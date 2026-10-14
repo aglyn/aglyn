@@ -39,6 +39,9 @@
       "load": {
         "org": {
           "doc": "orgs/{org.id}"
+        },
+        "zones": {
+          "compute": "timeZoneChoices"
         }
       },
       "blocks": [
@@ -110,10 +113,13 @@
             {
               "key": "timeZone",
               "label": "Time zone",
-              "kind": "text",
+              "kind": "select",
               "initial": "{data.org.timeZone}",
-              "placeholder": "America/Chicago",
-              "help": "An IANA zone name, like America/New_York. Leave it blank for UTC (the default)."
+              "optionsFrom": {
+                "items": "data.zones",
+                "value": "{item.value}",
+                "label": "{item.label}"
+              }
             }
           ],
           "submit": {
@@ -225,18 +231,16 @@
           "fields": [
             {
               "key": "logoUrl",
-              "label": "Logo URL",
-              "kind": "url",
+              "label": "Logo",
+              "kind": "media",
               "initial": "{data.org.logoUrl}",
-              "placeholder": "https://",
-              "help": "Paste an https URL."
+              "help": "Choose from the workspace media library. Recommended: SVG, or a PNG at least 400px wide — it renders at different sizes across your site and on retina screens."
             },
             {
               "key": "logoDarkUrl",
-              "label": "Dark mode logo URL",
-              "kind": "url",
+              "label": "Dark mode logo",
+              "kind": "media",
               "initial": "{data.org.logoDarkUrl}",
-              "placeholder": "https://",
               "help": "Shown in place of the logo above when the console is in dark mode. Leave it blank to use the same logo in both."
             },
             {
@@ -504,38 +508,38 @@
             },
             {
               "key": "logoUrl",
-              "label": "Logo URL",
-              "kind": "url",
+              "label": "Logo",
+              "kind": "media",
               "initial": "{item.logoUrl}",
-              "help": "Console chrome + site badge. Paste an https URL."
+              "help": "Console chrome + site badge. Choose from the workspace media library. Recommended: SVG, or a PNG at least 400px wide — it renders at different sizes across your site and on retina screens."
             },
             {
               "key": "logoDarkUrl",
-              "label": "Dark mode logo URL",
-              "kind": "url",
+              "label": "Dark mode logo",
+              "kind": "media",
               "initial": "{item.logoDarkUrl}",
               "help": "Console chrome in dark mode, and the site badge, which always sits on a dark background. Leave it blank to use the logo above."
             },
             {
               "key": "faviconUrl",
-              "label": "Favicon URL",
-              "kind": "url",
+              "label": "Favicon",
+              "kind": "media",
               "initial": "{item.faviconUrl}",
-              "help": "Browser tab icon for branded console surfaces."
+              "help": "Browser tab icon for branded console surfaces. Recommended: one square PNG, SVG or JPG, 512×512 or larger — every tab, bookmark and home-screen size is generated for you."
             },
             {
               "key": "faviconDarkUrl",
-              "label": "Dark mode favicon URL",
-              "kind": "url",
+              "label": "Dark mode favicon",
+              "kind": "media",
               "initial": "{item.faviconDarkUrl}",
               "help": "Used when the visitor’s browser is in dark mode. Leave it blank to use the favicon above."
             },
             {
               "key": "emailLogoUrl",
-              "label": "Email logo URL",
-              "kind": "url",
+              "label": "Email logo",
+              "kind": "media",
               "initial": "{item.emailLogoUrl}",
-              "help": "Logo shown in transactional email headers."
+              "help": "Logo shown in transactional email headers. Recommended: a PNG about 400px wide — email clients do not resize images, and most refuse SVG."
             },
             {
               "key": "customConsoleDomain",
@@ -1475,6 +1479,38 @@
       "load": {
         "notices": "/api/orgs/risk-notices?orgId={org.id}"
       },
+      "start": {
+        "action": "reviewLinked"
+      },
+      "actions": [
+        {
+          "id": "reviewLinked",
+          "label": "Request a review",
+          "icon": "envelope|mail",
+          "when": "params.notice && data.notices.notices[noticeId=params.notice].reviewable",
+          "url": "/api/orgs/risk-notices",
+          "prompt": [
+            {
+              "key": "note",
+              "label": "Your note",
+              "kind": "multiline",
+              "required": true,
+              "help": "Tell us what this is for and why it is genuine. A person reads every request, on the same case our team already has open. Requesting a review does not release anything by itself."
+            }
+          ],
+          "body": {
+            "orgId": "{org.id}",
+            "noticeId": "{params.notice}",
+            "note": "{form.note}"
+          },
+          "success": "Review requested. We’ll email you when it’s done.",
+          "instead": {
+            "when": "response.reference",
+            "title": "Review requested",
+            "text": "Review requested — reference {response.reference}. We’ll email you when it’s done."
+          }
+        }
+      ],
       "blocks": [
         {
           "type": "list",
@@ -1859,6 +1895,27 @@
       ]
     },
     {
+      "id": "core.settings.integrations",
+      "title": "Integrations",
+      "subtitle": "What the plugins you run connect this organization to",
+      "icon": "link|link",
+      "scope": "org",
+      "links": [
+        "/settings/integrations"
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Integrations appear here when a plugin that offers one is turned on."
+        },
+        {
+          "type": "zone",
+          "name": "orgSettings"
+        }
+      ]
+    },
+    {
       "id": "core.settings.ownership",
       "title": "Ownership",
       "icon": "person.badge.key|manage_accounts",
@@ -1999,14 +2056,33 @@
       "scope": "org",
       "group": "workspace",
       "order": 35,
-      "links": ["/plugins", "/settings/plugins"],
-      "load": { "plugins": { "switchboard": "org" } },
+      "links": [
+        "/plugins",
+        "/settings/plugins"
+      ],
+      "load": {
+        "plugins": {
+          "switchboard": "org"
+        }
+      },
+      "actions": [
+        {
+          "id": "install",
+          "label": "Install a plugin",
+          "icon": "plus|add",
+          "route": "/{org.slug}/marketplace"
+        }
+      ],
       "blocks": [
         {
           "type": "notice",
           "tone": "info",
           "when": "!org.manager",
           "text": "Only owners and admins can switch plugins. You can see what this workspace runs."
+        },
+        {
+          "type": "zone",
+          "name": "orgPluginInstalls"
         },
         {
           "type": "list",
@@ -2016,8 +2092,19 @@
           "primary": "{item.label}",
           "secondary": "{item.description}",
           "footer": "The plugins that ship with Aglyn. Turning one off removes it from navigation, the editor, published sites and the API for every site in this workspace.",
-          "badges": [{ "when": "item.locked", "text": "Always on", "tone": "info" }],
-          "open": { "screen": "core.plugin", "params": { "pluginId": "{item.id}" } },
+          "badges": [
+            {
+              "when": "item.locked",
+              "text": "Always on",
+              "tone": "info"
+            }
+          ],
+          "open": {
+            "screen": "core.plugin",
+            "params": {
+              "pluginId": "{item.id}"
+            }
+          },
           "toggle": {
             "value": "{item.on}",
             "disabled": "item.locked || !org.manager",
@@ -2027,7 +2114,11 @@
               "label": "Turn on",
               "icon": "power|power_settings_new",
               "url": "/api/orgs/settings",
-              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{item.enable}" },
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set-enabled-plugins",
+                "enabledPlugins": "{item.enable}"
+              },
               "success": "Plugins updated",
               "reload": true
             },
@@ -2039,7 +2130,11 @@
               "confirm": "Turning {item.label} off also turns off {item.cascade}, which need it, on every site in this workspace.",
               "confirmWhen": "item.cascade",
               "url": "/api/orgs/settings",
-              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{item.disable}" },
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set-enabled-plugins",
+                "enabledPlugins": "{item.disable}"
+              },
               "success": "Plugins updated",
               "reload": true
             }
@@ -2049,12 +2144,31 @@
     },
     {
       "id": "core.plugin",
-      "title": "{data.plugins.rows[id=params.pluginId].label|params.pluginId}",
+      "title": "{data.plugins.rows[id=params.pluginId].label|data.pin.displayName|params.pluginId}",
       "label": "Plugin",
       "icon": "puzzlepiece.extension|extension",
       "scope": "org",
-      "links": ["/plugins/:pluginId"],
-      "load": { "plugins": { "switchboard": "org" } },
+      "links": [
+        "/plugins/:pluginId"
+      ],
+      "load": {
+        "plugins": {
+          "switchboard": "org"
+        },
+        "pin": {
+          "doc": "orgs/{org.id}/installs/{params.pluginId}",
+          "optional": true
+        }
+      },
+      "actions": [
+        {
+          "id": "viewListing",
+          "label": "View listing",
+          "icon": "arrow.up.right.square|open_in_new",
+          "route": "/{org.slug}/marketplace/{params.pluginId}",
+          "when": "!data.plugins.rows[id=params.pluginId]"
+        }
+      ],
       "blocks": [
         {
           "type": "notice",
@@ -2071,17 +2185,27 @@
         {
           "type": "notice",
           "tone": "warning",
-          "when": "!data.plugins.rows[id=params.pluginId].on",
+          "when": "data.plugins.rows[id=params.pluginId] && !data.plugins.rows[id=params.pluginId].on",
           "text": "Off for every site in this workspace. No site can turn it on until the workspace does."
         },
         {
           "type": "fields",
           "title": "About",
           "rows": [
-            { "label": "What it does", "value": "{data.plugins.rows[id=params.pluginId].description|'—'}" },
-            { "label": "Needs", "value": "{data.plugins.rows[id=params.pluginId].requires|'Nothing else'}" },
-            { "label": "Needed by", "value": "{data.plugins.rows[id=params.pluginId].dependents|'Nothing else'}" }
-          ]
+            {
+              "label": "What it does",
+              "value": "{data.plugins.rows[id=params.pluginId].description|'—'}"
+            },
+            {
+              "label": "Needs",
+              "value": "{data.plugins.rows[id=params.pluginId].requires|'Nothing else'}"
+            },
+            {
+              "label": "Needed by",
+              "value": "{data.plugins.rows[id=params.pluginId].dependents|'Nothing else'}"
+            }
+          ],
+          "when": "data.plugins.rows[id=params.pluginId]"
         },
         {
           "type": "notice",
@@ -2091,14 +2215,18 @@
         },
         {
           "type": "actions",
-          "when": "org.manager && !data.plugins.rows[id=params.pluginId].locked",
+          "when": "data.plugins.rows[id=params.pluginId] && org.manager && !data.plugins.rows[id=params.pluginId].locked",
           "items": [
             {
               "id": "on",
               "label": "Turn on",
               "icon": "power|power_settings_new",
               "url": "/api/orgs/settings",
-              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{data.plugins.rows[id=params.pluginId].enable}" },
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set-enabled-plugins",
+                "enabledPlugins": "{data.plugins.rows[id=params.pluginId].enable}"
+              },
               "success": "Plugins updated",
               "reload": true,
               "when": "!data.plugins.rows[id=params.pluginId].on"
@@ -2110,7 +2238,11 @@
               "destructive": true,
               "confirm": "Turn {data.plugins.rows[id=params.pluginId].label} off for every site in this workspace?",
               "url": "/api/orgs/settings",
-              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{data.plugins.rows[id=params.pluginId].disable}" },
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set-enabled-plugins",
+                "enabledPlugins": "{data.plugins.rows[id=params.pluginId].disable}"
+              },
               "success": "Plugins updated",
               "reload": true,
               "when": "data.plugins.rows[id=params.pluginId].on"
@@ -2120,12 +2252,45 @@
         {
           "type": "links",
           "items": [
-            { "title": "AI settings", "subtitle": "Provider and the model for each kind of step", "icon": "gearshape|settings", "screen": "core.pluginSettings.ai", "when": "org.manager && params.pluginId == ai" },
-            { "title": "Commerce settings", "subtitle": "Register discounts, tipping, receipts and the customer display", "icon": "gearshape|settings", "screen": "core.pluginSettings.commerce", "when": "org.manager && params.pluginId == commerce" },
-            { "title": "Bookings settings", "subtitle": "Booking horizon and the booking page", "icon": "gearshape|settings", "screen": "core.pluginSettings.bookings", "when": "org.manager && params.pluginId == bookings" }
+            {
+              "title": "AI settings",
+              "subtitle": "Provider and the model for each kind of step",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.ai",
+              "when": "org.manager && params.pluginId == ai"
+            },
+            {
+              "title": "Commerce settings",
+              "subtitle": "Register discounts, tipping, receipts and the customer display",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.commerce",
+              "when": "org.manager && params.pluginId == commerce"
+            },
+            {
+              "title": "Bookings settings",
+              "subtitle": "Booking horizon and the booking page",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.bookings",
+              "when": "org.manager && params.pluginId == bookings"
+            }
           ]
         },
-        { "type": "zone", "name": "pluginSettings", "title": "Settings", "params": { "pluginId": "{params.pluginId}" } }
+        {
+          "type": "zone",
+          "name": "pluginInstallation",
+          "when": "!data.plugins.rows[id=params.pluginId]",
+          "params": {
+            "pluginId": "{params.pluginId}"
+          }
+        },
+        {
+          "type": "zone",
+          "name": "pluginSettings",
+          "title": "Settings",
+          "params": {
+            "pluginId": "{params.pluginId}"
+          }
+        }
       ]
     }
   ]

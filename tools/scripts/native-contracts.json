@@ -703,6 +703,12 @@
         "SEO_MAX_KEYWORDS",
         "SEO_KEYWORD_LINES_MAX_CHARS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/time-zone-choices.ts": {
+      "values": [
+        "TIME_ZONE_CHOICES",
+        "TIME_ZONE_DEFAULT_LABEL"
+      ]
     }
   },
   "ints": [
@@ -16656,6 +16662,2188 @@
         ],
         [
           1439
+        ]
+      ]
+    },
+    "timeZoneChoices": {
+      "module": "libs/aglyn/src/lib/app-utils/time-zone-choices.ts",
+      "args": [
+        []
+      ]
+    },
+    "compareArtifactVersions": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "1.0.0",
+          "1.0.0"
+        ],
+        [
+          "1.0.0",
+          "1.0.1"
+        ],
+        [
+          "1.10.0",
+          "1.9.0"
+        ],
+        [
+          "10",
+          "9"
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          "1.0.0-beta",
+          "1.0.0"
+        ],
+        [
+          null,
+          "1"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "",
+          "1"
+        ],
+        [
+          "1",
+          "1.0"
+        ],
+        [
+          "1.0",
+          "1"
+        ],
+        [
+          "1.2",
+          "1.10"
+        ],
+        [
+          "abc",
+          "abd"
+        ],
+        [
+          "2.0.0",
+          "2.0.0.1"
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    "updateStateLabel": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "state": "update-available",
+            "installedVersion": "1.0.0",
+            "availableVersion": "1.1.0"
+          }
+        ],
+        [
+          {
+            "state": "current",
+            "installedVersion": "2.3.0",
+            "availableVersion": "2.3.0"
+          }
+        ],
+        [
+          {
+            "state": "ahead",
+            "installedVersion": "3.0.0",
+            "availableVersion": "2.0.0"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": null,
+            "availableVersion": null,
+            "unknownReason": "no-provenance"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": "1.0.0",
+            "availableVersion": null,
+            "unknownReason": "nothing-published"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": "1.0.0-beta",
+            "availableVersion": "1.0.0",
+            "unknownReason": "incomparable"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": null,
+            "availableVersion": null
+          }
+        ]
+      ]
+    },
+    "pluginOfferedVersion": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "1.2.0",
+          null
+        ],
+        [
+          "1.2.0",
+          []
+        ],
+        [
+          "1.2.0",
+          [
+            "1.1.0"
+          ]
+        ],
+        [
+          "1.2.0",
+          [
+            "1.2.0"
+          ]
+        ],
+        [
+          "1.2.0",
+          "all"
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          "",
+          [
+            "1.0.0"
+          ]
+        ],
+        [
+          3,
+          [
+            "3"
+          ]
+        ],
+        [
+          3,
+          [
+            "2"
+          ]
+        ]
+      ]
+    },
+    "pluginUpdateStatus": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          null,
+          "1.0.0"
+        ],
+        [
+          {},
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "2.0.0"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          null
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          ""
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0-beta"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": 4
+          },
+          "4"
+        ],
+        [
+          {
+            "listingId": "l1"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "version": "1.0.0"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.1.0"
+            },
+            "version": "0.1"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "marketplace": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "source": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "1.5.0"
+        ]
+      ]
+    },
+    "resolveOrgInstallSummary": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {},
+          null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {},
+          {
+            "version": "1.0.0"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            }
+          },
+          null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            },
+            "h3": {
+              "version": "1.1.0"
+            }
+          },
+          null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h2": {
+              "version": "2.0.0"
+            }
+          },
+          {
+            "version": "1.0.0"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": null,
+            "h2": null
+          },
+          null
+        ],
+        [
+          [],
+          {},
+          {
+            "version": "3"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": 7
+            }
+          },
+          null
+        ]
+      ]
+    },
+    "resolveUninstallTargets": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "org"
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "host",
+          "h1"
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "org"
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "host",
+          "h2"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "host",
+          "h1"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "host",
+          "h2"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "org"
+        ]
+      ]
+    },
+    "staleSites": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.2.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.1.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "2.0.0",
+              "pinnedBy": "host",
+              "shadowed": true
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "2.0.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "2.0.0",
+              "pinnedBy": "host",
+              "shadowed": true
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          null
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "1.0.1"
+        ]
+      ]
+    },
+    "pluginSiteSetSummary": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "5",
+            "sites": [],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          0
+        ]
+      ]
+    },
+    "pluginUpdatePrompt": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "latestVersion": "1.2.0",
+            "label": "Blog",
+            "singleSite": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "latestVersion": "1.2.0",
+            "label": "2 sites",
+            "singleSite": false
+          }
+        ],
+        [
+          {
+            "name": "This plugin",
+            "latestVersion": "2.0.0",
+            "label": "every site in this organization",
+            "singleSite": false
+          }
+        ]
+      ]
+    },
+    "pluginUpdateAll": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "1.1.0"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ]
+      ]
+    },
+    "uninstallImpactView": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Home",
+                      "count": 2
+                    },
+                    {
+                      "type": "layout",
+                      "id": "l1",
+                      "name": "Header",
+                      "count": 1
+                    },
+                    {
+                      "type": "component",
+                      "id": "c1",
+                      "name": "Counter",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 3,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 1,
+              "placements": 3,
+              "affectedScreens": 3,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s0",
+                      "name": "Page 0",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Page 1",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s2",
+                      "name": "Page 2",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s3",
+                      "name": "Page 3",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s4",
+                      "name": "Page 4",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s5",
+                      "name": "Page 5",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s6",
+                      "name": "Page 6",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s7",
+                      "name": "Page 7",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s8",
+                      "name": "Page 8",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s9",
+                      "name": "Page 9",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s10",
+                      "name": "Page 10",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s11",
+                      "name": "Page 11",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s12",
+                      "name": "Page 12",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s13",
+                      "name": "Page 13",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 14,
+                  "truncated": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "stillCovered": true,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "x",
+                      "name": "Elsewhere",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 1,
+                  "truncated": false
+                },
+                {
+                  "hostId": "h3",
+                  "label": "Shop",
+                  "stillCovered": false,
+                  "placements": [],
+                  "affectedScreens": 0,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 2,
+              "placements": 15,
+              "affectedScreens": 15,
+              "truncated": true,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": true
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Home",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 1,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 1,
+              "placements": 1,
+              "affectedScreens": 1,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "this plugin",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [],
+            "impact": null,
+            "failed": false
+          }
+        ]
+      ]
+    },
+    "installPlanOutcome": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 3,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 2,
+            "errors": [],
+            "orgWide": false,
+            "updating": true,
+            "version": "1.2.0"
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": true,
+            "version": "1.2.0"
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": false,
+            "saved": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 2,
+            "errors": [
+              "Quota exceeded"
+            ],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 0,
+            "errors": [
+              "No approved version"
+            ],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 0,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": true,
+            "version": null
+          }
+        ]
+      ]
+    },
+    "installedPluginCaption": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "version": "1.2.0",
+            "orgWide": true,
+            "siteLabels": []
+          }
+        ],
+        [
+          {
+            "version": "1.0.0",
+            "orgWide": false,
+            "siteLabels": [
+              "Blog"
+            ]
+          }
+        ],
+        [
+          {
+            "version": 3,
+            "orgWide": false,
+            "siteLabels": [
+              "A",
+              "B"
+            ]
+          }
+        ]
+      ]
+    },
+    "manifestSettingsScreen": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "counter",
+          "Counter",
+          null
+        ],
+        [
+          "counter",
+          "Counter",
+          {}
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": []
+            }
+          }
+        ],
+        [
+          "",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "banner",
+                  "label": "Banner text",
+                  "type": "string"
+                },
+                {
+                  "key": "on",
+                  "label": "Show it",
+                  "type": "boolean"
+                }
+              ],
+              "defaults": {
+                "banner": "Welcome",
+                "on": true
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "banner",
+                  "label": "Banner text",
+                  "type": "string"
+                },
+                {
+                  "key": "on",
+                  "label": "Show it",
+                  "type": "boolean"
+                }
+              ],
+              "defaults": {
+                "banner": "Welcome",
+                "on": true
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": " greeting ",
+                  "label": "  Greeting ",
+                  "type": "string",
+                  "description": "Shown above the counter."
+                },
+                {
+                  "key": "limit",
+                  "type": "number",
+                  "min": 1,
+                  "max": 10
+                },
+                {
+                  "key": "limit",
+                  "type": "number"
+                },
+                {
+                  "key": "live",
+                  "label": "Live",
+                  "type": "boolean"
+                },
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "type": "select",
+                  "options": [
+                    {
+                      "value": "a",
+                      "label": "A"
+                    },
+                    {
+                      "value": 3,
+                      "label": "Three"
+                    },
+                    {
+                      "value": "b",
+                      "label": "B"
+                    }
+                  ]
+                },
+                {
+                  "key": "empty",
+                  "type": "select",
+                  "options": []
+                },
+                {
+                  "key": "bad",
+                  "type": "colour"
+                },
+                {
+                  "key": "",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "key": "plain"
+                },
+                {
+                  "key": "rate",
+                  "label": "Rate",
+                  "type": "number",
+                  "min": 0.5,
+                  "description": "Per hour."
+                },
+                {
+                  "key": "cap",
+                  "type": "number",
+                  "max": 20
+                }
+              ],
+              "defaults": {
+                "greeting": "Hello",
+                "limit": 99,
+                "live": "yes",
+                "mode": "b",
+                "plain": 4,
+                "rate": 0.25,
+                "cap": 7
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "f0",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f1",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f2",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f3",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f4",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f5",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f6",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f7",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f8",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f9",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f10",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f11",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f12",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f13",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f14",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f15",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f16",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f17",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f18",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f19",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f20",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f21",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f22",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f23",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f24",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f25",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f26",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f27",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f28",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f29",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f30",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f31",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f32",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f33",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f34",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f35",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f36",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f37",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f38",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f39",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f40",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f41",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f42",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f43",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f44",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f45",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f46",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f47",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f48",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f49",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f50",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f51",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f52",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f53",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f54",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f55",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f56",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f57",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f58",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f59",
+                  "type": "number",
+                  "max": 5
+                }
+              ],
+              "defaults": {
+                "f0": 3
+              }
+            }
+          }
+        ],
+        [
+          "x",
+          "X",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "k",
+                  "type": "select",
+                  "options": [
+                    {
+                      "value": "only",
+                      "label": "Only"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
         ]
       ]
     }

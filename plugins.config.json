@@ -1068,12 +1068,13 @@
         "planEntitlements": "marketplacePlanEntitlements"
       },
       "mobile": {
-        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app (and, from AGL-3671, publishing the site as a template with the Publisher Agreement it needs, as spec screens in src/android/screens/marketplace.screens.json): browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
+        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app (and, from AGL-3671, publishing the site as a template with the Publisher Agreement it needs, as spec screens in src/android/screens/marketplace.screens.json): browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop. From AGL-3671 it also fills two slots of the workspace's plugin pages, as the console's marketplace does: the plugins installed from it (every site's pins, with a chip where a newer version is on offer) and one plugin's installation (current or behind, which sites run it, update, add, split, promote and remove with the uninstall impact check, and its permissions).",
         "ios": { "module": "AglynMarketplacePlugin", "register": "registerMarketplaceNative" },
         "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
         "contributes": {
-          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.publishTemplate", "marketplace.publisherAgreement"],
+          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.publishTemplate", "marketplace.publisherAgreement"],
           "quickActions": ["marketplace.open"],
+          "widgets": ["marketplace.org-installs", "marketplace.plugin-installation"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page"]
         }
       },

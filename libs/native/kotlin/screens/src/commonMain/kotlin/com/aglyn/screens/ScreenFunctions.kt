@@ -1,5 +1,6 @@
 package com.aglyn.screens
 
+import com.aglyn.contracts.Contracts
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -22,6 +23,7 @@ object ScreenFunctions {
       (args.getOrNull(3) as? JsonPrimitive)?.doubleOrNull?.toInt(),
     )
     "aiProductsImportJob" -> aiProductsImportJob(args.getOrNull(0))
+    "timeZoneChoices" -> timeZoneChoices()
     "ssoEnforcementAccounts" -> ssoEnforcementAccounts(args.getOrNull(0), (args.getOrNull(1) as? JsonPrimitive)?.takeIf { it.isString }?.content, args.getOrNull(2))
     else -> null
   }
@@ -197,6 +199,15 @@ object ScreenFunctions {
     values["records"] = JsonObject(mapOf("summary" to JsonPrimitive(summary), "changes" to JsonArray(changes), "more" to JsonPrimitive(more)))
     return JsonObject(values)
   }
+
+  /**
+   * The time zone picker's choices (the console's `timeZoneChoices`): the default first, an empty value the route stores as
+   * no zone, then every zone of the console's list with its underscores read as spaces.
+   */
+  internal fun timeZoneChoices(): JsonElement = JsonArray(
+    listOf(JsonObject(mapOf("value" to JsonPrimitive(""), "label" to JsonPrimitive(Contracts.timeZoneDefaultLabel)))) +
+      Contracts.timeZoneChoices.map { zone -> JsonObject(mapOf("value" to JsonPrimitive(zone), "label" to JsonPrimitive(zone.replace('_', ' ')))) },
+  )
 
   /**
    * The single sign-on rehearsal's rows, one per account (the console's `ssoEnforcementAccounts`): the address, what

@@ -450,6 +450,8 @@ struct FieldInput: View {
         }
       case "upload":
         UploadFieldView(field: field, context: context, value: $value)
+      case "media":
+        MediaFieldView(field: field, value: $value)
       case "multiline", "lines":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)

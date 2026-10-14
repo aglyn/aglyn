@@ -17,7 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, resolveOrgEntitlements } from '@aglyn/aglyn'
+import { CONSOLE_WIDGET_SLOTS, PERSON_ERASURE_NOT_REACHED, PERSON_ERASURE_REMOVES, PERSON_ERASURE_RETAINS, resolveOrgEntitlements } from '@aglyn/aglyn'
 import { RISK_OWNER_ACTIONS } from '@aglyn/shared-util-email/risk-notice-catalog'
 
 /**
@@ -300,6 +300,63 @@ describe('native workspace settings', () => {
         'A machine-readable JSON copy of everything this workspace holds — its sites and their content, datasets, contacts, orders, form submissions, members, support threads and billing identifiers. Owners and admins only.',
         'Your data is downloading.',
       ])
+    })
+  })
+  describe('Plugin pages', () => {
+    const consoleList = read('apps/console/app/(app)/[orgSlug]/plugins/page.tsx')
+    const consolePage = read('apps/console/app/(app)/[orgSlug]/plugins/[pluginRef]/page.tsx')
+
+    it('hands the marketplace the two slots the console hands it, and keeps a built-in plugin\'s blocks to the built-in plugins', () => {
+      expect(consoleList).toContain('slot="orgPluginInstalls"')
+      expect(consolePage).toContain('slot="pluginInstallStatus"')
+      expect(consolePage).toContain('slot="pluginSiteSet"')
+      const list = screen('core.plugins')
+      expect(list.blocks.map((block) => [block.type, block['name']])).toContainEqual(['zone', 'orgPluginInstalls'])
+      expect((list.actions ?? []).map((action) => [action['id'], action['route']])).toEqual([['install', '/{org.slug}/marketplace']])
+      const page = screen('core.plugin')
+      const zone = page.blocks.find((block) => block.type === 'zone' && block['name'] === 'pluginInstallation')
+      expect(zone?.when).toBe('!data.plugins.rows[id=params.pluginId]')
+      expect(zone?.['params']).toEqual({ pluginId: '{params.pluginId}' })
+      expect((page.actions ?? []).map((action) => [action['id'], action['route']])).toEqual([['viewListing', '/{org.slug}/marketplace/{params.pluginId}']])
+      // Every block that speaks of the plugin as a built-in one is gated on it being one.
+      const row = 'data.plugins.rows[id=params.pluginId]'
+      for (const block of page.blocks.filter((one) => one.type !== 'zone' && one.type !== 'links')) {
+        expect([block.title ?? block.type, String(block.when ?? '').includes(row)]).toEqual([block.title ?? block.type, true])
+      }
+    })
+
+    it('says what the console says about a plugin that is not installed, is behind, or may do what', () => {
+      const status = read('libs/plugins/marketplace/src/lib/components/plugin-install-status.component.tsx')
+      expect(flat(consolePage)).toContain('This plugin is not installed in this organization. Install it from its marketplace listing.')
+      expect(flat(consolePage)).toContain('None declared — it cannot reach host data directly.')
+      expect(flat(consolePage)).toContain('No network origins declared; its CSP blocks outbound requests.')
+      expect(status).toContain('updateStateLabel(status)')
+      expect(read('libs/plugins/marketplace/src/lib/components/org-plugin-installs-card.component.tsx')).toContain('Nothing installed from the marketplace yet — browse it to add one.')
+      const native = flat(read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/PluginPages.swift') + read('libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/PluginPages.kt'))
+      for (const sentence of [
+        'Nothing installed from the marketplace yet — browse it to add one.',
+        'This plugin is not installed in this organization. Install it from its marketplace listing.',
+        'None declared — it cannot reach host data directly.',
+        'No network origins declared; its CSP blocks outbound requests.',
+        'Add to more sites',
+        'Add to selected',
+        'Install for the whole organization',
+        'Split into per-site installs',
+        'Pins each site separately so you can update them one at a time. Sites you add later will not get this plugin automatically.',
+        'Uninstall org-wide',
+      ]) {
+        expect([sentence, native.includes(sentence)]).toEqual([sentence, true])
+      }
+    })
+  })
+  describe('Integrations', () => {
+    it('fills the slot the console fills, in the console\'s words', () => {
+      const page = read('apps/console/app/(app)/[orgSlug]/settings/(sections)/integrations/page.tsx')
+      expect(CONSOLE_WIDGET_SLOTS.orgSettings).toBe('orgSettings')
+      expect(page).toContain('CONSOLE_WIDGET_SLOTS.orgSettings')
+      const native = screen('core.settings.integrations')
+      expect(native.blocks.filter((block) => block.type === 'zone').map((block) => block['name'])).toEqual([CONSOLE_WIDGET_SLOTS.orgSettings])
+      sentences(page, nativeText('core.settings.integrations'), ['Integrations appear here when a plugin that offers one is turned on.'])
     })
   })
 })

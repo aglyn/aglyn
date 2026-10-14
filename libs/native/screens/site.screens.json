@@ -16,6 +16,9 @@
       "load": {
         "site": {
           "doc": "hosts/{site.id}"
+        },
+        "zones": {
+          "compute": "timeZoneChoices"
         }
       },
       "blocks": [
@@ -34,10 +37,21 @@
             {
               "key": "timeZone",
               "label": "Time zone",
-              "kind": "text",
+              "kind": "select",
               "initial": "{item.timeZone}",
-              "placeholder": "America/Chicago",
-              "help": "An IANA zone name. Bookings and reports use it."
+              "help": "The day a published post is dated on this site. Leave it unset and the workspace decides.",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Same as the workspace"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.zones",
+                "value": "{item.value}",
+                "label": "{item.label}",
+                "filter": "item.value"
+              }
             }
           ],
           "submit": {

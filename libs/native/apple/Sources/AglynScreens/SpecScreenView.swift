@@ -74,6 +74,7 @@ public struct SpecScreenView: View {
         Form { SkeletonRows(count: 6) }.formStyle(.grouped)
       }
     }
+    .environment(\.aglynPluginContext, plugin)
     .onChange(of: session.claims) { _, _ in model?.rebase(baseContext) }
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {
@@ -156,8 +157,14 @@ struct SpecScreenBody: View {
   @State private var exportSheet: TransferExportRequest?
   @State private var running: String?
   @State private var searchText = ""
+  @State private var started = false
 
   private var context: JSONValue { model.context }
+
+  private var isReady: Bool {
+    if case .ready = model.phase { return true }
+    return false
+  }
 
   var body: some View {
     content
@@ -170,6 +177,16 @@ struct SpecScreenBody: View {
       }
       .animation(.default, value: notice?.text)
       .toolbar { toolbar }
+      // A screen that names a `start` action runs it once, as soon as its data is in: the action's own `when` decides
+      // whether there is anything to do (a link's `?notice=` that names a notice that cannot be reviewed does nothing).
+      .task(id: isReady) {
+        guard isReady, !started, let id = model.spec.startAction else { return }
+        started = true
+        guard let action = model.spec.raw["actions"].array.compactMap(ActionSpec.init).first(where: { $0.id == id }),
+          ScreenValues.condition(action.when, in: context)
+        else { return }
+        trigger(action, scope: context)
+      }
       .confirmationDialog(
         confirming.map { $0.action.confirmText(in: $0.scope) ?? ScreenValues.render($0.action.label, in: $0.scope) } ?? "",
         isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
@@ -380,9 +397,11 @@ struct SpecScreenBody: View {
           }
         }
       }
+      let slotParams = renderParams(block["params"], in: context)
       ForEach(widgets) { widget in
         Section {
           widget.make(plugin)
+            .environment(\.aglynSlotParams, slotParams)
             .accessibilityIdentifier("zone-widget-\(widget.id)")
         }
       }

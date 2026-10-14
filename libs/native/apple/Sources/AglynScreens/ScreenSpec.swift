@@ -30,6 +30,9 @@ public struct ScreenSpec: Identifiable, Sendable {
   public let zones: [String]
   public let loads: [LoadSpec]
   public let blocks: [BlockSpec]
+  /// The screen's own `actions` entry it runs as the screen opens, once its data has loaded and the action's `when` holds
+  /// (`start: { "action": "reviewLinked" }`): a link that carries a query (`?notice=`) opens the dialog it names.
+  public let startAction: String?
   /// `{ when, load, action }`: what this contributed screen does once a core action that names its zone
   /// (`afterZone`) has succeeded, and its `when` holds: the `load` is read, then the `action` runs over it.
   public let hook: JSONValue?
@@ -53,6 +56,7 @@ public struct ScreenSpec: Identifiable, Sendable {
     self.loads = json["load"].objectEntries.map { LoadSpec(key: $0.key, $0.value) }
     self.blocks = json["blocks"].array.compactMap(BlockSpec.init)
     self.hook = json["hook"]
+    self.startAction = json["start"]?["action"]?.stringValue
     self.raw = json
   }
 

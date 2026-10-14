@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import Foundation
@@ -147,5 +148,97 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
       "data": ["rows": [["uid": "u1", "label": "a", "eligible": true], ["uid": "u2", "label": "b", "eligible": false]]]
     ]
     XCTAssertEqual(choice.choices(in: rows).map(\.value), ["u1"])
+  }
+
+  @MainActor
+  func testTheTimeZoneIsPickedFromTheConsolesListNeverTyped() throws {
+    let general = try spec("core.settings.general")
+    let tz = try XCTUnwrap(general.blocks.first { $0.id == "tz" })
+    let field = try XCTUnwrap(tz["fields"].array.compactMap(FieldSpec.init).first)
+    XCTAssertEqual(field.kind, "select")
+    XCTAssertEqual(general.loads.first { $0.key == "zones" }?.compute, "timeZoneChoices")
+    let zones = try XCTUnwrap(ScreenFunctions.call("timeZoneChoices", []))
+    let choices = field.choices(in: ["data": ["zones": zones]])
+    // The console's default first, then every zone with its underscores read as spaces.
+    XCTAssertEqual(choices.first?.value, "")
+    XCTAssertEqual(choices.first?.label, "UTC (default)")
+    XCTAssertEqual(choices.first { $0.value == "America/New_York" }?.label, "America/New York")
+    XCTAssertEqual(choices.count, ContractValues.shared.timeZoneChoices.count + 1)
+    // A site may also leave it to the workspace, and cannot pick the default row twice.
+    let site = try spec("core.site.general")
+    let details = try XCTUnwrap(site.blocks.first { $0.id == "details" })
+    let siteField = try XCTUnwrap(details["fields"].array.compactMap(FieldSpec.init).first { $0.key == "timeZone" })
+    let siteChoices = siteField.choices(in: ["data": ["zones": zones]])
+    XCTAssertEqual(siteChoices.first?.label, "Same as the workspace")
+    XCTAssertEqual(siteChoices.filter { $0.value.isEmpty }.count, 1)
+    XCTAssertEqual(siteChoices.count, ContractValues.shared.timeZoneChoices.count + 1)
+  }
+
+  @MainActor
+  func testALinkedNoticeOpensItsReviewAsSoonAsItsDataIsIn() throws {
+    let holds = try spec("core.settings.holds")
+    XCTAssertEqual(holds.startAction, "reviewLinked")
+    let action = try XCTUnwrap(holds.raw["actions"].array.compactMap(ActionSpec.init).first { $0.id == "reviewLinked" })
+    func scope(_ notice: String?, reviewable: Bool) -> JSONValue {
+      [
+        "params": notice.map { ["notice": .string($0)] } ?? [:],
+        "data": ["notices": ["notices": [["noticeId": "n1", "reviewable": .bool(reviewable)], ["noticeId": "n2", "reviewable": false]]]],
+      ]
+    }
+    XCTAssertTrue(ScreenValues.condition(action.when, in: scope("n1", reviewable: true)))
+    XCTAssertFalse(ScreenValues.condition(action.when, in: scope("n1", reviewable: false)), "a hold that cannot be reviewed opens nothing")
+    XCTAssertFalse(ScreenValues.condition(action.when, in: scope("n2", reviewable: true)))
+    XCTAssertFalse(ScreenValues.condition(action.when, in: scope("missing", reviewable: true)))
+    XCTAssertFalse(ScreenValues.condition(action.when, in: scope(nil, reviewable: true)), "a plain visit asks for nothing")
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(action.body?["noticeId"]?.stringValue), in: scope("n1", reviewable: true)), "n1")
+    // The link the notice carries reaches this screen with its query.
+    struct HoldsRoute: DeepLinkRoute {
+      let path = "/settings/holds"
+      let screen = "core.settings.holds"
+    }
+    let target = DeepLinks.resolve("/acme/settings/holds?notice=n1", routes: [HoldsRoute()])
+    XCTAssertEqual(target, .screen("core.settings.holds", ["notice": "n1", "orgSlug": "acme"]))
+  }
+
+  @MainActor
+  func testTheLogoAndFaviconArePickedFromTheMediaLibraryNeverTyped() throws {
+    for (id, keys) in [
+      ("core.settings.profile", ["logoUrl", "logoDarkUrl"]),
+      ("core.settings.branding", ["logoUrl", "logoDarkUrl", "faviconUrl", "faviconDarkUrl", "emailLogoUrl"]),
+    ] {
+      let screen = try spec(id)
+      var kinds: [String: String] = [:]
+      func walk(_ value: JSONValue) {
+        switch value {
+        case .object(let record):
+          if let key = record["key"]?.stringValue, keys.contains(key), let kind = record["kind"]?.stringValue { kinds[key] = kind }
+          record.values.forEach(walk)
+        case .array(let items): items.forEach(walk)
+        default: break
+        }
+      }
+      walk(screen.raw)
+      XCTAssertEqual(kinds, Dictionary(uniqueKeysWithValues: keys.map { ($0, "media") }), id)
+    }
+    // What the pick stores is the console's: the CDN path, else the address.
+    XCTAssertEqual(mediaFieldValue(cdnPath: "/api/media/cdn/org:o1/m1", url: "https://x.test/a.png"), "/api/media/cdn/org:o1/m1")
+    XCTAssertEqual(mediaFieldValue(cdnPath: nil, url: "https://x.test/a.png"), "https://x.test/a.png")
+    XCTAssertEqual(mediaFieldValue(cdnPath: nil, url: nil), "")
+  }
+
+  @MainActor
+  func testAMarketplacePluginsPageIsFilledByTheMarketplaceAndAKeepsBuiltInBlocksToBuiltInPlugins() throws {
+    let page = try spec("core.plugin")
+    let zone = try XCTUnwrap(page.blocks.first { $0.type == "zone" && $0["name"]?.stringValue == "pluginInstallation" })
+    let builtIn: JSONValue = ["data": ["plugins": ["rows": [["id": "ai", "on": true, "label": "AI"]]]], "params": ["pluginId": "ai"]]
+    let marketplace: JSONValue = ["data": ["plugins": ["rows": [["id": "ai", "on": true, "label": "AI"]]]], "params": ["pluginId": "counter-l1"]]
+    XCTAssertFalse(ScreenValues.condition(zone.when, in: builtIn))
+    XCTAssertTrue(ScreenValues.condition(zone.when, in: marketplace))
+    // A plugin that is not one of the built-in ones is not "off for every site".
+    let shown = { (scope: JSONValue) in page.blocks.filter { ScreenValues.condition($0.when, in: scope) }.compactMap { $0.type == "notice" ? $0["text"]?.stringValue : nil } }
+    XCTAssertTrue(shown(builtIn).contains { $0.hasPrefix("On for every site") })
+    XCTAssertEqual(shown(marketplace), [])
+    XCTAssertEqual(page.raw["actions"].array.compactMap(ActionSpec.init).map(\.id), ["viewListing"])
+    XCTAssertEqual(try spec("core.plugins").raw["actions"].array.compactMap(ActionSpec.init).first?.route, "/{org.slug}/marketplace")
   }
 }

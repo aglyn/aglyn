@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import Foundation
 
@@ -22,6 +23,8 @@ public enum ScreenFunctions {
       return itemChanges(args.first ?? nil, args.count > 1 ? args[1] : nil, limit: limit ?? 200, recordLimit: recordLimit)
     case "aiProductsImportJob":
       return aiProductsImportJob(args.first ?? nil)
+    case "timeZoneChoices":
+      return timeZoneChoices()
     case "ssoEnforcementAccounts":
       return ssoEnforcementAccounts(
         args.first ?? nil, args.count > 1 ? args[1]?.stringValue : nil, args.count > 2 ? args[2] : nil)
@@ -197,6 +200,18 @@ public enum ScreenFunctions {
     result["recordField"] = .string(field)
     result["records"] = ["summary": .string(summary), "changes": .array(changes), "more": .number(Double(more))]
     return .object(result)
+  }
+
+  /// The time zone picker's choices (the console's `timeZoneChoices`): the default first, an empty value the route stores as
+  /// no zone, then every zone of the console's list with its underscores read as spaces.
+  static func timeZoneChoices() -> JSONValue {
+    let values = ContractValues.shared
+    let first: JSONValue = ["value": "", "label": .string(values.timeZoneDefaultLabel)]
+    return .array(
+      [first]
+        + values.timeZoneChoices.map { zone in
+          JSONValue.object(["value": .string(zone), "label": .string(zone.replacingOccurrences(of: "_", with: " "))])
+        })
   }
 
   /// The single sign-on rehearsal's rows, one per account (the console's `ssoEnforcementAccounts`): the address, what

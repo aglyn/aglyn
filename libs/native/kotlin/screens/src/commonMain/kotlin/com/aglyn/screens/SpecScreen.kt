@@ -163,9 +163,20 @@ fun SpecScreen(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SpecBody(
+  model: ScreenModel,
+  plugin: NativePluginContext,
+  selection: Selection?,
+  onSelect: (Selection) -> Unit,
+  splitting: Boolean,
+) {
+  androidx.compose.runtime.CompositionLocalProvider(LocalSpecPlugin provides plugin) { SpecBodyContent(model, plugin, selection, onSelect, splitting) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun SpecBodyContent(
   model: ScreenModel,
   plugin: NativePluginContext,
   selection: Selection?,
@@ -286,6 +297,17 @@ private fun SpecBody(
       action.asksConfirmation && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
+  }
+
+  // A screen that names a `start` action runs it once, as soon as its data is in: the action's own `when` decides whether
+  // there is anything to do (a link's `?notice=` that names a notice that cannot be reviewed does nothing).
+  var started by remember(model) { mutableStateOf(false) }
+  val ready = model.phase == ScreenModel.Phase.Ready
+  LaunchedEffect(model, ready) {
+    if (!ready || started) return@LaunchedEffect
+    started = true
+    val id = model.spec.startAction ?: return@LaunchedEffect
+    model.spec.actions.firstOrNull { it.id == id && ScreenValues.condition(it.whenCondition, model.context) }?.let { trigger(it, model.context) }
   }
 
   when (val phase = model.phase) {
@@ -528,8 +550,11 @@ private fun Block(
               }
             }
           }
+          val slotParams = renderParams(block["params"], context)
           widgets.forEach { widget ->
-            Box(Modifier.fillMaxWidth().testTag("zone-widget-${widget.id}")) { widget.content(plugin) }
+            Box(Modifier.fillMaxWidth().testTag("zone-widget-${widget.id}")) {
+              androidx.compose.runtime.CompositionLocalProvider(com.aglyn.pluginhost.LocalSlotParams provides slotParams) { widget.content(plugin) }
+            }
           }
         }
       }
@@ -896,6 +921,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       }
       "upload" -> UploadFieldInput(field, context, text) { onChange(FieldValue.Text(it)) }
+      "media" -> MediaFieldInput(field, text) { onChange(FieldValue.Text(it)) }
       "multiselect" -> {
         // Each choice a switch; the chosen ids are kept one per line. An id the list no longer offers is kept, not dropped.
         val choices = field.choices(context)

@@ -366,9 +366,10 @@ class ScreenImportTest {
   fun theItemDiffAndMergeKeysReplayTheConsolesCases() {
     val file = json(File(root, "libs/native/contracts/function-cases.generated.json").readText()) as JsonObject
     val functions = file.getValue("functions") as JsonObject
-    for (name in listOf("packageJsonDiff", "packageMergeKeys", "packageItemChanges", "aiProductsImportJob", "ssoEnforcementAccounts")) {
+    for (name in listOf("packageJsonDiff", "packageMergeKeys", "packageItemChanges", "aiProductsImportJob", "ssoEnforcementAccounts", "timeZoneChoices")) {
       val cases = ((functions.getValue(name) as JsonObject).getValue("cases") as kotlinx.serialization.json.JsonArray)
-      assertTrue(cases.size > 5, name)
+      // A function with nothing to ask has the one case.
+      assertTrue(cases.size > (if (name == "timeZoneChoices") 0 else 5), name)
       for (one in cases) {
         val args = (((one as JsonObject).getValue("args")) as kotlinx.serialization.json.JsonArray).toList()
         assertEquals(one.getValue("result"), ScreenFunctions.call(name, args), "$name $args")

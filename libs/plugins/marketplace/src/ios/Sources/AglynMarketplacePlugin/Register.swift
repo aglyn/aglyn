@@ -24,6 +24,18 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
     InstalledScreen(context: context)
   }
   r.screen(marketplaceLicencesScreen, title: "Licenses", icon: "doc.text") { context, _ in LicencesScreen(context: context) }
+  // A marketplace plugin's own settings, from its manifest, opened from its page in the workspace's plugins.
+  r.screen(marketplacePluginSettingsScreen, title: "Plugin settings", icon: "gearshape") { context, params in
+    PluginSettingsScreen(context: context, listingID: params["listing"] ?? "")
+  }
+  // The workspace's plugin pages hand the marketplace two slots (the console's `PluginWidgetSlot`): the plugins installed
+  // from it, on the list, and one plugin's installation on its page.
+  r.widget("marketplace.org-installs", title: "Installed from the marketplace", order: 10, slot: "orgPluginInstalls") {
+    OrgPluginInstallsCard(context: $0)
+  }
+  r.widget("marketplace.plugin-installation", title: "Installation", order: 10, slot: "pluginInstallation") {
+    PluginInstallationCard(context: $0)
+  }
   r.quickAction("marketplace.open", title: "Marketplace", icon: "storefront", order: 60, screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.page", path: "/marketplace", screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.listing-page", path: "/marketplace/:listingId", screen: marketplaceListingScreen)

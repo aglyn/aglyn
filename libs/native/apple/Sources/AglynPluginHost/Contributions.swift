@@ -313,3 +313,9 @@ public struct NativePluginManifestEntry {
       register: register)
   }
 }
+
+extension EnvironmentValues {
+  /// The params of the core page's zone a slot widget is drawn in (a plugin's page names the plugin: `pluginId`), the
+  /// native twin of the props the console's `PluginWidgetSlot` hands the widget it draws.
+  @Entry public var aglynSlotParams: NativeParams = [:]
+}

@@ -42,6 +42,8 @@ class ScreenSpec private constructor(val raw: JsonElement) {
   val loads: List<LoadSpec> = raw.entries("load").map { (key, value) -> LoadSpec(key, value) }
   val blocks: List<BlockSpec> = raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } }
   val actions: List<ActionSpec> = raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
+  /** The `actions` entry the screen runs as it opens, once its data has loaded and the action's `when` holds (`start: { "action": "reviewLinked" }`): a link that carries a query (`?notice=`) opens the dialog it names. */
+  val startAction: String? = raw.obj("start").str("action")
   /** `{ when, load, action }`: what this contributed screen does once a core action that names its zone (`afterZone`) has succeeded, and its `when` holds: the `load` is read, then the `action` runs over it. */
   val hook: JsonElement? = raw.obj("hook")
   val requiresSite: Boolean get() = scope == "site"

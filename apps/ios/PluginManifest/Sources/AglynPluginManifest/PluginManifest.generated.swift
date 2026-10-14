@@ -94,7 +94,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "marketplace",
-      contributes: ["screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.publishTemplate", "marketplace.publisherAgreement"], "quickActions": ["marketplace.open"], "deepLinks": ["marketplace.listing-page", "marketplace.page"]],
+      contributes: ["screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.publishTemplate", "marketplace.publisherAgreement"], "widgets": ["marketplace.org-installs", "marketplace.plugin-installation"], "quickActions": ["marketplace.open"], "deepLinks": ["marketplace.listing-page", "marketplace.page"]],
       register: AglynMarketplacePlugin.registerMarketplaceNative
     ),
     NativePluginManifestEntry(

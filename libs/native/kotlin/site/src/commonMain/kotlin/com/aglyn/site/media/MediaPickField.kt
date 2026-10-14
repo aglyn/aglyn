@@ -65,6 +65,8 @@ fun MediaPickField(
   enabled: Boolean = true,
   supporting: String? = null,
   onLink: ((String) -> Unit)? = null,
+  /** The workspace's library alone, whichever site is picked (a workspace's own logo or favicon). */
+  workspaceOnly: Boolean = false,
 ) {
   var choosing by remember { mutableStateOf(false) }
   var linkOpen by remember { mutableStateOf(value.startsWith("https://")) }
@@ -107,7 +109,7 @@ fun MediaPickField(
     }
   }
   if (choosing) {
-    MediaChooserDialog(context, onChoose = { chosen -> choosing = false; linkOpen = false; onPick(chosen) }, onDismiss = { choosing = false }, kind = kind)
+    MediaChooserDialog(context, onChoose = { chosen -> choosing = false; linkOpen = false; onPick(chosen) }, onDismiss = { choosing = false }, kind = kind, workspaceOnly = workspaceOnly)
   }
 }
 

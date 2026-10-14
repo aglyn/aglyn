@@ -157,6 +157,8 @@ extension EnvironmentValues {
   @Entry public var aglynScreenSession = ScreenSession()
   /// Set on a screen opened by another's `gate`: told when the person finished what the gate asked for.
   @Entry var aglynGateResolve: (() -> Void)?
+  /// The workspace, site and API the screen is drawn for, for an input that needs them (the media chooser).
+  @Entry var aglynPluginContext: NativePluginContext?
 }
 
 /// What running an action came to.

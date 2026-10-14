@@ -181,6 +181,12 @@ class NativeWidget(
   val content: @Composable (context: NativePluginContext) -> Unit,
 ) : Contribution
 
+/**
+ * The params of the core page's zone a slot widget is drawn in (a plugin's page names the plugin: `pluginId`), the native twin
+ * of the props the console's `PluginWidgetSlot` hands the widget it draws.
+ */
+val LocalSlotParams = androidx.compose.runtime.staticCompositionLocalOf<NativeParams> { emptyMap() }
+
 class NativeQuickAction(
   override val pluginId: String,
   override val id: String,

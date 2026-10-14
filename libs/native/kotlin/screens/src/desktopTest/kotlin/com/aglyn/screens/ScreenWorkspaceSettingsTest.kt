@@ -15,6 +15,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -25,7 +26,7 @@ import kotlin.test.assertTrue
 class ScreenWorkspaceSettingsTest {
   private val root: File = generateSequence(File("").absoluteFile) { it.parentFile }
     .first { File(it, "libs/native/screens").isDirectory }
-  private val specs = ScreenSpec.parseFile(File(root, "libs/native/screens/workspace.screens.json").readText())
+  private val specs = listOf("workspace", "site").flatMap { ScreenSpec.parseFile(File(root, "libs/native/screens/$it.screens.json").readText()) }
 
   private fun spec(id: String): ScreenSpec = specs.first { it.id == id }
 
@@ -152,5 +153,94 @@ class ScreenWorkspaceSettingsTest {
     val choice = buttons.first { it.id == "breakGlass" }.prompt.first()
     val rows = json("""{"data":{"rows":[{"uid":"u1","label":"a","eligible":true},{"uid":"u2","label":"b","eligible":false}]}}""")
     assertEquals(listOf("u1"), choice.choices(rows).map { it.first })
+  }
+
+  @Test
+  fun theTimeZoneIsPickedFromTheConsolesListNeverTyped() {
+    val general = spec("core.settings.general")
+    val field = FieldSpec.parse(general.blocks.first { it.id == "tz" }.raw.arr("fields").first())!!
+    assertEquals("select", field.kind)
+    assertEquals("timeZoneChoices", general.loads.first { it.key == "zones" }.compute)
+    val zones = ScreenFunctions.call("timeZoneChoices", emptyList())!!
+    val choices = field.choices(json("""{"data":{"zones":$zones}}"""))
+    // The console's default first, then every zone with its underscores read as spaces.
+    assertEquals("" to "UTC (default)", choices.first())
+    assertEquals("America/New York", choices.first { it.first == "America/New_York" }.second)
+    assertEquals(com.aglyn.contracts.Contracts.timeZoneChoices.size + 1, choices.size)
+    // A site may also leave it to the workspace, and cannot pick the default row twice.
+    val siteField = spec("core.site.general").blocks.first { it.id == "details" }.raw.arr("fields").mapNotNull { FieldSpec.parse(it) }.first { it.key == "timeZone" }
+    val siteChoices = siteField.choices(json("""{"data":{"zones":$zones}}"""))
+    assertEquals("Same as the workspace", siteChoices.first().second)
+    assertEquals(1, siteChoices.count { it.first.isEmpty() })
+    assertEquals(com.aglyn.contracts.Contracts.timeZoneChoices.size + 1, siteChoices.size)
+  }
+
+  @Test
+  fun aLinkedNoticeOpensItsReviewAsSoonAsItsDataIsIn() {
+    val holds = spec("core.settings.holds")
+    assertEquals("reviewLinked", holds.startAction)
+    val action = holds.actions.first { it.id == "reviewLinked" }
+    fun scope(notice: String?, reviewable: Boolean) = json(
+      """{"params":${if (notice == null) "{}" else """{"notice":"$notice"}"""},
+          "data":{"notices":{"notices":[{"noticeId":"n1","reviewable":$reviewable},{"noticeId":"n2","reviewable":false}]}}}""",
+    )
+    assertTrue(ScreenValues.condition(action.whenCondition, scope("n1", true)))
+    assertFalse(ScreenValues.condition(action.whenCondition, scope("n1", false)), "a hold that cannot be reviewed opens nothing")
+    assertFalse(ScreenValues.condition(action.whenCondition, scope("n2", true)))
+    assertFalse(ScreenValues.condition(action.whenCondition, scope("missing", true)))
+    assertFalse(ScreenValues.condition(action.whenCondition, scope(null, true)), "a plain visit asks for nothing")
+    assertEquals("n1", ScreenValues.render(action.body!!.str("noticeId")!!, scope("n1", true)))
+    // The link the notice carries reaches this screen with its query.
+    val target = com.aglyn.pluginhost.DeepLinks.resolve(
+      "/acme/settings/holds?notice=n1",
+      listOf(com.aglyn.pluginhost.NativeDeepLink("core", "holds", "/settings/holds", "core.settings.holds")),
+    )
+    assertIs<com.aglyn.pluginhost.NativeLinkTarget.Screen>(target)
+    assertEquals("core.settings.holds", target.screen)
+    assertEquals("n1", target.params["notice"])
+  }
+
+  @Test
+  fun theLogoAndFaviconArePickedFromTheMediaLibraryNeverTyped() {
+    fun kinds(id: String, keys: List<String>): Map<String, String> {
+      val found = linkedMapOf<String, String>()
+      fun walk(element: JsonElement) {
+        when (element) {
+          is kotlinx.serialization.json.JsonObject -> {
+            val key = element.str("key")
+            val kind = element.str("kind")
+            if (key != null && key in keys && kind != null) found[key] = kind
+            element.values.forEach(::walk)
+          }
+          is kotlinx.serialization.json.JsonArray -> element.forEach(::walk)
+          else -> Unit
+        }
+      }
+      walk(spec(id).raw)
+      return found
+    }
+    assertEquals(mapOf("logoUrl" to "media", "logoDarkUrl" to "media"), kinds("core.settings.profile", listOf("logoUrl", "logoDarkUrl")))
+    val branding = listOf("logoUrl", "logoDarkUrl", "faviconUrl", "faviconDarkUrl", "emailLogoUrl")
+    assertEquals(branding.associateWith { "media" }, kinds("core.settings.branding", branding))
+    // What the pick stores is the console's: the CDN path, else the address.
+    assertEquals("/api/media/cdn/org:o1/m1", mediaFieldValue("/api/media/cdn/org:o1/m1", "https://x.test/a.png"))
+    assertEquals("https://x.test/a.png", mediaFieldValue(null, "https://x.test/a.png"))
+    assertEquals("", mediaFieldValue(null, null))
+  }
+
+  @Test
+  fun aMarketplacePluginsPageIsFilledByTheMarketplaceAndKeepsBuiltInBlocksToBuiltInPlugins() {
+    val page = spec("core.plugin")
+    val zone = page.blocks.first { it.type == "zone" && it.string("name") == "pluginInstallation" }
+    val builtIn = json("""{"data":{"plugins":{"rows":[{"id":"ai","on":true,"label":"AI"}]}},"params":{"pluginId":"ai"}}""")
+    val marketplace = json("""{"data":{"plugins":{"rows":[{"id":"ai","on":true,"label":"AI"}]}},"params":{"pluginId":"counter-l1"}}""")
+    assertFalse(ScreenValues.condition(zone.whenCondition, builtIn))
+    assertTrue(ScreenValues.condition(zone.whenCondition, marketplace))
+    // A plugin that is not one of the built-in ones is not "off for every site".
+    fun notices(scope: JsonElement) = page.blocks.filter { ScreenValues.condition(it.whenCondition, scope) && it.type == "notice" }.mapNotNull { it.string("text") }
+    assertTrue(notices(builtIn).any { it.startsWith("On for every site") })
+    assertEquals(emptyList(), notices(marketplace))
+    assertEquals(listOf("viewListing"), page.actions.map { it.id })
+    assertEquals("/{org.slug}/marketplace", spec("core.plugins").actions.first().route)
   }
 }
