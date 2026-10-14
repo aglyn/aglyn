@@ -36,6 +36,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { posReadersCall } from './pos/pos-api'
+import { POS_REGISTERS_ANCHOR } from './pos/pos-pairing.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface RegistersCardProps {
@@ -221,11 +222,22 @@ export function RegistersCard(props: RegistersCardProps) {
     [confirm, user, hostId, enqueueSnackbar],
   )
 
+  /*
+   * Arrived by "Add a register" (AGL-3712): the register page and the POS
+   * devices card link here by anchor, and this card renders after the page
+   * has already tried to scroll to it, so it brings itself into view.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.hash !== `#${POS_REGISTERS_ANCHOR}`) return
+    document.getElementById(POS_REGISTERS_ANCHOR)?.scrollIntoView?.({ block: 'start' })
+  }, [])
+
   const locationName = (id: string) =>
     locations.find((location: any) => location.$id === id)?.name
 
   return (
     <CardDisplay
+      id={POS_REGISTERS_ANCHOR}
       header={'POS registers'}
       help={pluginDocsHelp('pos', { anchor: '#registers' })}
       contentGutterX
