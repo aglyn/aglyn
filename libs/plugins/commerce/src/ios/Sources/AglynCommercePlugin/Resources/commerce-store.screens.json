@@ -664,7 +664,8 @@
               },
               "success": "Reply saved"
             }
-          ]
+          ],
+          "load": "reviews"
         }
       ]
     },
@@ -774,7 +775,8 @@
               },
               "success": "Removed"
             }
-          ]
+          ],
+          "load": "suppliers"
         },
         {
           "type": "actions",
@@ -2628,7 +2630,8 @@
               ],
               "success": "Sent."
             }
-          ]
+          ],
+          "load": "deliveries"
         }
       ]
     }

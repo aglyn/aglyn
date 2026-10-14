@@ -55,7 +55,8 @@
               },
               "success": "Deleted"
             }
-          ]
+          ],
+          "load": "posts"
         },
         {
           "type": "actions",

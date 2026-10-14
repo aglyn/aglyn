@@ -973,7 +973,10 @@ its values does (`item.holds.*.expiresAtMs > @now.ms`). A number field takes `mi
 
 A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with
 `op` any of `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `not-in`, `array-contains` and
-`array-contains-any`, a number or flag in the spec compared as itself. With
+`array-contains-any`, a number or flag in the spec compared as itself. A list block that names its query load (`"load": "key"`) offers "Load more" whenever the window came
+back full: a query has no cursor to continue from, so it reads a window one page size bigger (the spec's `limit`
+again) and replaces its rows, and a reload after an action keeps the window the person grew.
+With
 `aggregate: { count: true, sum: "field" }` the server counts and adds every matching document
 and no row is read: the answer is `data.<key>.count` and `.sum`, left out where the reader
 cannot ask (show "Unavailable", never a zero). `{ "entitlement": "giftCards" }` reads the

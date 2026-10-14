@@ -152,4 +152,77 @@ final class FirestoreLoadsTests: XCTestCase {
     let expected = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 30, hour: 23, minute: 59, second: 59, nanosecond: 999_000_000)))
     XCTAssertEqual(got, .number((expected.timeIntervalSince1970 * 1000).rounded()))
   }
+
+  /// Answers a query with as many rows as it was limited to, up to its total.
+  private final class Rows: FirestoreReader, @unchecked Sendable {
+    let total: Int
+    var limits: [Int?] = []
+    init(total: Int) { self.total = total }
+
+    @MainActor
+    func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void) -> FirestoreListening {
+      limits.append(query.limit)
+      let count = min(total, query.limit ?? total)
+      onChange(.success((1...max(count, 1)).prefix(count).map { FirestoreDocument(id: "d\($0)", data: ["n": $0]) }))
+      return NoListener()
+    }
+
+    @MainActor
+    func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void) -> FirestoreListening {
+      onChange(.success(nil))
+      return NoListener()
+    }
+
+    func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
+    func deleteDocument(_ path: [String]) async throws {}
+  }
+
+  @MainActor
+  private func growing(total: Int, limit: Int) throws -> (ScreenModel, Rows) {
+    let spec = try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": ["rows": ["query": ["collection": "hosts/h1/rows", "limit": .number(Double(limit))]]],
+        "blocks": [["type": "list", "id": "rows", "items": "data.rows.items", "load": "rows", "primary": "{item.n}"]],
+      ]))
+    let reader = Rows(total: total)
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" })
+    return (ScreenModel(spec: spec, context: ["site": ["id": "h1"]], api: api, reader: reader), reader)
+  }
+
+  @MainActor
+  private func rowCount(_ model: ScreenModel) -> Int { ScreenValues.lookup("data.rows.items", in: model.context).array.count }
+
+  /// A list fed by a Firestore query reads a bigger window each time it is asked for more, and stops offering more when the
+  /// window falls short. The Kotlin renderer's `QueryGrowthTest` holds the same cases.
+  @MainActor
+  func testAFullWindowOffersMoreAndEachAskReadsAnotherPage() async throws {
+    let (model, reader) = try growing(total: 5, limit: 2)
+    await model.load()
+    XCTAssertEqual(rowCount(model), 2)
+    XCTAssertEqual(model.cursors["rows"], "2", "a window that came back full may have more behind it")
+    await model.loadMore("rows")
+    XCTAssertEqual(rowCount(model), 4)
+    XCTAssertEqual(model.cursors["rows"], "4")
+    await model.loadMore("rows")
+    XCTAssertEqual(rowCount(model), 5)
+    XCTAssertNil(model.cursors["rows"], "the window fell short, so that was everything")
+    XCTAssertEqual(reader.limits, [2, 4, 6])
+  }
+
+  @MainActor
+  func testAWindowThatFellShortOffersNothingMoreAndAReloadKeepsAGrownOne() async throws {
+    let (short, shortReader) = try growing(total: 1, limit: 2)
+    await short.load()
+    XCTAssertEqual(rowCount(short), 1)
+    XCTAssertNil(short.cursors["rows"])
+    await short.loadMore("rows")
+    XCTAssertEqual(shortReader.limits, [2], "nothing to ask for")
+    let (grown, reader) = try growing(total: 9, limit: 3)
+    await grown.load()
+    await grown.loadMore("rows")
+    await grown.load()
+    XCTAssertEqual(rowCount(grown), 6, "an action that reloads does not shrink the list the person grew")
+    XCTAssertEqual(reader.limits, [3, 6, 6])
+  }
 }

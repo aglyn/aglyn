@@ -167,7 +167,8 @@
               },
               "success": "Category deleted"
             }
-          ]
+          ],
+          "load": "categories"
         },
         {
           "type": "actions",
@@ -330,7 +331,8 @@
             "params": {
               "collectionId": "{item.$id}"
             }
-          }
+          },
+          "load": "collections"
         },
         {
           "type": "actions",
