@@ -365,7 +365,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#email-page': 'A time, and each row opens that email\'s own page. On your organization\'s Emails page it lists every site\'s, with a Site column, and writing a new one there first asks which site it is sent as.',
     '#email-preview': 'Y, Write this email while it is unsent, and Open template for a designed one — beside All messages.',
     '#email-recipients': 'Is not stored — it is rendered for each recipient at send time — so the preview draws the template as it is now, and says so when the email went out before the template was last edited.',
-    '#experiments': 'S refused, telling you the number it found.',
+    '#experiments': 'The people a rule added, a campaign reads the opt-in on their contact, and the list\'s Consent column shows that same opt-in.',
     '#experiments-across-sites': 'Start checks every experiment on the site, not only the page on screen, and refuses a second test running on the same page: the page runner serves only the first.',
     '#last-campaign-card': 'Igured, campaign history shows opens and clicks per campaign, and clicks on A/B sends count as that variant\'s conversions — so the experiment results table fills in by itself.',
     '#list-members': 'St" automation step (e.g. on form completion), popup email capture, the Add to a list card in the Inbox, or by hand from the list itself.',
