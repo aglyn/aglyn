@@ -221,7 +221,9 @@ public final class ScreenModel {
       phase = .failed("Sign in to continue.")
       return
     }
-    let loads = spec.loads.filter { ScreenValues.condition($0.when, in: context) }
+    let wanted = spec.loads.filter { ScreenValues.condition($0.when, in: context) }
+    // A derived value is worked out from the others once they have answered.
+    let loads = wanted.filter { $0.derive == nil }
     var results: [String: JSONValue] = [:]
     var nextCursors: [String: String] = [:]
     do {
@@ -250,9 +252,21 @@ public final class ScreenModel {
       phase = .failed((error as? ConsoleAPIError)?.message ?? error.localizedDescription)
       return
     }
+    for load in wanted where load.derive != nil {
+      results[load.key] = Self.derived(load, from: .object(results))
+    }
     context = ScreenContext.with(context, "data", .object(results))
     cursors = nextCursors
     phase = .ready
+  }
+
+  /// A derived load's value, from what the screen's other loads answered.
+  static func derived(_ load: LoadSpec, from data: JSONValue) -> JSONValue {
+    let source = load.from.flatMap { ScreenValues.lookup($0, in: data) }
+    switch load.derive {
+    case "shippingCoverage": return ShippingCoverage.summary(source)
+    default: return .null
+    }
   }
 
   /// One load: a Firestore document or query, or a route.

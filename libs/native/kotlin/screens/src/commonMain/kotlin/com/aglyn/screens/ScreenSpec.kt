@@ -81,6 +81,12 @@ class LoadSpec(val key: String, json: JsonElement) {
   val entitlement: String? = json.str("entitlement")
   /** An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship. */
   val orderZone: String? = json.str("orderZone")
+  /**
+   * A value worked out from other loads once they have answered, not read from anywhere: `shippingCoverage`, from the
+   * shipping settings the [from] path (a path under `data`) finds.
+   */
+  val derive: String? = json.str("derive")
+  val from: String? = json.str("from")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
