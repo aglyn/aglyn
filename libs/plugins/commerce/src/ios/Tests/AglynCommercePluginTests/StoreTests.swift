@@ -90,8 +90,8 @@ final class CommerceRegistrationTests: XCTestCase {
     let registry = NativePluginRegistry()
     let declared = NativeContributionDeclaration(
       screens: [
-        "commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.order", "commerce.orders", "commerce.product", "commerce.products",
-        "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings",
+        "commerce.card-readers", "commerce.display", "commerce.import.giftCards", "commerce.kiosk", "commerce.order", "commerce.orders",
+        "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings",
       ],
       tabs: ["commerce.orders-tab", "commerce.products-tab"],
       widgets: ["commerce.sales-trend", "commerce.to-ship", "commerce.today"],
