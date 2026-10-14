@@ -9,6 +9,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -57,6 +58,16 @@ class ConsoleApiClientTest {
     assertEquals(JsonPrimitive(true), body!!.jsonObject["ok"])
     assertEquals("https://app.example.com/api/things?a%20b=c%26d", harness.seen[0]["url"])
     assertEquals("Bearer stale", harness.seen[0]["auth"])
+  }
+
+  @Test
+  fun headersGoOutAndAKeyInThemMakesAWriteRetryable() = runTest {
+    val harness = Harness(mutableListOf({ _ -> 503 to """{"error":"Busy"}""" }, { _ -> 200 to "{}" }))
+    client(harness).request("/api/x", ApiMethod.POST, JsonObject(emptyMap()), headers = mapOf("idempotency-key" to "k2"))
+    assertEquals(listOf("k2", "k2"), harness.seen.map { it["key"] })
+    val refused = Harness(mutableListOf({ _ -> 503 to """{"error":"Busy"}""" }))
+    runCatching { client(refused).request("/api/x", ApiMethod.POST, JsonObject(emptyMap()), headers = mapOf("X-Staff" to "yes")) }
+    assertEquals(1, refused.seen.size)
   }
 
   @Test
