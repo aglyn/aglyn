@@ -85,7 +85,7 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(user, AglynUser(uid: "u9", email: "p@example.test", displayName: "Pat"))
     XCTAssertEqual(
       transport.requests.map { $0.url?.lastPathComponent },
-      ["accounts:signInWithCustomToken?key=key", "accounts:lookup?key=key"])
+      ["accounts:signInWithCustomToken", "accounts:lookup"])
     XCTAssertEqual(transport.json(0)["token"] as? String, "minted")
     XCTAssertEqual(transport.json(0)["returnSecureToken"] as? Bool, true)
     XCTAssertEqual(transport.json(1)["idToken"] as? String, "id9")
