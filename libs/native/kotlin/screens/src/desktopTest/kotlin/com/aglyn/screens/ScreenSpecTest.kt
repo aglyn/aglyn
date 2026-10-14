@@ -248,6 +248,36 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun anActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Report","url":"/api/issue-reports","success":"Filed",
+           "instead":{"when":"response.deflected","title":"Already answered","text":"{response.sections.0.title}: {response.sections.0.text}"}}""",
+      ),
+    )!!
+    val instead = assertNotNull(action.instead)
+    val answered = Json.parseToJsonElement("""{"response":{"deflected":true,"sections":[{"title":"Domains","text":"Point a CNAME."}]}}""")
+    assertTrue(ScreenValues.condition(instead.str("when"), answered))
+    assertEquals("Domains: Point a CNAME.", ScreenValues.render(instead.str("text")!!, answered))
+    assertFalse(ScreenValues.condition(instead.str("when"), Json.parseToJsonElement("""{"response":{"ok":true}}""")))
+  }
+
+  @Test
+  fun theReportFormShowsOnlyTheFieldsOfItsKind() {
+    val file = File(screensDir, "account.screens.json")
+    val support = ScreenSpec.parseFile(file.readText()).first { it.id == "core.support" }
+    val block = support.blocks.first { it.title == "Report an issue" }
+    val action = ActionSpec.parse(block.raw.arr("items").first())!!
+    fun asked(kind: String): List<String> {
+      val form = Json.parseToJsonElement("""{"form":{"kind":"$kind"}}""")
+      return action.prompt.filter { ScreenValues.condition(it.whenCondition, form) }.map { it.key }
+    }
+    assertEquals(listOf("kind", "summary", "steps", "expected", "actual", "frequency", "contactConsent"), asked("bug"))
+    assertEquals(listOf("kind", "summary", "problem", "workaround", "proposal", "contactConsent"), asked("idea"))
+    assertEquals(listOf("kind", "summary", "question", "tried", "skipDeflection", "contactConsent"), asked("question"))
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)
