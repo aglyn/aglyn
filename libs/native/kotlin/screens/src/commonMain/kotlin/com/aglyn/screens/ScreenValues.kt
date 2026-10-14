@@ -46,7 +46,11 @@ object ScreenValues {
         if (segment.isNotEmpty()) current = step(current, segment)
         val contains = inner.indexOf("~=")
         val equals = inner.indexOf('=')
-        if (contains >= 0) {
+        if (inner.startsWith("?")) {
+          // `rows[?item.rate && !item.own]`: every row the condition holds for (`item` is the row), as a list.
+          val keep = inner.substring(1)
+          current = (current as? JsonArray)?.let { list -> JsonArray(list.filter { condition(keep, ScreenContext.withItem(context, it)) }) }
+        } else if (contains >= 0) {
           // `rows[badges~=path]`: the first row whose list field holds the text at path.
           val wanted = text(lookup(inner.substring(contains + 2), context))
           val field = inner.substring(0, contains)
@@ -580,6 +584,12 @@ object ScreenValues {
       } ?: "\u2014"
       // `minus/other.path`: this number less the one at the path, never below zero (text that is no number stays as it is).
       "minus" -> number(value)?.let { numberText(max(0.0, it - (parts.getOrNull(1)?.let { path -> number(lookup(path, context)) } ?: 0.0))) } ?: text(value)
+      // `percentof/other.path`: this as a percentage of the number at the path, to one decimal (`5`, `2.5`); `0` when there is nothing to divide by.
+      "percentof" -> {
+        val top = number(value)
+        val bottom = parts.getOrNull(1)?.let { number(lookup(it, context)) }
+        if (top == null || bottom == null || bottom == 0.0) "0" else numberText(floor((top / bottom) * 1000 + 0.5) / 10)
+      }
       // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
       "lesscents" -> formatOrderMoney(round(max(0.0, (number(value) ?: 0.0) - (parts.getOrNull(1)?.let { number(lookup(it, context)) } ?: 0.0))), "USD")
       // A site path with its leading slash: `about` is `/about`, the home page `/`.

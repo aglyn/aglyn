@@ -120,14 +120,22 @@ public struct OpeningHoursPicker: View {
   let label: String?
   let footer: String?
   let enabled: Bool
+  let defaultInterval: WeeklyHoursInterval
   let intervalNoun: String
+  let sameDay: Bool
 
-  public init(text: Binding<String>, label: String? = nil, footer: String? = nil, enabled: Bool = true, intervalNoun: String = "hours") {
+  public init(
+    text: Binding<String>, label: String? = nil, footer: String? = nil, enabled: Bool = true,
+    defaultInterval: WeeklyHoursInterval = WeeklyHoursInterval(start: 9 * 60, end: 17 * 60), intervalNoun: String = "hours",
+    sameDay: Bool = false
+  ) {
     _text = text
     self.label = label
     self.footer = footer
     self.enabled = enabled
+    self.defaultInterval = defaultInterval
     self.intervalNoun = intervalNoun
+    self.sameDay = sameDay
   }
 
   public var body: some View {
@@ -137,6 +145,6 @@ public struct OpeningHoursPicker: View {
       footer: parsed.unreadLines.isEmpty
         ? footer
         : "Some saved hours could not be read (line \(parsed.unreadLines.map(String.init).joined(separator: ", "))) and are not shown. Set the days again here and save to replace them.",
-      enabled: enabled, intervalNoun: intervalNoun)
+      enabled: enabled, defaultInterval: defaultInterval, intervalNoun: intervalNoun, sameDay: sameDay)
   }
 }

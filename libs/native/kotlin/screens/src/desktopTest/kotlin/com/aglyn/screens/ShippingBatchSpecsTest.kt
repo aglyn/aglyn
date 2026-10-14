@@ -6,6 +6,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 
 /** Labels for several orders at once: pick a box and a rule, review the rates, buy them all, the way the console's batch labels do. */
 class ShippingBatchSpecsTest : SpecTestBase() {
@@ -53,6 +56,18 @@ class ShippingBatchSpecsTest : SpecTestBase() {
     assertEquals(listOf("#1001", "UPS Ground", "$8.45"), line(0))
     assertEquals(listOf("#1002", "USPS Priority", "$12.10"), line(1))
     assertEquals(listOf("c", "No rate matches the service rule.", ""), line(2))
+  }
+
+  @Test
+  fun theTotalLeavesOutLabelsOnTheMerchantsOwnCarrierAccount() {
+    val model = review()
+    val total = model.block("total").raw.jsonObject["rows"]!!.jsonArray.single().jsonObject
+    assertEquals("Total for labels on discounted rates", (total["label"] as JsonPrimitive).content)
+    // Order a is on Aglyn's rate ($8.45); order b is on the merchant's own account ($12.10, billed by the carrier); c has no rate.
+    assertEquals("$8.45", ScreenValues.render((total["value"] as JsonPrimitive).content, model.context))
+    assertTrue("total" in model.shown())
+    assertTrue("total" !in review("""{"results":[{"recordId":"c","rate":null,"error":"No rate."}]}""").shown())
+    assertEquals("$0.00", ScreenValues.render((total["value"] as JsonPrimitive).content, review("""{"results":[{"recordId":"b","shipmentId":"s","rate":{"rateId":"r","amountCents":500,"merchantCarrierAccount":true}}]}""").context))
   }
 
   @Test

@@ -36,6 +36,11 @@ class ScreenSpec private constructor(val raw: JsonElement) {
   /** The plain name a sidebar or app bar shows: `label`, else a title without templates. */
   val label: String = raw.str("label") ?: title.takeIf { '{' !in it } ?: "Details"
   val requires: String? = raw.str("requires")
+  /**
+   * For a screen that sits in a zone: a condition over the screen's own loads. The zone reads those loads and lists the row only
+   * while the condition holds, as a console widget that draws nothing for a store it has nothing to say to.
+   */
+  val showWhen: String? = raw.str("showWhen")
   val links: List<String> = raw.arr("links").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
   /** Core screens' zones this plugin screen contributes to (`orgMember`, `staffOrg`, …). */
   val zones: List<String> = raw.arr("zones").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
@@ -76,6 +81,12 @@ class LoadSpec(val key: String, json: JsonElement) {
   val entitlement: String? = json.str("entitlement")
   /** An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship. */
   val orderZone: String? = json.str("orderZone")
+  /**
+   * A value worked out from other loads once they have answered, not read from anywhere: `shippingCoverage`, from the
+   * shipping settings the [from] path (a path under `data`) finds.
+   */
+  val derive: String? = json.str("derive")
+  val from: String? = json.str("from")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {

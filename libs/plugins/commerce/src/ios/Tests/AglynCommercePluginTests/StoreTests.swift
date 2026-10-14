@@ -139,6 +139,31 @@ final class StoreOrdersTests: XCTestCase {
   }
 }
 
+/// The Home card's low-stock count: the products at or under their alert, as the console's card counts them.
+final class GlanceTests: XCTestCase {
+  private func product(_ id: String, threshold: Int?, stock: Int?, deleted: Bool = false) -> FirestoreDocument {
+    var variant: [String: Any] = ["id": "default", "priceUsd": 10.0]
+    if let stock { variant["inventory"] = stock }
+    var data: [String: Any] = ["name": "Mug \(id)", "variants": [variant]]
+    if let threshold { data["lowStockThreshold"] = threshold }
+    if deleted { data["deletedAt"] = 1 }
+    return FirestoreDocument(id: id, data: data)
+  }
+
+  func testAProductIsLowAtOrUnderItsAlertWhenItTracksStockAndHasOne() {
+    let docs = [
+      product("a", threshold: 5, stock: 5), product("b", threshold: 5, stock: 6), product("c", threshold: nil, stock: 0),
+      product("d", threshold: 5, stock: nil), product("e", threshold: 2, stock: 0), product("f", threshold: 5, stock: 1, deleted: true),
+    ]
+    XCTAssertEqual(glanceLowStock(docs), 2, "at the alert counts; above it, no alert, untracked and deleted do not")
+  }
+
+  func testOnlyTheFirstTwoHundredFiftyProductsAreCounted() {
+    let docs = (1...300).map { product("p\($0)", threshold: 10, stock: 1) }
+    XCTAssertEqual(glanceLowStock(docs), glanceProductCeiling)
+  }
+}
+
 @MainActor
 final class CommerceRegistrationTests: XCTestCase {
   /// What `plugins.config.json` declares for commerce under `mobile.contributes`: the screens grow with every spec, and the
