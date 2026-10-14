@@ -1935,48 +1935,16 @@ export function aiStockPhotoWordsOf(job: {
 }
 
 /**
- * The subject a plan's photo words lead with (AGL-3769): its first word that
- * is not filler, with the place or person words that follow it — "bakery" of
- * "bakery pan dulce conchas", "candle shop" of "candle shop soy candles",
- * "ceramic artist" of "ceramic artist stoneware bowls". The words are subject
- * first, never an English noun phrase with its head last, and what follows
- * the subject may be the brief's own names in English letters: Panaderia La
- * Espiga Dorada's "pan dulce conchas" read as the business, made "concha" its
- * craft, and placed purple ceanothus flowers, tagged "ceanothus concha", as
- * its hero. Empty when every word is filler.
- */
-export function aiStockPhotoWordsSubject(photoWords: string): string {
-  const list = contentWords(photoWords)
-  const start = list.findIndex((word) => !FILLER.has(word) && !SITE_KINDS.has(word))
-  if (start < 0) return ''
-  let end = start + 1
-  while (end < list.length && (VENUES.has(list[end]) || ROLES.has(list[end]))) end += 1
-  return list.slice(start, end).join(' ')
-}
-
-/**
- * What a source's photos are searched and judged by (AGL-3760, AGL-3769): a
- * site in another language by the subject of its plan's English photo words,
- * every other site by its business type. One reading for every slot of every
- * source — hero, background, gallery, card, product, post — so no slot
- * searches by words another slot is held against.
- */
-export function aiStockSourceTerms(
-  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords'>,
-): AiStockSiteTerms {
-  return aiStockSiteTerms(aiStockSourceSubject(input) || input.business)
-}
-
-/**
- * What a site in another language is searched by ({@link aiStockSourceTerms}):
- * its photo words' subject, else, where its plan gave none, the English name
- * of its kind of site (AGL-3771) — Panaderia El Trigal's plan gave no photo
+ * What a site in another language is searched by (AGL-3760): its plan's
+ * English photo words, else, where its plan gave none, the English name of
+ * its kind of site (AGL-3771) — Panaderia El Trigal's plan gave no photo
  * words, and its pages searched "con pan dulce" again and placed the Río
- * Dulce beside its story. Empty for every other site.
+ * Dulce beside its story. Empty for every other site, which is searched by
+ * its business type.
  */
-function aiStockSourceSubject(input: Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords'>): string {
+export function aiStockEnglishWords(input: Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords'>): string {
   if (!aiLayoutSpeaksOtherThanEnglish(input.language)) return ''
-  return aiStockPhotoWordsSubject(input.photoWords ?? '') || (input.kindWords ?? '').trim()
+  return (input.photoWords ?? '').trim() || (input.kindWords ?? '').trim()
 }
 
 /**
@@ -1994,10 +1962,10 @@ export function aiLayoutStockPhotoSource(
   // "Una panadería familiar de San Antonio con pan dulce…", read as the
   // business "con pan dulce", and its hero searched that and placed the Río
   // Dulce at dusk; a site in another language is searched by its plan's
-  // English photo words' subject ({@link aiStockSourceTerms}), and its slots'
-  // alt texts, in its own language, name no subject a search could use.
-  const english = aiStockSourceSubject(input)
-  const terms = aiStockSourceTerms(input)
+  // English photo words, and its slots' alt texts, in its own language, name
+  // no subject a search could use.
+  const english = aiStockEnglishWords(input)
+  const terms = aiStockSiteTerms(english || input.business)
   return async (slots) => {
     const timeout = AbortSignal.timeout(
       deps.budgetMs ?? AI_LAYOUT_STOCK_PHOTOS_BUDGET_MS,

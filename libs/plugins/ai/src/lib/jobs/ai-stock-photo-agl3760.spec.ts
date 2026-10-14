@@ -24,6 +24,7 @@ import {
 import type { AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
 import {
   aiLayoutStockPhotoSource,
+  aiStockEnglishWords,
   aiStockForgetJobPhotos,
   aiStockPhotoWordsOf,
   aiStockRelevance,
@@ -152,8 +153,7 @@ describe('a Spanish start is searched in English (AGL-3760, Panadería Sol de Oa
     const words = aiStockPhotoWordsOf({ plan: { language: 'es', photoWords: PANADERIA_WORDS } })
     const [now] = (await aiLayoutStockPhotoSource({ ...base, ...words }, { provider: () => after.provider, ingest: () => after.ingest })?.([slot])) ?? []
     expect(after.asked).not.toContain('con pan dulce')
-    // By the words' subject, which they lead with (AGL-3769).
-    expect(after.asked[0]).toBe('bakery')
+    expect(after.asked[0]).toBe('bakery bread pastries')
     // Nothing recorded answers the English searches, so the starter photos fill it: never the river.
     expect(RIO_DULCE).not.toContain(idOf(now?.src))
   })
@@ -203,5 +203,63 @@ describe('a hero is OF the site’s world, by its first tag (AGL-3760, Copper Fe
     expect(id).not.toBe(LATTE)
     expect(placed).not.toContain(id)
     expect(byId(CANDLE_SHOP_TALL_HERO, id)?.tags[0]).toMatch(/candle/)
+  })
+})
+
+/*
+ * Panaderia El Trigal (job iGmqrEgyW4, beta.249, AGL-3771): its plan gave no
+ * photo words, so every slot searched its Spanish business type, "con pan
+ * dulce", and its story section placed the Río Dulce at dusk. A site in
+ * another language whose plan gave none is searched by its kind of site.
+ */
+describe('a site in another language with no photo words (AGL-3771)', () => {
+  it('reads the English name of the kind of site the person picked', () => {
+    expect(aiStockPhotoWordsOf({ plan: { language: 'es' }, inputs: { siteKind: 'restaurant', businessType: PANADERIA } })).toEqual({
+      language: 'es',
+      kindWords: 'restaurant cafe',
+    })
+  })
+
+  it('is searched by its kind of site, never its business type in its own language', () => {
+    expect(aiStockEnglishWords({ language: 'es', kindWords: 'restaurant cafe' })).toBe('restaurant cafe')
+  })
+
+  it('keeps its plan photo words first, and an English site its business type', () => {
+    expect(aiStockEnglishWords({ language: 'es', photoWords: PANADERIA_WORDS, kindWords: 'restaurant cafe' })).toBe(PANADERIA_WORDS)
+    expect(aiStockEnglishWords({ language: 'en', kindWords: 'restaurant cafe' })).toBe('')
+  })
+
+  it('places a café photo, never the Río Dulce, in the slot it searches for', async () => {
+    const searched: string[] = []
+    const source = aiLayoutStockPhotoSource(
+      {
+        hostId: 'host-trigal',
+        uid: 'owner',
+        seed: 'job-trigal:p3',
+        business: PANADERIA,
+        language: 'es',
+        kindWords: 'restaurant cafe',
+        sectionNames: ['Encabezado', 'Cómo empezó la panadería familiar'],
+        jobId: 'job-trigal',
+      },
+      {
+        provider: () =>
+          ({
+            search: async (request: { query: string }) => {
+              searched.push(request.query)
+              return { photos: [] }
+            },
+            download: async () => null,
+            credit: () => ({ text: '', providerLabel: '', license: '', licenseUrl: '', attributionRequired: false }),
+          }) as never,
+        ingest: () => ({ findStockPhoto: async () => null, ingest: async () => ({ ok: false, status: 500, reason: 'x' }) }) as never,
+      },
+    )
+    await source?.([
+      { imageId: 'img', frameId: null, iconId: null, alt: 'La familia fundadora amasando pan dulce', aspect: 4 / 3, sectionIndex: 1, role: 'card' } as never,
+    ])
+    aiStockForgetJobPhotos()
+    expect(searched.length).toBeGreaterThan(0)
+    expect(searched.join(' | ')).not.toMatch(/dulce|con pan/)
   })
 })
