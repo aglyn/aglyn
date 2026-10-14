@@ -197,6 +197,9 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   /** `{ doc, current, edited }`: the owner's save of a business profile (`edited` the typed values, `current` the path to the stored document); the write follows [BusinessProfile.ownerWrite]. */
   val businessProfile: JsonElement? = json.obj("businessProfile")
 
+  /** After a `write` to the site document that changes how pages render, stage the site-wide republish the console's host-document writes do (`publishSiteWideChange`). */
+  val siteWide: Boolean = json.isTrue("siteWide")
+
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>
     get() = if (reason) prompt + FieldSpec.reason() else prompt

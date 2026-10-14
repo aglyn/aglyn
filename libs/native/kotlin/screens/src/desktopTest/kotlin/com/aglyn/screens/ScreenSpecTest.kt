@@ -308,6 +308,23 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun choicesFromDataLeaveOutWhatTheFilterRefuses() {
+    val field = FieldSpec.parse(
+      Json.parseToJsonElement(
+        """{"key":"screen","kind":"select","options":[{"value":"","label":"Built-in form"}],
+           "optionsFrom":{"items":"data.screens","value":"{item.${'$'}id}","label":"{item.displayName|item.${'$'}id}","filter":"!item.deletedAt && item.kind != group"}}""",
+      ),
+    )!!
+    val context = Json.parseToJsonElement(
+      """{"data":{"screens":[{"${'$'}id":"home","displayName":"Home"},{"${'$'}id":"old","displayName":"Old","deletedAt":5},
+          {"${'$'}id":"folder","displayName":"Folder","kind":"group"},{"${'$'}id":"login"}]}}""",
+    )
+    assertEquals(listOf("", "home", "login"), field.choices(context).map { it.first })
+    assertEquals(listOf("Built-in form", "Home", "login"), field.choices(context).map { it.second })
+    assertTrue(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Set","siteWide":true,"write":{"doc":"hosts/h"}}"""))!!.siteWide)
+  }
+
+  @Test
   fun anActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() {
     val action = ActionSpec.parse(
       Json.parseToJsonElement(

@@ -212,6 +212,24 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ScreenValues.render("{now.prevMonth}", in: model.context).count, 7)
   }
 
+  func testChoicesFromDataLeaveOutWhatTheFilterRefuses() throws {
+    let field = try XCTUnwrap(
+      FieldSpec([
+        "key": "screen", "kind": "select",
+        "options": [["value": "", "label": "Built-in form"]],
+        "optionsFrom": ["items": "data.screens", "value": "{item.$id}", "label": "{item.displayName|item.$id}", "filter": "!item.deletedAt && item.kind != group"],
+      ]))
+    let context: JSONValue = [
+      "data": ["screens": [
+        ["$id": "home", "displayName": "Home"], ["$id": "old", "displayName": "Old", "deletedAt": 5],
+        ["$id": "folder", "displayName": "Folder", "kind": "group"], ["$id": "login"],
+      ]]
+    ]
+    XCTAssertEqual(field.choices(in: context).map(\.value), ["", "home", "login"])
+    XCTAssertEqual(field.choices(in: context).map(\.label), ["Built-in form", "Home", "login"])
+    XCTAssertTrue(try XCTUnwrap(ActionSpec(["label": "Set", "siteWide": true, "write": ["doc": "hosts/h"]])).siteWide)
+  }
+
   func testAnActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() throws {
     let action = try XCTUnwrap(
       ActionSpec([

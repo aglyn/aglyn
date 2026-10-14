@@ -189,6 +189,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// `{ doc, current, edited }`: the owner's save of a business profile. `edited` is the typed values,
   /// `current` the path to the stored document; the write follows `BusinessProfile.ownerWrite`.
   public let businessProfile: JSONValue?
+  /// After a `write` to the site document that changes how pages render, stage the site-wide
+  /// republish the console's host-document writes do (`publishSiteWideChange`).
+  public let siteWide: Bool
   /// A change to the signed-in person's own sign-in, made through the
   /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
   public let account: String?
@@ -268,6 +271,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
     self.businessProfile = json["businessProfile"]
+    self.siteWide = json["siteWide"] == .bool(true)
     self.account = json["account"]?.stringValue
     self.stash = json["stash"]
     self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)

@@ -1295,7 +1295,11 @@
       "icon": "puzzlepiece.extension|extension",
       "scope": "site",
       "links": ["/admin/plugins/:pluginId"],
-      "load": { "plugins": { "switchboard": "site" } },
+      "load": {
+        "plugins": { "switchboard": "site" },
+        "host": { "doc": "hosts/{site.id}", "when": "params.pluginId == accounts", "optional": true },
+        "authPages": { "query": { "collection": "hosts/{site.id}/screens", "limit": 200 }, "when": "params.pluginId == accounts", "optional": true }
+      },
       "blocks": [
         {
           "type": "notice",
@@ -1410,6 +1414,74 @@
               "icon": "gearshape.2|settings",
               "screen": "core.plugin",
               "params": { "pluginId": "{params.pluginId}" }
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "params.pluginId == accounts && data.plugins.rows[id=params.pluginId].state != runs-here",
+          "text": "User Accounts is off for this site, so /signin, /signup and /recover return 404 and nothing assigned here is reachable."
+        },
+        {
+          "type": "fields",
+          "title": "Sign-in & sign-up pages",
+          "when": "params.pluginId == accounts && data.host",
+          "footer": "Design your own membership pages with the Members blocks, then assign them to replace the built-in forms. Assigned pages are kept out of search results.",
+          "rows": [
+            { "label": "Sign-in page", "value": "{data.authPages.items[$id=data.host.authScreens.signinScreenId].displayName|data.host.authScreens.signinScreenId|'Built-in form'}" },
+            { "label": "Sign-up page", "value": "{data.authPages.items[$id=data.host.authScreens.signupScreenId].displayName|data.host.authScreens.signupScreenId|'Built-in form'}" },
+            { "label": "Password recovery page", "value": "{data.authPages.items[$id=data.host.authScreens.recoveryScreenId].displayName|data.host.authScreens.recoveryScreenId|'Built-in form'}" }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "params.pluginId == accounts && data.host && org.manager",
+          "items": [
+            {
+              "id": "set-signinScreenId", "label": "Choose the sign-in page", "icon": "doc.badge.gearshape|description",
+              "prompt": [{
+                "key": "screen", "label": "Sign-in page", "kind": "select", "required": true, "initial": "{data.host.authScreens.signinScreenId}",
+                "help": "Rendered at /signin. Drop a Member sign-in block on it.",
+                "optionsFrom": { "items": "data.authPages.items", "value": "{item.$id}", "label": "{item.displayName|item.$id}", "filter": "!item.deletedAt && item.kind != group" }
+              }],
+              "write": { "doc": "hosts/{site.id}", "fields": { "authScreens": { "signinScreenId": "{form.screen}" } } },
+              "siteWide": true, "success": "Auth page set", "reload": true
+            },
+            {
+              "id": "clear-signinScreenId", "label": "Use the built-in sign-in page", "icon": "arrow.uturn.backward|undo", "when": "data.host.authScreens.signinScreenId",
+              "write": { "doc": "hosts/{site.id}", "fields": { "authScreens": { "signinScreenId": { "$delete": true } } } },
+              "siteWide": true, "success": "Auth page cleared", "reload": true
+            },
+            {
+              "id": "set-signupScreenId", "label": "Choose the sign-up page", "icon": "doc.badge.gearshape|description",
+              "prompt": [{
+                "key": "screen", "label": "Sign-up page", "kind": "select", "required": true, "initial": "{data.host.authScreens.signupScreenId}",
+                "help": "Rendered at /signup. Drop a Member sign-up block on it.",
+                "optionsFrom": { "items": "data.authPages.items", "value": "{item.$id}", "label": "{item.displayName|item.$id}", "filter": "!item.deletedAt && item.kind != group" }
+              }],
+              "write": { "doc": "hosts/{site.id}", "fields": { "authScreens": { "signupScreenId": "{form.screen}" } } },
+              "siteWide": true, "success": "Auth page set", "reload": true
+            },
+            {
+              "id": "clear-signupScreenId", "label": "Use the built-in sign-up page", "icon": "arrow.uturn.backward|undo", "when": "data.host.authScreens.signupScreenId",
+              "write": { "doc": "hosts/{site.id}", "fields": { "authScreens": { "signupScreenId": { "$delete": true } } } },
+              "siteWide": true, "success": "Auth page cleared", "reload": true
+            },
+            {
+              "id": "set-recoveryScreenId", "label": "Choose the password recovery page", "icon": "doc.badge.gearshape|description",
+              "prompt": [{
+                "key": "screen", "label": "Password recovery page", "kind": "select", "required": true, "initial": "{data.host.authScreens.recoveryScreenId}",
+                "help": "Rendered at /recover. Drop a Password recovery block on it.",
+                "optionsFrom": { "items": "data.authPages.items", "value": "{item.$id}", "label": "{item.displayName|item.$id}", "filter": "!item.deletedAt && item.kind != group" }
+              }],
+              "write": { "doc": "hosts/{site.id}", "fields": { "authScreens": { "recoveryScreenId": "{form.screen}" } } },
+              "siteWide": true, "success": "Auth page set", "reload": true
+            },
+            {
+              "id": "clear-recoveryScreenId", "label": "Use the built-in password recovery page", "icon": "arrow.uturn.backward|undo", "when": "data.host.authScreens.recoveryScreenId",
+              "write": { "doc": "hosts/{site.id}", "fields": { "authScreens": { "recoveryScreenId": { "$delete": true } } } },
+              "siteWide": true, "success": "Auth page cleared", "reload": true
             }
           ]
         },
