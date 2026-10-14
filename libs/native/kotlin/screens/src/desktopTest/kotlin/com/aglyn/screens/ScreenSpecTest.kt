@@ -196,6 +196,26 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun aSitePluginScreenWritesOnlyTheFieldsTheSiteOverrides() {
+    val spec = ScreenSpec.parseFile(File(screensDir, "plugin-settings.screens.json").readText()).first { it.id == "core.sitePluginSettings.ai" }
+    assertEquals(listOf("sitePluginSettings"), spec.zones)
+    assertEquals("org.manager && params.pluginId == ai", spec.requires)
+    val form = spec.blocks.first { it.type == "form" }
+    val submit = ActionSpec.parse(form["submit"])!!
+    val scope = Json.parseToJsonElement(
+      """{"user":{"uid":"u1"},"form":{"ov_provider":true,"provider":"anthropic","ov_chatModel":false,"chatModel":"platform"}}""",
+    )
+    val written = ScreenValues.resolveBody(submit.write.obj("fields")!!, scope)
+    assertEquals(JsonPrimitive("anthropic"), written.obj("provider"))
+    assertEquals(Json.parseToJsonElement("""{"${'$'}delete":true}"""), written.obj("chatModel"))
+    assertEquals(JsonPrimitive("u1"), written.obj("updatedBy"))
+    val start = Json.parseToJsonElement("""{"data":{"site":{"provider":"anthropic"},"org":{}}}""")
+    val toggles = form.raw.arr("fields").mapNotNull { FieldSpec.parse(it) }
+    assertEquals(FieldValue.Flag(true), initialValue(toggles.first { it.key == "ov_provider" }, start))
+    assertEquals(FieldValue.Flag(false), initialValue(toggles.first { it.key == "ov_chatModel" }, start))
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)

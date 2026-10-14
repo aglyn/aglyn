@@ -168,6 +168,14 @@
     {
       "template": "{data.access[@data.hostKey]}",
       "expect": "viewer"
+    },
+    {
+      "template": "{data.flag:present}",
+      "expect": "true"
+    },
+    {
+      "template": "{data.nothing:present}",
+      "expect": ""
     }
   ],
   "url": [
@@ -345,6 +353,30 @@
       },
       "expect": {
         "clear": null
+      }
+    },
+    {
+      "body": {
+        "on": {
+          "$if": "data.perms[org.settings]",
+          "then": "{params.uid}",
+          "else": {
+            "$delete": true
+          }
+        },
+        "off": {
+          "$if": "data.flag",
+          "then": "{params.uid}",
+          "else": {
+            "$delete": true
+          }
+        }
+      },
+      "expect": {
+        "on": "u2",
+        "off": {
+          "$delete": true
+        }
       }
     }
   ],

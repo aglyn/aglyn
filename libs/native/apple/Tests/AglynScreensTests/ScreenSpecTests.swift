@@ -159,6 +159,30 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testASitePluginScreenWritesOnlyTheFieldsTheSiteOverrides() throws {
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.sitePluginSettings.ai" })
+    XCTAssertEqual(spec.zones, ["sitePluginSettings"])
+    XCTAssertEqual(spec.requires, "org.manager && params.pluginId == ai")
+    let form = try XCTUnwrap(spec.blocks.first { $0.type == "form" })
+    let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+    let fields = try XCTUnwrap(submit.write?["fields"])
+    let scope: JSONValue = [
+      "user": ["uid": "u1"],
+      "form": ["ov_provider": true, "provider": "anthropic", "ov_chatModel": false, "chatModel": "platform"],
+    ]
+    let written = ScreenValues.resolveBody(fields, in: scope)
+    XCTAssertEqual(written["provider"], "anthropic")
+    XCTAssertEqual(written["chatModel"], ["$delete": true])
+    XCTAssertEqual(written["updatedBy"], "u1")
+    // A field the site holds starts overridden, even when the stored value is false or 0.
+    let start: JSONValue = ["data": ["site": ["provider": "anthropic"], "org": [:]]]
+    let toggle = try XCTUnwrap(form["fields"].array.compactMap(FieldSpec.init).first { $0.key == "ov_provider" })
+    XCTAssertEqual(initialValue(toggle, in: start), .flag(true))
+    let other = try XCTUnwrap(form["fields"].array.compactMap(FieldSpec.init).first { $0.key == "ov_chatModel" })
+    XCTAssertEqual(initialValue(other, in: start), .flag(false))
+  }
+
+  @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
     let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)

@@ -188,7 +188,11 @@ object ScreenValues {
   fun resolveBody(body: JsonElement, context: JsonElement): JsonElement = when (body) {
     is JsonPrimitive -> if (body.isString) resolve(body.content, context) else body
     is JsonArray -> JsonArray(body.map { resolveBody(it, context) })
-    is JsonObject -> if (body.size == 1 && (body["\$append"] is JsonObject || body["\$without"] is JsonObject)) {
+    is JsonObject -> if (body.containsKey("\$if") && body.keys.all { it == "\$if" || it == "then" || it == "else" }) {
+      // `{"$if": "form.override", "then": "{form.x}", "else": {"$delete": true}}`: one of two values by a condition.
+      val chosen = if (condition((body["\$if"] as? JsonPrimitive)?.takeIf { it.isString }?.content, context)) body["then"] else body["else"]
+      chosen?.let { resolveBody(it, context) } ?: JsonNull
+    } else if (body.size == 1 && (body["\$append"] is JsonObject || body["\$without"] is JsonObject)) {
       // `{"$append": {"list": "{a}", "item": "{b}"}}` / `$without`: the list with the item added (once) or removed.
       val adding = body["\$append"] is JsonObject
       val spec = (body["\$append"] ?: body["\$without"]) as JsonObject
@@ -383,6 +387,7 @@ object ScreenValues {
         is JsonObject -> value.size.toString()
         else -> number(value)?.let { grouped(it) } ?: "0"
       }
+      "present" -> if (value != null && value != JsonNull) "true" else ""
       "yesno" -> if (truthy(value)) "Yes" else "No"
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
       "upper" -> text(value).uppercase()
