@@ -159,6 +159,22 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(asked("question"), ["kind", "summary", "question", "tried", "skipDeflection", "contactConsent"])
   }
 
+  /// An `export` action asks nothing of a route: it names the transfer resource, and its title, file name and filter are templates.
+  func testAnExportActionNamesTheResourceAndMakesNoRequestOfItsOwn() throws {
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Export",
+        "export": ["resource": "forms.submissions", "title": "Export {item.name}", "fileStem": "{item.slug}", "filter": ["formId": "{item.id}"]],
+      ]))
+    let export = try XCTUnwrap(action.export)
+    XCTAssertEqual(export["resource"]?.stringValue, "forms.submissions")
+    XCTAssertNil(action.url)
+    XCTAssertFalse(action.reload, "an export has nothing to reload")
+    let scope: JSONValue = ["item": ["id": "f1", "name": "Contact", "slug": "contact"]]
+    XCTAssertEqual(ScreenValues.render(export["title"]?.stringValue ?? "", in: scope), "Export Contact")
+    XCTAssertEqual(ScreenValues.resolveBody(try XCTUnwrap(export["filter"]), in: scope), ["formId": "f1"])
+  }
+
   /// An action's `headers` go out with the request, and `{attempt}` holds one key while the same
   /// request is sent again and takes a new one when the body changes (enterprise billing).
   @MainActor

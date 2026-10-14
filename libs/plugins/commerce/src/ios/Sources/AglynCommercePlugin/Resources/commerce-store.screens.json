@@ -664,7 +664,8 @@
               },
               "success": "Reply saved"
             }
-          ]
+          ],
+          "load": "reviews"
         }
       ]
     },
@@ -774,7 +775,8 @@
               },
               "success": "Removed"
             }
-          ]
+          ],
+          "load": "suppliers"
         },
         {
           "type": "actions",
@@ -897,10 +899,9 @@
                 {
                   "key": "hours",
                   "label": "Pickup hours",
-                  "kind": "multiline",
+                  "kind": "hours",
                   "initial": "{item.pickup.hours}",
-                  "placeholder": "Mo-Fr 09:00-17:00",
-                  "help": "One line for each set of days: Mo-Fr 09:00-17:00, Sa 10:00-14:00."
+                  "help": "Switch on each day buyers can collect, then pick the times."
                 },
                 {
                   "key": "instructions",
@@ -2628,7 +2629,8 @@
               ],
               "success": "Sent."
             }
-          ]
+          ],
+          "load": "deliveries"
         }
       ]
     }

@@ -140,6 +140,8 @@ public final class ScreenModel {
   public private(set) var context: JSONValue
   /// The cursor of each paged load's next page, by load key.
   public private(set) var cursors: [String: String] = [:]
+  /// How many rows each grown Firestore query load reads now: a list that was asked for more asks for its page size again.
+  @ObservationIgnored private var queryLimits: [String: Int] = [:]
   public private(set) var loadingMore: Set<String> = []
   /// Per-block search words for loads whose route searches (`search` param).
   public var search: [String: String] = [:]
@@ -196,11 +198,12 @@ public final class ScreenModel {
       try await withThrowingTaskGroup(of: (String, JSONValue, String?).self) { group in
         let reader = reader
         let context = context
+        let limits = queryLimits
         for load in loads {
           let path = url(for: load)
           group.addTask {
             do {
-              return try await Self.fetch(load, path: path, api: api, reader: reader, context: context)
+              return try await Self.fetch(load, path: path, api: api, reader: reader, context: context, limit: limits[load.key])
             } catch where load.optional && !(error is CancellationError) {
               return (load.key, .null, nil)
             }
@@ -224,7 +227,7 @@ public final class ScreenModel {
 
   /// One load: a Firestore document or query, or a route.
   nonisolated static func fetch(
-    _ load: LoadSpec, path: String, api: ConsoleAPIClient, reader: FirestoreReader?, context: JSONValue
+    _ load: LoadSpec, path: String, api: ConsoleAPIClient, reader: FirestoreReader?, context: JSONValue, limit: Int? = nil
   ) async throws -> (String, JSONValue, String?) {
     if let doc = load.doc {
       guard let reader else { return (load.key, .null, nil) }
@@ -249,7 +252,11 @@ public final class ScreenModel {
     }
     if let query = load.query {
       guard let reader else { return (load.key, .null, nil) }
-      return (load.key, try await FirestoreLoads.query(reader, query, in: context), nil)
+      let rows = limit ?? FirestoreLoads.queryLimit(query)
+      let answer = try await FirestoreLoads.query(reader, query, in: context, limit: rows)
+      // A window that came back full may have more behind it; the list offers "Load more" with this as its cursor.
+      let full = query["aggregate"] == nil && ScreenValues.lookup("items", in: answer).array.count >= rows
+      return (load.key, answer, full ? String(rows) : nil)
     }
     let body = load.body.map { ScreenValues.resolveBody($0, in: context) }
     let value = try await api.request(path, method: load.method, body: body) ?? .null
@@ -259,6 +266,23 @@ public final class ScreenModel {
 
   /// The next page of a paged load, appended to its rows.
   public func loadMore(_ key: String) async {
+    // A Firestore query has no cursor to continue from here: it reads a bigger window (the page size again) and replaces its rows.
+    if let api, let load = spec.loads.first(where: { $0.key == key }), let query = load.query, let cursor = cursors[key],
+      !loadingMore.contains(key)
+    {
+      loadingMore.insert(key)
+      defer { loadingMore.remove(key) }
+      let step = FirestoreLoads.queryLimit(query)
+      queryLimits[key] = (Int(cursor) ?? step) + step
+      guard let (_, grown, next) = try? await Self.fetch(
+        load, path: "", api: api, reader: reader, context: context, limit: queryLimits[key])
+      else { return }
+      guard case .object(var record) = data else { return }
+      record[key] = grown
+      context = ScreenContext.with(context, "data", .object(record))
+      cursors[key] = next?.isEmpty == false ? next : nil
+      return
+    }
     guard let api, let load = spec.loads.first(where: { $0.key == key }), let cursor = cursors[key],
       let itemsPath = load.items, !loadingMore.contains(key)
     else { return }

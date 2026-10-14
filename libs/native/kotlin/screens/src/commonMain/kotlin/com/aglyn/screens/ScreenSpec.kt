@@ -125,6 +125,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   /** A Besigner path (whole, from the console root) opened in the app's web view. */
   val besigner: String? = json.str("besigner")
   val copy: String? = json.str("copy")
+  /**
+   * `{ resource, title, fileStem, scope, filter }`: opens the export dialog on a transfer resource (`commerce.products`),
+   * which asks for the columns and the format and hands the file to the device. `scope` is `{ "kind": "all" }` unless it
+   * names a filter; `title`, `fileStem` and `filter` are templates.
+   */
+  val export: JsonElement? = json.obj("export")
   val reveal: String? = json.str("reveal")
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
   /** The status of the answer that runs `else` (404 unless the spec names another, such as 409). */
@@ -192,6 +198,8 @@ class FieldSpec private constructor(
   val integer: Boolean = false,
   /** A regular expression a typed value must contain a match of (an https address); an empty value is left to `required`. */
   val pattern: String? = null,
+  /** An `hours` field's options: `{ noun, sameDay, start, end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets). */
+  val hours: JsonElement? = null,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
@@ -302,6 +310,7 @@ class FieldSpec private constructor(
         max = ScreenValues.number(json.obj("max")),
         integer = json.isTrue("integer"),
         pattern = json.str("pattern"),
+        hours = json.obj("hours"),
       )
     }
   }

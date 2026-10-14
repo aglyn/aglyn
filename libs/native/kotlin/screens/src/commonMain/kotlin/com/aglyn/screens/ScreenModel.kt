@@ -136,6 +136,8 @@ class ScreenModel(
   var context: JsonElement by mutableStateOf(spec.raw.obj("constants")?.let { ScreenContext.with(initial, "const", it) } ?: initial)
     private set
   val cursors = mutableStateMapOf<String, String>()
+  /** How many rows each grown Firestore query load reads now: a list that was asked for more asks for its page size again. */
+  private val queryLimits = mutableMapOf<String, Int>()
   val loadingMore = mutableStateMapOf<String, Boolean>()
   val search = mutableStateMapOf<String, String>()
   /** The `{attempt}` key of each action's last request, by action, path and body: a retry reuses it. */
@@ -199,7 +201,12 @@ class ScreenModel(
       return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
     }
     load.query?.let { query ->
-      return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      val limit = queryLimits[load.key] ?: FirestoreLoads.queryLimit(query)
+      val answer = FirestoreLoads.query(reader, query, context, limit)
+      // A window that came back full may have more behind it; the list offers "Load more" with this as its cursor.
+      val full = query.obj("aggregate") == null && ((answer as? JsonObject)?.get("items") as? JsonArray)?.size.let { it != null && it >= limit }
+      return Triple(load.key, answer, if (full) limit.toString() else null)
     }
     load.orderZone?.let { id ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
@@ -224,6 +231,25 @@ class ScreenModel(
     val client = api ?: return
     val load = spec.loads.firstOrNull { it.key == key } ?: return
     val cursor = cursors[key] ?: return
+    // A Firestore query has no cursor to continue from here: it reads a bigger window (the page size again) and replaces its rows.
+    load.query?.let { query ->
+      if (loadingMore[key] == true) return
+      loadingMore[key] = true
+      try {
+        queryLimits[key] = (cursor.toIntOrNull() ?: FirestoreLoads.queryLimit(query)) + FirestoreLoads.queryLimit(query)
+        val (_, grown, next) = fetch(client, load)
+        val record = (data as? JsonObject)?.toMutableMap() ?: return
+        record[key] = grown
+        context = ScreenContext.with(context, "data", JsonObject(record))
+        if (next.isNullOrEmpty()) cursors.remove(key) else cursors[key] = next
+      } catch (error: CancellationException) {
+        throw error
+      } catch (_: Throwable) {
+      } finally {
+        loadingMore.remove(key)
+      }
+      return
+    }
     val itemsPath = load.items ?: return
     if (loadingMore[key] == true) return
     loadingMore[key] = true

@@ -113,6 +113,19 @@
         },
         {
           "type": "links",
+          "id": "data",
+          "title": "Data",
+          "items": [
+            {
+              "title": "Export records",
+              "icon": "download|download",
+              "screen": "commerce.transfer",
+              "subtitle": "Products, orders, promotions and more as a file"
+            }
+          ]
+        },
+        {
+          "type": "links",
           "id": "reports",
           "title": "Reports",
           "items": [
@@ -665,6 +678,99 @@
           "name": "commerceSettings",
           "title": "Connected services",
           "footer": "Tax services, shipping, fulfillment, accounting and the other services your store connects to."
+        }
+      ]
+    },
+    {
+      "id": "commerce.transfer",
+      "title": "Export records",
+      "label": "Export records",
+      "subtitle": "Products, orders, promotions and more as a file",
+      "icon": "download|download",
+      "scope": "site",
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "about",
+          "tone": "info",
+          "text": "Pick what to export. You choose the columns and the file type next, and the file is handed to your device. The site’s own roles and plan decide what each export allows."
+        },
+        {
+          "type": "actions",
+          "id": "export",
+          "title": "Export",
+          "items": [
+            {
+              "id": "products",
+              "label": "Export products",
+              "icon": "inventory_2|inventory_2",
+              "export": {
+                "resource": "commerce.products",
+                "title": "Export products",
+                "fileStem": "products"
+              }
+            },
+            {
+              "id": "categories",
+              "label": "Export product categories",
+              "icon": "category|category",
+              "export": {
+                "resource": "commerce.categories",
+                "title": "Export product categories",
+                "fileStem": "categories"
+              }
+            },
+            {
+              "id": "orders",
+              "label": "Export orders",
+              "icon": "shopping_basket|shopping_basket",
+              "export": {
+                "resource": "commerce.orders",
+                "title": "Export orders",
+                "fileStem": "orders"
+              }
+            },
+            {
+              "id": "discounts",
+              "label": "Export discounts",
+              "icon": "tag|sell",
+              "export": {
+                "resource": "commerce.discounts",
+                "title": "Export discounts",
+                "fileStem": "discounts"
+              }
+            },
+            {
+              "id": "coupons",
+              "label": "Export coupons",
+              "icon": "ticket|local_offer",
+              "export": {
+                "resource": "commerce.coupons",
+                "title": "Export coupons",
+                "fileStem": "coupons"
+              }
+            },
+            {
+              "id": "gift-cards",
+              "label": "Export gift cards",
+              "icon": "gift|card_giftcard",
+              "export": {
+                "resource": "commerce.gift-cards",
+                "title": "Export gift cards",
+                "fileStem": "gift-cards"
+              }
+            },
+            {
+              "id": "tracking",
+              "label": "Export tracking numbers",
+              "icon": "local_shipping|local_shipping",
+              "export": {
+                "resource": "commerce.tracking",
+                "title": "Export tracking numbers",
+                "fileStem": "tracking-numbers"
+              }
+            }
+          ]
         }
       ]
     }

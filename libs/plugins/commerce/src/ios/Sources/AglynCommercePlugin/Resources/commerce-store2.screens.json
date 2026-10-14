@@ -55,7 +55,8 @@
               },
               "success": "Deleted"
             }
-          ]
+          ],
+          "load": "posts"
         },
         {
           "type": "actions",
@@ -1485,10 +1486,14 @@
             {
               "key": "windows",
               "label": "Delivery windows",
-              "kind": "multiline",
+              "kind": "hours",
               "initial": "{data.store.localDelivery.windows}",
-              "placeholder": "Mo-Fr 09:00-12:00",
-              "help": "One line for each set of days and its window: Mo-Fr 09:00-12:00, Sa 10:00-14:00. Each window is offered on its day."
+              "hours": {
+                "noun": "window",
+                "start": 540,
+                "end": 720
+              },
+              "help": "Switch on each day you deliver, then pick its windows. Each window is offered on its day."
             },
             {
               "key": "leadTime",

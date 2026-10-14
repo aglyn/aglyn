@@ -129,10 +129,14 @@ enum FirestoreLoads {
     return doc
   }
 
+  /// How many rows a query load reads to start with: the spec's `limit`, or fifty.
+  static func queryLimit(_ spec: JSONValue) -> Int { ScreenValues.number(spec["limit"]).map { Int($0) } ?? 50 }
+
   /// A collection query, read once: `{ "items": [...] }`.
-  /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`.
+  /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. `limit` replaces the spec's
+  /// own when a list has been asked for more rows (a growing window, as the console's lists page).
   @MainActor
-  static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue) async throws -> JSONValue {
+  static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue, limit: Int? = nil) async throws -> JSONValue {
     let collection = ScreenValues.render(spec["collection"]?.stringValue ?? "", in: context)
     var equals: [(field: String, value: Any)] = []
     var filters: [ListQueryConstraint] = []
@@ -170,8 +174,8 @@ enum FirestoreLoads {
       let parts = raw.split(separator: " ")
       order = [FirestoreQuery.Order(String(parts[0]), descending: parts.count > 1 && parts[1] == "desc")]
     }
-    let limit = ScreenValues.number(spec["limit"]).map { Int($0) } ?? 50
-    let query = FirestoreQuery(segments(collection), equals: equals, filters: filters, order: order, limit: limit)
+    let rows = limit ?? queryLimit(spec)
+    let query = FirestoreQuery(segments(collection), equals: equals, filters: filters, order: order, limit: rows)
     // `aggregate`: { count: true, sum: "balanceCents" } asks the server for the figures over every matching document
     // and reads no rows: `count` and `sum` are missing from the result where the reader cannot answer, so a screen
     // shows "Unavailable" instead of a zero.

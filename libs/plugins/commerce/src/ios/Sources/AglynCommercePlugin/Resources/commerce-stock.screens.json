@@ -196,7 +196,8 @@
               "when": "item.source"
             }
           ],
-          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list."
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
         }
       ]
     },
@@ -302,7 +303,8 @@
               "when": "item.source"
             }
           ],
-          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list."
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
         }
       ]
     },
@@ -408,7 +410,8 @@
               "when": "item.source"
             }
           ],
-          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list."
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
         }
       ]
     },
@@ -514,7 +517,8 @@
               "when": "item.source"
             }
           ],
-          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list."
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
         }
       ]
     },
@@ -620,7 +624,8 @@
               "when": "item.source"
             }
           ],
-          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list."
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
         }
       ]
     },

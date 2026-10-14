@@ -89,8 +89,14 @@ internal object FirestoreLoads {
     )
   }
 
-  /** `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. */
-  suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement): JsonElement {
+  /** How many rows a query load reads to start with: the spec's `limit`, or fifty. */
+  fun queryLimit(spec: JsonElement): Int = ScreenValues.number(spec.obj("limit"))?.toInt() ?: 50
+
+  /**
+   * `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. [limit] replaces the spec's own
+   * when a list has been asked for more rows (a growing window, as the console's lists page).
+   */
+  suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement, limit: Int? = null): JsonElement {
     val collection = ScreenValues.render(spec.str("collection").orEmpty(), context)
     val filters = spec.arr("where").mapNotNull { clause ->
       val parts = clause as? JsonArray ?: return@mapNotNull null
@@ -133,7 +139,7 @@ internal object FirestoreLoads {
       FirestoreFilter(field, op, if (listOp) (parts[2] as? JsonArray)?.map { plain(it) } ?: listOf(plain(parts[2])) else plain(parts[2]))
     }
     val order = spec.str("orderBy")?.split(' ')?.let { listOf(FirestoreOrder(it[0], it.getOrNull(1) == "desc")) } ?: emptyList()
-    val limit = ScreenValues.number(spec.obj("limit"))?.toInt() ?: 50
+    val rows = limit ?: queryLimit(spec)
     // `aggregate`: { count: true, sum: "balanceCents" } asks the server for the figures over every matching document
     // and reads no rows: `count` and `sum` are missing from the result where the reader cannot answer, so a screen
     // shows "Unavailable" instead of a zero.
@@ -149,7 +155,7 @@ internal object FirestoreLoads {
         },
       )
     }
-    val page = reader.page(FirestoreQuery(collection, filters, order, limit))
+    val page = reader.page(FirestoreQuery(collection, filters, order, rows))
     return JsonObject(mapOf("items" to JsonArray(page.docs.map { json(it) })))
   }
 }

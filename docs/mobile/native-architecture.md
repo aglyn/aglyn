@@ -885,7 +885,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
-reason, success, instead, check, open, navigate, back, reload, when, link, copy,
+reason, success, instead, check, open, navigate, back, reload, when, link, copy, export,
 reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
@@ -902,6 +902,11 @@ that matches wins) shown in place of `success` when the route's answer meets
 (`open` then names the response field holding the invoice page to open).
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
+
+`export` is `{ resource, title, fileStem, scope, filter }`: it makes no request of its own but opens the export
+sheet (`TransferExportSheet`, `TransferExportDialog`) on a transfer resource such as `commerce.products`, which asks for
+the columns and the file type and hands the file to the device. `scope` is `{ "kind": "all" }` unless it names a
+filter; `title`, `fileStem` and `filter` are templates. The site's roles and plan are the server's to enforce.
 
 `headers` names request headers, each a template. `{attempt}` there is one key per
 (action, route, resolved body): sending the same request again, a retry or a second tap,
@@ -926,6 +931,12 @@ prints them joined); a select's `optionsFrom` takes `where`, a condition on the
 row (`item.classification == bank`); and a comparison's right side may be another
 path (`a != @b.c`). A load names the query parameter its route searches by with
 `searchParam` (the catalog route reads `q`, the default is `search`).
+
+A field of kind `hours` is a week of opening hours chosen by touch, as the console's weekly hours picker is: a switch
+for each day and, for an open day, a From and a To time from a menu, with another interval on request. It reads and
+writes the stored text lines (`Mo-Fr 09:00-17:00`), so nobody types them; its `hours` option is `{ noun, sameDay, start,
+end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets, in minutes).
+`libs/native/screens/weekly-hours-cases.json` holds the Swift and Kotlin conversions to the console's own.
 
 A form or prompt can list fields from the data: an entry
 `{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
@@ -968,7 +979,10 @@ its values does (`item.holds.*.expiresAtMs > @now.ms`). A number field takes `mi
 
 A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with
 `op` any of `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `not-in`, `array-contains` and
-`array-contains-any`, a number or flag in the spec compared as itself. With
+`array-contains-any`, a number or flag in the spec compared as itself. A list block that names its query load (`"load": "key"`) offers "Load more" whenever the window came
+back full: a query has no cursor to continue from, so it reads a window one page size bigger (the spec's `limit`
+again) and replaces its rows, and a reload after an action keeps the window the person grew.
+With
 `aggregate: { count: true, sum: "field" }` the server counts and adds every matching document
 and no row is read: the answer is `data.<key>.count` and `.sum`, left out where the reader
 cannot ask (show "Unavailable", never a zero). `{ "entitlement": "giftCards" }` reads the

@@ -166,7 +166,8 @@
             "params": {
               "returnId": "{item.$id}"
             }
-          }
+          },
+          "load": "returns"
         }
       ]
     },
@@ -280,7 +281,8 @@
             "params": {
               "returnId": "{item.$id}"
             }
-          }
+          },
+          "load": "returns"
         }
       ]
     },
