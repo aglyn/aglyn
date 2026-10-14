@@ -59,6 +59,8 @@ class RegisterModel(
   val opsApi: PosOpsApi = OfflinePosOps,
   /** The customer route. */
   customersApi: PosCustomersApi = OfflinePosCustomers,
+  /** The return route. */
+  returnsApi: PosReturnsApi = OfflinePosReturns,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -70,6 +72,8 @@ class RegisterModel(
 
   /** The customer lookup beside the basket. */
   val customers = PosCustomerModel(customersApi, scope)
+  /** The return being rung at the register. */
+  val returns = PosReturnModel(returnsApi, scope, { register?.id }, { cashier.assertion })
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set

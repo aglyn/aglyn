@@ -70,14 +70,17 @@ final class RegisterModel {
   @ObservationIgnored private var tillShift: PosShiftModel!
   /// The customer lookup beside the basket.
   @ObservationIgnored let customers: PosCustomerModel
+  @ObservationIgnored private var tillReturns: PosReturnModel!
   /// Who is ringing: the cashier a PIN switched in, and the idle lock.
   var cashier: PosCashier { tillCashier }
   /// The register's shift and its drawer.
   var shift: PosShiftModel { tillShift }
+  /// The return being rung at the register.
+  var returns: PosReturnModel { tillReturns }
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
-    defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil
+    defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil, returnsAPI: PosReturnsAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
@@ -93,6 +96,9 @@ final class RegisterModel {
     cashier.assertionSink = { sale.cashier.assertion = $0 }
     tillCashier = cashier
     tillShift = PosShiftModel(api: ops, registerID: { [weak self] in self?.register?.id }, assertion: { [weak cashier] in cashier?.assertion })
+    tillReturns = PosReturnModel(
+      api: returnsAPI ?? ConsolePosReturnsAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id },
+      assertion: { [weak cashier] in cashier?.assertion })
   }
 
   func money(_ cents: Int) -> String { posMoney(cents, currency: currency) }
