@@ -53,8 +53,8 @@ line here is done; each line names the console source it was read from.
 | page | what the console has that the screens lack | state |
 | -- | -- | -- |
 | Organization | Enterprise custom billing (`org-detail` page, `/api/admin/enterprise-billing`, needs `Idempotency-Key`) | done (action `headers`) |
-| Organization | Override editor: stored plan, comp plan and caps, quota overrides, feature and release-flag overrides, reason code (`StaffOrgActions`, `/api/admin/org-override`) | open |
-| Organization | Request or cancel erasure: the console batches the org flag and its audit row in the client SDK, then calls `/api/admin/erasure-request`; the native writers have no atomic batch or server-timestamp sentinel yet | open |
+| Organization | Override editor: stored plan, staff comp and caps, every quota, feature and early-access switch with what the workspace holds now, the reason code and note, saved through `/api/admin/org-override` (generated from the console's lists in `utils/org-override-fields.ts`; the route replaces the whole set, so all of it is sent). The save reports what took effect | done |
+| Organization | Request or cancel erasure: the web page batches the flag and its audit row in the browser; a native client cannot build the audit row's index fields or batch atomically, so `/api/admin/org-erasure` makes both writes in one batch and tells the owner | done |
 | Organization | Suspend and unsuspend sent free text where the route takes a reason code (it refused every one), and pause or resume AI (`/api/admin/lockdown` feature `ai-assist`, `ai-generate`) | done |
 | Organization | How they found us (`/api/admin/acquisition`) | done |
 | Organization | Subscription card with cancel, typed workspace name and reason (`/api/admin/billing/cancel-subscription`) | done |

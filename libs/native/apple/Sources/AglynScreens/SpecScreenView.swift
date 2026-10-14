@@ -322,6 +322,20 @@ struct SpecScreenBody: View {
           }
         }
       }
+    case "image":
+      // `{ "type": "image", "src": "{item.url}", "caption": "…" }`: a picture the route hands over (a staff media preview).
+      let source = ScreenValues.render(block["src"]?.stringValue ?? "", in: context)
+      if !source.isEmpty {
+        Section {
+          AglynRemoteImage(URL(string: source), contentMode: .fit, label: block["caption"]?.stringValue.map { ScreenValues.render($0, in: context) })
+            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 320)
+            .listRowInsets(EdgeInsets())
+        } header: {
+          if let title { Text(title) }
+        } footer: {
+          if let footer, !footer.isEmpty { Text(footer) }
+        }
+      }
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))

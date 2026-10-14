@@ -231,6 +231,33 @@ object ScreenValues {
       val spec = body["\$if"] as JsonObject
       val branch = if (condition(spec.str("when"), context)) spec["then"] else spec["else"]
       branch?.let { resolveBody(it, context) } ?: JsonNull
+    } else if (body.size == 1 && body["\$collect"] is JsonObject) {
+      // `{"$collect": {"prefix": "quota.", "as": "number"}}`: the form's `quota.*` inputs as a map, key without the prefix.
+      // `as: number` keeps the filled ones as numbers; `as: flag` reads "true" and "false" and leaves "" (inherit) out.
+      val spec = body["\$collect"] as JsonObject
+      val prefix = spec.str("prefix").orEmpty()
+      val kind = spec.str("as") ?: "text"
+      val map = mutableMapOf<String, JsonElement>()
+      ((lookup("form", context)) as? JsonObject)?.forEach { (key, value) ->
+        if (!key.startsWith(prefix)) return@forEach
+        val name = key.removePrefix(prefix)
+        val primitive = value as? JsonPrimitive
+        when {
+          value is JsonNull -> {}
+          kind == "flag" -> {
+            if (primitive != null && !primitive.isString) map[name] = primitive
+            else if (primitive?.content == "true") map[name] = JsonPrimitive(true)
+            else if (primitive?.content == "false") map[name] = JsonPrimitive(false)
+          }
+          kind == "number" && primitive != null && primitive.isString -> {
+            val trimmed = primitive.content.trim()
+            if (trimmed.isNotEmpty()) map[name] = trimmed.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(trimmed)
+          }
+          primitive != null && primitive.isString -> if (primitive.content.isNotEmpty()) map[name] = value
+          else -> map[name] = value
+        }
+      }
+      JsonObject(map)
     } else if (body.size == 1 && body["\$afterHours"] != null) {
       // `{"$afterHours": "{form.hours}"}`: the moment that many hours from now, in epoch milliseconds; nothing when blank or not positive.
       val hours = number(resolveBody(body.getValue("\$afterHours"), context))
@@ -248,8 +275,9 @@ object ScreenValues {
       buildMap {
         for ((key, value) in body) {
           val resolved = resolveBody(value, context)
-          // A template that found nothing is left out; a literal null is sent (it clears the field).
-          if (resolved != JsonNull || value == JsonNull) put(key, resolved)
+          // A template that found nothing is left out; a literal null is sent (it clears the field), and so is "$null"
+          // where a branch of $if has to say null (a comp removed).
+          if (resolved == JsonPrimitive("\$null")) put(key, JsonNull) else if (resolved != JsonNull || value == JsonNull) put(key, resolved)
         }
       },
     )

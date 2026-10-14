@@ -246,6 +246,30 @@ public enum ScreenValues {
       let spec = record["$if"] ?? .null
       let branch = condition(spec["when"]?.stringValue, in: context) ? spec["then"] : spec["else"]
       return branch.map { resolveBody($0, in: context) } ?? .null
+    case .object(let record) where record.count == 1 && record["$collect"] != nil:
+      // `{"$collect": {"prefix": "quota.", "as": "number"}}`: the form's `quota.*` inputs as a map, key without the prefix.
+      // `as: number` keeps the filled ones as numbers; `as: flag` reads "true" and "false" and leaves "" (inherit) out.
+      let spec = record["$collect"] ?? .null
+      let prefix = spec["prefix"]?.stringValue ?? ""
+      let kind = spec["as"]?.stringValue ?? "text"
+      var map: [String: JSONValue] = [:]
+      if case .object(let form)? = lookup("form", in: context) {
+        for (key, value) in form where key.hasPrefix(prefix) {
+          let name = String(key.dropFirst(prefix.count))
+          switch (kind, value) {
+          case ("flag", .bool(let flag)): map[name] = .bool(flag)
+          case ("flag", .string(let text)): if text == "true" { map[name] = .bool(true) } else if text == "false" { map[name] = .bool(false) }
+          case (_, .null): break
+          case ("number", .string(let text)):
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { map[name] = Double(trimmed).map(JSONValue.number) ?? .string(trimmed) }
+          case (_, .string(let text)): if !text.isEmpty { map[name] = value }
+          case ("flag", _): break
+          default: map[name] = value
+          }
+        }
+      }
+      return .object(map)
     case .object(let record) where record.count == 1 && record["$afterHours"] != nil:
       // `{"$afterHours": "{form.hours}"}`: the moment that many hours from now, in epoch milliseconds; nothing when blank or not positive.
       guard let hours = number(resolveBody(record["$afterHours"] ?? .null, in: context)), hours > 0, hours.isFinite else { return .null }
@@ -276,8 +300,9 @@ public enum ScreenValues {
       var out: [String: JSONValue] = [:]
       for (key, value) in record {
         let resolved = resolveBody(value, in: context)
-        // A template that found nothing is left out; a literal null is sent (it clears the field).
-        if resolved != .null || value == .null { out[key] = resolved }
+        // A template that found nothing is left out; a literal null is sent (it clears the field), and so is `"$null"`
+        // where a branch of `$if` has to say null (a comp removed).
+        if resolved == .string("$null") { out[key] = .null } else if resolved != .null || value == .null { out[key] = resolved }
       }
       return .object(out)
     default: return body

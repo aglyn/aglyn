@@ -87,7 +87,7 @@ class ScreenSpecTest {
     }
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
-    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone")
+    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image")
     for (spec in specs) {
       assertTrue(spec.scope in setOf("org", "site", "account", "staff"), "${spec.id}: scope ${spec.scope}")
       for (block in spec.blocks) assertTrue(block.type in known, "${spec.id}: block ${block.type}")

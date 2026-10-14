@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -65,6 +66,7 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
@@ -419,6 +421,21 @@ private fun Block(
   when (block.type) {
     "notice" -> NoticeBanner(ScreenValues.render(block.string("text").orEmpty(), context), tone(block.string("tone")))
     "list" -> ListBlock(block, title, footer, model, context, selection, open, trigger)
+    "image" -> {
+      // `{ "type": "image", "src": "{item.url}", "caption": "…" }`: a picture the route hands over (a staff media preview).
+      val source = ScreenValues.render(block.string("src").orEmpty(), context)
+      if (source.isNotEmpty()) {
+        SectionCard(title) {
+          RemoteImage(
+            source,
+            block.string("caption")?.let { ScreenValues.render(it, context) },
+            Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 320.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+          )
+          footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+      }
+    }
     "zone" -> {
       // A core screen's zone: whatever plugin screens contribute to it, never named here.
       val contributions = ScreenCatalog.zone(block.string("name").orEmpty()).filter { ScreenValues.condition(it.requires, context) }

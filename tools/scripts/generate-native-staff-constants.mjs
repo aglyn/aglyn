@@ -58,6 +58,8 @@ export async function staffSources() {
   const suppression = await jiti.import(join(ROOT, 'apps/console/utils/email-suppression-filters.ts'))
   const plans = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'))
   const revenue = await jiti.import(join(ROOT, 'apps/console/utils/revenue-view.ts'))
+  const overrides = await jiti.import(join(ROOT, 'apps/console/utils/org-override-fields.ts'))
+  const overrideReasons = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/org-override-reason.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
   const model = (file) => jiti.import(join(ROOT, `libs/plugins/marketplace/src/lib/model/${file}.ts`))
   const checklist = await model('plugin-review-checklist')
@@ -83,6 +85,14 @@ export async function staffSources() {
     },
     suppressions: {
       reasons: Object.entries(suppression.SUPPRESSION_REASON_LABELS).map(([value, { label }]) => ({ value, label })),
+    },
+    override: {
+      quotas: overrides.QUOTA_FIELDS,
+      features: overrides.FLAG_FIELDS,
+      releaseFlags: overrides.RELEASE_FLAG_FIELDS,
+      plans: Object.entries(plans.PLAN_LABELS).map(([value, label]) => ({ value, label })),
+      reasons: options(overrideReasons.ORG_OVERRIDE_REASON_CODES, overrideReasons.ORG_OVERRIDE_REASON_LABELS),
+      noteMax: overrideReasons.ORG_OVERRIDE_NOTE_MAX,
     },
     margin: {
       plans: Object.entries(plans.PLAN_LABELS).map(([value, label]) => ({ value, label })),
@@ -265,6 +275,130 @@ export function maintenanceScreen(jobs, reasonMin) {
   }
 }
 
+/** A feature key as words: `abTesting` is "Ab testing" (the console shows the key; this is for reading). */
+const keyWords = (key) => {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+/**
+ * The override screen (`admin/orgs/{id}`'s "Override" dialog): the plan, a staff comp, every quota, every feature
+ * and every release flag, one input each, with what the organization holds now. The route (`/api/admin/org-override`)
+ * replaces the lot, an empty quota or an "inherit" meaning "delete the override", so the whole set is always sent.
+ */
+export function orgOverrideScreen(override) {
+  const tri = [
+    { value: '', label: 'Inherit the plan' },
+    { value: 'true', label: 'On' },
+    { value: 'false', label: 'Off' },
+  ]
+  const fields = [
+    {
+      key: 'reason',
+      label: 'Reason',
+      kind: 'select',
+      required: true,
+      options: override.reasons,
+      help: 'Overrides change what a customer is billed against. The audit row is append-only, so the reason cannot be added later.',
+    },
+    { key: 'note', label: `Note (required for Other, up to ${override.noteMax} characters)`, kind: 'multiline' },
+    {
+      key: 'plan',
+      label: 'Stored plan',
+      kind: 'select',
+      initial: '{item.plan}',
+      options: [{ value: '', label: 'No plan (reads as Free)' }, ...override.plans],
+      help: 'Where a live subscription decides the plan this is edited as it always was. Without one a plan has to be a staff comp, below.',
+    },
+    { key: 'changeComp', label: 'Change the staff comp', kind: 'toggle', help: 'A comp grants a plan with no subscription behind it. Only for a workspace with no live subscription.' },
+    {
+      key: 'compPlan',
+      label: 'Comp plan (blank removes the comp)',
+      kind: 'select',
+      initial: '{item.entitlements.planComp.plan}',
+      when: 'form.changeComp',
+      options: [{ value: '', label: 'No comp' }, ...override.plans.filter((plan) => plan.value !== 'free')],
+    },
+    {
+      key: 'compUncapped',
+      label: 'The comp lifts every cap',
+      kind: 'toggle',
+      initial: '{item.entitlements.planComp.uncapped}',
+      when: 'form.changeComp && form.compPlan',
+    },
+    ...override.quotas.map(({ key, label }) => ({
+      key: `quota.${key}`,
+      label: `Limit: ${label}`,
+      kind: 'number',
+      initial: `{item.entitlements.${key}}`,
+      help: 'Empty inherits the plan default. 0 is a real limit of none.',
+    })),
+    ...override.features.map((key) => ({
+      key: `feature.${key}`,
+      label: `Feature: ${keyWords(key)}`,
+      kind: 'select',
+      initial: `{item.entitlements.features.${key}}`,
+      options: tri,
+    })),
+    ...override.releaseFlags.map(({ key, label, defaultEnabled }) => ({
+      key: `release.${key}`,
+      label: `Early access: ${label}`,
+      kind: 'select',
+      initial: `{item.releaseFlags.${key}}`,
+      when: 'staff.super',
+      options: tri,
+      help: `Super staff only. Off by default for everyone: ${defaultEnabled ? 'no' : 'yes'}.`,
+    })),
+  ]
+  return {
+    id: 'core.staff.orgOverride',
+    title: 'Override {data.detail.org.name|params.orgId}',
+    label: 'Override',
+    subtitle: 'Plan, comp, limits and switches for one workspace',
+    icon: 'slider.horizontal.3|tune',
+    scope: 'staff',
+    requires: 'staff.is',
+    load: { detail: '/api/admin/org-detail?orgId={params.orgId}' },
+    blocks: [
+      {
+        type: 'notice',
+        tone: 'warning',
+        text:
+          'Every field below is sent, with what the workspace holds now, because the route replaces the whole set: an empty limit or "Inherit the plan" deletes that override. Billing and super staff only; early access is super only. Every save is audited with your reason.',
+      },
+      {
+        type: 'form',
+        id: 'override',
+        object: 'data.detail.org',
+        when: 'staff.role == super,billing',
+        fields,
+        submit: {
+          label: 'Save the override',
+          url: '/api/admin/org-override',
+          body: {
+            orgId: '{params.orgId}',
+            plan: '{form.plan}',
+            quotas: { $collect: { prefix: 'quota.', as: 'number' } },
+            features: { $collect: { prefix: 'feature.', as: 'flag' } },
+            releaseFlags: { $collect: { prefix: 'release.', as: 'flag' } },
+            reason: '{form.reason}',
+            note: '{form.note}',
+            comp: {
+              $if: {
+                when: 'form.changeComp',
+                then: { $if: { when: 'form.compPlan', then: { plan: '{form.compPlan}', uncapped: '{form.compUncapped}' }, else: '$null' } },
+              },
+            },
+          },
+          success: 'Saved, and audited',
+          report: [{ text: '{response.planEffect.summary}', when: 'response.planEffect.summary' }],
+          reload: true,
+        },
+      },
+    ],
+  }
+}
+
 const current = readFileSync(join(ROOT, SPEC), 'utf8')
 const spec = JSON.parse(current)
 const sources = await staffSources()
@@ -288,6 +422,7 @@ replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: so
 replace('core.staff.pluginReview', (screen) => ({ ...screen, constants: sources.pluginReview }))
 replace('core.staff.site', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons } }))
 replace('core.staff.maintenance', () => maintenanceScreen(sources.jobs, sources.reasonMin))
+replace('core.staff.orgOverride', () => orgOverrideScreen(sources.override))
 
 const next = `${JSON.stringify(spec, null, 2)}\n`
 if (next === current) {

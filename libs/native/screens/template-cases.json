@@ -87,7 +87,14 @@
     "form": {
       "scope": "org",
       "hours": "2",
-      "blank": ""
+      "blank": "",
+      "quota.hostLimit": 5,
+      "quota.blank": null,
+      "quota.typed": "12",
+      "quota.empty": "",
+      "feature.a": "true",
+      "feature.b": "false",
+      "feature.c": ""
     }
   },
   "render": [
@@ -435,6 +442,45 @@
             "enabled": true
           }
         }
+      }
+    },
+    {
+      "body": {
+        "quotas": {
+          "$collect": {
+            "prefix": "quota.",
+            "as": "number"
+          }
+        },
+        "features": {
+          "$collect": {
+            "prefix": "feature.",
+            "as": "flag"
+          }
+        },
+        "comp": {
+          "$if": {
+            "when": "form.scope == org",
+            "then": "$null"
+          }
+        },
+        "other": {
+          "$if": {
+            "when": "form.scope == user",
+            "then": "$null"
+          }
+        }
+      },
+      "expect": {
+        "quotas": {
+          "hostLimit": 5,
+          "typed": 12
+        },
+        "features": {
+          "a": true,
+          "b": false
+        },
+        "comp": null
       }
     }
   ],

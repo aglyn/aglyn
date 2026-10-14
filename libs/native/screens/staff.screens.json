@@ -565,6 +565,12 @@
         "acquisition": {
           "url": "/api/admin/acquisition?orgId={params.orgId}",
           "optional": true
+        },
+        "activity": {
+          "url": "/api/orgs/activity?orgId={params.orgId}&scope=org-wide",
+          "cursor": "nextCursor",
+          "items": "entries",
+          "optional": true
         }
       },
       "blocks": [
@@ -573,6 +579,12 @@
           "tone": "error",
           "when": "data.detail.org.suspended",
           "text": "Suspended: {data.detail.org.suspendedReason|data.detail.org.suspendedReasonCode}"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Erasure requested {data.detail.org.erasureRequestedAt:date}. After the 7-day hold the 04:00 UTC job deletes the workspace.",
+          "when": "data.detail.org.erasureRequestedAt"
         },
         {
           "type": "fields",
@@ -874,12 +886,98 @@
         },
         {
           "type": "list",
+          "title": "Limits overridden by staff",
+          "footer": "Only what staff changed for this workspace; everything else is the plan's. A comp and the early-access switches are below.",
+          "items": "data.detail.org.entitlements",
+          "filter": "item.key != features && item.key != planComp",
+          "primary": "{item.key}",
+          "trailing": "{item.value}",
+          "icon": "slider.horizontal.3|tune",
+          "count": false,
+          "empty": "No limit is overridden."
+        },
+        {
+          "type": "list",
+          "title": "Features overridden by staff",
+          "items": "data.detail.org.entitlements.features",
+          "primary": "{item.key}",
+          "badges": [
+            {
+              "text": "On",
+              "when": "item.value",
+              "tone": "success"
+            },
+            {
+              "text": "Off",
+              "when": "!item.value",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No feature is overridden."
+        },
+        {
+          "type": "list",
+          "title": "Early access switched by staff",
+          "items": "data.detail.org.releaseFlags",
+          "primary": "{item.key}",
+          "badges": [
+            {
+              "text": "On",
+              "when": "item.value",
+              "tone": "success"
+            },
+            {
+              "text": "Off",
+              "when": "!item.value",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "fields",
+          "title": "Staff comp",
+          "when": "data.detail.org.entitlements.planComp.plan",
+          "object": "data.detail.org.entitlements.planComp",
+          "rows": [
+            {
+              "label": "Plan",
+              "value": "{item.plan:title}"
+            },
+            {
+              "label": "Lifts every cap",
+              "value": "{item.uncapped:yesno}"
+            },
+            {
+              "label": "Why",
+              "value": "{item.reason} {item.note}"
+            }
+          ]
+        },
+        {
+          "type": "list",
           "title": "Recent changes",
           "items": "data.detail.audit",
           "primary": "{item.action:title}",
           "secondary": "{item.actorEmail|item.actorUid} · {item.at|item.createdAt:datetime}",
           "count": false,
           "empty": "—"
+        },
+        {
+          "type": "list",
+          "title": "Organization activity",
+          "footer": "Who changed what in this workspace: settings, members, invites and site-level changes.",
+          "load": "activity",
+          "search": true,
+          "items": "data.activity.entries",
+          "primary": "{item.action:title}",
+          "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
+          "tertiary": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|'System'} · {item.createdAt:datetime}",
+          "icon": "clock|schedule",
+          "count": false,
+          "empty": "No activity yet."
         },
         {
           "type": "list",
@@ -896,6 +994,20 @@
               "messageId": "{item.messageId}"
             }
           }
+        },
+        {
+          "type": "links",
+          "title": "Files",
+          "items": [
+            {
+              "title": "Media library",
+              "icon": "photo.on.rectangle|photo_library",
+              "screen": "core.staff.media",
+              "params": {
+                "orgId": "{params.orgId}"
+              }
+            }
+          ]
         },
         {
           "type": "zone",
@@ -928,6 +1040,18 @@
           "type": "actions",
           "title": "Staff actions",
           "items": [
+            {
+              "id": "override",
+              "label": "Override plan and limits",
+              "icon": "slider.horizontal.3|tune",
+              "when": "staff.role == super,billing",
+              "navigate": {
+                "screen": "core.staff.orgOverride",
+                "params": {
+                  "orgId": "{params.orgId}"
+                }
+              }
+            },
             {
               "id": "note",
               "label": "Add a note",
@@ -1586,6 +1710,49 @@
                   "text": "{item}"
                 }
               ]
+            },
+            {
+              "id": "erase",
+              "label": "Request data erasure",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "when": "!data.detail.org.erasureRequestedAt",
+              "url": "/api/admin/org-erasure",
+              "confirm": "Marks the organization for GDPR deletion. Nothing is deleted now: after a 7-day hold the erasure runs automatically. No copy is kept, so the hold is the window to export anything the customer still needs. The owner is told by email. Audited.",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "request"
+              },
+              "success": "Erasure requested; deletable after 7 days (audited)",
+              "reload": true,
+              "report": [
+                {
+                  "text": "The owner was told by email.",
+                  "when": "response.emailed"
+                },
+                {
+                  "text": "The owner could not be emailed; the request stands.",
+                  "when": "response.emailed == false"
+                },
+                {
+                  "text": "Already requested; nothing changed.",
+                  "when": "response.changed == false"
+                }
+              ]
+            },
+            {
+              "id": "cancelErase",
+              "label": "Cancel the erasure request",
+              "icon": "arrow.uturn.backward|restore",
+              "when": "data.detail.org.erasureRequestedAt",
+              "url": "/api/admin/org-erasure",
+              "confirm": "The organization is no longer marked for deletion. Audited.",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "cancel"
+              },
+              "success": "Erasure request canceled (audited)",
+              "reload": true
             }
           ]
         }
@@ -1850,6 +2017,20 @@
               "messageId": "{item.messageId}"
             }
           }
+        },
+        {
+          "type": "links",
+          "title": "Files",
+          "items": [
+            {
+              "title": "Media library",
+              "icon": "photo.on.rectangle|photo_library",
+              "screen": "core.staff.media",
+              "params": {
+                "hostId": "{params.hostId}"
+              }
+            }
+          ]
         },
         {
           "type": "zone",
@@ -11975,6 +12156,1934 @@
             {
               "label": "After",
               "value": "{item.after:json}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.orgOverride",
+      "title": "Override {data.detail.org.name|params.orgId}",
+      "label": "Override",
+      "subtitle": "Plan, comp, limits and switches for one workspace",
+      "icon": "slider.horizontal.3|tune",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "detail": "/api/admin/org-detail?orgId={params.orgId}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Every field below is sent, with what the workspace holds now, because the route replaces the whole set: an empty limit or \"Inherit the plan\" deletes that override. Billing and super staff only; early access is super only. Every save is audited with your reason."
+        },
+        {
+          "type": "form",
+          "id": "override",
+          "object": "data.detail.org",
+          "when": "staff.role == super,billing",
+          "fields": [
+            {
+              "key": "reason",
+              "label": "Reason",
+              "kind": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "enterprise",
+                  "label": "Negotiated enterprise or custom contract"
+                },
+                {
+                  "value": "support",
+                  "label": "Support remediation or goodwill"
+                },
+                {
+                  "value": "beta",
+                  "label": "Early access to an unreleased feature"
+                },
+                {
+                  "value": "correction",
+                  "label": "Correcting an earlier mistake"
+                },
+                {
+                  "value": "trial",
+                  "label": "Sales trial or proof of concept"
+                },
+                {
+                  "value": "other",
+                  "label": "Other — say what, below"
+                }
+              ],
+              "help": "Overrides change what a customer is billed against. The audit row is append-only, so the reason cannot be added later."
+            },
+            {
+              "key": "note",
+              "label": "Note (required for Other, up to 1000 characters)",
+              "kind": "multiline"
+            },
+            {
+              "key": "plan",
+              "label": "Stored plan",
+              "kind": "select",
+              "initial": "{item.plan}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "No plan (reads as Free)"
+                },
+                {
+                  "value": "free",
+                  "label": "Free"
+                },
+                {
+                  "value": "starter",
+                  "label": "Starter"
+                },
+                {
+                  "value": "pro",
+                  "label": "Pro"
+                },
+                {
+                  "value": "business",
+                  "label": "Business"
+                },
+                {
+                  "value": "scale",
+                  "label": "Scale"
+                },
+                {
+                  "value": "advanced",
+                  "label": "Advanced"
+                },
+                {
+                  "value": "agency",
+                  "label": "Agency"
+                },
+                {
+                  "value": "enterprise",
+                  "label": "Enterprise"
+                }
+              ],
+              "help": "Where a live subscription decides the plan this is edited as it always was. Without one a plan has to be a staff comp, below."
+            },
+            {
+              "key": "changeComp",
+              "label": "Change the staff comp",
+              "kind": "toggle",
+              "help": "A comp grants a plan with no subscription behind it. Only for a workspace with no live subscription."
+            },
+            {
+              "key": "compPlan",
+              "label": "Comp plan (blank removes the comp)",
+              "kind": "select",
+              "initial": "{item.entitlements.planComp.plan}",
+              "when": "form.changeComp",
+              "options": [
+                {
+                  "value": "",
+                  "label": "No comp"
+                },
+                {
+                  "value": "starter",
+                  "label": "Starter"
+                },
+                {
+                  "value": "pro",
+                  "label": "Pro"
+                },
+                {
+                  "value": "business",
+                  "label": "Business"
+                },
+                {
+                  "value": "scale",
+                  "label": "Scale"
+                },
+                {
+                  "value": "advanced",
+                  "label": "Advanced"
+                },
+                {
+                  "value": "agency",
+                  "label": "Agency"
+                },
+                {
+                  "value": "enterprise",
+                  "label": "Enterprise"
+                }
+              ]
+            },
+            {
+              "key": "compUncapped",
+              "label": "The comp lifts every cap",
+              "kind": "toggle",
+              "initial": "{item.entitlements.planComp.uncapped}",
+              "when": "form.changeComp && form.compPlan"
+            },
+            {
+              "key": "quota.hostLimit",
+              "label": "Limit: Sites",
+              "kind": "number",
+              "initial": "{item.entitlements.hostLimit}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.screensPerHost",
+              "label": "Limit: Pages / site",
+              "kind": "number",
+              "initial": "{item.entitlements.screensPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.sharedLayoutsPerHost",
+              "label": "Limit: Layouts / site",
+              "kind": "number",
+              "initial": "{item.entitlements.sharedLayoutsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.templatesPerHost",
+              "label": "Limit: Templates / site",
+              "kind": "number",
+              "initial": "{item.entitlements.templatesPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.storagePerHostMb",
+              "label": "Limit: Storage MB",
+              "kind": "number",
+              "initial": "{item.entitlements.storagePerHostMb}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.membersPerHost",
+              "label": "Limit: Members / site",
+              "kind": "number",
+              "initial": "{item.entitlements.membersPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.managersPerOrg",
+              "label": "Limit: Team seats",
+              "kind": "number",
+              "initial": "{item.entitlements.managersPerOrg}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.maxManagersPerOrg",
+              "label": "Limit: Max team seats",
+              "kind": "number",
+              "initial": "{item.entitlements.maxManagersPerOrg}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.maxMembersPerHost",
+              "label": "Limit: Max member seats",
+              "kind": "number",
+              "initial": "{item.entitlements.maxMembersPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.bandwidthGb",
+              "label": "Limit: Bandwidth GB",
+              "kind": "number",
+              "initial": "{item.entitlements.bandwidthGb}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.formsPerHost",
+              "label": "Limit: Saved forms / site",
+              "kind": "number",
+              "initial": "{item.entitlements.formsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.componentsPerHost",
+              "label": "Limit: Reusable components / site",
+              "kind": "number",
+              "initial": "{item.entitlements.componentsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.variablesPerHost",
+              "label": "Limit: Variables",
+              "kind": "number",
+              "initial": "{item.entitlements.variablesPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.functionsPerHost",
+              "label": "Limit: Functions",
+              "kind": "number",
+              "initial": "{item.entitlements.functionsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.workflowsPerHost",
+              "label": "Limit: Workflows",
+              "kind": "number",
+              "initial": "{item.entitlements.workflowsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.servicesPerHost",
+              "label": "Limit: Booking services",
+              "kind": "number",
+              "initial": "{item.entitlements.servicesPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.redirectsPerHost",
+              "label": "Limit: Redirects",
+              "kind": "number",
+              "initial": "{item.entitlements.redirectsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.contactsPerHost",
+              "label": "Limit: CRM records",
+              "kind": "number",
+              "initial": "{item.entitlements.contactsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.emailSendsPerMonth",
+              "label": "Limit: Campaign email sends / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.emailSendsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.actionRunsPerMonth",
+              "label": "Limit: Action runs / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.actionRunsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.apiRequestsPerMonth",
+              "label": "Limit: API requests / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.apiRequestsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.datasetsPerOrg",
+              "label": "Limit: Datasets (org)",
+              "kind": "number",
+              "initial": "{item.entitlements.datasetsPerOrg}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.maxDatasetsPerOrg",
+              "label": "Limit: Max datasets (org)",
+              "kind": "number",
+              "initial": "{item.entitlements.maxDatasetsPerOrg}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.recordsPerDataset",
+              "label": "Limit: Records / dataset",
+              "kind": "number",
+              "initial": "{item.entitlements.recordsPerDataset}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.dataStorageMbPerOrg",
+              "label": "Limit: Data storage MB (org)",
+              "kind": "number",
+              "initial": "{item.entitlements.dataStorageMbPerOrg}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.productsPerHost",
+              "label": "Limit: Products / site",
+              "kind": "number",
+              "initial": "{item.entitlements.productsPerHost}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.inventoryLocations",
+              "label": "Limit: Inventory locations",
+              "kind": "number",
+              "initial": "{item.entitlements.inventoryLocations}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.posRegisters",
+              "label": "Limit: POS registers (base)",
+              "kind": "number",
+              "initial": "{item.entitlements.posRegisters}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.transactionFeePhysicalPct",
+              "label": "Limit: Txn fee physical %",
+              "kind": "number",
+              "initial": "{item.entitlements.transactionFeePhysicalPct}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.transactionFeeDigitalPct",
+              "label": "Limit: Txn fee digital %",
+              "kind": "number",
+              "initial": "{item.entitlements.transactionFeeDigitalPct}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.formSubmissionsPerMonth",
+              "label": "Limit: Form subs / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.formSubmissionsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.marketplaceFeePct",
+              "label": "Limit: Marketplace fee %",
+              "kind": "number",
+              "initial": "{item.entitlements.marketplaceFeePct}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.crmEmailsPerDay",
+              "label": "Limit: One-to-one emails / day",
+              "kind": "number",
+              "initial": "{item.entitlements.crmEmailsPerDay}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.workflowRunsPerMonth",
+              "label": "Limit: Workflow runs / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.workflowRunsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.assistCreditsPerMonth",
+              "label": "Limit: AI credits / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.assistCreditsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "feature.abTesting",
+              "label": "Feature: Ab testing",
+              "kind": "select",
+              "initial": "{item.entitlements.features.abTesting}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.versioning",
+              "label": "Feature: Versioning",
+              "kind": "select",
+              "initial": "{item.entitlements.features.versioning}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.reusableComponents",
+              "label": "Feature: Reusable components",
+              "kind": "select",
+              "initial": "{item.entitlements.features.reusableComponents}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.customDomain",
+              "label": "Feature: Custom domain",
+              "kind": "select",
+              "initial": "{item.entitlements.features.customDomain}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.customSendingDomain",
+              "label": "Feature: Custom sending domain",
+              "kind": "select",
+              "initial": "{item.entitlements.features.customSendingDomain}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.dedicatedSendingDomain",
+              "label": "Feature: Dedicated sending domain",
+              "kind": "select",
+              "initial": "{item.entitlements.features.dedicatedSendingDomain}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.removeBranding",
+              "label": "Feature: Remove branding",
+              "kind": "select",
+              "initial": "{item.entitlements.features.removeBranding}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.scheduledPublishing",
+              "label": "Feature: Scheduled publishing",
+              "kind": "select",
+              "initial": "{item.entitlements.features.scheduledPublishing}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.aiAssist",
+              "label": "Feature: Ai assist",
+              "kind": "select",
+              "initial": "{item.entitlements.features.aiAssist}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.aiGenerative",
+              "label": "Feature: Ai generative",
+              "kind": "select",
+              "initial": "{item.entitlements.features.aiGenerative}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.workflows",
+              "label": "Feature: Workflows",
+              "kind": "select",
+              "initial": "{item.entitlements.features.workflows}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.dataStore",
+              "label": "Feature: Data store",
+              "kind": "select",
+              "initial": "{item.entitlements.features.dataStore}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.videoMedia",
+              "label": "Feature: Video media",
+              "kind": "select",
+              "initial": "{item.entitlements.features.videoMedia}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.bookings",
+              "label": "Feature: Bookings",
+              "kind": "select",
+              "initial": "{item.entitlements.features.bookings}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.crm",
+              "label": "Feature: Crm",
+              "kind": "select",
+              "initial": "{item.entitlements.features.crm}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.outreach",
+              "label": "Feature: Outreach",
+              "kind": "select",
+              "initial": "{item.entitlements.features.outreach}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.interactions",
+              "label": "Feature: Interactions",
+              "kind": "select",
+              "initial": "{item.entitlements.features.interactions}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.actions",
+              "label": "Feature: Actions",
+              "kind": "select",
+              "initial": "{item.entitlements.features.actions}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.webhooks",
+              "label": "Feature: Webhooks",
+              "kind": "select",
+              "initial": "{item.entitlements.features.webhooks}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.apiAccess",
+              "label": "Feature: Api access",
+              "kind": "select",
+              "initial": "{item.entitlements.features.apiAccess}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.siteExport",
+              "label": "Feature: Site export",
+              "kind": "select",
+              "initial": "{item.entitlements.features.siteExport}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.multilingual",
+              "label": "Feature: Multilingual",
+              "kind": "select",
+              "initial": "{item.entitlements.features.multilingual}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.eventCalendar",
+              "label": "Feature: Event calendar",
+              "kind": "select",
+              "initial": "{item.entitlements.features.eventCalendar}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.redirects",
+              "label": "Feature: Redirects",
+              "kind": "select",
+              "initial": "{item.entitlements.features.redirects}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.screenAnalytics",
+              "label": "Feature: Screen analytics",
+              "kind": "select",
+              "initial": "{item.entitlements.features.screenAnalytics}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.mediaCdn",
+              "label": "Feature: Media cdn",
+              "kind": "select",
+              "initial": "{item.entitlements.features.mediaCdn}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.marketingOverlays",
+              "label": "Feature: Marketing overlays",
+              "kind": "select",
+              "initial": "{item.entitlements.features.marketingOverlays}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.commerce",
+              "label": "Feature: Commerce",
+              "kind": "select",
+              "initial": "{item.entitlements.features.commerce}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.pos",
+              "label": "Feature: Pos",
+              "kind": "select",
+              "initial": "{item.entitlements.features.pos}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.contentGating",
+              "label": "Feature: Content gating",
+              "kind": "select",
+              "initial": "{item.entitlements.features.contentGating}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.productReviews",
+              "label": "Feature: Product reviews",
+              "kind": "select",
+              "initial": "{item.entitlements.features.productReviews}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.abandonedCart",
+              "label": "Feature: Abandoned cart",
+              "kind": "select",
+              "initial": "{item.entitlements.features.abandonedCart}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.dropshipRouting",
+              "label": "Feature: Dropship routing",
+              "kind": "select",
+              "initial": "{item.entitlements.features.dropshipRouting}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.whiteLabel",
+              "label": "Feature: White label",
+              "kind": "select",
+              "initial": "{item.entitlements.features.whiteLabel}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.ssoEnabled",
+              "label": "Feature: Sso enabled",
+              "kind": "select",
+              "initial": "{item.entitlements.features.ssoEnabled}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.storefrontSubscriptions",
+              "label": "Feature: Storefront subscriptions",
+              "kind": "select",
+              "initial": "{item.entitlements.features.storefrontSubscriptions}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.giftCards",
+              "label": "Feature: Gift cards",
+              "kind": "select",
+              "initial": "{item.entitlements.features.giftCards}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.commerceAnalytics",
+              "label": "Feature: Commerce analytics",
+              "kind": "select",
+              "initial": "{item.entitlements.features.commerceAnalytics}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "feature.marketplaceSelling",
+              "label": "Feature: Marketplace selling",
+              "kind": "select",
+              "initial": "{item.entitlements.features.marketplaceSelling}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "release.release_member_accounts",
+              "label": "Early access: User Accounts",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_member_accounts}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_bookings",
+              "label": "Early access: Bookings",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_bookings}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_commerce_v2",
+              "label": "Early access: Commerce v2",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_commerce_v2}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_marketplace",
+              "label": "Early access: Marketplace",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_marketplace}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_crm",
+              "label": "Early access: CRM",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_crm}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_outreach",
+              "label": "Early access: Sequences",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_outreach}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_data_store",
+              "label": "Early access: Data store",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_data_store}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_email",
+              "label": "Early access: Email",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_email}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_events",
+              "label": "Early access: Events",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_events}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_inbox",
+              "label": "Early access: Inbox",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_inbox}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_logic",
+              "label": "Early access: Logic",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_logic}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_marketing",
+              "label": "Early access: Marketing",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_marketing}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_redirects",
+              "label": "Early access: Redirects",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_redirects}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_workflows",
+              "label": "Early access: Automation",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_workflows}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_accounting",
+              "label": "Early access: Accounting",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_accounting}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_weglot",
+              "label": "Early access: Weglot translation",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_weglot}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_addon_store",
+              "label": "Early access: Add-on store",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_addon_store}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_native_checkout",
+              "label": "Early access: In-page checkout",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_native_checkout}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_edit_bar",
+              "label": "Early access: Site admin bar",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_edit_bar}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_assist",
+              "label": "Early access: Aglyn Assist",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_assist}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_video_uploads",
+              "label": "Early access: Video uploads",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_video_uploads}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_video_delivery",
+              "label": "Early access: Video delivery",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_video_delivery}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_ai_generative",
+              "label": "Early access: Aglyn AI generation",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_ai_generative}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_crm_assist_whole_record",
+              "label": "Early access: CRM assistance: whole record",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_crm_assist_whole_record}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: no."
+            }
+          ],
+          "submit": {
+            "label": "Save the override",
+            "url": "/api/admin/org-override",
+            "body": {
+              "orgId": "{params.orgId}",
+              "plan": "{form.plan}",
+              "quotas": {
+                "$collect": {
+                  "prefix": "quota.",
+                  "as": "number"
+                }
+              },
+              "features": {
+                "$collect": {
+                  "prefix": "feature.",
+                  "as": "flag"
+                }
+              },
+              "releaseFlags": {
+                "$collect": {
+                  "prefix": "release.",
+                  "as": "flag"
+                }
+              },
+              "reason": "{form.reason}",
+              "note": "{form.note}",
+              "comp": {
+                "$if": {
+                  "when": "form.changeComp",
+                  "then": {
+                    "$if": {
+                      "when": "form.compPlan",
+                      "then": {
+                        "plan": "{form.compPlan}",
+                        "uncapped": "{form.compUncapped}"
+                      },
+                      "else": "$null"
+                    }
+                  }
+                }
+              }
+            },
+            "success": "Saved, and audited",
+            "report": [
+              {
+                "text": "{response.planEffect.summary}",
+                "when": "response.planEffect.summary"
+              }
+            ],
+            "reload": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.staff.media",
+      "title": "Media",
+      "label": "Media library",
+      "subtitle": "What a workspace or site has uploaded",
+      "icon": "photo.on.rectangle|photo_library",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "media": {
+          "url": "/api/admin/media-library?orgId={params.orgId}&hostId={params.hostId}&pageSize=24",
+          "cursor": "nextCursor",
+          "items": "rows"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Files",
+          "footer": "Staff reads of a file are recorded in the audit log. A private file's preview is a short-lived signed link.",
+          "load": "media",
+          "items": "data.media.rows",
+          "primary": "{item.name}",
+          "secondary": "{item.contentType} · {item.sizeBytes:bytes}",
+          "tertiary": "Created {item.createdAtMs:datetime}",
+          "icon": "photo|photo_library",
+          "badges": [
+            {
+              "text": "Private",
+              "when": "item.private",
+              "tone": "warning"
+            },
+            {
+              "text": "In trash",
+              "when": "item.deleted",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.mediaAsset",
+            "params": {
+              "mediaId": "{item.$id}",
+              "orgId": "{params.orgId}",
+              "hostId": "{params.hostId}"
+            }
+          },
+          "empty": "Nothing uploaded."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.mediaAsset",
+      "title": "{data.asset.name|'File'}",
+      "label": "File",
+      "icon": "photo|photo_library",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "asset": "/api/admin/media-library/asset?orgId={params.orgId}&hostId={params.hostId}&mediaId={params.mediaId}"
+      },
+      "blocks": [
+        {
+          "type": "image",
+          "src": "{data.asset.previewSrc}",
+          "caption": "{data.asset.alt|data.asset.name}",
+          "footer": "A signed link that stops working {data.asset.previewExpiresAtMs:datetime}."
+        },
+        {
+          "type": "fields",
+          "title": "The file",
+          "object": "data.asset",
+          "rows": [
+            {
+              "label": "Type",
+              "value": "{item.contentType}"
+            },
+            {
+              "label": "Size",
+              "value": "{item.sizeBytes:bytes}"
+            },
+            {
+              "label": "Dimensions",
+              "value": "{item.width} x {item.height}"
+            },
+            {
+              "label": "Created",
+              "value": "{item.createdAtMs:datetime}"
+            },
+            {
+              "label": "Visibility",
+              "value": "{item.private:yesno}"
+            },
+            {
+              "label": "In the trash",
+              "value": "{item.deleted:yesno}"
+            },
+            {
+              "label": "Storage path",
+              "value": "{item.storagePath}"
+            },
+            {
+              "label": "Folder",
+              "value": "{item.folderId}"
+            },
+            {
+              "label": "Alt text",
+              "value": "{item.alt}"
+            },
+            {
+              "label": "Description",
+              "value": "{item.description}"
+            },
+            {
+              "label": "Uploaded by",
+              "value": "{item.owner.displayName} {item.owner.email|item.uploadedBy}"
+            },
+            {
+              "label": "Visible only to",
+              "value": "{item.visibleTo|'Everyone in the library'}"
+            },
+            {
+              "label": "Rights confirmed (audio)",
+              "value": "{item.rightsConfirmation.atMs:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Used by",
+          "footer": "{data.asset.usage.coverage|'unknown'} coverage: only a full scan means used nowhere.",
+          "items": "data.asset.usedBy",
+          "primary": "{item.name|item.hostId}",
+          "icon": "globe|public",
+          "open": {
+            "screen": "core.staff.site",
+            "params": {
+              "hostId": "{item.hostId}"
+            }
+          },
+          "count": false,
+          "empty": "No site was found using it."
+        },
+        {
+          "type": "list",
+          "title": "References",
+          "items": "data.asset.usage.references",
+          "primary": "{item.name}",
+          "secondary": "{item.kind:title} · {item.hostName|item.hostId}",
+          "count": false,
+          "empty": "None.",
+          "badges": [
+            {
+              "text": "Live",
+              "when": "item.live",
+              "tone": "success"
             }
           ]
         }
