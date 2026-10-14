@@ -480,7 +480,6 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    const stripeReason = stripeRefundReason(reason.reason)
     const refundRes = await stripe(
       secretKey,
       'refunds',
@@ -493,7 +492,7 @@ async function handler(request: Request): Promise<Response> {
         'metadata[aglyn_org_id]': orgId,
         'metadata[aglyn_actor_uid]': String(decoded.uid),
         'metadata[aglyn_reason]': reason.reason,
-        ...(stripeReason ? { reason: stripeReason } : {}),
+        reason: stripeRefundReason(reason.reason),
       },
       attemptKey || null,
     )

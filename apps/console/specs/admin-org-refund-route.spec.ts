@@ -595,9 +595,11 @@ describe('POST /api/admin/org-refund (AGL-2486)', () => {
       expect(refundCalls()[0].body).toContain('reason=fraudulent')
     })
 
-    it('sends no Stripe reason where none of its codes fits', async () => {
-      await postRefund(good())
-      expect(refundCalls()[0].body).not.toMatch(/(^|&)reason=/)
+    it('gives every refund a Stripe reason derived from ours', async () => {
+      await postRefund(good({ reason: 'duplicate', idempotencyKey: 'a-dup' }))
+      expect(refundCalls()[0].body).toContain('reason=duplicate')
+      await postRefund(good({ reason: 'goodwill', idempotencyKey: 'a-good' }))
+      expect(refundCalls()[1].body).toContain('reason=requested_by_customer')
     })
 
     it('sends the attempt key as Stripe’s idempotency header', async () => {

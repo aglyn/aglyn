@@ -104,9 +104,10 @@ Two consequences worth knowing:
    **other**. `other` will not submit until the note says what — it is the escape hatch
    that stops staff picking the nearest wrong code, so it is the one code that requires
    an explanation. The note is internal and is never shown to the customer.
-   **Fraudulent or unauthorized charge** also marks the refund fraudulent in Stripe, which
-   adds the card to Stripe's block list so it can't pay again. **Duplicate charge** is
-   passed to Stripe as a duplicate. The other reasons are recorded only in Aglyn.
+   Stripe is given a matching reason automatically. **Fraudulent or unauthorized charge**
+   marks the refund fraudulent in Stripe, which adds the card to Stripe's block list so it
+   can't pay again. **Duplicate charge** is passed as a duplicate, and every other reason
+   as requested by the customer, the only other reason Stripe has.
 4. **Confirm.** The dialog names the amount, the currency, the charge, the invoice, what
    the charge originally captured, how much of it is already refunded, and the fee Stripe
    keeps regardless. You must **type the amount** to confirm. There is no single-click
