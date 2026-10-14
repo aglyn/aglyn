@@ -110,6 +110,12 @@ fun folderPath(folder: MediaFolder, byId: Map<String, MediaFolder>): String {
   return names.joinToString(" / ")
 }
 
+/** The sentence an audio uploader confirms, word for word, and the one the server stores with the answer (`AUDIO_RIGHTS_STATEMENT`). */
+const val AUDIO_RIGHTS_STATEMENT = "I own this audio or have a license to use it on my site"
+
+/** Whether a picked file is audio, which the upload routes refuse without a rights confirmation. */
+fun isAudioFile(file: PickedFile): Boolean = file.mimeType.lowercase().startsWith("audio/")
+
 /** One file, as the grid and its details read it. */
 data class MediaItem(
   val id: String,
@@ -333,46 +339,49 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope)
   )
 
   /** Uploads one picked file into [folderId]; answers its media id. */
-  suspend fun upload(file: PickedFile, folderId: String?): String? {
+  suspend fun upload(file: PickedFile, folderId: String?, rightsConfirmed: Boolean = false): String? {
     val contentType = file.mimeType.ifBlank { "application/octet-stream" }
+    // An audio file is refused unless its uploader confirmed they own it or hold a license (AUDIO_RIGHTS_FIELD).
+    val rights = if (rightsConfirmed) arrayOf("rightsConfirmed" to true) else emptyArray()
     if (file.size <= SIGNED_UPLOAD_THRESHOLD_BYTES) {
       val answer = api.request(
         "/api/media/upload",
         ApiMethod.POST,
-        body("fileName" to file.name, "contentType" to contentType, "folderId" to folderId, "data" to Base64.encode(file.bytes)),
+        body("fileName" to file.name, "contentType" to contentType, "folderId" to folderId, "data" to Base64.encode(file.bytes), *rights),
       )
       return answer.field("mediaId")
     }
     val minted = api.request(
       "/api/media/upload-url",
       ApiMethod.POST,
-      body("contentType" to contentType, "fileName" to file.name, "sizeBytes" to file.size, "folderId" to folderId),
+      body("contentType" to contentType, "fileName" to file.name, "sizeBytes" to file.size, "folderId" to folderId, *rights),
     )
     val mediaId = minted.field("mediaId") ?: return null
     api.putSigned(minted.field("uploadUrl") ?: return null, minted.field("contentType") ?: contentType, file.bytes)
-    api.request("/api/media/upload-url", ApiMethod.PATCH, body("mediaId" to mediaId, "fileName" to file.name, "folderId" to folderId))
+    api.request("/api/media/upload-url", ApiMethod.PATCH, body("mediaId" to mediaId, "fileName" to file.name, "folderId" to folderId, *rights))
     return mediaId
   }
 
   /** Replaces the file's bytes in place: the same id and address everywhere it is used. */
-  suspend fun replace(item: MediaItem, file: PickedFile) {
+  suspend fun replace(item: MediaItem, file: PickedFile, rightsConfirmed: Boolean = false) {
     val contentType = file.mimeType.ifBlank { item.contentType }
     val expected = item.updatedAt?.epochMillis
+    val rights = if (rightsConfirmed) arrayOf("rightsConfirmed" to true) else emptyArray()
     if (file.size <= SIGNED_UPLOAD_THRESHOLD_BYTES) {
       api.request(
         "/api/media/replace",
         ApiMethod.POST,
-        body("mediaId" to item.id, "contentType" to contentType, "data" to Base64.encode(file.bytes), "fileName" to file.name, "expectedUpdatedAtMs" to expected),
+        body("mediaId" to item.id, "contentType" to contentType, "data" to Base64.encode(file.bytes), "fileName" to file.name, "expectedUpdatedAtMs" to expected, *rights),
       )
       return
     }
     val minted = api.request(
       "/api/media/replace",
       ApiMethod.PUT,
-      body("mediaId" to item.id, "contentType" to contentType, "fileName" to file.name, "sizeBytes" to file.size, "expectedUpdatedAtMs" to expected),
+      body("mediaId" to item.id, "contentType" to contentType, "fileName" to file.name, "sizeBytes" to file.size, "expectedUpdatedAtMs" to expected, *rights),
     )
     api.putSigned(minted.field("uploadUrl") ?: error("The upload could not start."), minted.field("contentType") ?: contentType, file.bytes)
-    api.request("/api/media/replace", ApiMethod.PATCH, body("mediaId" to item.id, "fileName" to file.name, "expectedUpdatedAtMs" to expected))
+    api.request("/api/media/replace", ApiMethod.PATCH, body("mediaId" to item.id, "fileName" to file.name, "expectedUpdatedAtMs" to expected, *rights))
   }
 
   suspend fun saveDetails(id: String, fileName: String, alt: String, description: String, tags: List<String>) {

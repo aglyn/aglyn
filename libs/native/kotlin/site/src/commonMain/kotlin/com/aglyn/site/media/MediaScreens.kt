@@ -83,6 +83,7 @@ import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.PickSource
+import com.aglyn.ui.PickedFile
 import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
@@ -174,23 +175,30 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   var uploading by remember { mutableStateOf<String?>(null) }
   var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
 
+  var audioBatch by remember { mutableStateOf<List<PickedFile>?>(null) }
+
+  fun sendFiles(files: List<PickedFile>, rightsConfirmed: Boolean) {
+    val folderId = (model.folder as? FolderPick.One)?.id
+    runner.run(success = if (files.size == 1) "${files[0].name} uploaded." else "${files.size} files uploaded.", onDone = { uploading = null; model.refresh() }) {
+      try {
+        files.forEachIndexed { index, file ->
+          uploading = if (files.size == 1) "Uploading ${file.name}…" else "Uploading ${index + 1} of ${files.size}…"
+          api.upload(file, folderId, rightsConfirmed)
+        }
+      } finally {
+        uploading = null
+        model.refresh()
+      }
+    }
+  }
+
   fun uploadFrom(source: PickSource) {
     val device = picker ?: return
     coroutines.launch {
       val files = runCatching { device.pick(source, multiple = source != PickSource.CAMERA) }.getOrDefault(emptyList())
       if (files.isEmpty()) return@launch
-      val folderId = (model.folder as? FolderPick.One)?.id
-      runner.run(success = if (files.size == 1) "${files[0].name} uploaded." else "${files.size} files uploaded.", onDone = { uploading = null; model.refresh() }) {
-        try {
-          files.forEachIndexed { index, file ->
-            uploading = if (files.size == 1) "Uploading ${file.name}…" else "Uploading ${index + 1} of ${files.size}…"
-            api.upload(file, folderId)
-          }
-        } finally {
-          uploading = null
-          model.refresh()
-        }
-      }
+      // An audio file needs its uploader's rights confirmation first (AGL-3716).
+      if (files.any(::isAudioFile)) audioBatch = files else sendFiles(files, false)
     }
   }
 
@@ -276,6 +284,37 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   )
 
   MediaDialogs(dialog, api, runner, foldersById, onChanged = { model.refresh() }) { dialog = null }
+  audioBatch?.let { files ->
+    AudioRightsDialog(files) { confirmed ->
+      audioBatch = null
+      if (confirmed) sendFiles(files, true)
+    }
+  }
+}
+
+/**
+ * The rights confirmation an audio upload needs (AGL-3716), asked once for a batch: every audio file in it is named, and
+ * the one sentence the uploader ticks is the sentence the server stores beside who ticked it and when. Upload stays off
+ * until it is ticked, and the box starts unticked every time.
+ */
+@Composable
+internal fun AudioRightsDialog(files: List<PickedFile>, onAnswer: (Boolean) -> Unit) {
+  val names = files.filter(::isAudioFile).map { it.name }
+  var confirmed by remember(files) { mutableStateOf(false) }
+  ActionDialog(
+    title = "Confirm your rights to this audio",
+    body = (if (names.size == 1) "You are uploading \"${names[0]}\"." else "You are uploading ${names.size} audio files: ${names.joinToString(", ")}.") +
+      " Only upload music you made, or have a license to publish. Tracks by other artists cannot be played on your site without their permission, and are taken down when the rights holder reports them.",
+    icon = "music_note",
+    confirmLabel = "Upload",
+    confirmEnabled = confirmed,
+    dismissLabel = "Cancel",
+    onDismiss = { onAnswer(false) },
+    onConfirm = { onAnswer(true) },
+    modifier = Modifier.testTag("audio-rights"),
+  ) {
+    SwitchRow(AUDIO_RIGHTS_STATEMENT, confirmed, { confirmed = it }, Modifier.testTag("audio-rights-confirm"))
+  }
 }
 
 @Composable
@@ -482,6 +521,7 @@ private fun MediaDetailBody(
   var description by remember(item.id, item.description) { mutableStateOf(item.description) }
   var tags by remember(item.id, item.tags) { mutableStateOf(item.tags.joinToString(", ")) }
   var moving by remember(item.id) { mutableStateOf(false) }
+  var audioReplacement by remember(item.id) { mutableStateOf<PickedFile?>(null) }
   var deleting by remember(item.id) { mutableStateOf(false) }
   var references by remember(item.id) { mutableStateOf<List<MediaReference>?>(null) }
   val altMax = Contracts.mediaAltMaxLength.toInt()
@@ -543,7 +583,8 @@ private fun MediaDetailBody(
             onClick = {
               coroutines.launch {
                 val picked = runCatching { picker.pick(PickSource.FILES, multiple = false) }.getOrDefault(emptyList()).firstOrNull() ?: return@launch
-                runner.run("File replaced. Everywhere it is used now shows the new file.", onDone = onChanged) { api.replace(item, picked) }
+                // An audio file needs its uploader's rights confirmation first (AGL-3716).
+                if (isAudioFile(picked)) audioReplacement = picked else runner.run("File replaced. Everywhere it is used now shows the new file.", onDone = onChanged) { api.replace(item, picked) }
               }
             },
             enabled = canEdit && !runner.busy,
@@ -560,6 +601,12 @@ private fun MediaDetailBody(
           enabled = canEdit && !runner.busy,
           modifier = Modifier.testTag("media-private"),
         )
+      }
+    }
+    audioReplacement?.let { file ->
+      AudioRightsDialog(listOf(file)) { confirmed ->
+        audioReplacement = null
+        if (confirmed) runner.run("File replaced. Everywhere it is used now shows the new file.", onDone = onChanged) { api.replace(item, file, rightsConfirmed = true) }
       }
     }
     SectionCard("Details") {
