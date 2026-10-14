@@ -1018,7 +1018,10 @@ and no row is read: the answer is `data.<key>.count` and `.sum`, left out where 
 cannot ask (show "Unavailable", never a zero). `{ "entitlement": "giftCards" }` reads the
 workspace document and answers `data.<key>.carried` and `.label`, the plan that includes the
 feature, so a card the console locks behind a plan shows its notice instead of failing
-(the features are the generated `NATIVE_PLAN_FEATURES`).
+(the features are the generated `NATIVE_PLAN_FEATURES`). A load that is not read from anywhere but worked out from the others once they answer is
+`{ "derive": "shippingCoverage", "from": "store.shipping" }`: the `from` path (under `data`) finds the shipping settings, and
+`data.<key>` holds what the console's Coverage block says of them (`served`, `unserved`, `headline`, `detail`, `note`, `asks`, …), a port
+of the console's resolver replayed from `shipping-coverage-cases.json`.
 
 ### The plugin switchboard
 
