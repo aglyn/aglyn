@@ -16,10 +16,11 @@
  */
 'use client'
 
+import * as Aglyn from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useFirestoreCollection, useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreCollection, useOrgPlan, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Box,
   Button,
@@ -36,6 +37,7 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { posDisplayCall, posReadersCall, PosRequestError } from './pos/pos-api'
+import { POS_REGISTERS_ANCHOR, usePosPairing } from './pos/pos-pairing.component'
 
 interface ReaderRow {
   id: string
@@ -63,6 +65,13 @@ interface DisplayRow {
 
 export interface PosDevicesCardProps {
   hostId: string
+  /**
+   * Whether the viewer may work this site's register: `managePos`, as the
+   * shell resolved it, on a site role that may run it (admin or editor).
+   * Pairing a tablet is refused by the server otherwise, so the card says why
+   * rather than offering a button that fails. Absent reads as not allowed.
+   */
+  canManagePos?: boolean
 }
 
 const EMPTY_ADDRESS = { line1: '', line2: '', city: '', state: '', postalCode: '', country: 'US' }
@@ -72,8 +81,12 @@ const EMPTY_ADDRESS = { line1: '', line2: '', city: '', state: '', postalCode: '
  * — registered with the code a reader shows, bound to a register, renamed,
  * removed — and the customer displays paired to each register, which can be
  * signed out. Readers appear only where card readers are offered at all.
+ *
+ * Each register pairs a new customer display or self-service kiosk here,
+ * through the same flow as the register's own Pair display (AGL-3712); a site
+ * with no register is sent to the card that makes one.
  */
-export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
+export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -83,6 +96,8 @@ export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // Not "no registers" until the listen has answered.
+  const noRegisters = registerDocs !== undefined && registerDocs.length === 0
   const registers = [...(registerDocs ?? [])].sort((a: any, b: any) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
@@ -95,6 +110,8 @@ export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [busy, setBusy] = useState(false)
   const [renaming, setRenaming] = useState<{ id: string; label: string } | null>(null)
+  const { org, ready: planReady } = useOrgPlan(hostId)
+  const posEntitled = planReady && Aglyn.checkEntitlement(org as any, 'pos')
 
   const notify = useCallback(
     (error: unknown, fallback: string) =>
@@ -104,6 +121,20 @@ export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
       }),
     [enqueueSnackbar],
   )
+
+  const onPairingError = useCallback(
+    (message: string) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+    [enqueueSnackbar],
+  )
+  const pairingFlow = usePosPairing({ user, hostId, onError: onPairingError })
+  /** Why pairing is not offered to this viewer, or null when it is. */
+  const pairBlocked = !planReady
+    ? 'Checking your plan…'
+    : !posEntitled
+      ? 'Point of Sale is not on your plan. Upgrade in Billing to pair displays and kiosks.'
+      : !canManagePos
+        ? 'Only an admin or editor with the "Use the point of sale" permission can pair displays and kiosks.'
+        : null
 
   const load = useCallback(
     async (refresh = false) => {
@@ -180,12 +211,21 @@ export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
       header={'POS devices'}
       help={pluginDocsHelp('pos', { anchor: '#card-readers' })}
       HeaderProps={
-        showReaders
+        showReaders || noRegisters
           ? {
               action: (
-                <Button size="small" onClick={() => setAdding(true)}>
-                  {'Add card reader'}
-                </Button>
+                <Stack direction="row" spacing={1}>
+                  {noRegisters ? (
+                    <Button size="small" href={`#${POS_REGISTERS_ANCHOR}`}>
+                      {'Add a register'}
+                    </Button>
+                  ) : null}
+                  {showReaders ? (
+                    <Button size="small" onClick={() => setAdding(true)}>
+                      {'Add card reader'}
+                    </Button>
+                  ) : null}
+                </Stack>
               ),
             }
           : undefined
@@ -289,45 +329,69 @@ export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
         ) : null}
         <Stack spacing={1}>
           <Typography variant="subtitle2">{'Customer displays and kiosks'}</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {'Pair a tablet from the register: tap Pair display, choose Customer display or Self-service kiosk, and enter the code on the tablet.'}
-          </Typography>
-          {registers.flatMap((register: any) =>
-            (displays[register.$id] ?? []).map((display) => (
-              <Stack key={`${register.$id}:${display.id}`} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ flex: 1 }}>
-                  {`${display.label} · ${register.name}`}
-                </Typography>
-                <Chip
-                  size="small"
-                  label={Date.now() - display.lastSeenAtMs < 120_000 ? 'Connected' : 'Not connected'}
-                  color={Date.now() - display.lastSeenAtMs < 120_000 ? 'success' : 'default'}
-                />
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={async () => {
-                    if (!user) return
-                    try {
-                      await posDisplayCall(user, {
-                        action: 'revoke',
-                        hostId,
-                        registerId: register.$id,
-                        displayId: display.id,
-                      })
-                      setDisplays((prev) => ({
-                        ...prev,
-                        [register.$id]: (prev[register.$id] ?? []).filter((entry) => entry.id !== display.id),
-                      }))
-                    } catch (error) {
-                      notify(error, 'The display could not be signed out')
-                    }
-                  }}
-                >
-                  {'Sign out'}
-                </Button>
-              </Stack>
-            )),
+          {noRegisters ? (
+            <Typography variant="body2" color="text.secondary">
+              {'A display or kiosk pairs to a register. Add a register first.'}
+            </Typography>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                {pairBlocked ??
+                  'Pair display gives you a code. Open the address it shows on the tablet and enter the code.'}
+              </Typography>
+              {registers.map((register: any) => (
+                <Stack key={register.$id} spacing={0.5}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ flex: 1, fontWeight: 'fontWeightMedium' }} noWrap>
+                      {register.name}
+                    </Typography>
+                    <Button
+                      size="small"
+                      disabled={Boolean(pairBlocked)}
+                      onClick={() => void pairingFlow.open(register.$id, 'display', register.name)}
+                      aria-label={`Pair display to ${register.name}`}
+                    >
+                      {'Pair display'}
+                    </Button>
+                  </Stack>
+                  {(displays[register.$id] ?? []).map((display) => (
+                    <Stack key={`${register.$id}:${display.id}`} direction="row" spacing={1} sx={{ alignItems: 'center', pl: 2 }}>
+                      <Typography variant="body2" sx={{ flex: 1 }}>
+                        {display.label}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={Date.now() - display.lastSeenAtMs < 120_000 ? 'Connected' : 'Not connected'}
+                        color={Date.now() - display.lastSeenAtMs < 120_000 ? 'success' : 'default'}
+                      />
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={async () => {
+                          if (!user) return
+                          try {
+                            await posDisplayCall(user, {
+                              action: 'revoke',
+                              hostId,
+                              registerId: register.$id,
+                              displayId: display.id,
+                            })
+                            setDisplays((prev) => ({
+                              ...prev,
+                              [register.$id]: (prev[register.$id] ?? []).filter((entry) => entry.id !== display.id),
+                            }))
+                          } catch (error) {
+                            notify(error, 'The display could not be signed out')
+                          }
+                        }}
+                      >
+                        {'Sign out'}
+                      </Button>
+                    </Stack>
+                  ))}
+                </Stack>
+              ))}
+            </>
           )}
         </Stack>
       </Stack>
@@ -415,6 +479,7 @@ export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
+      {pairingFlow.dialog}
     </CardDisplay>
   )
 }

@@ -19,16 +19,22 @@
  * The POS devices card (AGL-3607, AGL-3608): card readers are offered only
  * where the server says they are available, a reader is added with the code
  * it shows (and the store's address for the first one), and a paired
- * customer display can be signed out.
+ * customer display can be signed out. Each register pairs a new display or
+ * kiosk from here, behind the register's own gate (AGL-3712).
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 let readersAnswer: any
+let registerRows: Array<Record<string, unknown>> | undefined
+const orgPlan = { org: { plan: 'business' } as unknown, ready: true }
 const calls: Array<{ url: string; body: any }> = []
 
-jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
+jest.mock('@aglyn/aglyn', () => ({
+  pluginDocsHelp: () => undefined,
+  checkEntitlement: (org: any, key: string) => key === 'pos' && org?.plan === 'business',
+}))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children, HeaderProps }: { children: ReactNode; HeaderProps?: { action?: ReactNode } }) => (
     <div>
@@ -47,7 +53,8 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-1' } }),
-  useFirestoreCollection: () => ({ data: [{ $id: 'reg-1', name: 'Front counter' }] }),
+  useFirestoreCollection: () => ({ data: registerRows }),
+  useOrgPlan: () => orgPlan,
 }))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (_user: unknown, url: string, init: any) => {
@@ -62,7 +69,9 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
                 { id: 'abcdef0123456789', label: 'Counter tablet', createdAtMs: 1, lastSeenAtMs: Date.now() },
               ],
             }
-          : { ok: true }
+          : url === '/api/commerce/pos-display' && body?.action === 'pairing-code'
+            ? { code: body.mode === 'kiosk' ? '654321' : '123456', expiresAtMs: Date.now() + 600_000 }
+            : { ok: true }
     return { ok: true, status: 200, json: async () => answer }
   },
 }))
@@ -71,6 +80,9 @@ import PosDevicesCard from './pos-devices-card.component'
 
 beforeEach(() => {
   calls.length = 0
+  registerRows = [{ $id: 'reg-1', name: 'Front counter' }]
+  orgPlan.org = { plan: 'business' }
+  orgPlan.ready = true
   readersAnswer = {
     available: true,
     testMode: true,
@@ -91,7 +103,7 @@ beforeEach(() => {
 
 describe('the POS devices card', () => {
   it('lists the site’s readers with their status and register', async () => {
-    render(<PosDevicesCard hostId="host-1" />)
+    render(<PosDevicesCard hostId="host-1" canManagePos />)
     await waitFor(() => expect(screen.getByText('Counter reader')).toBeTruthy())
     expect(screen.getByText('Online')).toBeTruthy()
     expect(screen.getByText(/Front counter · test/)).toBeTruthy()
@@ -99,7 +111,7 @@ describe('the POS devices card', () => {
 
   it('hides every reader control where card readers are not offered', async () => {
     readersAnswer = { ...readersAnswer, available: false, readers: [] }
-    render(<PosDevicesCard hostId="host-1" />)
+    render(<PosDevicesCard hostId="host-1" canManagePos />)
     await waitFor(() => expect(calls.some((call) => call.body?.action === 'list')).toBe(true))
     expect(screen.queryByText('Add card reader')).toBeNull()
     expect(screen.queryByText('Card readers')).toBeNull()
@@ -107,7 +119,7 @@ describe('the POS devices card', () => {
   })
 
   it('adds a reader with its code, register and the store address the first time', async () => {
-    render(<PosDevicesCard hostId="host-1" />)
+    render(<PosDevicesCard hostId="host-1" canManagePos />)
     await waitFor(() => expect(screen.getByText('Add card reader')).toBeTruthy())
     fireEvent.click(screen.getByText('Add card reader'))
     fireEvent.change(screen.getByLabelText('Registration code'), { target: { value: 'simulated-wpe' } })
@@ -125,8 +137,8 @@ describe('the POS devices card', () => {
   })
 
   it('signs a paired customer display out', async () => {
-    render(<PosDevicesCard hostId="host-1" />)
-    await waitFor(() => expect(screen.getByText('Counter tablet · Front counter')).toBeTruthy())
+    render(<PosDevicesCard hostId="host-1" canManagePos />)
+    await waitFor(() => expect(screen.getByText('Counter tablet')).toBeTruthy())
     fireEvent.click(screen.getByText('Sign out'))
     await waitFor(() =>
       expect(calls.find((call) => call.body?.action === 'revoke')?.body).toMatchObject({
@@ -134,5 +146,45 @@ describe('the POS devices card', () => {
         displayId: 'abcdef0123456789',
       }),
     )
+  })
+
+  it('pairs a display to each register through the shared flow', async () => {
+    registerRows = [
+      { $id: 'reg-1', name: 'Front counter' },
+      { $id: 'reg-2', name: 'Patio' },
+    ]
+    render(<PosDevicesCard hostId="host-1" canManagePos />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Pair display to Patio' }))
+    expect(await screen.findByText('Pair a customer display')).toBeTruthy()
+    expect(screen.getByText('For Patio')).toBeTruthy()
+    expect(screen.getByText('123456')).toBeTruthy()
+    expect(calls.find((call) => call.body?.action === 'pairing-code')?.body).toMatchObject({
+      hostId: 'host-1',
+      registerId: 'reg-2',
+      mode: 'display',
+    })
+  })
+
+  it('with no register, offers one instead of pairing', async () => {
+    registerRows = []
+    render(<PosDevicesCard hostId="host-1" canManagePos />)
+    await waitFor(() => expect(calls.some((call) => call.body?.action === 'list')).toBe(true))
+    expect(screen.getByRole('link', { name: 'Add a register' }).getAttribute('href')).toBe('#pos-registers')
+    expect(screen.queryByRole('button', { name: /Pair display/ })).toBeNull()
+  })
+
+  it('disables pairing with a reason for someone who may not work the register', async () => {
+    render(<PosDevicesCard hostId="host-1" />)
+    const pair = await screen.findByRole('button', { name: 'Pair display to Front counter' })
+    expect((pair as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/Only an admin or editor/)).toBeTruthy()
+  })
+
+  it('disables pairing with a reason on a plan without POS', async () => {
+    orgPlan.org = { plan: 'free' }
+    render(<PosDevicesCard hostId="host-1" canManagePos />)
+    const pair = await screen.findByRole('button', { name: 'Pair display to Front counter' })
+    expect((pair as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/Point of Sale is not on your plan/)).toBeTruthy()
   })
 })
