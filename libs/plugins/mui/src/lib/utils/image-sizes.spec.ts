@@ -176,3 +176,80 @@ describe('layoutBandWidths — a parent chain that loops (AGL-3565)', () => {
     expect(() => layoutBandWidths({ componentId: 'image', parent: a })).not.toThrow()
   })
 })
+
+describe("layoutBandWidths — the image's own share width (AGL-3715)", () => {
+  /**
+   * The aglyn.com product hero, as stored: an image 118% of its half-width
+   * Grid cell from `lg` (pulled right with a negative margin), in a `xl`
+   * Container, under a section whose stored parent is itself.
+   */
+  const hero = (imageSx: Record<string, unknown>) => {
+    const root: LayoutNode = { componentId: 'section' }
+    root.parent = root
+    return chain(
+      {
+        componentId: 'image',
+        props: { width: '100%', height: 'auto' },
+        sx: imageSx,
+      },
+      { componentId: 'muiGrid', props: { size: 'xs:12 lg:6' } },
+      { componentId: 'muiGrid', props: { container: true, spacing: 2 } },
+      { componentId: 'muiContainer', props: { maxWidth: 'xl' } },
+      root,
+    )
+  }
+
+  it('scales the cell by a share width over 100% instead of ignoring it', () => {
+    const sizes = sizesFor(
+      hero({
+        flexShrink: 0,
+        height: 'auto',
+        width: { xs: '100%', lg: '118%' },
+        maxWidth: { xs: '920px', lg: 'none' },
+        marginRight: { xs: 0, lg: '-14%' },
+      }),
+    )
+    // 118% of (half of 100vw − 48px gutters, less half a 16px gap):
+    // 1.18 × (50vw − 32px) = 59vw − 37.76px — 812px at 1440, not 688.
+    expect(sizes).toContain('(min-width: 1200px) calc(59vw - 38px)')
+    // Below lg the image is its full-width cell, capped at 920px.
+    expect(sizes).not.toContain('calc(50vw - 32px)')
+  })
+
+  it('picks a 2x candidate at least as wide as the painted box', () => {
+    const widths = layoutBandWidths(
+      hero({ width: { xs: '100%', lg: '118%' } }),
+    )
+    const lg = widths.lg
+    expect(lg).toBeDefined()
+    const at1440 = ((lg?.vw ?? 0) / 100) * 1440 - (lg?.offsetPx ?? 0)
+    expect(Math.round(at1440)).toBeGreaterThanOrEqual(811)
+    expect(2 * at1440).toBeGreaterThanOrEqual(1624 - 2)
+  })
+
+  it('shrinks the slot by a share width under 100%', () => {
+    const image = chain(
+      { componentId: 'image', sx: { width: '50%' } },
+      { componentId: 'muiGrid', props: { size: 6 } },
+      { componentId: 'muiGrid', props: { container: true } },
+    )
+    expect(sizesFor(image)).toBe('25vw')
+  })
+
+  it('reads the width attribute when the styles state none', () => {
+    const image = chain(
+      { componentId: 'image', props: { width: '50%' } },
+      { componentId: 'muiBox', sx: { width: 0.5 } },
+    )
+    expect(sizesFor(image)).toBe('25vw')
+  })
+
+  it('leaves a 100% image exactly as before', () => {
+    const image = chain(
+      { componentId: 'image', sx: { width: '100%' } },
+      { componentId: 'muiGrid', props: { size: 6 } },
+      { componentId: 'muiGrid', props: { container: true, spacing: 4 } },
+    )
+    expect(sizesFor(image)).toBe('calc(50vw - 16px)')
+  })
+})
