@@ -562,6 +562,28 @@ describe('the notification email is a system email (AGL-3367)', () => {
     expect(String(sends[0]['text'])).not.toContain('/host-1/inbox')
   })
 
+  it('still links the button and the settings line where no console URL is configured', async () => {
+    // The site app, which sends every form-submission alert, sets none.
+    delete process.env.NEXT_PUBLIC_CONSOLE_URL
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('orgs/org-1', { slug: 'acme' })
+    hostDocs.set('hosts/host-1', { subdomain: 'shop' })
+    await notifyUsers(['uid-a'], {
+      type: 'content.formSubmission',
+      title: 'New form submission',
+      link: '/host-1/inbox',
+      orgId: 'org-1',
+      hostId: 'host-1',
+    })
+    const html = String(sends[0]['html'])
+    expect(html).toContain('href="https://app.aglyn.com/acme/hosts/shop/inbox"')
+    expect(html).toContain('https://app.aglyn.com/manage/notifications/settings')
+    expect(sends[0]['headers']).toEqual({
+      'List-Unsubscribe': '<https://app.aglyn.com/manage/notifications/settings>',
+    })
+  })
+
   it('speaks in a white-label org’s own name to that org’s people', async () => {
     userDocs.set('uid-a', ON)
     directory.set('uid-a', 'a@example.com')

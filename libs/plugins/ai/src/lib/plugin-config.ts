@@ -60,9 +60,10 @@ export const AI_STEP_MODEL_SETTING: Record<AiStepKind, string> = {
   'job.workflow': 'jobWorkflowModel',
 }
 
+/** Every current catalog model: a retired one is served by its successor, so it is not offered. */
 const MODEL_OPTIONS = [
   { value: AI_SETTING_PLATFORM, label: 'Platform default' },
-  ...AI_MODEL_CATALOG.map((entry) => ({
+  ...AI_MODEL_CATALOG.filter((entry) => !entry.successor).map((entry) => ({
     value: entry.id,
     label: `${entry.label} (${entry.provider})`,
   })),

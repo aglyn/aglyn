@@ -55,7 +55,7 @@ import { logAiAssistSection } from '../activity/ai-activity'
 // spec replaces the barrel with a closed-world factory, and nothing replaces
 // the entry point, so the spec exercises the real request shape and the real
 // error boundary rather than a stub that agrees with the handler.
-import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep, aiRouteSettings } from '../providers/routing'
 import {
   AiUpstreamError,
   aiProviderReady,
@@ -467,6 +467,10 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
           model,
           maxTokens,
           stream: false,
+          // The mode's row (AGL-3781): an element's ceiling holds the copy
+          // alone, so its row says no thinking; a section's and a post's
+          // name nothing and leave the model's own default.
+          ...aiRouteSettings(assistStepKindForMode(mode)),
           // The mode's prompt with the acceptable-use rules ahead of it
           // (AGL-2925), from `ai-assist-prompts.ts` so a spec can read what
           // this route sends without standing up the route.

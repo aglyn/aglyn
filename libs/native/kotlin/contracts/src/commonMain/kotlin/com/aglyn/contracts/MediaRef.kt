@@ -167,6 +167,20 @@ fun resolveMediaSrc(value: String?, hostId: String? = null): String? {
 }
 
 /**
+ * The poster frame a film's reference can be asked for, or null when the value
+ * is not served by this platform's CDN. Asking is not a promise one exists:
+ * only a film whose document records a captured `poster` has one.
+ */
+fun mediaPosterSrc(value: String?, hostId: String? = null, width: Double? = null): String? {
+  val src = resolveMediaSrc(value, hostId)?.takeIf { it.startsWith("$MEDIA_CDN_ROUTE/") } ?: return null
+  val query = buildString {
+    append("poster=1")
+    if (width != null && width.isFinite() && width > 0) append("&w=").append(kotlin.math.floor(width + 0.5).toLong())
+  }
+  return src + (if ('?' in src) "&" else "?") + query
+}
+
+/**
  * An org asset's CDN path rewritten to name the site using it, but only for an
  * asset restricted to some sites; an org-wide asset, a site's own file and a
  * path already naming a site are returned untouched.
@@ -223,3 +237,14 @@ fun libraryVideoSeconds(video: Any?): Long? {
   if (width <= 0 || width > VIDEO_MAX_DIMENSION || height <= 0 || height > VIDEO_MAX_DIMENSION) return null
   return maxOf(1L, floor(duration / 1000 + 0.5).toLong())
 }
+
+private val DOWNLOAD_QUERY = Regex("[?&]download=1(?:&|$)")
+
+/**
+ * The URL of an asset's ORIGINAL bytes: the CDN url with `?download=1`, or the
+ * url unchanged when it is not a CDN one. The bare CDN url is an upright,
+ * stripped display copy; the image editor's "Replace original" must start from
+ * the file itself (`mediaOriginalSrc`).
+ */
+fun mediaOriginalSrc(src: String): String =
+  if (src.contains("$MEDIA_CDN_ROUTE/") && !DOWNLOAD_QUERY.containsMatchIn(src)) src + (if ('?' in src) "&" else "?") + "download=1" else src

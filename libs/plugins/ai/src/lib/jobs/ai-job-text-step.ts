@@ -28,6 +28,7 @@ import type {
 } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
 import { aiJobStepBudget } from './ai-job-budget'
@@ -233,6 +234,8 @@ export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor 
       ...(signal ? { signal } : {}),
     })
   }
+  // A development run's effort A/B arm (AGL-3781), else the row's.
+  const effort = aiDevEffortFor('job.text') ?? AI_ROUTING_TABLE['job.text'].effort
   const result = await runAiRequest({
     model,
     system: AI_JOB_TEXT_SYSTEM,
@@ -241,7 +244,7 @@ export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor 
     // least time the step registered.
     maxTokens: AI_JOB_TEXT_STEP_BUDGET.maxTokens(model),
     ...(AI_ROUTING_TABLE['job.text'].thinking ? { thinking: AI_ROUTING_TABLE['job.text'].thinking } : {}),
-    ...(AI_ROUTING_TABLE['job.text'].effort ? { effort: AI_ROUTING_TABLE['job.text'].effort } : {}),
+    ...(effort ? { effort } : {}),
     stream: false,
     ...(signal ? { signal } : {}),
   })

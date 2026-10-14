@@ -189,6 +189,8 @@ import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.ShoppingBasket
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.RotateLeft
+import androidx.compose.material.icons.outlined.RotateRight
 import androidx.compose.material.icons.outlined.FlashlightOn
 import androidx.compose.material.icons.outlined.FlashlightOff
 import androidx.compose.material.icons.outlined.LocalShipping
@@ -295,6 +297,8 @@ object AglynIcons {
     "bookmark" to Icons.Outlined.BookmarkBorder,
     "bluetooth" to Icons.Outlined.Bluetooth,
     "photo_camera" to Icons.Outlined.PhotoCamera,
+    "rotate_left" to Icons.Outlined.RotateLeft,
+    "rotate_right" to Icons.Outlined.RotateRight,
     "flashlight_on" to Icons.Outlined.FlashlightOn,
     "flashlight_off" to Icons.Outlined.FlashlightOff,
     "local_shipping" to Icons.Outlined.LocalShipping,

@@ -30,10 +30,10 @@
 import { anthropicProvider } from './providers/anthropic'
 import {
   AI_CATALOG_PROVIDERS,
-  ANTHROPIC_CRM_ASSISTANCE_DISCLOSED,
   ANTHROPIC_CRM_ASSISTANCE_WHOLE_RECORD,
   anthropicDataReceived,
 } from './providers/catalog'
+import { ANTHROPIC_CRM_ASSISTANCE_DISCLOSED } from './providers/anthropic-crm-wording-superseded'
 import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   OPENAI_COMPAT_BASE_URL_ENV,

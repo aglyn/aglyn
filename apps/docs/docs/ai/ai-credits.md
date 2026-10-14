@@ -63,15 +63,15 @@ before you confirm it.
 | --- | --- |
 | An answer in the chat, a rewrite, a summary | A few credits |
 | An answer quoted straight from the docs | Free |
-| A vector illustration, icon or logo mark | About 18 credits a picture |
+| A vector illustration, icon or logo mark | About 4 credits a picture |
 | A photo, art or design picture | About 108 credits a picture (about 75 on Free) |
-| A new site's look | A few credits |
+| A new site's look | About 1 credit |
 | A page from a brief | About 30 credits for a page of five sections (about 6 a section), plus planning |
 | A layout (header and footer) | About 25 credits |
 | A form | About 30 credits |
 | A component or email design | About 30 credits |
-| A new site started with AI, paid plan | About 170 for 3 pages to 320 for 8 |
-| A new site started with AI, Free plan | About 140 for two pages, within the 300 Free credits |
+| A new site started with AI, paid plan | About 160 for 3 pages to 300 for 8 |
+| A new site started with AI, Free plan | About 115 for two pages, within the 300 Free credits |
 | Products, booking services, overlays, A/B tests, funnels, variables in a chat build | Almost nothing |
 | [Stock photos](./stock-photos.md) in an AI site | Nothing |
 

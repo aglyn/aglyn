@@ -19,7 +19,7 @@ import type { SeoListingFieldKey } from '@aglyn/aglyn/app-utils/seo-listing-fiel
 import type { AiSeoFieldValues } from '../model/ai-seo'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiProvider } from '../providers/contract'
-import { AI_ROUTING_TABLE, type AiPluginSettings } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiRouteSettings, type AiPluginSettings } from '../providers/routing'
 import {
   AI_SEO_FIELDS_TOOL_NAME,
   aiSeoFieldsTool,
@@ -285,8 +285,12 @@ export async function generateSeoFields(
     (key) => key !== 'imageAlt' || hasImage,
   )
   const keywords = input.keywords ?? []
+  const step = input.step ?? 'job.seo'
   return runValidatedGeneration('seo-fields', {
-    step: input.step ?? 'job.seo',
+    step,
+    // The row's thinking and effort (AGL-3781): a listing's ceiling holds the
+    // answer alone.
+    ...aiRouteSettings(step),
     ...(input.settings ? { settings: input.settings } : {}),
     ...(input.model ? { model: input.model } : {}),
     instructions: aiSeoFieldsInstructions({

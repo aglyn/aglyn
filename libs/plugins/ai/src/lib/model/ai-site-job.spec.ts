@@ -473,10 +473,10 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
     expect(aiFreeCreditsResetLabel('2026-11-01')).toBe('November 1')
   })
 
-  it('quotes a start at its measured figures and its worst case: about 137 (p90 213, up to 283) for two pages (AGL-3722)', () => {
-    expect(aiFreeSiteCreditRange(2)).toEqual({ likely: 137, p90: 213, ceiling: aiFreeSiteCreditEstimate(2) })
-    expect(aiFreeSiteCreditEstimate(2)).toBe(283)
-    expect(aiFreeSiteCreditRange(1)).toEqual({ likely: 107, p90: 173, ceiling: aiFreeSiteCreditEstimate(1) })
+  it('quotes a start at its measured figures and its worst case: about 113 (p90 203, up to 243) for two pages (AGL-3722, AGL-3781)', () => {
+    expect(aiFreeSiteCreditRange(2)).toEqual({ likely: 113, p90: 203, ceiling: aiFreeSiteCreditEstimate(2) })
+    expect(aiFreeSiteCreditEstimate(2)).toBe(243)
+    expect(aiFreeSiteCreditRange(1)).toEqual({ likely: 85, p90: 165, ceiling: aiFreeSiteCreditEstimate(1) })
   })
 
   it('asks before a start whose p90 is more than what is left — never when it fits, or when nothing is known (AGL-3722)', () => {
@@ -507,7 +507,7 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
   it('quotes a paid start and a kept plan as ranges whose ceiling is the old figure (AGL-3722)', () => {
     expect(aiSiteCreditRange(6).ceiling).toBe(aiSiteCreditEstimate(6))
     // A paid start at what paid starts measured: plan, look, layout, form, pages.
-    expect(aiSiteCreditRange(6).likely).toBe(81 + 4 + 29 + 32 + 6 * 29)
+    expect(aiSiteCreditRange(6).likely).toBe(81 + 1 + 29 + 32 + 6 * 27)
     const kept = plan({ screens: [screen(), screen({ slug: '/about' })] })
     expect(aiJobPlanCreditRange('site', kept).ceiling).toBe(aiJobPlanCreditEstimate('site', kept))
     expect(aiJobPlanCreditRange('site', kept).likely).toBeLessThan(aiJobPlanCreditEstimate('site', kept))
@@ -518,12 +518,15 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
    * d0ME89B7tB, 2026-10-12) was quoted about 277 and came to 423: its plan
    * counted at a Free start's 21 where it ran 84 on the paid routing, and its
    * first products (66) not counted at all. The other paid stores of the
-   * window came to 413 and 448.
+   * window came to 413 and 448. Their look and five listings ran on the fast
+   * tier at Haiku 4.5's cost; repriced at Haiku 5.5's billed rate they are
+   * about 13 less (AGL-3781).
    */
   it('quotes a paid store its first products and a paid plan, near what such stores came to', () => {
     const store = aiSiteCreditRange(5, { welcomeEmail: true, siteKind: 'store' })
-    expect(store.likely).toBe(81 + 4 + 29 + 32 + 5 * 29 + 49 + 64)
-    expect(store.likely).toBeGreaterThan(400)
+    expect(store.likely).toBe(81 + 1 + 29 + 32 + 5 * 27 + 49 + 64)
+    // Within about ten of the cheapest of them, repriced: 413 less 13.
+    expect(store.likely).toBeGreaterThan(390)
     expect(store.p90).toBeGreaterThanOrEqual(423)
     expect(store.ceiling).toBe(aiSiteCreditEstimate(5, { welcomeEmail: true }) + AI_SITE_PASS_CREDITS)
     // A blog's three first posts at the stand-in pass, each a pass of the ceiling.
