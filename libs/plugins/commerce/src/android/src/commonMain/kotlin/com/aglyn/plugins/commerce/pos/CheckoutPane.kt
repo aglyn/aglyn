@@ -176,6 +176,17 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
           Text("Card on ${reader.label}", style = MaterialTheme.typography.titleSmall)
         }
       }
+      model.keyedCard?.let { keyed ->
+        Button(
+          onClick = { model.act { checkout.payCard(keyed) } },
+          enabled = state.canTender,
+          modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("tender-card-${keyed.id}"),
+        ) {
+          Icon(AglynIcons.named("credit_card"), null)
+          Spacer(Modifier.width(space(1f)))
+          Text(keyed.label, style = MaterialTheme.typography.titleSmall)
+        }
+      }
       if (model.readers.isEmpty()) {
         NoticeBanner(
           "No card reader is ready on this register.",
@@ -472,7 +483,8 @@ private fun QrStep(model: RegisterModel, checkout: Checkout, state: CheckoutStat
 
 @Composable
 private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, step: CheckoutStep.Card, fmt: (Long) -> String) {
-  val reader = model.readers.firstOrNull { it.label == step.readerLabel }
+  val reader = model.cardService(step.readerLabel)
+  val typed = reader is KeyedCardService
   // A device reader says what it wants ("Insert the card."); a smart reader shows it on its own screen.
   val devicePrompt by (
     (if (reader is DeviceReaderService) model.cardCollector?.deviceReaders?.prompt else null)
@@ -485,11 +497,15 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
   ) {
     Box(contentAlignment = Alignment.Center) {
       CircularProgressIndicator(Modifier.size(88.dp), strokeWidth = 4.dp)
-      Icon(AglynIcons.named("contactless"), null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+      Icon(AglynIcons.named(if (typed) "credit_card" else "contactless"), null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
     }
     Text(fmt(state.amountCents + state.tipCents), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
     Text(
-      if (step.paymentId == null) "Sending the payment to ${step.readerLabel}…" else "Ask the customer to tap, insert or swipe on ${step.readerLabel}.",
+      when {
+        step.paymentId == null -> "Sending the payment to ${step.readerLabel}…"
+        reader is KeyedCardService -> reader.prompt
+        else -> "Ask the customer to tap, insert or swipe on ${step.readerLabel}."
+      },
       style = MaterialTheme.typography.bodyLarge,
       textAlign = TextAlign.Center,
     )

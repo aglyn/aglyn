@@ -130,6 +130,10 @@ struct CheckoutView: View {
           Task { await checkout.payCard(reader) }
         }
       }
+      if let keyed = model.keyedCard {
+        tenderButton(keyed.label, systemImage: "creditcard") { Task { await checkout.payCard(keyed) } }
+          .accessibilityIdentifier("tender-keyed-card")
+      }
       tenderButton("Cash", systemImage: "banknote") { checkout.go(to: .cash) }
       tenderButton("Gift card", systemImage: "giftcard") { checkout.go(to: .giftCard) }
       tenderButton("Card (QR)", systemImage: "qrcode") { Task { await checkout.payLink() } }
@@ -365,16 +369,16 @@ struct CheckoutView: View {
 
   private func card(_ label: String) -> some View {
     VStack(spacing: AglynSpace.two) {
-      Image(systemName: "wave.3.right.circle")
+      Image(systemName: model.cardService(labeled: label)?.kind == .keyed ? "creditcard.circle" : "wave.3.right.circle")
         .font(.system(size: 64))
         .foregroundStyle(AglynColor.tint)
         .symbolEffect(.pulse)
-      Text(model.readers.first(where: { $0.label == label })?.prompt ?? "Present the card on \(label)")
+      Text(model.cardService(labeled: label)?.prompt ?? "Present the card on \(label)")
         .font(AglynFont.title2).multilineTextAlignment(.center)
       Text(model.money(checkout.amountCents + checkout.tipCents)).font(AglynFont.figure).monospacedDigit()
       Button("Cancel payment", role: .destructive) {
         Task {
-          if let reader = model.readers.first(where: { $0.label == label }) { await checkout.cancelCard(reader) }
+          if let reader = model.cardService(labeled: label) { await checkout.cancelCard(reader) }
         }
       }
       .buttonStyle(.bordered)

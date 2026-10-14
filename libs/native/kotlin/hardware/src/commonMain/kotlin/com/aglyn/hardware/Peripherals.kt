@@ -51,6 +51,9 @@ interface Peripherals {
   /** This device's own card reader (Tap to Pay or Bluetooth); null where there is none. */
   val cardCollector: CardCollector? get() = null
 
+  /** Stripe's card form, where the app carries the SDK that draws it (Aglyn POS on Android): a card typed in at the register. */
+  val keyedCardEntry: KeyedCardEntry? get() = null
+
   /** A keyboard-wedge (HID) barcode scanner's input, where the device has a keyboard. */
   val hidScanner: HidBurstDetector? get() = null
 
@@ -68,4 +71,5 @@ class StaticPeripherals(
   override val cardCollector: CardCollector? = null,
   override val hidScanner: HidBurstDetector? = null,
   override val systemPrinter: SystemPrinter? = null,
+  override val keyedCardEntry: KeyedCardEntry? = null,
 ) : Peripherals

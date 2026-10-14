@@ -58,10 +58,27 @@ final class RegisterModel {
   /// The checked-in stays a sale can be charged to.
   private(set) var stays: [PosStay] = []
 
+  /// "Type card", as the console offers it with the site's publishable key,
+  /// where this app has Stripe's card form. Not offered while offline: a card
+  /// needs the server's intent.
+  var keyedCard: KeyedCardService? {
+    guard online, let entry = keyedEntry, let key = context?.publishableKey, !key.isEmpty else { return nil }
+    return KeyedCardService(entry: entry, publishableKey: key, merchantName: storeName)
+  }
+
+  /// The card tender a payment step names by label, to cancel or to read what it asks for.
+  func cardService(labeled label: String) -> (any CardReaderService)? {
+    if let reader = readers.first(where: { $0.label == label }) { return reader }
+    if let keyed = keyedCard, keyed.label == label { return keyed }
+    return nil
+  }
+
   @ObservationIgnored private let reader: FirestoreReader
   @ObservationIgnored private let api: PosSaleAPI
   @ObservationIgnored let terminal: CommerceTerminalConnection
   @ObservationIgnored let collector: CardCollector?
+  /// Stripe's card form, where this app carries it (Aglyn POS on iPhone and iPad): a typed card.
+  @ObservationIgnored let keyedEntry: KeyedCardEntry?
   @ObservationIgnored private let store: RegisterStore
   @ObservationIgnored private var openAttempt = AttemptKeys()
   @ObservationIgnored private var listeners: [String: FirestoreListening] = [:]
@@ -103,6 +120,7 @@ final class RegisterModel {
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
+    keyedEntry: KeyedCardEntry? = nil,
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
     uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil,
     displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil
@@ -114,6 +132,7 @@ final class RegisterModel {
     self.opsAPI = opsAPI ?? ConsolePosOpsAPI(api: api, hostID: hostID)
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
+    self.keyedEntry = keyedEntry
     store = RegisterStore(defaults: defaults, hostID: hostID)
     customers = PosCustomerModel(api: customersAPI ?? ConsolePosCustomersAPI(api: api, hostID: hostID))
     lastReceipt = PosLastReceiptModel(reader: reader, api: sale, store: store, hostID: hostID)
