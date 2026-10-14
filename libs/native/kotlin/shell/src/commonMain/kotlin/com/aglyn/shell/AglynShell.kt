@@ -64,6 +64,7 @@ fun AglynShell(
       com.aglyn.ui.LocalImageLoader provides services.imageLoader,
       com.aglyn.ui.LocalMediaPicker provides (com.aglyn.ui.LocalMediaPicker.current ?: services.mediaPicker),
       com.aglyn.ui.LocalFileExporter provides (com.aglyn.ui.LocalFileExporter.current ?: services.fileExporter),
+      com.aglyn.ui.LocalImageTransformer provides (com.aglyn.ui.LocalImageTransformer.current ?: platformImageTransformer()),
     ) {
     val auth by services.auth.state.collectAsState()
     when (val state = auth) {

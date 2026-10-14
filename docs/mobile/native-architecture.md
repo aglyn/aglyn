@@ -253,6 +253,14 @@ public func registerRedirectsNative(_ r: NativePluginRegistrar) {
 fun registerRedirectsNative(r: NativePluginRegistrar) { … same ids … }
 ```
 
+A widget may name a `slot` (`r.widget(…, slot: "hostSeo")`) and then renders in a core
+page's zone instead of Home: the native twin of the console's `PluginWidgetSlot`. A core page that hosts a zone draws
+`context.slotWidgets(slot)` and never names the plugins that contribute. Site setup hosts three (AGL-3668):
+`hostBusinessProfile` (what Aglyn AI learned from the site's edits), `hostSeo` under the SEO check (the listing the
+guided start proposed), and `hostSettings`. The SEO page also hands its widgets a `SeoZone` (Kotlin
+`LocalSeoZone`, Apple the `seoZone` environment value): the stored `seo` settings, and `proposeDraft(values, key)`,
+which puts values in the form below as unsaved edits (the same key twice applies once; the form's Save is the write).
+
 A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
 
 - `uid`, `orgId`, `hostId`, `orgSlug` and `hostSlug`;

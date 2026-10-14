@@ -82,6 +82,7 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **native:** parity rows follow the re-check of the content area ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **native:** tick the commerce integration cards row on both platforms ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 - **native:** spec grammar path projection, option filter, path comparison ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 - **email:** live audiences show the contact's opt-in and refresh hourly
