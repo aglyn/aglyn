@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class CouriersNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("couriers.service"),
+    "screens" to listOf("couriers.service", "couriers.order"),
     "deepLinks" to listOf(),
   )
 
@@ -23,7 +23,7 @@ class CouriersNativeTest {
   @Test
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = CouriersScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
-    assertEquals(listOf("couriers.service").sorted(), specs.map { it.id }.sorted())
+    assertEquals(listOf("couriers.service", "couriers.order").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

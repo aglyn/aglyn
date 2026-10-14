@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class PrintOnDemandNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("print-on-demand.service", "print-on-demand.connection", "print-on-demand.catalog", "print-on-demand.imported", "print-on-demand.orders"),
+    "screens" to listOf("print-on-demand.service", "print-on-demand.connection", "print-on-demand.catalog", "print-on-demand.imported", "print-on-demand.orders", "print-on-demand.order"),
     "deepLinks" to listOf(),
   )
 
@@ -23,7 +23,7 @@ class PrintOnDemandNativeTest {
   @Test
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = PrintOnDemandScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
-    assertEquals(listOf("print-on-demand.service", "print-on-demand.connection", "print-on-demand.catalog", "print-on-demand.imported", "print-on-demand.orders").sorted(), specs.map { it.id }.sorted())
+    assertEquals(listOf("print-on-demand.service", "print-on-demand.connection", "print-on-demand.catalog", "print-on-demand.imported", "print-on-demand.orders", "print-on-demand.order").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

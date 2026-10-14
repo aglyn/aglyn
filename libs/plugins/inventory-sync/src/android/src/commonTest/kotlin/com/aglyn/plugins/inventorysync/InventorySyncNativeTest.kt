@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class InventorySyncNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("inventory-sync.service"),
+    "screens" to listOf("inventory-sync.service", "inventory-sync.order"),
     "deepLinks" to listOf(),
   )
 
@@ -23,7 +23,7 @@ class InventorySyncNativeTest {
   @Test
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = InventorySyncScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
-    assertEquals(listOf("inventory-sync.service").sorted(), specs.map { it.id }.sorted())
+    assertEquals(listOf("inventory-sync.service", "inventory-sync.order").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

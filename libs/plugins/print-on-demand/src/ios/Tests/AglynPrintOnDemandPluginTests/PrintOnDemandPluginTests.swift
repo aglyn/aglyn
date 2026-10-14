@@ -12,7 +12,7 @@ final class PrintOnDemandPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["print-on-demand.catalog", "print-on-demand.connection", "print-on-demand.imported", "print-on-demand.orders", "print-on-demand.service"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["print-on-demand.catalog", "print-on-demand.connection", "print-on-demand.imported", "print-on-demand.order", "print-on-demand.orders", "print-on-demand.service"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "print-on-demand", contributes: declared, register: registerPrintOnDemandNative)], into: registry)
     XCTAssertEqual(result.failed, [])

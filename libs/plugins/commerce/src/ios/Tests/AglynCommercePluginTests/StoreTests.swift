@@ -141,20 +141,29 @@ final class StoreOrdersTests: XCTestCase {
 
 @MainActor
 final class CommerceRegistrationTests: XCTestCase {
-  func testEveryDeclaredIDRegistersNativelyAndNothingOpensTheConsole() {
+  /// What `plugins.config.json` declares for commerce under `mobile.contributes`: the screens grow with every spec, and the
+  /// plugin is held to exactly the list it declares, so the test reads the declaration rather than restating it.
+  private func declared() throws -> NativeContributionDeclaration {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent()
+    let data = try Data(contentsOf: root.appendingPathComponent("plugins.config.json"))
+    let plugins = try XCTUnwrap((try JSONSerialization.jsonObject(with: data) as? [String: Any])?["plugins"] as? [[String: Any]])
+    let commerce = try XCTUnwrap(plugins.first { $0["id"] as? String == "commerce" })
+    let contributes = try XCTUnwrap((commerce["mobile"] as? [String: Any])?["contributes"] as? [String: [String]])
+    return NativeContributionDeclaration(
+      screens: contributes["screens"] ?? [], tabs: contributes["tabs"] ?? [], widgets: contributes["widgets"] ?? [],
+      quickActions: contributes["quickActions"] ?? [], deepLinks: contributes["deepLinks"] ?? [])
+  }
+
+  func testEveryDeclaredIDRegistersNativelyAndNothingOpensTheConsole() throws {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(
-      screens: [
-        "commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products",
-        "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings",
-      ],
-      tabs: ["commerce.orders-tab", "commerce.products-tab"],
-      widgets: ["commerce.sales-trend", "commerce.to-ship", "commerce.today"],
-      quickActions: ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"],
-      deepLinks: ["commerce.orders-page", "commerce.products-page"])
+    let declared = try declared()
+    XCTAssertTrue(declared.screens.count > 9, "the declaration was read")
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "commerce", contributes: declared, register: registerCommerceNative)],
       into: registry)
+    XCTAssertEqual(result.failed, [])
     XCTAssertEqual(result.loaded, ["commerce"])
     XCTAssertTrue(registry.quickActions(for: .aglyn).allSatisfy { registry.screen($0.screen) != nil })
     XCTAssertEqual(registry.tabs(for: .aglyn).map(\.id), ["commerce.orders-tab", "commerce.products-tab"])

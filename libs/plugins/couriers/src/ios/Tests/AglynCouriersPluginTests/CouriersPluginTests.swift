@@ -12,7 +12,7 @@ final class CouriersPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["couriers.service"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["couriers.order", "couriers.service"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "couriers", contributes: declared, register: registerCouriersNative)], into: registry)
     XCTAssertEqual(result.failed, [])

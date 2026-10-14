@@ -12,7 +12,7 @@ final class ReviewPlatformsPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["review-platforms.service"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["review-platforms.order", "review-platforms.service"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "review-platforms", contributes: declared, register: registerReviewPlatformsNative)], into: registry)
     XCTAssertEqual(result.failed, [])

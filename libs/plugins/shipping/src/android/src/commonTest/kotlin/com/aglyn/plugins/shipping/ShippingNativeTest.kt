@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class ShippingNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("shipping.service", "shipping.shipFrom", "shipping.boxes", "shipping.labels", "shipping.services", "shipping.billing", "shipping.carriers", "shipping.connectCarrier", "shipping.own", "shipping.connectOwn", "shipping.spend"),
+    "screens" to listOf("shipping.service", "shipping.shipFrom", "shipping.boxes", "shipping.labels", "shipping.services", "shipping.billing", "shipping.carriers", "shipping.connectCarrier", "shipping.own", "shipping.connectOwn", "shipping.spend", "shipping.order", "shipping.returnLabel"),
     "deepLinks" to listOf(),
   )
 
@@ -23,7 +23,7 @@ class ShippingNativeTest {
   @Test
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = ShippingScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
-    assertEquals(listOf("shipping.service", "shipping.shipFrom", "shipping.boxes", "shipping.labels", "shipping.services", "shipping.billing", "shipping.carriers", "shipping.connectCarrier", "shipping.own", "shipping.connectOwn", "shipping.spend").sorted(), specs.map { it.id }.sorted())
+    assertEquals(listOf("shipping.service", "shipping.shipFrom", "shipping.boxes", "shipping.labels", "shipping.services", "shipping.billing", "shipping.carriers", "shipping.connectCarrier", "shipping.own", "shipping.connectOwn", "shipping.spend", "shipping.order", "shipping.returnLabel").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

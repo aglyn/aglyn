@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class PostPurchaseNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("post-purchase.service"),
+    "screens" to listOf("post-purchase.service", "post-purchase.order"),
     "deepLinks" to listOf(),
   )
 
@@ -23,7 +23,7 @@ class PostPurchaseNativeTest {
   @Test
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = PostPurchaseScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
-    assertEquals(listOf("post-purchase.service").sorted(), specs.map { it.id }.sorted())
+    assertEquals(listOf("post-purchase.service", "post-purchase.order").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }
