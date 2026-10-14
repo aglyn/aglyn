@@ -54,6 +54,27 @@
         "h2": "viewer"
       },
       "hostKey": "h2",
+      "addons": {
+        "plan": "pro",
+        "catalog": {
+          "hosts": {
+            "unitUsd": 5,
+            "max": 20,
+            "configured": true,
+            "upgradeRequired": false
+          },
+          "aiAddon": {
+            "unitUsd": null,
+            "max": 0,
+            "configured": false,
+            "upgradeRequired": true
+          }
+        },
+        "quantities": {
+          "hosts": 2
+        }
+      },
+      "kindKey": "hosts",
       "holds": {
         "b": {
           "expiresAtMs": 4102444800000
@@ -188,6 +209,14 @@
     {
       "template": "{data.missing:amount}",
       "expect": ""
+    },
+    {
+      "template": "{data.addons.catalog[@data.kindKey].unitUsd:dollars}/mo",
+      "expect": "$5.00/mo"
+    },
+    {
+      "template": "{data.addons.quantities[@data.kindKey]|'0'} of {data.addons.catalog[@data.kindKey].max}",
+      "expect": "2 of 20"
     },
     {
       "template": "{?org.manager && !staff.is}",
@@ -761,6 +790,22 @@
     {
       "when": "data.money > 100 && data.money < 200000",
       "expect": true
+    },
+    {
+      "when": "data.addons.catalog[@data.kindKey].configured && !data.addons.catalog[@data.kindKey].upgradeRequired",
+      "expect": true
+    },
+    {
+      "when": "data.addons.catalog[@data.kindKey].upgradeRequired",
+      "expect": false
+    },
+    {
+      "when": "data.addons.plan == enterprise",
+      "expect": false
+    },
+    {
+      "when": "!data.addons.quantities[@data.kindKey]",
+      "expect": false
     },
     {
       "when": "data.holds.*.expiresAtMs > 4000000000000",
