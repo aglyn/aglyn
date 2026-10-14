@@ -28,6 +28,7 @@ import {
 import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { notificationPushEnabled } from '@aglyn/aglyn/app-utils/notification-push'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { FieldValue } from 'firebase-admin/firestore'
 import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
@@ -86,11 +87,6 @@ export interface NotifyUsersOptions {
   skipEmailFor?: readonly string[]
 }
 
-/** The console's absolute origin for an email link, or `''` when unset. */
-function consoleOrigin(): string {
-  return (process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim().replace(/\/+$/, '')
-}
-
 /**
  * At most this many directory lookups per fan-out, and at most this many
  * notification emails.
@@ -133,7 +129,14 @@ async function emailNotification(
   known: Readonly<Record<string, string | null | undefined>>,
   audience: NotifyUsersOptions['audience'],
 ): Promise<void> {
-  const origin = consoleOrigin()
+  /*
+   * `platformConsoleOrigin`, never `NEXT_PUBLIC_CONSOLE_URL` read bare: this
+   * runs in the site app as well as the console, and the site app's
+   * deployment does not set that variable. Read bare, a notification a site
+   * sends (a form submission, an order) would carry a button that opens
+   * nothing and a settings line with no address.
+   */
+  const origin = platformConsoleOrigin()
   const settingsUrl = `${origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
   const context = await notificationEmailContext(payload, audience)
   const url = notificationEmailUrl(payload, context, origin)
@@ -142,7 +145,7 @@ async function emailNotification(
     payload.title,
     payload.body ?? '',
     url,
-    origin ? `Change what you are emailed about: ${settingsUrl}` : '',
+    `Change what you are emailed about: ${settingsUrl}`,
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -168,7 +171,7 @@ async function emailNotification(
             'notification.title': payload.title,
             'notification.body': payload.body ?? '',
             'notification.url': url,
-            settingsUrl: origin ? settingsUrl : '',
+            settingsUrl,
           },
           context.brand.options,
         )
@@ -181,9 +184,7 @@ async function emailNotification(
       }),
       ...(context.brand.fromName ? { fromName: context.brand.fromName } : {}),
       context: 'notification',
-      ...(origin
-        ? { headers: { 'List-Unsubscribe': `<${settingsUrl}>` } }
-        : {}),
+      headers: { 'List-Unsubscribe': `<${settingsUrl}>` },
     })
     if (!result.sent) continue
     sent += 1
@@ -246,8 +247,7 @@ async function notificationEmailContext(
  * Where the email's button goes: the notification's own link, rewritten onto
  * today's routes the way the console rewrites it when it is clicked, else
  * the notifications page. A stored host link is `/{hostDocId}/…`, which only
- * that rewrite turns into a page that exists. Empty when the deployment has
- * no console origin to make a link absolute with.
+ * that rewrite turns into a page that exists.
  */
 function notificationEmailUrl(
   payload: NotificationPayload,
@@ -260,7 +260,6 @@ function notificationEmailUrl(
     hostSubdomain: context.hostSubdomain,
   })
   if (link && /^https?:\/\//i.test(link)) return link
-  if (!origin) return ''
   return `${origin}${link?.startsWith('/') ? link : buildRoute(Route.MANAGE_NOTIFICATIONS)}`
 }
 
