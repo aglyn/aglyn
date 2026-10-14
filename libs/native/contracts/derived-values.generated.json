@@ -741,6 +741,11 @@
       "enabled": true,
       "rolloutPercent": 0,
       "plans": []
+    },
+    "release_ad_audience_sync": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
     }
   },
   "flagCases": [

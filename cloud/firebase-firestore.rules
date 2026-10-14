@@ -4460,14 +4460,17 @@ service cloud.firestore {
       // `acquisition` — where the account came from — is written once, by
       // the platform, at account creation (AGL-3289), and never by a client:
       // not the owner, not staff. A record its subject could restate would
-      // be a record nobody could trust.
+      // be a record nobody could trust. `adAudienceOptOut` (AGL-3780) is
+      // written only by the audited staff manage route: a client that could
+      // clear it would put an opted-out account back into the ad audiences.
       allow create: if (isStaff() ||
           (isSignedIn() && request.auth.uid == userId)) &&
-        !('acquisition' in request.resource.data);
+        !('acquisition' in request.resource.data) &&
+        !('adAudienceOptOut' in request.resource.data);
       allow update: if (isStaff() ||
           (isSignedIn() && request.auth.uid == userId)) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-          ['acquisition']);
+          ['acquisition', 'adAudienceOptOut']);
 
       // "My organizations" reverse index (AGL-233): API-maintained
       // beside the member docs; each user reads only their own.

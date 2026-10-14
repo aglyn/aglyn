@@ -1,1 +1,386 @@
-../../../../android/screens/marketplace.screens.json
+{
+  "$comment": "The Marketplace plugin's spec screens (AGL-3671): publishing the site as a template, and the Marketplace Publisher Agreement that publishing needs accepted. Generated from the plugin's own publisher-agreement and listing-price-floor models and held to them by apps/console/specs/native-marketplace-publish-matches-the-console.spec.ts. Routes: /api/marketplace/publish-template, /api/marketplace/publisher-profile (accept-agreement), /api/orgs/members; the profile is the org's publisherProfiles document. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "marketplace.publishTemplate",
+      "title": "Publish as template",
+      "subtitle": "Every published page and the theme, as a template others can start from",
+      "icon": "square.and.arrow.up|upload",
+      "scope": "site",
+      "zones": [
+        "siteTemplate"
+      ],
+      "order": 50,
+      "load": {
+        "profile": {
+          "doc": "publisherProfiles/{org.id}",
+          "optional": true
+        }
+      },
+      "constants": {
+        "agreement": {
+          "title": "Marketplace Publisher Agreement",
+          "version": "2026-08-24.1",
+          "url": "https://aglyn.com/legal/marketplace-publisher-agreement",
+          "published": true,
+          "unavailable": "The Marketplace Publisher Agreement is not published yet, so there is nothing here for you to read — and we will not ask you to agree to a document we have not shown you. Acceptance is paused until it is available, which also means marketplace publishing is paused. Nothing is required of you in the meantime.",
+          "points": [
+            {
+              "id": "hosting-license",
+              "label": "We may host, verify and distribute what you publish",
+              "detail": "Including keeping an immutable copy of every version, inspecting its code, and showing your listing content in the marketplace and console."
+            },
+            {
+              "id": "warranties",
+              "label": "You warrant each version as you publish it",
+              "detail": "That you have the right to publish it, that its license is accurate and compatible, that it carries no malware or hidden telemetry, and that its documentation describes what it does with data."
+            },
+            {
+              "id": "immutable",
+              "label": "You cannot recall code that is already installed",
+              "detail": "Installs pin an exact version and hash. A mistake ships until an installer chooses to upgrade — publishing a new version is the only remedy you have."
+            },
+            {
+              "id": "revocation",
+              "label": "We can disable a version everywhere, without notice",
+              "detail": "If a version looks like a security, legal or privacy risk we stop it on every site running it, and tell you afterwards. Operating a platform that executes other people’s code requires this."
+            },
+            {
+              "id": "review",
+              "label": "Review is a safety screen, not an endorsement",
+              "detail": "Approval is not an audit and not a guarantee your plugin works. We may decline, delist or unsign anything, for reasons that may have nothing to do with your code."
+            },
+            {
+              "id": "payouts",
+              "label": "On paid listings we process the sale and take a fee",
+              "detail": "We process the purchase and pay your share into your own Stripe Connect account, less a platform fee that may change. We collect and remit sales tax on Marketplace sales; refunds, chargebacks and support on your Artifacts are yours."
+            },
+            {
+              "id": "indemnity",
+              "label": "You indemnify us for claims arising from what you publish",
+              "detail": "Including infringement claims and disputes with the organizations that install it."
+            }
+          ],
+          "changes": [
+            {
+              "version": "2026-08-18.1",
+              "changes": [
+                "§1 names the marketplace and the End User License Agreement by their current names.",
+                "§3(h), new: listing conduct — what an Artifact and its listing may not claim about the platform, its plans or its prices.",
+                "§8.6, new: a paid Artifact, tier or license key must be sold through the Marketplace.",
+                "§13.6, new: how you may use the platform’s names and marks."
+              ]
+            },
+            {
+              "version": "2026-08-24.1",
+              "changes": [
+                "§13.3: venue moves to Travis County, Texas, and governing law now cites Terms of Service Section 18.6."
+              ]
+            }
+          ]
+        }
+      },
+      "derive": [
+        {
+          "name": "current",
+          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Publishes the current published version of this site template so other organizations can install it. Your site is unaffected. Re-publishing bumps the version."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.profile.handle && const.agreement.published && !is.current && data.profile.publisherAgreement.version",
+          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.profile.handle && const.agreement.published && !is.current && !data.profile.publisherAgreement.version",
+          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
+        },
+        {
+          "type": "links",
+          "when": "data.profile.handle && const.agreement.published && !is.current",
+          "items": [
+            {
+              "title": "Review the Marketplace Publisher Agreement",
+              "subtitle": "You can also accept it when Publish asks",
+              "icon": "doc.text|description",
+              "screen": "marketplace.publisherAgreement"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "publish",
+          "title": "Listing",
+          "fields": [
+            {
+              "key": "name",
+              "label": "Listing name",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "description",
+              "label": "Description",
+              "kind": "multiline"
+            },
+            {
+              "key": "category",
+              "label": "Category",
+              "kind": "text",
+              "placeholder": "e.g. Portfolio, Restaurant"
+            },
+            {
+              "key": "price",
+              "label": "Price (USD)",
+              "kind": "number",
+              "placeholder": "0 = free",
+              "help": "0 for free, or $3 and up for a paid listing. Paid listings need payouts set up on your marketplace profile."
+            }
+          ],
+          "submit": {
+            "label": "Publish",
+            "url": "/api/marketplace/publish-template",
+            "body": {
+              "hostId": "{site.id}",
+              "displayName": "{form.name}",
+              "description": "{form.description}",
+              "category": "{form.category}",
+              "priceUsd": "{form.price}"
+            },
+            "success": "Published v{response.version} to the marketplace",
+            "back": true,
+            "gate": {
+              "when": "error.agreement.required && error.agreement.state == none,outdated",
+              "screen": "marketplace.publisherAgreement"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "marketplace.publisherAgreement",
+      "title": "Marketplace Publisher Agreement",
+      "subtitle": "Accept it for your organization, then publish",
+      "icon": "doc.text|description",
+      "scope": "site",
+      "order": 51,
+      "load": {
+        "profile": {
+          "doc": "publisherProfiles/{org.id}",
+          "optional": true
+        },
+        "members": {
+          "url": "/api/orgs/members?orgId={org.id}&filters=%5B%7B%22field%22%3A%22role%22%2C%22op%22%3A%22isAnyOf%22%2C%22value%22%3A%22owner%2Cadmin%22%7D%5D",
+          "optional": true
+        }
+      },
+      "constants": {
+        "agreement": {
+          "title": "Marketplace Publisher Agreement",
+          "version": "2026-08-24.1",
+          "url": "https://aglyn.com/legal/marketplace-publisher-agreement",
+          "published": true,
+          "unavailable": "The Marketplace Publisher Agreement is not published yet, so there is nothing here for you to read — and we will not ask you to agree to a document we have not shown you. Acceptance is paused until it is available, which also means marketplace publishing is paused. Nothing is required of you in the meantime.",
+          "points": [
+            {
+              "id": "hosting-license",
+              "label": "We may host, verify and distribute what you publish",
+              "detail": "Including keeping an immutable copy of every version, inspecting its code, and showing your listing content in the marketplace and console."
+            },
+            {
+              "id": "warranties",
+              "label": "You warrant each version as you publish it",
+              "detail": "That you have the right to publish it, that its license is accurate and compatible, that it carries no malware or hidden telemetry, and that its documentation describes what it does with data."
+            },
+            {
+              "id": "immutable",
+              "label": "You cannot recall code that is already installed",
+              "detail": "Installs pin an exact version and hash. A mistake ships until an installer chooses to upgrade — publishing a new version is the only remedy you have."
+            },
+            {
+              "id": "revocation",
+              "label": "We can disable a version everywhere, without notice",
+              "detail": "If a version looks like a security, legal or privacy risk we stop it on every site running it, and tell you afterwards. Operating a platform that executes other people’s code requires this."
+            },
+            {
+              "id": "review",
+              "label": "Review is a safety screen, not an endorsement",
+              "detail": "Approval is not an audit and not a guarantee your plugin works. We may decline, delist or unsign anything, for reasons that may have nothing to do with your code."
+            },
+            {
+              "id": "payouts",
+              "label": "On paid listings we process the sale and take a fee",
+              "detail": "We process the purchase and pay your share into your own Stripe Connect account, less a platform fee that may change. We collect and remit sales tax on Marketplace sales; refunds, chargebacks and support on your Artifacts are yours."
+            },
+            {
+              "id": "indemnity",
+              "label": "You indemnify us for claims arising from what you publish",
+              "detail": "Including infringement claims and disputes with the organizations that install it."
+            }
+          ],
+          "changes": [
+            {
+              "version": "2026-08-18.1",
+              "changes": [
+                "§1 names the marketplace and the End User License Agreement by their current names.",
+                "§3(h), new: listing conduct — what an Artifact and its listing may not claim about the platform, its plans or its prices.",
+                "§8.6, new: a paid Artifact, tier or license key must be sold through the Marketplace.",
+                "§13.6, new: how you may use the platform’s names and marks."
+              ]
+            },
+            {
+              "version": "2026-08-24.1",
+              "changes": [
+                "§13.3: venue moves to Travis County, Texas, and governing law now cites Terms of Service Section 18.6."
+              ]
+            }
+          ]
+        }
+      },
+      "derive": [
+        {
+          "name": "current",
+          "when": "data.profile.publisherAgreement.version == @const.agreement.version"
+        },
+        {
+          "name": "outdated",
+          "when": "data.profile.publisherAgreement.version && !is.current"
+        },
+        {
+          "name": "canAccept",
+          "when": "const.agreement.published && !is.current && org.manager"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!const.agreement.published",
+          "text": "{const.agreement.unavailable}"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "const.agreement.published && is.outdated",
+          "text": "These terms have changed since your organization accepted version {data.profile.publisherAgreement.version}. Publishing is paused until the current version is accepted."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "const.agreement.published && !is.current && !is.outdated",
+          "text": "Your organization has not accepted these terms. They must be accepted before anything is published."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.current",
+          "text": "Your organization has accepted version {const.agreement.version}. There is nothing left to do."
+        },
+        {
+          "type": "list",
+          "title": "What changed since version {data.profile.publisherAgreement.version}",
+          "when": "is.outdated",
+          "items": "const.agreement.changes",
+          "within": "changes",
+          "filter": "parent.version > data.profile.publisherAgreement.version && parent.version <= const.agreement.version",
+          "count": false,
+          "primary": "{item}",
+          "secondary": "Version {parent.version}",
+          "icon": "pencil|edit"
+        },
+        {
+          "type": "list",
+          "title": "In summary",
+          "footer": "In summary — this is not the agreement, it is what tends to surprise people later.",
+          "items": "const.agreement.points",
+          "count": false,
+          "primary": "{item.label}",
+          "secondary": "{item.detail}",
+          "icon": "checkmark.seal|verified"
+        },
+        {
+          "type": "actions",
+          "when": "const.agreement.published",
+          "items": [
+            {
+              "id": "read",
+              "label": "Read the full Marketplace Publisher Agreement",
+              "icon": "safari|open_in_new",
+              "link": "{const.agreement.url}"
+            }
+          ],
+          "footer": "Version {const.agreement.version}"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!const.agreement.published",
+          "text": "Version {const.agreement.version} has no published page yet, so there is no full text to link to."
+        },
+        {
+          "type": "actions",
+          "when": "is.canAccept",
+          "footer": "Accepting version {const.agreement.version} binds the organization, not you personally, and we record who accepted and when.",
+          "items": [
+            {
+              "id": "accept",
+              "label": "Accept on behalf of this organization",
+              "icon": "checkmark|check",
+              "when": "!is.outdated",
+              "url": "/api/marketplace/publisher-profile",
+              "body": {
+                "action": "accept-agreement",
+                "orgId": "{org.id}",
+                "version": "{const.agreement.version}"
+              },
+              "success": "Agreement accepted",
+              "back": true,
+              "resume": true
+            },
+            {
+              "id": "acceptCurrent",
+              "label": "Accept the current version",
+              "icon": "checkmark|check",
+              "when": "is.outdated",
+              "url": "/api/marketplace/publisher-profile",
+              "body": {
+                "action": "accept-agreement",
+                "orgId": "{org.id}",
+                "version": "{const.agreement.version}"
+              },
+              "success": "Agreement accepted",
+              "back": true,
+              "resume": true
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "const.agreement.published && !is.current && !org.manager",
+          "text": "Only an owner or admin of your organization can accept on its behalf. Ask one of them to accept it, then try again."
+        },
+        {
+          "type": "list",
+          "title": "Who can accept",
+          "when": "const.agreement.published && !is.current && !org.manager && data.members.members",
+          "items": "data.members.members",
+          "filter": "item.role == owner,admin",
+          "count": false,
+          "primary": "{item.displayName|item.email|item.$id}",
+          "secondary": "{item.email}",
+          "icon": "person|person"
+        }
+      ]
+    }
+  ]
+}

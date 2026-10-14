@@ -312,6 +312,13 @@ on:
           # email and sends nothing; the POST sends. Safe by hand — each
           # crossing is recorded on the account after its send.
           - /api/admin/retention-emails
+          # The account-holder ad audiences (AGL-3780), the same as the
+          # nightly `consoleAdAudienceSync` job. A GET reports per provider
+          # how many hashes would be added and removed and sends nothing; the
+          # POST sends, and only while `release_ad_audience_sync` is on. Safe
+          # by hand — an unchanged audience is not re-sent, and a repeated add
+          # or remove changes nothing at any provider.
+          - /api/admin/ad-audience-sync
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

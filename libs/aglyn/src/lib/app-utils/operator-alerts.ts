@@ -754,6 +754,21 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    // Nightly, so once a day per provider is every run it could report.
+    type: 'ops.adAudienceSyncFailed',
+    label: 'Ad audience sync failed',
+    description:
+      'The nightly account-holder audience sync (AGL-3780) could not update a Meta, Google or LinkedIn audience, or held a run whose audience would have shrunk by more than half. The audience keeps what it last had; check the provider credentials, or run the sync with force once the drop is confirmed.',
+    tier: 'should',
+    category: 'ops',
+    title: 'Ad audience sync: {{provider}} not updated',
+    body: 'The {{provider}} account-holder audience was not updated: {{detail}}. It keeps what it was last sent, and the next nightly run tries again.',
+    link: '/admin/flags',
+    delivery: 'immediate',
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+  },
+  {
     type: 'system.pluginVerifierRegression',
     label: 'Plugin verifier regression',
     description:
