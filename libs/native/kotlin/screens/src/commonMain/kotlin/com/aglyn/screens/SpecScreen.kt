@@ -240,7 +240,7 @@ private fun SpecBody(
 
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
-      action.inputs.isNotEmpty() -> prompting = Pending(action, actionScope)
+      action.inputs(actionScope).isNotEmpty() -> prompting = Pending(action, actionScope)
       action.confirm != null && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
@@ -385,7 +385,7 @@ private fun SpecBody(
 @Composable
 private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
   val values = remember(pending) { mutableStateMapOf<String, FieldValue>() }
-  val inputs = pending.action.inputs
+  val inputs = pending.action.inputs(pending.scope)
   fun filled(): JsonElement = ScreenContext.with(
     pending.scope, "form",
     JsonObject(inputs.associate { it.key to fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)) }),

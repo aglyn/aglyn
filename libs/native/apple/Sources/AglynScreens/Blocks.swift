@@ -468,7 +468,7 @@ struct ActionInputSheet: View {
   @Environment(\.dismiss) private var dismiss
   @State private var values: [String: FieldValue] = [:]
 
-  private var inputs: [FieldSpec] { pending.action.inputs }
+  private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
 
   private var filled: JSONValue {
     var form: [String: JSONValue] = [:]

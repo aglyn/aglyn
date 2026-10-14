@@ -335,6 +335,30 @@ class ScreenSpecTest {
     assertFalse(url.contains("onOrAfter"))
   }
 
+  /** A prompt field with `each` is one field per row of a list, and `$collect` gathers what was typed. */
+  @Test
+  fun aPromptFieldCanRepeatForEveryRowOfAList() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Test","url":"/api/x","prompt":[{"key":"to","kind":"email"},
+           {"each":"const.tokens","key":"token.{item.name}","label":"{item.name}","help":"{item.description}","initial":"{item.sample}"}],
+           "body":{"to":"{form.to}","mergeValues":{"${'$'}collect":{"prefix":"token."}}}}""",
+      ),
+    )!!
+    val scope = Json.parseToJsonElement(
+      """{"const":{"tokens":[{"name":"org.name","description":"The workspace","sample":"Acme {x}"},{"name":"link","description":"","sample":""}]}}""",
+    )
+    val inputs = action.inputs(scope)
+    assertEquals(listOf("to", "token.org.name", "token.link"), inputs.map { it.key })
+    assertEquals("org.name", inputs[1].label)
+    assertEquals("The workspace", inputs[1].help)
+    // A brace in a sample is text, not a template.
+    assertEquals("Acme {x}", ScreenValues.render(inputs[1].initial.orEmpty(), JsonObject(emptyMap())))
+    val sent = ScreenValues.resolveBody(action.body!!, Json.parseToJsonElement("""{"form":{"to":"a@b.c","token.org.name":"Acme","token.link":""}}"""))
+    assertEquals(Json.parseToJsonElement("""{"to":"a@b.c","mergeValues":{"org.name":"Acme"}}"""), sent)
+    assertEquals(listOf("reason"), ActionSpec.parse(Json.parseToJsonElement("""{"label":"Go","url":"/api/x","reason":true}"""))!!.inputs(JsonObject(emptyMap())).map { it.key })
+  }
+
   /** A list can be ordered by a field of its rows: numbers as numbers, anything else as text, rows without it last. */
   @Test
   fun sortOrdersByAFieldWithNumbersAsNumbersAndKeepsTiesInOrder() {

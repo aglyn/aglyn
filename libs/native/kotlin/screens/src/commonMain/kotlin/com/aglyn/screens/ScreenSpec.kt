@@ -183,9 +183,11 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   /** Repeats the request page by page until the route is done, and answers the totals. */
   val loop: LoopSpec? = json.obj("loop")?.let { LoopSpec(it) }
 
-  /** Every field the action asks for before it runs: its prompt, then a reason. */
-  val inputs: List<FieldSpec>
-    get() = if (reason) prompt + FieldSpec.reason() else prompt
+  /** Every field the action asks for before it runs: its prompt (a field with `each` becoming one per row), then a reason. */
+  fun inputs(scope: JsonElement): List<FieldSpec> {
+    val asked = prompt.flatMap { it.expanded(scope) }
+    return if (reason) asked + FieldSpec.reason() else asked
+  }
 
   companion object {
     fun parse(json: JsonElement?): ActionSpec? = json?.str("label")?.let { ActionSpec(json, it) }
@@ -207,7 +209,33 @@ class FieldSpec private constructor(
   val mustMatch: String? = null,
   /** `{ length, alphabet }`: the field offers a button that fills it with a random value of that many characters drawn from the alphabet (a template; the console's password generator). */
   val generate: JsonElement? = null,
+  /** A list (a path) this field repeats for, one field per row, with `item` the row: the values an email is tested with, a field for each. */
+  val each: String? = null,
 ) {
+  /** This field as it is asked: itself, or one per row of its `each` list, its templates rendered over the row. */
+  fun expanded(scope: JsonElement): List<FieldSpec> {
+    val path = each ?: return listOf(this)
+    return ScreenValues.rows(ScreenValues.lookup(path, scope)).map { row ->
+      val item = ScreenContext.withItem(scope, row)
+      FieldSpec(
+        key = ScreenValues.render(key, item),
+        label = ScreenValues.render(label, item),
+        kind = kind,
+        // The initial value is final here, so a brace in it is text and not a template.
+        initial = initial?.let { ScreenValues.render(it, item).replace("{", "{{") },
+        placeholder = placeholder,
+        help = help?.let { ScreenValues.render(it, item) },
+        required = required,
+        options = options,
+        optionsFrom = optionsFrom,
+        whenCondition = whenCondition,
+        mustMatch = mustMatch,
+        generate = generate,
+        each = null,
+      )
+    }
+  }
+
   /** A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name the console's own constants); null for a field that does not. */
   fun generatedValue(context: JsonElement): String? {
     val spec = generate ?: return null
@@ -255,6 +283,7 @@ class FieldSpec private constructor(
         whenCondition = json.str("when"),
         mustMatch = json.str("mustMatch"),
         generate = json.obj("generate"),
+        each = json.str("each"),
       )
     }
   }

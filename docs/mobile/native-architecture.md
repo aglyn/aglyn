@@ -914,7 +914,7 @@ like a read.
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row
-whose field matches) and `map[key.with.dots]`. `now` has `month`, `previousMonth`, `quarter` and `ms`. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
+whose field matches) and `map[key.with.dots]`. `now` has `month`, `previousMonth`, `quarter` and `ms`. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `each: "<list path>"` is one field for every row of that list (key, label, help and initial are templates over `item`, so an email's test asks for each variable it takes, and `{"$collect": {"prefix": "token."}}` gathers what was typed). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
 platform's secure generator (the console's password generator). Formats: `pairs` (a map's entries as
 `key: value`, the keys untouched, where `facts` splits them into words), `labeled/<path>` (each id through the map at
 `<path>`), `before/-` and `after/-` (either side of the first separator), `date`, `datetime`,

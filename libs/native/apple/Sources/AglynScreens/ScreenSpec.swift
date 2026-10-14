@@ -238,12 +238,12 @@ public struct ActionSpec: Sendable, Identifiable {
     self.instead = json["instead"]
   }
 
-  /// Every field the action asks for before it runs: its prompt, then a reason.
-  public var inputs: [FieldSpec] {
-    reason
-      ? prompt + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true,
-          help: "Recorded in the audit log.")]
-      : prompt
+  /// Every field the action asks for before it runs: its prompt (a field with `each` becoming one per row), then a reason.
+  public func inputs(in scope: JSONValue) -> [FieldSpec] {
+    let asked = prompt.flatMap { $0.expanded(in: scope) }
+    return reason
+      ? asked + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true, help: "Recorded in the audit log.")]
+      : asked
   }
 }
 
@@ -335,6 +335,9 @@ public struct FieldSpec: Sendable, Identifiable {
   public let when: String?
   /// A template the typed value must equal (type the workspace name to delete it).
   public let mustMatch: String?
+  /// A list (a path) this field repeats for, one field per row, with `item` the row: the values a template of an
+  /// email is tested with, a field for each. The key, label, help and initial value are rendered per row.
+  public let each: String?
   /// `{ length, alphabet }`: the field offers a button that fills it with a random value of that many
   /// characters drawn from the alphabet (a template; the console's password generator).
   public let generate: JSONValue?
@@ -369,6 +372,33 @@ public struct FieldSpec: Sendable, Identifiable {
     self.when = nil
     self.mustMatch = nil
     self.generate = nil
+    self.each = nil
+  }
+
+  /// One field of an `each` field's rows: its templates rendered over the row.
+  private init(_ template: FieldSpec, row: JSONValue, in scope: JSONValue) {
+    let item = ScreenContext.with(scope, item: row)
+    func rendered(_ text: String?) -> String? { text.map { ScreenValues.render($0, in: item) } }
+    key = ScreenValues.render(template.key, in: item)
+    label = ScreenValues.render(template.label, in: item)
+    kind = template.kind
+    // The initial value is final here, so a brace in it is text and not a template.
+    initial = rendered(template.initial).map { $0.replacingOccurrences(of: "{", with: "{{") }
+    placeholder = template.placeholder
+    help = rendered(template.help)
+    required = template.required
+    options = template.options
+    optionsFrom = template.optionsFrom
+    when = template.when
+    mustMatch = template.mustMatch
+    generate = template.generate
+    each = nil
+  }
+
+  /// This field as it is asked: itself, or one per row of its `each` list.
+  public func expanded(in scope: JSONValue) -> [FieldSpec] {
+    guard let each else { return [self] }
+    return ScreenValues.rows(ScreenValues.lookup(each, in: scope)).map { FieldSpec(self, row: $0, in: scope) }
   }
 
   init?(_ json: JSONValue) {
@@ -388,6 +418,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
     self.generate = json["generate"]
+    self.each = json["each"]?.stringValue
   }
 
   /// The choices for a `select`: the static options, then any read from data.

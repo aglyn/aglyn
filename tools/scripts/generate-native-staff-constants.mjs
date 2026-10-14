@@ -142,11 +142,11 @@ export async function staffSources() {
         deliveredBy,
         editable: emails.isSystemEmailEditable({ deliveredBy }),
       })),
-      // What the console's test drawer sends before staff change a value: each token's sample.
-      samples: Object.fromEntries(
+      // What the console's test drawer asks for: each merge value a template takes, with its sample, a field each.
+      tokens: Object.fromEntries(
         emails.SYSTEM_EMAIL_TEMPLATES.filter((template) => emails.isSystemEmailEditable(template)).map((template) => [
           template.key,
-          Object.fromEntries(template.mergeTokens.map((token) => [token.name, token.sample])),
+          template.mergeTokens.map(({ name, description, sample }) => ({ name, description, sample })),
         ]),
       ),
     },

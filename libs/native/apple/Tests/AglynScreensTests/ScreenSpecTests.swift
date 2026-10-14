@@ -300,6 +300,32 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertFalse((transport.requests[0].url?.absoluteString ?? "").contains("onOrAfter"))
   }
 
+  /// A prompt field with `each` is one field per row of a list, and `$collect` gathers what was typed.
+  func testAPromptFieldCanRepeatForEveryRowOfAList() throws {
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Test", "url": "/api/x",
+        "prompt": [
+          ["key": "to", "kind": "email"],
+          ["each": "const.tokens", "key": "token.{item.name}", "label": "{item.name}", "help": "{item.description}", "initial": "{item.sample}"],
+        ],
+        "body": ["to": "{form.to}", "mergeValues": ["$collect": ["prefix": "token."]]],
+      ]))
+    let scope: JSONValue = [
+      "const": ["tokens": [["name": "org.name", "description": "The workspace", "sample": "Acme {x}"], ["name": "link", "description": "", "sample": ""]]]
+    ]
+    let inputs = action.inputs(in: scope)
+    XCTAssertEqual(inputs.map(\.key), ["to", "token.org.name", "token.link"])
+    XCTAssertEqual(inputs[1].label, "org.name")
+    XCTAssertEqual(inputs[1].help, "The workspace")
+    // A brace in a sample is text, not a template.
+    XCTAssertEqual(ScreenValues.render(inputs[1].initial ?? "", in: [:]), "Acme {x}")
+    let sent = ScreenValues.resolveBody(
+      action.body ?? .null, in: ["form": ["to": "a@b.c", "token.org.name": "Acme", "token.link": ""]])
+    XCTAssertEqual(sent, ["to": "a@b.c", "mergeValues": ["org.name": "Acme"]])
+    XCTAssertEqual(try XCTUnwrap(ActionSpec(["label": "Go", "url": "/api/x", "reason": true])).inputs(in: [:]).map(\.key), ["reason"])
+  }
+
   /// A list can be ordered by a field of its rows: numbers as numbers, anything else as text, rows without it last.
   func testSortOrdersByAFieldWithNumbersAsNumbersAndKeepsTiesInOrder() {
     let rows: [JSONValue] = [["key": "a", "value": 9], ["key": "b", "value": 10], ["key": "c"], ["key": "d", "value": 10], ["key": "E", "value": 2]]
