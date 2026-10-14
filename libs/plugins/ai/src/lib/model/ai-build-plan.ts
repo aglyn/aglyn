@@ -294,12 +294,13 @@ export interface AiBuildPlan {
    * is in (AGL-3760): two to four words a stock photo library is searched by,
    * the business's subject first — "bakery bread pastries" for "una panadería
    * … con pan dulce, conchas". The libraries are tagged in English, so a site
-   * in another language searches by these rather than its own words, and its
-   * plan is asked for them again once when it gave none (AGL-3779). Absent
-   * on every other kind's plan, on one that said null, on one whose words
-   * were not plain English letters, and on a plan in another language whose
-   * re-ask still gave none, whose photos then fall back to its business type
-   * in English (`aiStockBusinessNoun`), else its kind of site.
+   * in another language searches by these rather than its own words — unless
+   * its business type names a business the curated table knows in English
+   * (`aiStockBusinessNoun`), which leads — and its plan is asked for them
+   * again once when it gave none (AGL-3779). Absent on every other kind's
+   * plan, on one that said null, on one whose words were not plain English
+   * letters, and on a plan in another language whose re-ask still gave none,
+   * whose photos then fall back to its kind of site.
    */
   photoWords?: string
 }
@@ -654,10 +655,13 @@ export function aiPlanPhotoWords(value: unknown): string | null {
  * said `es` and gave none (jobs ih6kVvCGP1, iGmqrEgyW4): a guided start's
  * brief is English sentences around the person's own words. A strict schema
  * has no conditional keyword, so the condition is said here and held by the
- * plan step (`aiSitePhotoWordsCheck`), which re-asks once.
+ * plan step (`aiSitePhotoWordsCheck`), which re-asks once. The kind of
+ * business comes first because the first word is the subject every photo is
+ * searched by (`aiStockPhotoWordsSubject`): asked for the most specific word
+ * first, a florist's live plan wrote "wedding bouquets event flowers".
  */
 const PHOTO_WORDS_SCHEMA = nullableString(
-  'Required when language is not en: 2-4 English words naming what the business is or sells, most specific first, e.g. bakery pastries; never a place or the business name. Null when language is en.',
+  'Required when language is not en: 2-4 English words, the kind of business first, then what it sells, e.g. florist wedding bouquets; never a place or the business name. Null when language is en.',
 )
 
 /**

@@ -19,13 +19,15 @@
  * THE ENGLISH NAME OF A BUSINESS TYPE WRITTEN IN ANOTHER LANGUAGE (AGL-3779).
  *
  * The stock photo libraries are tagged in English, so a site in another
- * language is searched by its plan's English photo words
- * (`aiStockSourceTerms`). Where a plan gave none, the business type the
- * person typed is the next best word for what the site is about — but only
- * once it is English: "Una panadería familiar … con pan dulce" read as an
- * English noun phrase searched "con pan dulce" and placed the Río Dulce, and
- * the kind of site picked ("restaurant cafe") placed a coffee mug as a
- * bakery's hero (jobs ih6kVvCGP1 and iGmqrEgyW4, beta.250).
+ * language is searched by an English subject (`aiStockSourceTerms`). The
+ * business type the person typed is the surest word for what the site is
+ * about, once it is English: "Una panadería familiar … con pan dulce" read
+ * as an English noun phrase searched "con pan dulce" and placed the Río
+ * Dulce, the kind of site picked ("restaurant cafe") placed a coffee mug as a
+ * bakery's hero (jobs ih6kVvCGP1 and iGmqrEgyW4, beta.250), and a live plan's
+ * photo words for a florist, "wedding bouquets event flowers", led with
+ * "wedding". So a business this table names leads the search, ahead of the
+ * plan's photo words, which decide only for a business it does not name.
  *
  * This table names the common kinds of local business in Spanish, French,
  * Portuguese, German and Italian, each with the English words a library is
@@ -58,7 +60,9 @@ export const AI_STOCK_BUSINESS_NOUNS: readonly AiStockBusinessNoun[] = [
   { english: 'pastry shop', names: ['pastelería', 'repostería', 'pâtisserie', 'confeitaria', 'Konditorei', 'pasticceria'] },
   { english: 'tacos', names: ['taquería'] },
   { english: 'cafe', names: ['cafetería', 'caffetteria'] },
-  { english: 'restaurant', names: ['restaurante', 'ristorante', 'trattoria', 'osteria', 'Gaststätte'] },
+  { english: 'restaurant', names: ['restaurante', 'ristorante', 'Gaststätte'] },
+  // A library knows the trattoria by its own name, a narrower search than "restaurant".
+  { english: 'trattoria', names: ['trattoria', 'osteria'] },
   { english: 'butcher shop', names: ['carnicería', 'boucherie', 'açougue', 'Metzgerei', 'macelleria'] },
   { english: 'florist', names: ['floristería', 'florería', 'fleuriste', 'floricultura', 'Blumenladen', 'fioraio', 'fioreria'] },
   {

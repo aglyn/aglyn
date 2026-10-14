@@ -1879,15 +1879,16 @@ export interface AiLayoutStockPhotoSourceInput {
   language?: string
   /**
    * The plan's photo words, in English (AGL-3760): what a site in another
-   * language is searched by, in place of its business type and its alt texts.
+   * language is searched by, in place of its business type and its alt texts,
+   * unless its business type names a business listed in English
+   * (`aiStockBusinessNoun`, AGL-3779), which leads.
    */
   photoWords?: string
   /**
    * The English name of the kind of site the person picked (AGL-3771): what a
-   * site in another language is searched by when its plan gave no photo words
-   * and its business type names no business listed in English
-   * (`aiStockBusinessNoun`, AGL-3779), rather than its business type in its
-   * own language.
+   * site in another language is searched by when its business type names no
+   * business listed in English (`aiStockBusinessNoun`, AGL-3779) and its plan
+   * gave no photo words, rather than its business type in its own language.
    */
   kindWords?: string
   /** The page's section names, by plan index. */
@@ -1959,10 +1960,11 @@ export function aiStockPhotoWordsSubject(photoWords: string): string {
 
 /**
  * What a source's photos are searched and judged by (AGL-3760, AGL-3769): a
- * site in another language by the subject of its plan's English photo words,
- * every other site by its business type. One reading for every slot of every
- * source — hero, background, gallery, card, product, post — so no slot
- * searches by words another slot is held against.
+ * site in another language by an English subject ({@link aiStockSourceSubject}:
+ * its business named in English, else its plan's photo words' subject, else
+ * its kind of site), every other site by its business type. One reading for
+ * every slot of every source — hero, background, gallery, card, product,
+ * post — so no slot searches by words another slot is held against.
  */
 export function aiStockSourceTerms(
   input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords'>,
@@ -1971,22 +1973,32 @@ export function aiStockSourceTerms(
 }
 
 /**
- * What a site in another language is searched by ({@link aiStockSourceTerms}):
- * its photo words' subject; where its plan gave none, the English name of the
- * business its type names (AGL-3779, {@link aiStockBusinessNoun}); and only
- * then the English name of its kind of site (AGL-3771). Panaderia El Trigal's
- * plan gave no photo words, and its pages searched "con pan dulce" and placed
- * the Río Dulce beside its story; searched by its kind instead, a bakery's
- * hero searched "restaurant cafe" and took a coffee mug, where "panadería"
- * says bakery. Empty for every other site.
+ * What a site in another language is searched by ({@link aiStockSourceTerms}),
+ * in this order (AGL-3779):
+ *
+ * 1. The English name of the business its type names, where the curated table
+ *    knows it ({@link aiStockBusinessNoun}): "florist" for "Una floristería en
+ *    Sevilla". It leads whatever the plan's photo words say, because the words
+ *    are the model's and the table is not: a live plan for that florist gave
+ *    "wedding bouquets event flowers", whose subject, "wedding", would have
+ *    searched every slot, its hero included, by weddings.
+ * 2. Its photo words' subject (AGL-3760, AGL-3769), for a business the table
+ *    does not list.
+ * 3. The English name of its kind of site (AGL-3771), where the plan gave
+ *    none. Panaderia El Trigal's pages searched "con pan dulce" and placed the
+ *    Río Dulce; searched by its kind, a bakery's hero took a coffee mug
+ *    ("restaurant cafe"), which is why it comes last.
+ *
+ * The photo words' other words were never searched by (AGL-3769), so a site
+ * the table names is searched by its name alone. Empty for every other site.
  */
 function aiStockSourceSubject(
   input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords'>,
 ): string {
   if (!aiLayoutSpeaksOtherThanEnglish(input.language)) return ''
   return (
-    aiStockPhotoWordsSubject(input.photoWords ?? '') ||
     aiStockBusinessNoun(input.business) ||
+    aiStockPhotoWordsSubject(input.photoWords ?? '') ||
     (input.kindWords ?? '').trim()
   )
 }

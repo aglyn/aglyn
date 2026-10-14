@@ -521,7 +521,7 @@ export function aiSitePhotoWordsViolations(plan: Pick<AiBuildPlan, 'language' | 
     {
       rule: null,
       code: AI_SITE_PHOTO_WORDS_CODE,
-      message: `This plan's language is ${plan.language}, so photoWords is required: 2-4 plain English words naming what the business is or sells, most specific first (e.g. bakery pastries), never a place or the business name.`,
+      message: `This plan's language is ${plan.language}, so photoWords is required: 2-4 plain English words, the kind of business first, then what it sells (e.g. florist wedding bouquets), never a place or the business name.`,
       paths: ['photoWords'],
     },
   ]

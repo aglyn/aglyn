@@ -75,6 +75,8 @@ import {
   aiLayoutStockPhotoSource,
   aiStockForgetJobPhotos,
   aiStockPhotoWordsOf,
+  aiStockPhotoWordsSubject,
+  aiStockSearchesFor,
   aiStockSiteTerms,
   aiStockSourceTerms,
 } from './ai-layout-stock-photos'
@@ -179,7 +181,7 @@ describe('a site plan’s tool asks for English photo words whenever its languag
 
   it('says they are required when the language is not en, what they name, and that only an English plan says null', () => {
     expect(photoWords.description).toBe(
-      'Required when language is not en: 2-4 English words naming what the business is or sells, most specific first, e.g. bakery pastries; never a place or the business name. Null when language is en.',
+      'Required when language is not en: 2-4 English words, the kind of business first, then what it sells, e.g. florist wedding bouquets; never a place or the business name. Null when language is en.',
     )
     // Strict structured output compiles no conditional keyword, so null stays a branch and the plan step holds the rule.
     expect(JSON.stringify(photoWords)).toContain('"type":"null"')
@@ -278,7 +280,10 @@ describe('a business type in another language, in English (AGL-3779)', () => {
     ['Una peluquería canina con baño y corte', 'dog grooming'],
     ['Una cafetería con desayunos', 'cafe'],
     ['Un restaurante de mariscos en Veracruz', 'restaurant'],
+    ['Una trattoria di famiglia a Bologna', 'trattoria'],
     ['Un taller mecánico de frenos y suspensión', 'auto repair'],
+    ['Eine Kfz-Werkstatt in Köln', 'auto repair'],
+    ['Um salão de cabeleireiro no Porto', 'hair salon'],
     ['Una PANADERÍA y cafetería', 'bakery'],
   ])('reads “%s” as %s', (text, english) => {
     expect(aiStockBusinessNoun(text)).toBe(english)
@@ -307,10 +312,15 @@ describe('a business type in another language, in English (AGL-3779)', () => {
     expect(JSON.stringify(terms)).not.toMatch(/restaurant|coffee|dulce/)
   })
 
-  it('keeps the plan’s photo words first, the kind of site last, and an English site its business type', () => {
-    expect(aiStockSourceTerms({ business: BUSINESS_TYPE, language: 'es', photoWords: 'florist bouquets', kindWords: 'restaurant cafe' })).toEqual(
-      aiStockSiteTerms('florist'),
+  it('leads with the business the table names, then the plan’s photo words, the kind of site last, and an English site its business type', () => {
+    // The table's name leads whatever the photo words say.
+    expect(aiStockSourceTerms({ business: BUSINESS_TYPE, language: 'es', photoWords: 'wedding cakes', kindWords: 'restaurant cafe' })).toEqual(
+      aiStockSiteTerms('bakery'),
     )
+    // A business it does not name is searched by the photo words' subject.
+    expect(
+      aiStockSourceTerms({ business: 'Un negocio familiar con pan dulce', language: 'es', photoWords: 'bakery pastries', kindWords: 'restaurant cafe' }),
+    ).toEqual(aiStockSiteTerms('bakery'))
     expect(aiStockSourceTerms({ business: 'Un negocio familiar con pan dulce', language: 'es', kindWords: 'restaurant cafe' })).toEqual(
       aiStockSiteTerms('restaurant cafe'),
     )
@@ -371,5 +381,46 @@ describe('a business type in another language, in English (AGL-3779)', () => {
     expect(asked).not.toContain('restaurant cafe')
     const id = placed?.src?.split('/').pop()
     expect((BAKERY.find((hit: StockPhoto) => hit.id === id) as StockPhoto).tags[0]).toMatch(/bakery|bread|pastr|cake|baker/)
+  })
+})
+
+/*
+ * The live languages eval of `ai-job-site-plan-live.spec.ts` on a73af114b8
+ * (AGL-3779): every plan said its language and gave English photo words, and
+ * on the Free workspace the Sevilla florist's were "wedding bouquets event
+ * flowers", whose subject, "wedding", would have searched every slot by
+ * weddings. These are the plans' answers as that run reported them, with
+ * what each site is now searched by: the business the table names leads.
+ */
+describe('the live languages eval’s plans, as each site is searched (AGL-3779)', () => {
+  const HERO: AiLayoutPictureSlot = { imageId: 'hero', frameId: null, iconId: null, alt: '', aspect: 16 / 9, sectionIndex: 0, role: 'hero' }
+  const ROWS: ReadonlyArray<{ business: string; language: string; photoWords: string | null; searched: string }> = [
+    { business: BUSINESS_TYPE, language: 'es', photoWords: 'bakery pastries cakes', searched: 'bakery' },
+    {
+      business: 'Una floristería en Sevilla con ramos de novia y arreglos para eventos',
+      language: 'es',
+      photoWords: 'wedding bouquets event flowers',
+      searched: 'florist',
+    },
+    { business: 'Une boulangerie artisanale à Lyon, pains au levain et viennoiseries', language: 'fr', photoWords: 'artisan bakery sourdough', searched: 'bakery' },
+    { business: 'Um salão de cabeleireiro no Porto com cortes, coloração e escovas', language: 'pt', photoWords: 'hair salon cuts coloring', searched: 'hair salon' },
+    { business: 'Eine Kfz-Werkstatt in Köln für Inspektion, Reifenwechsel und Bremsen', language: 'de', photoWords: 'car repair workshop', searched: 'auto repair' },
+    { business: 'Una trattoria di famiglia a Bologna con pasta fresca fatta a mano', language: 'it', photoWords: 'trattoria pasta bolognese', searched: 'trattoria' },
+  ]
+
+  it('searched the florist by weddings, as its photo words led', () => {
+    expect(aiStockPhotoWordsSubject('wedding bouquets event flowers')).toBe('wedding')
+  })
+
+  it.each(ROWS)('searches every slot of $business, its hero first, by $searched', ({ business, language, photoWords, searched }) => {
+    const terms = aiStockSourceTerms({ business, language, kindWords: 'restaurant cafe', ...(photoWords ? { photoWords } : {}) })
+    expect(terms).toEqual(aiStockSiteTerms(searched))
+    expect(aiStockSearchesFor(HERO, terms, '')[0]).toMatchObject({ query: searched, first: true })
+    expect(JSON.stringify(terms)).not.toMatch(/wedding|restaurant cafe/)
+  })
+
+  it('searches the English control by its business type, its photo words null', () => {
+    const business = 'a family bakery in Tulsa that sells cakes to order'
+    expect(aiStockSourceTerms({ business, language: 'en', kindWords: 'restaurant cafe' })).toEqual(aiStockSiteTerms(business))
   })
 })

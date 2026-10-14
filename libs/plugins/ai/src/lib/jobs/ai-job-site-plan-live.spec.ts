@@ -148,10 +148,10 @@ const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audien
  * above with `AGLYN_LIVE_AI_BRIEFS=languages`. Each brief is the one the
  * guided start writes (`aiSiteStartBrief`): English sentences around the
  * person's own words. Every plan must say its language and, when that is not
- * English, give English photo words whose subject is the business — the
- * Spanish bakery is Panaderia La Molienda's (job ih6kVvCGP1), whose plan said
- * `es` and gave none on beta.250. The English bakery is the control: its
- * photo words may be null.
+ * English, give English photo words, and the site must then be searched by
+ * its business — the Spanish bakery is Panaderia La Molienda's (job
+ * ih6kVvCGP1), whose plan said `es` and gave none on beta.250. The English
+ * bakery is the control: its photo words may be null.
  */
 const LANGUAGE_BRIEFS: ReadonlyArray<{
   businessName: string
@@ -159,7 +159,7 @@ const LANGUAGE_BRIEFS: ReadonlyArray<{
   audience: string
   kind: string
   language: string
-  /** What the photo words' subject must name; `null` where none are owed. */
+  /** What the site's photos must be searched by; `null` where no photo words are owed. */
   subject: RegExp | null
 }> = [
   {
@@ -314,7 +314,11 @@ describeLanguages("a guided start's plan in another language, from the real mode
     expect(owed.map(({ result }) => [result.brief, (result.language ?? '').slice(0, 2)])).toEqual(
       owed.map(({ result }) => [result.brief, result.expected]),
     )
-    expect(owed.map(({ result, subject }) => [result.brief, Boolean(result.photoWords) && subject.test(result.subject)])).toEqual(
+    // Held to what the site is searched by, its hero included: a business the
+    // curated table names leads the plan's photo words, whose own subject the
+    // table reports (a florist's "wedding bouquets event flowers" led with
+    // "wedding" on a73af114b8).
+    expect(owed.map(({ result, subject }) => [result.brief, Boolean(result.photoWords) && subject.test(result.searchedBy)])).toEqual(
       owed.map(({ result }) => [result.brief, true]),
     )
   })
