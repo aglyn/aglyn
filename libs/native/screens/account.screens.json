@@ -73,12 +73,46 @@
               "value": "{user.email}"
             },
             {
+              "label": "Email confirmed",
+              "value": "{user.emailVerified:yesno}",
+              "chip": true,
+              "tones": {
+                "Yes": "success",
+                "*": "warning"
+              }
+            },
+            {
               "label": "Account ID",
               "value": "{user.uid}"
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Sign-in methods",
+          "when": "user.providers",
+          "items": "user.providers",
+          "count": false,
+          "primary": "{const.providers[@item]|item}",
+          "secondary": "{const.providerNotes[@item]|'Connected'}",
+          "icon": "lock|lock",
+          "footer": "How you sign in to Aglyn."
         }
-      ]
+      ],
+      "constants": {
+        "providers": {
+          "password": "Email & password",
+          "google.com": "Google",
+          "apple.com": "Apple",
+          "github.com": "GitHub",
+          "microsoft.com": "Microsoft",
+          "phone": "Phone number"
+        },
+        "providerNotes": {
+          "password": "Sign in with your email and password",
+          "phone": "Sign in with a code sent to your phone"
+        }
+      }
     },
     {
       "id": "core.account.emails",

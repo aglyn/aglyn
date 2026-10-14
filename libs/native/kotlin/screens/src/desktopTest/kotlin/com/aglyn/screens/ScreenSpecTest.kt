@@ -166,6 +166,20 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun theTokenSaysHowTheAccountSignsIn() {
+    val enc = Base64.getUrlEncoder().withoutPadding()
+    fun token(claims: String) = TokenClaims.fromIdToken("h.${enc.encodeToString(claims.toByteArray())}.s")
+    val both = token("""{"email_verified":true,"firebase":{"identities":{"google.com":["1"],"email":["a@b.c"]},"sign_in_provider":"password"}}""")
+    assertEquals(listOf("password", "google.com"), both.signInMethods)
+    assertTrue(both.emailVerified)
+    assertEquals(emptyList(), token("{}").signInMethods)
+    assertFalse(token("{}").emailVerified)
+    val context = ScreenSession(email = "a@b.c", claims = both).context(null, emptyMap())
+    assertEquals("password, google.com", ScreenValues.render("{user.providers}", context))
+    assertEquals("Yes", ScreenValues.render("{user.emailVerified:yesno}", context))
+  }
+
+  @Test
   fun anActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() {
     val action = ActionSpec.parse(
       Json.parseToJsonElement(
