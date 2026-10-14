@@ -273,6 +273,31 @@ describe('the cache guard (AGL-2352)', () => {
   })
 })
 
+describe('a retired model in a live run (AGL-3781)', () => {
+  afterEach(() => {
+    delete process.env['AGLYN_LIVE_AI']
+  })
+
+  it('is refused by name, before any network, with the model that serves in its place', async () => {
+    process.env['AGLYN_LIVE_AI'] = '1'
+    for (const [retired, successor] of [
+      ['claude-sonnet-5', 'claude-sonnet-5-5'],
+      ['claude-haiku-4-5', 'claude-haiku-5-5'],
+    ]) {
+      await expect(runAiRequest({ ...BASE, model: retired, stream: false })).rejects.toThrow(
+        `${retired} is retired; ${successor} serves in its place`,
+      )
+    }
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('is not refused outside a live run, where a spec prices recorded usage under the retired id', async () => {
+    await expect(runAiRequest({ ...BASE, model: 'claude-sonnet-5', stream: false })).rejects.not.toBeInstanceOf(
+      AiRequestShapeError,
+    )
+  })
+})
+
 describe('the picture guard (AGL-2916)', () => {
   /** Four bytes of a JPEG's start, base64. */
   const PICTURE = '/9j/4AAQ'

@@ -85,16 +85,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -134,16 +130,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -183,16 +175,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -232,16 +220,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -281,16 +265,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -330,16 +310,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -379,16 +355,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -428,16 +400,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -477,16 +445,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -526,16 +490,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -575,16 +535,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -624,16 +580,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -673,16 +625,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -722,16 +670,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -771,16 +715,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -820,16 +760,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -869,16 +805,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -918,16 +850,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -967,16 +895,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1016,16 +940,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1065,16 +985,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1114,16 +1030,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1163,16 +1075,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1340,16 +1248,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1396,16 +1300,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1452,16 +1352,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1508,16 +1404,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1564,16 +1456,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1620,16 +1508,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1676,16 +1560,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1732,16 +1612,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1788,16 +1664,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1844,16 +1716,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1900,16 +1768,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -1956,16 +1820,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2012,16 +1872,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2068,16 +1924,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2124,16 +1976,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2180,16 +2028,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2236,16 +2080,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2292,16 +2132,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2348,16 +2184,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2404,16 +2236,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2460,16 +2288,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2516,16 +2340,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",
@@ -2572,16 +2392,12 @@
                   "label": "Claude Sonnet 5.5 (anthropic)"
                 },
                 {
-                  "value": "claude-sonnet-5",
-                  "label": "Claude Sonnet 5 (anthropic)"
-                },
-                {
                   "value": "claude-sonnet-4-6",
                   "label": "Claude Sonnet 4.6 (anthropic)"
                 },
                 {
-                  "value": "claude-haiku-4-5",
-                  "label": "Claude Haiku 4.5 (anthropic)"
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
                 },
                 {
                   "value": "claude-opus-5",

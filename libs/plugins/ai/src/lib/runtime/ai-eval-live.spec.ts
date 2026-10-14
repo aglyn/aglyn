@@ -381,6 +381,47 @@ describe('the live run', () => {
     expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
 
+  it('asks every brief side by side in batch mode, so a round is one batch, and reports in the briefs’ order (AGL-3781)', async () => {
+    armReferenceAnswers()
+    const answer = mockRunAiRequest.getMockImplementation() as (request: unknown) => Promise<unknown>
+    // Every answer request is held until every brief has asked: a run that
+    // asked one brief after another would never get past the first.
+    const held: Array<() => void> = []
+    mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
+      if (request.tools?.[0]?.name !== AI_EVAL_RUBRIC_TOOL.name) {
+        await new Promise<void>((release) => {
+          held.push(release)
+          if (held.length === 2) for (const go of held) go()
+        })
+      }
+      return answer(request)
+    })
+    const report = await recordAiEvalLive([text, theme], {
+      ...LIVE,
+      env: { ...LIVE.env, AGLYN_LIVE_AI_BATCH: '1' },
+    })
+    expect(held).toHaveLength(2)
+    expect(report.recorded.map((entry) => entry.caseId)).toEqual([text.id, theme.id])
+    expect(report.failed).toEqual([])
+  })
+
+  it('asks the briefs one after another outside batch mode', async () => {
+    armReferenceAnswers()
+    const answer = mockRunAiRequest.getMockImplementation() as (request: unknown) => Promise<unknown>
+    let inFlight = 0
+    let most = 0
+    mockRunAiRequest.mockImplementation(async (request: unknown) => {
+      inFlight += 1
+      most = Math.max(most, inFlight)
+      await Promise.resolve()
+      inFlight -= 1
+      return answer(request)
+    })
+    const report = await recordAiEvalLive([text, theme], LIVE)
+    expect(most).toBe(1)
+    expect(report.recorded.map((entry) => entry.caseId)).toEqual([text.id, theme.id])
+  })
+
   it('gives a failing rubric when the grader never answers with whole grades', async () => {
     armReferenceAnswers({ structure: 9, copy: 'fine', reuse: null, notes: '' })
     const [{ candidate }] = (await recordAiEvalLive([text], LIVE)).recorded

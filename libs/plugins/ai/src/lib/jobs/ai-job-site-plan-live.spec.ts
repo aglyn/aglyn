@@ -109,9 +109,13 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { createAiJobPlanStep } from './ai-job-plan-step'
 import { aiStockPhotoWordsOf, aiStockPhotoWordsSubject, aiStockSourceTerms } from './ai-layout-stock-photos'
+import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
-const NOW = new Date()
+// A fixed day (AGL-3781): a build's or an events plan's prompt states today's
+// date, and a date that moved every run gave each run new request bytes, so
+// the replay cache answered none of them.
+const NOW = new Date('2026-10-14T12:00:00Z')
 /**
  * The workspace the plans are made on: Free, as a guided start makes most of
  * them, or a paid one with `AGLYN_LIVE_AI_ORG_PLAN=business` (AGL-3660) — a
@@ -253,7 +257,7 @@ const describeLive = LIVE && !LANGUAGES ? describe : describe.skip
 const describeLanguages = LIVE && LANGUAGES ? describe : describe.skip
 
 describeLanguages("a guided start's plan in another language, from the real model (AGL-3779)", () => {
-  jest.setTimeout(10 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(10 * 60_000))
 
   it(`says its language and gives English photo words of its business, on a ${ORG_PLAN} workspace’s provisioned site`, async () => {
     const capabilities = aiPlanCapabilitiesFrom(ORG, {
@@ -325,7 +329,7 @@ describeLanguages("a guided start's plan in another language, from the real mode
 })
 
 describeLive("a guided start's plan from the real model", () => {
-  jest.setTimeout(10 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(10 * 60_000))
 
   it(`keeps the plan rules for every brief, on a ${ORG_PLAN} workspace’s provisioned site`, async () => {
     const capabilities = aiPlanCapabilitiesFrom(ORG, {

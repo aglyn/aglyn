@@ -64,7 +64,7 @@ import {
   type AiSeoSiteFormField,
   type AiSeoSiteProposal,
 } from '../model/ai-seo'
-import { aiModelForStep } from '../providers/routing'
+import { aiModelForStep, aiRouteSettings } from '../providers/routing'
 import type { AiSystemBlock, AiUsage } from '../runtime/ai-runtime'
 import { aiSeoAudit, aiSeoAuditBatches, aiSeoHeadingDemotions } from '../runtime/seo-audit'
 import {
@@ -631,6 +631,7 @@ async function proposeSite(
   const siteText = scan.pages.map((page) => page.facts.text).join('\n')
   const generation = await runValidatedGeneration('seo-site', {
     step: 'job.seo',
+    ...aiRouteSettings('job.seo'),
     model,
     instructions: AI_SEO_SITE_INSTRUCTIONS,
     messages: [{ role: 'user', content: prompt }],
@@ -789,6 +790,7 @@ async function proposeFixes(
   if (pages.length) {
     const generation = await runValidatedGeneration('seo-fixes', {
       step: 'job.seo',
+      ...aiRouteSettings('job.seo'),
       model,
       instructions: AI_SEO_FIXES_INSTRUCTIONS,
       messages: [{ role: 'user', content: aiSeoFixesPrompt(pages, titlesElsewhere) }],

@@ -49,8 +49,10 @@ to methods linked before your organization enabled enforcement.
 A new email-and-password account is verified before it can open a workspace. Right after
 you sign up, the console emails you a link and waits on a **Verify your email** page.
 
-- **Open the link from the email.** It opens a new tab (on a phone, often inside your mail
-  app) that confirms **Email verified**. You can close that tab: the tab you signed up in
+- **Open the link from the email, then choose Confirm my email.** The link opens a new tab
+  (on a phone, often inside your mail app). Opening it doesn't verify anything on its own,
+  so a mail security scanner that checks links can't verify an address for you. Once you
+  confirm, the page says **Email verified**. You can close that tab: the tab you signed up in
   moves on by itself as soon as you return to it. If you would rather carry on in the new
   tab, choose **Continue to Aglyn**, or **Sign in to continue** if that browser isn't
   signed in.
