@@ -54,13 +54,14 @@ line here is done; each line names the console source it was read from.
 | -- | -- | -- |
 | Organization | Enterprise custom billing (`org-detail` page, `/api/admin/enterprise-billing`, needs `Idempotency-Key`) | done (action `headers`) |
 | Organization | Override editor: stored plan, comp plan and caps, quota overrides, feature and release-flag overrides, reason code (`StaffOrgActions`, `/api/admin/org-override`) | open |
-| Organization | Request or cancel erasure (`/api/admin/erasure-request`); pause AI (`/api/admin/lockdown` scope `ai`) | open |
-| Organization | Acquisition card (`StaffAcquisitionCard`, `/api/admin/acquisition`) | open |
-| Organization | Subscription card with cancel (`StaffOrgSubscriptionCard`, `/api/admin/billing/cancel-subscription`) | open |
-| Organization | Edit organization, ownership transfer, owner handoff (`StaffOrgOwnershipTransfer`, `StaffOrgOwnerHandoff`) | open |
+| Organization | Request or cancel erasure: the console batches the org flag and its audit row in the client SDK, then calls `/api/admin/erasure-request`; the native writers have no atomic batch or server-timestamp sentinel yet | open |
+| Organization | Suspend and unsuspend sent free text where the route takes a reason code (it refused every one), and pause or resume AI (`/api/admin/lockdown` feature `ai-assist`, `ai-generate`) | done |
+| Organization | How they found us (`/api/admin/acquisition`) | done |
+| Organization | Subscription card with cancel, typed workspace name and reason (`/api/admin/billing/cancel-subscription`) | done |
+| Organization | Rename, logo and contact, ownership transfer to a member, owner handoff (`/api/orgs/settings`, `/api/orgs/invites`) | done |
 | Organization | Effective entitlements table, media library card (`/api/admin/media-library`, `/asset`), activity card | open |
-| Site | Domain card (`StaffDomainCard`), content card, media library card, usage and settings snapshot | open |
-| Person | System email composer (`/api/admin/users/system-email`), product-email consent, acquisition, erase card | open |
+| Site | Suspend and unsuspend had the same reason-code bug (fixed); domain card (`StaffDomainCard`), content card, media library card, usage and settings snapshot | open |
+| Person | System email: follow-up, preview (subject and recipient; the console also draws the HTML) and send (`/api/admin/users/system-email`), product-email consent facts, acquisition: done. Erase card: to be read against `StaffUserEraseCard` | open |
 | Overview | Users total, Top usage, anomalies banner, marketplace overview cards (`/api/marketplace/admin/overview`) | open |
 | Health | The nine probes (the old list read a shape the route never answers), CSP and server config (also read the wrong fields), scope drift (`/api/admin/backfill-scope`), pending erasures (`/api/admin/run-erasures`), idempotency claims | done (paged jobs: action `loop`) |
 | Maintenance | `/admin/maintenance`: schedule readings and the three guarded jobs (audit archive, plugin artifact reaper, plugin verdict re-verification), generated from `maintenance-jobs.ts`; the console also locks the real run until a preview has been read, which the screen leaves to the route's reason and typed phrase | done |

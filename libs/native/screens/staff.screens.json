@@ -336,6 +336,25 @@
         "charges": {
           "url": "/api/admin/org-refund?orgId={params.orgId}",
           "optional": true
+        },
+        "aiState": {
+          "url": "/api/admin/lockdown?scope=feature&targetId=ai-assist&orgId={params.orgId}",
+          "optional": true
+        },
+        "members": {
+          "query": {
+            "collection": "orgs/{params.orgId}/members",
+            "limit": 200
+          },
+          "optional": true
+        },
+        "subs": {
+          "url": "/api/admin/billing/cancel-subscription?orgId={params.orgId}",
+          "optional": true
+        },
+        "acquisition": {
+          "url": "/api/admin/acquisition?orgId={params.orgId}",
+          "optional": true
         }
       },
       "blocks": [
@@ -437,6 +456,72 @@
             }
           },
           "count": false
+        },
+        {
+          "type": "list",
+          "title": "Subscription",
+          "items": "data.subs.subscriptions",
+          "primary": "{item.plan|'Custom price'} {item.interval}",
+          "secondary": "{item.id}",
+          "tertiary": "Renews {item.currentPeriodEnd:date}",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Active": "success",
+                "Canceled": "neutral",
+                "*": "warning"
+              }
+            },
+            {
+              "text": "Ends at period end",
+              "when": "item.cancelAtPeriodEnd",
+              "tone": "warning"
+            }
+          ],
+          "count": false,
+          "empty": "No subscription in Stripe for this organization.",
+          "footer": "Read from Stripe, a snapshot and not a live view. Cancelling never refunds."
+        },
+        {
+          "type": "fields",
+          "title": "How they found us",
+          "object": "data.acquisition.acquisition",
+          "rows": [
+            {
+              "label": "Channel",
+              "value": "{item.channel:title}"
+            },
+            {
+              "label": "Source / medium",
+              "value": "{item.source} {item.medium}"
+            },
+            {
+              "label": "Campaign",
+              "value": "{item.campaign}"
+            },
+            {
+              "label": "Landing page",
+              "value": "{item.landing.host}{item.landing.path}"
+            },
+            {
+              "label": "Referrer",
+              "value": "{item.referrerHost|'None'}"
+            },
+            {
+              "label": "Door",
+              "value": "{item.door:title} {item.provider}"
+            },
+            {
+              "label": "First visit",
+              "value": "{item.capturedAt:datetime}"
+            },
+            {
+              "label": "Signed up from",
+              "value": "{item.geo.city} {item.geo.region} {item.geo.country}"
+            }
+          ],
+          "footer": "Locations show the country only; the region and city need the super staff role."
         },
         {
           "type": "list",
@@ -686,12 +771,24 @@
             },
             {
               "id": "lock",
-              "label": "Lock this workspace",
+              "label": "Suspend this workspace",
               "icon": "lock|lock",
               "destructive": true,
               "when": "staff.super && !data.detail.org.suspended",
               "url": "/api/admin/lockdown",
               "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "initial": "manual",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.lockReasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
                 {
                   "key": "mode",
                   "label": "Mode",
@@ -710,36 +807,34 @@
                 },
                 {
                   "key": "message",
-                  "label": "Message to the owner",
+                  "label": "Message shown to the owner",
                   "kind": "multiline"
                 }
               ],
-              "reason": true,
               "body": {
                 "action": "lock",
                 "scope": "org",
                 "targetId": "{params.orgId}",
                 "mode": "{form.mode}",
-                "message": "{form.message}",
                 "reason": "{form.reason}",
-                "confirm": true
+                "message": "{form.message}"
               },
-              "success": "Locked"
+              "success": "Locked: sites are offline now",
+              "confirm": "Every published site of this workspace returns 503 now, member writes are blocked, and members see a suspension notice. Security and manual suspensions also log the members out, and a security suspension in full mode permanently rotates every raw file download link the workspace has published; those links stay dead after the suspension is lifted. No data is deleted, and the suspension itself is reversible. It stops new delivery and is not a recall: anything already downloaded, cached or held downstream stays where it is."
             },
             {
               "id": "unlock",
-              "label": "Unlock this workspace",
+              "label": "Unsuspend this workspace",
               "icon": "lock.open|lock_open",
               "when": "staff.super",
               "url": "/api/admin/lockdown",
-              "reason": true,
               "body": {
                 "action": "unlock",
                 "scope": "org",
-                "targetId": "{params.orgId}",
-                "reason": "{form.reason}"
+                "targetId": "{params.orgId}"
               },
-              "success": "Unlocked"
+              "success": "Unlocked: sites are back online",
+              "confirm": "Their published sites come back online within a minute."
             },
             {
               "id": "discount",
@@ -1005,10 +1100,326 @@
               "open": "checkoutUrl",
               "success": "Checkout link ready",
               "reload": true
+            },
+            {
+              "id": "aiPause",
+              "label": "Pause AI for this workspace",
+              "icon": "pause.circle|pause_circle",
+              "destructive": true,
+              "when": "staff.super && data.aiState && !data.aiState.state.locked",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "initial": "billing",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.lockReasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "message",
+                  "label": "Message shown to members when AI is refused",
+                  "kind": "multiline"
+                }
+              ],
+              "confirm": "Both AI doors refuse for this workspace now. Its entitlements are untouched.",
+              "body": {
+                "scope": "feature",
+                "targetIds": [
+                  "ai-assist",
+                  "ai-generate"
+                ],
+                "orgId": "{params.orgId}",
+                "action": "lock",
+                "reason": "{form.reason}",
+                "message": "{form.message}"
+              },
+              "success": "AI paused for this workspace"
+            },
+            {
+              "id": "aiResume",
+              "label": "Resume AI for this workspace",
+              "icon": "play.circle|play_circle",
+              "when": "staff.super && data.aiState.state.locked",
+              "url": "/api/admin/lockdown",
+              "confirm": "Let this workspace use AI again?",
+              "body": {
+                "scope": "feature",
+                "targetIds": [
+                  "ai-assist",
+                  "ai-generate"
+                ],
+                "orgId": "{params.orgId}",
+                "action": "unlock"
+              },
+              "success": "AI resumed for this workspace"
+            },
+            {
+              "id": "rename",
+              "label": "Rename the workspace",
+              "icon": "pencil|edit",
+              "url": "/api/orgs/settings",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{data.detail.org.name}"
+                }
+              ],
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "rename",
+                "name": "{form.name}"
+              },
+              "success": "Renamed"
+            },
+            {
+              "id": "profile",
+              "label": "Edit logo and contact",
+              "icon": "person.crop.rectangle|badge",
+              "url": "/api/orgs/settings",
+              "prompt": [
+                {
+                  "key": "logoUrl",
+                  "label": "Logo URL",
+                  "kind": "url",
+                  "initial": "{data.detail.org.logoUrl}"
+                },
+                {
+                  "key": "logoDarkUrl",
+                  "label": "Dark mode logo URL",
+                  "kind": "url",
+                  "initial": "{data.detail.org.logoDarkUrl}",
+                  "help": "Blank uses the logo above in both modes."
+                },
+                {
+                  "key": "contactEmail",
+                  "label": "Contact email",
+                  "kind": "email",
+                  "initial": "{data.detail.org.contact.email}"
+                },
+                {
+                  "key": "contactPhone",
+                  "label": "Phone",
+                  "kind": "text",
+                  "initial": "{data.detail.org.contact.phone}"
+                },
+                {
+                  "key": "contactWebsite",
+                  "label": "Website",
+                  "kind": "url",
+                  "initial": "{data.detail.org.contact.website}"
+                }
+              ],
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "update-profile",
+                "logoUrl": "{form.logoUrl}",
+                "logoDarkUrl": "{form.logoDarkUrl}",
+                "contactEmail": "{form.contactEmail}",
+                "contactPhone": "{form.contactPhone}",
+                "contactWebsite": "{form.contactWebsite}"
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "transfer",
+              "label": "Transfer ownership to a member",
+              "icon": "arrow.left.arrow.right|swap_horiz",
+              "url": "/api/orgs/settings",
+              "prompt": [
+                {
+                  "key": "target",
+                  "label": "New owner",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.members.items",
+                    "value": "{item.$id}",
+                    "label": "{item.displayName|item.email|item.$id}"
+                  }
+                }
+              ],
+              "confirm": "The member becomes the owner. Billing and every site go with the workspace.",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "transfer-ownership",
+                "targetUid": "{form.target}"
+              },
+              "success": "Ownership transferred"
+            },
+            {
+              "id": "handoff",
+              "label": "Hand off to a new owner",
+              "icon": "person.badge.plus|person_add",
+              "url": "/api/orgs/invites",
+              "prompt": [
+                {
+                  "key": "email",
+                  "label": "New owner's email",
+                  "kind": "email",
+                  "required": true
+                },
+                {
+                  "key": "previousOwner",
+                  "label": "Current owner",
+                  "kind": "select",
+                  "initial": "stay",
+                  "options": [
+                    {
+                      "value": "stay",
+                      "label": "Stay on as an admin after the handoff"
+                    },
+                    {
+                      "value": "leave",
+                      "label": "Leave after the handoff"
+                    }
+                  ]
+                }
+              ],
+              "confirm": "They become the owner once they accept. Nothing changes until then, and the invitation reserves no seat.",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "create",
+                "email": "{form.email}",
+                "role": "owner",
+                "handoff": {
+                  "previousOwner": "{form.previousOwner}"
+                }
+              },
+              "success": "Handoff sent to {form.email}"
+            },
+            {
+              "id": "cancelSub",
+              "label": "Cancel the subscription",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "staff.super",
+              "url": "/api/admin/billing/cancel-subscription",
+              "prompt": [
+                {
+                  "key": "when",
+                  "label": "When",
+                  "kind": "select",
+                  "initial": "now",
+                  "options": [
+                    {
+                      "value": "now",
+                      "label": "Now"
+                    },
+                    {
+                      "value": "period_end",
+                      "label": "At the end of the billing period"
+                    }
+                  ]
+                },
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.cancelReasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "note",
+                  "label": "Note (required for Other)",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "phrase",
+                  "label": "Type the workspace URL name to confirm",
+                  "kind": "text",
+                  "required": true,
+                  "mustMatch": "{data.detail.org.slug|params.orgId}"
+                }
+              ],
+              "confirm": "This ends every live subscription in Stripe. Cancelling never refunds: refund a charge separately if one is owed.",
+              "body": {
+                "orgId": "{params.orgId}",
+                "when": "{form.when}",
+                "reason": "{form.reason}",
+                "note": "{form.note}"
+              },
+              "report": [
+                {
+                  "text": "Verified in Stripe",
+                  "when": "response.confirmed"
+                },
+                {
+                  "text": "The cancellation did NOT verify. Something may still bill.",
+                  "when": "!response.confirmed"
+                },
+                {
+                  "each": "response.subscriptions",
+                  "text": "{item.id}: {item.outcome} - now {item.verified.status|'could not be read back'} {item.error}"
+                },
+                {
+                  "each": "response.lookupErrors",
+                  "text": "{item}"
+                }
+              ]
             }
           ]
         }
-      ]
+      ],
+      "constants": {
+        "lockReasons": [
+          {
+            "value": "security",
+            "label": "Security — investigating a concern"
+          },
+          {
+            "value": "abuse",
+            "label": "Abuse — phishing, fraud or malicious content (permanent ban)"
+          },
+          {
+            "value": "billing",
+            "label": "Billing — unresolved payment"
+          },
+          {
+            "value": "maintenance",
+            "label": "Maintenance"
+          },
+          {
+            "value": "manual",
+            "label": "Manual"
+          }
+        ],
+        "cancelReasons": [
+          {
+            "value": "fraud",
+            "label": "Fraud or a stolen payment method"
+          },
+          {
+            "value": "security",
+            "label": "Security lockdown"
+          },
+          {
+            "value": "abuse",
+            "label": "Abuse or terms violation"
+          },
+          {
+            "value": "customer-request",
+            "label": "Customer asked us to"
+          },
+          {
+            "value": "other",
+            "label": "Other — say what, below"
+          }
+        ]
+      }
     },
     {
       "id": "core.staff.sites",
@@ -1215,6 +1626,18 @@
               "url": "/api/admin/lockdown",
               "prompt": [
                 {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "initial": "manual",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.lockReasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
                   "key": "mode",
                   "label": "Mode",
                   "kind": "select",
@@ -1232,19 +1655,17 @@
                 },
                 {
                   "key": "message",
-                  "label": "Message to the owner",
+                  "label": "Message shown to the owner",
                   "kind": "multiline"
                 }
               ],
-              "reason": true,
               "body": {
                 "action": "lock",
                 "scope": "host",
                 "targetId": "{params.hostId}",
                 "mode": "{form.mode}",
-                "message": "{form.message}",
                 "reason": "{form.reason}",
-                "confirm": true
+                "message": "{form.message}"
               },
               "success": "Locked"
             },
@@ -1254,18 +1675,41 @@
               "icon": "lock.open|lock_open",
               "when": "staff.super",
               "url": "/api/admin/lockdown",
-              "reason": true,
               "body": {
                 "action": "unlock",
                 "scope": "host",
-                "targetId": "{params.hostId}",
-                "reason": "{form.reason}"
+                "targetId": "{params.hostId}"
               },
-              "success": "Unlocked"
+              "success": "Unlocked",
+              "confirm": "Bring this site back online?"
             }
           ]
         }
-      ]
+      ],
+      "constants": {
+        "lockReasons": [
+          {
+            "value": "security",
+            "label": "Security — investigating a concern"
+          },
+          {
+            "value": "abuse",
+            "label": "Abuse — phishing, fraud or malicious content (permanent ban)"
+          },
+          {
+            "value": "billing",
+            "label": "Billing — unresolved payment"
+          },
+          {
+            "value": "maintenance",
+            "label": "Maintenance"
+          },
+          {
+            "value": "manual",
+            "label": "Manual"
+          }
+        ]
+      }
     },
     {
       "id": "core.staff.users",
@@ -1354,9 +1798,23 @@
           "cursor": "nextCursor",
           "items": "rows",
           "optional": true
+        },
+        "acquisition": {
+          "url": "/api/admin/acquisition?uid={params.uid}",
+          "optional": true
+        },
+        "sendable": {
+          "url": "/api/admin/users/system-email?uid={params.uid}",
+          "optional": true
         }
       },
       "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "This address is on the suppression list, so nothing can be sent to it until it is released.",
+          "when": "data.sendable.account.suppressed"
+        },
         {
           "type": "fields",
           "object": "data.detail.user",
@@ -1395,6 +1853,82 @@
               "value": "{item.lastSignInAt:datetime}"
             }
           ]
+        },
+        {
+          "type": "fields",
+          "title": "Product updates and marketing email",
+          "object": "data.detail.marketing",
+          "rows": [
+            {
+              "label": "Their answer",
+              "value": "{item.answer.decision|'Not answered':title} {item.answer.atMs:datetime}"
+            },
+            {
+              "label": "Dismissed the prompt",
+              "value": "{item.answer.promptDismissedAtMs:datetime}"
+            },
+            {
+              "label": "Marketing contact",
+              "value": "{item.reach.status:title}"
+            },
+            {
+              "label": "Verdict",
+              "value": "{item.reach.verdict:title} {item.reach.reason}"
+            },
+            {
+              "label": "Suppression",
+              "value": "{item.reach.suppression.list} {item.reach.suppression.reason}"
+            },
+            {
+              "label": "Product updates list",
+              "value": "{item.reach.topic.state:title}"
+            }
+          ],
+          "footer": "Sends follow the marketing contact and the suppression lists, not the answer alone."
+        },
+        {
+          "type": "fields",
+          "title": "How they found us",
+          "object": "data.acquisition.acquisition",
+          "rows": [
+            {
+              "label": "Channel",
+              "value": "{item.channel:title}"
+            },
+            {
+              "label": "Source / medium",
+              "value": "{item.source} {item.medium}"
+            },
+            {
+              "label": "Campaign",
+              "value": "{item.campaign}"
+            },
+            {
+              "label": "Landing page",
+              "value": "{item.landing.host}{item.landing.path}"
+            },
+            {
+              "label": "Referrer",
+              "value": "{item.referrerHost|'None'}"
+            },
+            {
+              "label": "Door",
+              "value": "{item.door:title} {item.provider}"
+            },
+            {
+              "label": "First visit",
+              "value": "{item.capturedAt:datetime}"
+            },
+            {
+              "label": "Signed up from",
+              "value": "{item.geo.city} {item.geo.region} {item.geo.country}"
+            },
+            {
+              "label": "Latest sign-in",
+              "value": "{data.acquisition.latestSignIn.location} {data.acquisition.latestSignIn.atMs:datetime}"
+            }
+          ],
+          "footer": "Locations show the country only; the region and city need the super staff role."
         },
         {
           "type": "list",
@@ -1658,6 +2192,99 @@
               },
               "success": "Erased",
               "back": true
+            },
+            {
+              "id": "followUp",
+              "label": "Write a follow-up email",
+              "icon": "envelope|mail",
+              "url": "/api/admin/users/system-email",
+              "prompt": [
+                {
+                  "key": "subject",
+                  "label": "Subject",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "body",
+                  "label": "Message",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "confirm": "Send this to {data.detail.user.email} from the platform sender? Every send is audited.",
+              "body": {
+                "uid": "{params.uid}",
+                "templateKey": "staff-follow-up",
+                "mergeValues": {
+                  "message.subject": "{form.subject}",
+                  "message.body": "{form.body}"
+                },
+                "send": true
+              },
+              "reload": false,
+              "success": "Sent. It shows under Email delivery once the provider reports it."
+            },
+            {
+              "id": "previewEmail",
+              "label": "Preview a system email",
+              "icon": "eye|visibility",
+              "url": "/api/admin/users/system-email",
+              "prompt": [
+                {
+                  "key": "template",
+                  "label": "Email",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.sendable.emails",
+                    "value": "{item.key}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "body": {
+                "uid": "{params.uid}",
+                "templateKey": "{form.template}",
+                "send": false
+              },
+              "reload": false,
+              "success": "To {response.to}",
+              "report": [
+                {
+                  "text": "Subject: {response.subject}"
+                }
+              ]
+            },
+            {
+              "id": "sendEmail",
+              "label": "Send a system email",
+              "icon": "paperplane|send",
+              "url": "/api/admin/users/system-email",
+              "prompt": [
+                {
+                  "key": "template",
+                  "label": "Email",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.sendable.emails",
+                    "value": "{item.key}",
+                    "label": "{item.name}"
+                  },
+                  "help": "Links are minted fresh when you send. The account gets the email with its own details filled in."
+                }
+              ],
+              "confirm": "Send this email to {data.detail.user.email}? Every send is audited.",
+              "body": {
+                "uid": "{params.uid}",
+                "templateKey": "{form.template}",
+                "send": true
+              },
+              "reload": false,
+              "success": "Sent. It shows under Email delivery once the provider reports it."
             }
           ]
         }

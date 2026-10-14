@@ -16,8 +16,9 @@
  * runs. Those live in console modules (`utils/platform-health.ts`,
  * `utils/maintenance-jobs.ts`), so this generator READS them and writes only
  * their values into `libs/native/screens/staff.screens.json`: the probe
- * texts as the `constants` of `core.staff.health`, and the whole
- * `core.staff.maintenance` screen, one block group per job. A reworded
+ * texts as the `constants` of `core.staff.health`, the lock and cancellation
+ * reasons a route insists on as the `constants` of the screens that offer
+ * them, and the whole `core.staff.maintenance` screen, one block group per job. A reworded
  * consequence or a new confirmation phrase cannot drift from the route that
  * enforces it. Values cross, never code.
  */
@@ -47,7 +48,12 @@ export async function staffSources() {
   const jiti = createJiti(join(ROOT, 'package.json'), { interopDefault: true, fsCache: false, alias: aliases() })
   const health = await jiti.import(join(ROOT, 'apps/console/utils/platform-health.ts'))
   const maintenance = await jiti.import(join(ROOT, 'apps/console/utils/maintenance-jobs.ts'))
+  const lockdown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/lockdown.ts'))
+  const cancel = await jiti.import(join(ROOT, 'apps/console/constants/subscription-cancel.ts'))
+  const options = (codes, labels) => codes.map((value) => ({ value, label: labels[value] }))
   return {
+    lockReasons: options(lockdown.LOCKDOWN_REASON_CODES, lockdown.LOCKDOWN_REASON_LABELS),
+    cancelReasons: options(cancel.SUBSCRIPTION_CANCEL_REASON_CODES, cancel.SUBSCRIPTION_CANCEL_REASON_LABELS),
     probes: Object.fromEntries(
       health.HEALTH_PROBES.map(({ id, label, path, auth, meaning, remedy }) => [id, { label, path, auth, meaning, remedy }]),
     ),
@@ -196,6 +202,8 @@ const replace = (id, change) => {
   spec.screens[at] = change(spec.screens[at])
 }
 replace('core.staff.health', (screen) => ({ ...screen, constants: { probes: sources.probes } }))
+replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons } }))
+replace('core.staff.site', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons } }))
 replace('core.staff.maintenance', () => maintenanceScreen(sources.jobs, sources.reasonMin))
 
 const next = `${JSON.stringify(spec, null, 2)}\n`
