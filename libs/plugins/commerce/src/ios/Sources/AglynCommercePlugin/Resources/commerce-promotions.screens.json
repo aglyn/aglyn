@@ -612,6 +612,13 @@
                 },
                 "recipientEmail": "{form.email}"
               },
+              "instead": [
+                {
+                  "when": "response.emailed",
+                  "title": "Issued",
+                  "text": "Issued {response.code} — emailed to {form.email}"
+                }
+              ],
               "success": "Issued {response.code}"
             },
             {

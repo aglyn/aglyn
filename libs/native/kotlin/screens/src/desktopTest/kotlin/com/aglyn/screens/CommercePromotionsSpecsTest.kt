@@ -164,6 +164,12 @@ class CommercePromotionsSpecsTest : SpecTestBase() {
       model.body(issue, """{"amount":25.5,"email":"x@y.co"}"""),
     )
     assertEquals(json("""{"hostId":"h1","action":"issue","amountCents":10000,"recipientEmail":""}"""), model.body(issue, """{"amount":"100","email":""}"""), "the console sends the address even when it is blank")
+    // "Issued CODE", and "Issued CODE \u2014 emailed to x@y.co" when the route emailed it, as the console words it.
+    val emailed = ScreenContext.with(ScreenContext.with(model.context, "form", json("""{"email":"x@y.co"}""")), "response", json("""{"code":"AAAA-1111","emailed":true}"""))
+    assertEquals("Issued AAAA-1111 \u2014 emailed to x@y.co", ScreenValues.render(issue.insteadEntry(emailed)!!.str("text")!!, emailed))
+    val plain = ScreenContext.with(model.context, "response", json("""{"code":"AAAA-1111","emailed":false}"""))
+    assertEquals(null, issue.insteadEntry(plain))
+    assertEquals("Issued AAAA-1111", ScreenValues.render(issue.success!!, plain))
   }
 
   @Test

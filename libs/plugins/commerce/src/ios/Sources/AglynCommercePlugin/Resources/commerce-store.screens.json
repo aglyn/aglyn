@@ -2129,9 +2129,44 @@
               },
               "instead": [
                 {
-                  "when": "response.sync",
+                  "when": "response.sync && response.sync.already > 0 && response.sync.failed > 0 && response.sync.more",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy, {response.sync.already} already there, {response.sync.failed} not sent. More open orders are waiting: select Send open orders again."
+                },
+                {
+                  "when": "response.sync && response.sync.already > 0 && response.sync.failed > 0 && !response.sync.more",
                   "title": "Send open orders",
                   "text": "{response.sync.sent:plural/order} sent to ShippingEasy, {response.sync.already} already there, {response.sync.failed} not sent."
+                },
+                {
+                  "when": "response.sync && response.sync.already > 0 && !response.sync.failed && response.sync.more",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy, {response.sync.already} already there. More open orders are waiting: select Send open orders again."
+                },
+                {
+                  "when": "response.sync && response.sync.already > 0 && !response.sync.failed && !response.sync.more",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy, {response.sync.already} already there."
+                },
+                {
+                  "when": "response.sync && !response.sync.already && response.sync.failed > 0 && response.sync.more",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy, {response.sync.failed} not sent. More open orders are waiting: select Send open orders again."
+                },
+                {
+                  "when": "response.sync && !response.sync.already && response.sync.failed > 0 && !response.sync.more",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy, {response.sync.failed} not sent."
+                },
+                {
+                  "when": "response.sync && !response.sync.already && !response.sync.failed && response.sync.more",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy. More open orders are waiting: select Send open orders again."
+                },
+                {
+                  "when": "response.sync && !response.sync.already && !response.sync.failed && !response.sync.more",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy."
                 }
               ],
               "success": "Sent."

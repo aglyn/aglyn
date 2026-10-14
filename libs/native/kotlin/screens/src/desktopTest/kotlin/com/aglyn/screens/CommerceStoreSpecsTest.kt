@@ -300,8 +300,15 @@ class CommerceStoreSpecsTest : SpecTestBase() {
     assertEquals(listOf("sync", "keys", "disconnect"), on.actionsShown("manage"))
     assertEquals("Needs attention", rows(on, "connection").first())
     val sync = on.action("manage", "sync")
-    val answer = ScreenContext.with(on.context, "response", json("""{"sync":{"sent":3,"already":1,"failed":0}}"""))
-    assertEquals("3 orders sent to ShippingEasy, 1 already there, 0 not sent.", ScreenValues.render(sync.insteadEntry(answer)!!.str("text")!!, answer))
+    fun said(result: String) = ScreenContext.with(on.context, "response", json("""{"sync":$result}""")).let { ScreenValues.render(sync.insteadEntry(it)!!.str("text")!!, it) }
+    // The parts that are zero are left out, as the console's `describeShippingEasySync` leaves them.
+    assertEquals("3 orders sent to ShippingEasy, 1 already there.", said("""{"sent":3,"already":1,"failed":0,"more":false}"""))
+    assertEquals("1 order sent to ShippingEasy.", said("""{"sent":1,"already":0,"failed":0,"more":false}"""))
+    assertEquals("0 orders sent to ShippingEasy, 2 not sent.", said("""{"sent":0,"already":0,"failed":2,"more":false}"""))
+    assertEquals(
+      "5 orders sent to ShippingEasy, 1 already there, 1 not sent. More open orders are waiting: select Send open orders again.",
+      said("""{"sent":5,"already":1,"failed":1,"more":true}"""),
+    )
   }
 
   // ---- order webhooks ----------------------------------------------------------------------------------------------
