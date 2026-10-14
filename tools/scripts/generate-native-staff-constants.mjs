@@ -248,6 +248,9 @@ const RUN_REPORT = [
     { text: '{response.erasureDue:count} erasure(s) past the hold', when: 'response.erasureDue' },
   ])
 
+/** A job id as a key the session can hold (`audit-archive` is `auditArchive`). */
+const armKey = (id) => id.replace(/[-.](\w)/g, (_, letter) => letter.toUpperCase())
+
 /**
  * The Maintenance page (`/admin/maintenance`), one block group per job in the console's list: the
  * schedule verdict from the crons probe, what the job does and costs, a preview (a bare GET is the
@@ -285,6 +288,14 @@ export function maintenanceScreen(jobs, reasonMin) {
         when: `${check} && !${check}.ok`,
       },
       { type: 'notice', tone: job.destructive ? 'error' : 'warning', text: `${job.what}\n\n${job.consequence}` },
+      // The console's card keeps the real run locked until a preview has been read in this session (AGL-1949):
+      // the preview arms it, a preview that failed disarms it, and running spends the look it was armed by.
+      {
+        type: 'notice',
+        tone: 'info',
+        text: 'Preview first \u2014 the real run stays locked until you have read what it would do.',
+        when: `!session.armed.${armKey(job.id)}`,
+      },
       {
         type: 'actions',
         footer: `Preview first. ${job.previewShows} The real run needs a reason of at least ${reasonMin} characters${
@@ -298,6 +309,7 @@ export function maintenanceScreen(jobs, reasonMin) {
             method: 'GET',
             url: job.path,
             reload: false,
+            arm: armKey(job.id),
             success: 'What a real run would do',
             report: RUN_REPORT,
           },
@@ -305,6 +317,8 @@ export function maintenanceScreen(jobs, reasonMin) {
             id: `${job.id}.run`,
             label: 'Run for real',
             icon: 'play.fill|play_arrow',
+            when: `session.armed.${armKey(job.id)}`,
+            disarm: armKey(job.id),
             destructive: job.destructive,
             confirm: job.consequence,
             url: job.path,

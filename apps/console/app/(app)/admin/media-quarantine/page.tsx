@@ -106,6 +106,7 @@ import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { quarantineLogLines } from '../../../../utils/quarantine-log-lines'
 import { useStaffRole } from '../../../../hooks/use-is-staff'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
@@ -351,8 +352,10 @@ function AdminMediaQuarantine() {
         if (!response.ok) {
           throw new Error(payload.error ?? `Failed (${response.status})`)
         }
-        const confirmed = payload.confirmed !== false
-        const what = `Released ${target}`
+        const [{ confirmed, text: what }] = quarantineLogLines(
+          { by: 'key', key: target },
+          payload,
+        )
         setLog((entries) =>
           [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
         )
@@ -414,10 +417,10 @@ function AdminMediaQuarantine() {
         // A 200 says the request was accepted. Only `confirmed` says the
         // state changed, and on a release it means NO key can still refuse
         // the file — the two are not the same claim.
-        const confirmed = payload.confirmed !== false
-        const what = `${action === 'quarantine' ? 'Disabled' : 'Released'} ${mediaId.trim()} (${(
-          payload.keys ?? [payload.key]
-        ).length} key${(payload.keys ?? [payload.key]).length === 1 ? '' : 's'})`
+        const [{ confirmed, text: what }] = quarantineLogLines(
+          { action, by: 'media', mediaId },
+          payload,
+        )
         setLog((entries) =>
           [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
         )

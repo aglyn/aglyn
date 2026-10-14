@@ -230,6 +230,9 @@ describe('a lock emails the people it locked', () => {
     ])
     // Reported as its own verified step beside the lock.
     expect(body.ownerNotice).toMatchObject({ kind: 'workspace-locked', confirmed: true, emailed: 2 })
+    // And the lines the page keeps under "Actions taken in this session", for the staff apps (AGL-3667).
+    expect(body.logLines[0]).toEqual({ text: 'Locked org org-fraud', confirmed: true })
+    expect(body.logLines).toContainEqual({ text: expect.stringContaining('Emailed'), confirmed: true })
   })
 
   it('uses the per-reason notice the lock serves when staff wrote no message', async () => {

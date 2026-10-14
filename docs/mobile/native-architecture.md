@@ -881,7 +881,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
 | `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503; `filters`: `{ field, op, value }` clauses for a staff list route, each kept when its value template is not empty), or `{ doc }` / `{ query: { collection, where, orderBy, limit, count } }` for a Firestore read (a `where` clause ending in `"optional"` is left out while its value is empty; `count: true` answers `{ count }`, the server's tally, as the console's `getCountFromServer` does), `late: true` on any load to run it after the others, with their answers under `data` (a read keyed by something another read found), or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
-| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
+| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
@@ -912,6 +912,20 @@ reuses it, and a changed body gets a new one. A route that provisions something
 like a read. A route that wants the key in its body (the AI credit give-back's `idempotencyKey`)
 writes `{attempt}` there; the key is found with `{attempt}` blank, so carrying it does not
 change the request it identifies.
+
+A screen keeps a little state while it is open, read as `session`: `session.log` is what the person has done on it,
+newest first (`{ at, text, confirmed }`, at most 25), and `session.armed.<key>` is a flag. An action's `log` is a list of
+lines like `report`'s (`{ text, when, each, confirmed }`, `confirmed` a condition that defaults to true) appended when it
+succeeds, the lines of one act with the last listed on top: the console's "Actions taken in this session", which the
+lockdown and quarantine routes feed with `logLines`. `arm: "<key>"` sets `session.armed.<key>` when the action succeeds
+and clears it when it fails, and `disarm: "<key>"` clears it when it succeeds: a preview that has been read, which a
+guarded run waits for through its `when`. A block `{ "type": "html", "source": "{…}" }` draws a message's HTML as styled
+text through the platform's own HTML reader (`NSAttributedString` on Apple, `AnnotatedString.fromHtml` on Android, the
+JDK's HTML parser on desktop) after taking out scripts, styles, frames, forms, images (their alternative text stays) and
+every attribute but a link's address; a link opens only when it is http, https, mailto or tel, in the system handler. The
+shared cases both apps replay are `libs/native/screens/email-html-cases.json`, generated from the console's renderer
+(`generate:native-email-html-cases`). A prompt field of kind `country` is a picker over the platform's region list,
+named in the person's language and sorted by name, storing the two-letter code.
 
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
