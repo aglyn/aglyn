@@ -48,7 +48,7 @@ const CONTEXT = {
   credits: [{ providerId: 'loyalty', label: 'Rewards', lookup: true }],
 } as const
 
-const display = { connected: false, asking: null, show: jest.fn(), ask: jest.fn(), pairingCode: jest.fn() }
+const display = { connected: false, asking: null, show: jest.fn(), ask: jest.fn() }
 
 function panel(props: { offline: boolean; onSellOffline?: () => void; payments?: unknown[] }) {
   return render(
