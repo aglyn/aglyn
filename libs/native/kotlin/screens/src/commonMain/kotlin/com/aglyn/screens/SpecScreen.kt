@@ -362,7 +362,9 @@ private fun SpecBody(
       onDismiss = { confirming = null },
     )
   }
-  prompting?.let { pending -> PromptDialog(pending, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null } }
+  prompting?.let { pending ->
+    PromptDialog(pending, search = { group, words -> model.lookup(group, words) }, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null }
+  }
   reauthing?.let { pending ->
     var password by remember(pending) { mutableStateOf("") }
     var error by remember(pending) { mutableStateOf<String?>(null) }
@@ -416,8 +418,10 @@ private fun SpecBody(
 }
 
 @Composable
-private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
+private fun PromptDialog(pending: Pending, search: suspend (LookupGroup, String) -> List<JsonElement>, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
   val values = remember(pending) { mutableStateMapOf<String, FieldValue>() }
+  // What each `lookup` field last picked, as the person reads it.
+  val picked = remember(pending) { mutableStateMapOf<String, String>() }
   val inputs = pending.action.inputs(pending.scope)
   fun filled(): JsonElement = ScreenContext.with(
     pending.scope, "form",
@@ -439,7 +443,15 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
       val now = filled()
       for (field in inputs.filter { ScreenValues.condition(it.whenCondition, now) }) {
-        FieldInput(field, pending.scope, values[field.key] ?: initialValue(field, pending.scope)) { values[field.key] = it }
+        if (field.kind == "lookup") {
+          LookupInput(field, pending.scope, picked[field.key], search) { group, row ->
+            picked[field.key] = group.heading(row, pending.scope)
+            // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
+            for ((key, value) in group.fills(row, pending.scope, inputs.map { it.key }.toSet())) values[key] = FieldValue.Text(value)
+          }
+        } else {
+          FieldInput(field, pending.scope, values[field.key] ?: initialValue(field, pending.scope)) { values[field.key] = it }
+        }
       }
     }
   }

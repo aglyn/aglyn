@@ -132,6 +132,8 @@ class ScreenModel(
     private set
   val cursors = mutableStateMapOf<String, String>()
   val loadingMore = mutableStateMapOf<String, Boolean>()
+  /** The limit each Firestore `query` load is now read with, once "Show more" has widened it. */
+  private val queryLimits = mutableMapOf<String, Int>()
   val search = mutableStateMapOf<String, String>()
   /** The order each list was asked for (by its load, else its items); absent is the route's own default. */
   val order = mutableStateMapOf<String, ListOrder>()
@@ -229,6 +231,7 @@ class ScreenModel(
       return
     }
     val results = mutableListOf<Triple<String, JsonElement, String?>>()
+    queryLimits.clear()
     try {
       // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too.
       for (late in listOf(false, true)) {
@@ -270,7 +273,8 @@ class ScreenModel(
       return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
     }
     load.query?.let { query ->
-      return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
+      val value = reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull
+      return Triple(load.key, value, moreCursor(load, value, null))
     }
     load.switchboard?.let { scope ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
@@ -288,7 +292,51 @@ class ScreenModel(
     return Triple(load.key, value, load.cursor?.let { (ScreenValues.lookup(it, value) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
   }
 
+  /** The records a `lookup` field's group finds for the words typed. */
+  suspend fun lookup(group: LookupGroup, words: String): List<JsonElement> {
+    val client = api ?: return emptyList()
+    return group.rows(client.request(group.request(words)))
+  }
+
+  /** "more" when a Firestore query that can be widened came back full, so there may be rows past it. */
+  private fun moreCursor(load: LoadSpec, value: JsonElement, limit: Int?): String? {
+    val query = load.query ?: return null
+    if (load.more == null) return null
+    val size = limit ?: ScreenValues.number(query.obj("limit"))?.toInt() ?: 50
+    return if (value.obj("items").let { (it as? JsonArray)?.size ?: 0 } >= size) "more" else null
+  }
+
+  /** Reads a Firestore query again with a larger limit (each load's `more` rows beyond the last read). */
+  private suspend fun widen(load: LoadSpec, step: Int, query: JsonElement) {
+    val source = reader ?: return
+    if (loadingMore[load.key] == true) return
+    loadingMore[load.key] = true
+    try {
+      val limit = (queryLimits[load.key] ?: ScreenValues.number(query.obj("limit"))?.toInt() ?: 50) + step
+      val widened = JsonObject((query as? JsonObject ?: return) + ("limit" to JsonPrimitive(limit)))
+      val value = FirestoreLoads.query(source, widened, context)
+      val record = (data as? JsonObject)?.toMutableMap() ?: return
+      record[load.key] = value
+      context = ScreenContext.with(context, "data", JsonObject(record))
+      queryLimits[load.key] = limit
+      moreCursor(load, value, limit)?.let { cursors[load.key] = it } ?: cursors.remove(load.key)
+    } catch (error: CancellationException) {
+      throw error
+    } catch (_: Throwable) {
+    } finally {
+      loadingMore.remove(load.key)
+    }
+  }
+
   suspend fun loadMore(key: String) {
+    spec.loads.firstOrNull { it.key == key }?.let { load ->
+      val step = load.more
+      val query = load.query
+      if (step != null && query != null && cursors[key] != null) {
+        widen(load, step, query)
+        return
+      }
+    }
     val client = api ?: return
     val load = spec.loads.firstOrNull { it.key == key } ?: return
     val cursor = cursors[key] ?: return

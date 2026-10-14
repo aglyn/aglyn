@@ -10,54 +10,63 @@ import kotlinx.coroutines.tasks.await
 /**
  * A support session on the Firebase Android SDK, in a Firebase app of its own: its own sign-in (the custom token, exchanged in the
  * identity pool it was minted in) and its own Firestore, so the staff member's sign-in and listeners are untouched while it is on.
+ * Each identity pool gets an app of its own, so a pool is set once on an instance and never has to be cleared again.
  *
- * The SDK keeps a signed-in user on disk, and a support session must not outlive the app: [prefs] remembers that one is on, so the
- * next launch signs it out before anything reads it.
+ * The SDK keeps a signed-in user on disk, and a support session must not outlive the app: [prefs] remembers which app one is on,
+ * so the next launch signs it out before anything reads it.
  */
 class FirebaseSupportBackend(
   private val context: Context,
   private val base: AndroidFirebase,
   private val prefs: KeyValueStore,
 ) : SupportBackend {
-  private var supportAuth: FirebaseAuth? = null
-  private var supportFirestore: FirebaseFirestore? = null
+  /** One identity pool's app: its sign-in and its Firestore. */
+  private class Session(val appName: String, val auth: FirebaseAuth, val firestore: FirebaseFirestore)
+
+  private val sessions = mutableMapOf<String, Session>()
+  private var current: Session? = null
 
   init {
     // A support session the last run did not end (the app was killed): sign it out now.
-    if (prefs.get(ON_KEY) == "1") {
-      runCatching { auth().signOut() }
+    prefs.get(ON_KEY)?.let { appName ->
+      runCatching { FirebaseAuth.getInstance(app(appName)).signOut() }
       prefs.set(ON_KEY, null)
     }
   }
 
-  private fun app(): FirebaseApp =
-    FirebaseApp.getApps(context).firstOrNull { it.name == NAME } ?: FirebaseApp.initializeApp(context, base.app.options, NAME)
+  private fun app(name: String): FirebaseApp =
+    FirebaseApp.getApps(context).firstOrNull { it.name == name } ?: FirebaseApp.initializeApp(context, base.app.options, name)
 
-  private fun auth(): FirebaseAuth = supportAuth ?: FirebaseAuth.getInstance(app()).also { auth ->
-    base.config.authEmulatorHost?.let { hostPort ->
-      val (host, port) = hostPort.split(':')
-      auth.useEmulator(host, port.toInt())
+  private fun session(tenantId: String?): Session {
+    val pool = tenantId?.takeIf { it.isNotEmpty() }
+    val name = if (pool == null) NAME else "$NAME-$pool"
+    return sessions.getOrPut(name) {
+      val app = app(name)
+      val auth = FirebaseAuth.getInstance(app)
+      base.config.authEmulatorHost?.let { hostPort ->
+        val (host, port) = hostPort.split(':')
+        auth.useEmulator(host, port.toInt())
+      }
+      pool?.let { auth.setTenantId(it) }
+      val firestore = FirebaseFirestore.getInstance(app)
+      base.config.firestoreEmulatorHost?.let { hostPort ->
+        val (host, port) = hostPort.split(':')
+        firestore.useEmulator(host, port.toInt())
+      }
+      Session(name, auth, firestore)
     }
-    supportAuth = auth
   }
 
   /** The support session's own Firestore, signed in as the customer. */
-  fun firestore(): FirebaseFirestore = supportFirestore ?: FirebaseFirestore.getInstance(app()).also { db ->
-    base.config.firestoreEmulatorHost?.let { hostPort ->
-      val (host, port) = hostPort.split(':')
-      db.useEmulator(host, port.toInt())
-    }
-    supportFirestore = db
-  }
+  fun firestore(): FirebaseFirestore = checkNotNull(current) { "No support session is on." }.firestore
 
   override suspend fun signIn(customToken: String, tenantId: String?): AuthUser {
-    val auth = auth()
-    auth.signOut()
-    // Assigned unconditionally: a null tenant is the project's own pool, not "no opinion".
-    auth.tenantId = tenantId?.ifEmpty { null }
-    prefs.set(ON_KEY, "1")
+    val session = session(tenantId)
+    session.auth.signOut()
+    prefs.set(ON_KEY, session.appName)
     try {
-      val user = auth.signInWithCustomToken(customToken).await().user ?: throw AuthError(supportErrorMessage(null))
+      val user = session.auth.signInWithCustomToken(customToken).await().user ?: throw AuthError(supportErrorMessage(null))
+      current = session
       return AuthUser(user.uid, user.email, user.displayName)
     } catch (error: AuthError) {
       prefs.set(ON_KEY, null)
@@ -72,10 +81,11 @@ class FirebaseSupportBackend(
   }
 
   override suspend fun idToken(forceRefresh: Boolean): String? =
-    supportAuth?.currentUser?.getIdToken(forceRefresh)?.await()?.token
+    current?.auth?.currentUser?.getIdToken(forceRefresh)?.await()?.token
 
   override suspend fun signOut() {
-    supportAuth?.signOut()
+    current?.auth?.signOut()
+    current = null
     prefs.set(ON_KEY, null)
   }
 

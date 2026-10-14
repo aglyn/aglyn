@@ -636,6 +636,40 @@ class ScreenSpecTest {
     assertFalse(ScreenValues.condition(instead.str("when"), Json.parseToJsonElement("""{"response":{"ok":true}}""")))
   }
 
+  /**
+   * A collection read straight from Firestore shows its first rows; one that came back full offers "Show more", which reads it again
+   * with a larger limit until the end, so a big site can be gone through to its last page.
+   */
+  @Test
+  fun aFullFirestoreQueryOffersMoreRows() = runTest {
+    val reader = RowsReader(total = 6)
+    val api = client(sent = mutableListOf())
+    fun spec(extra: String) = ScreenSpec.parse(
+      Json.parseToJsonElement("""{"id":"core.x","title":"X","load":{"rows":{"query":{"collection":"hosts/h1/screens","limit":3}$extra}}}"""),
+    )!!
+    fun rows(model: ScreenModel) = (ScreenValues.lookup("data.rows.items", model.context) as JsonArray).size
+    val model = ScreenModel(spec(""","more":2"""), JsonObject(emptyMap()), api, reader)
+    model.load()
+    assertEquals(3, rows(model))
+    assertEquals("more", model.cursors["rows"])
+    model.loadMore("rows")
+    assertEquals(5, rows(model))
+    assertEquals("more", model.cursors["rows"])
+    model.loadMore("rows")
+    // The last read came back short: that was everything, and the button goes.
+    assertEquals(6, rows(model))
+    assertNull(model.cursors["rows"])
+    assertEquals(listOf(3, 5, 7), reader.limits)
+    // A load without `more` never offers it, however full it comes back.
+    val fixed = ScreenModel(spec(""), JsonObject(emptyMap()), api, RowsReader(total = 6))
+    fixed.load()
+    assertNull(fixed.cursors["rows"])
+    // A reload starts over from the first limit.
+    model.load()
+    assertEquals(3, rows(model))
+    assertEquals("more", model.cursors["rows"])
+  }
+
   /** The abuse and counter-notice pages keep the console's "Changes made in this session", in its words. */
   @Test
   fun abuseDecisionsLeaveTheConsolesSessionLines() = runTest {
@@ -674,6 +708,57 @@ class ScreenSpecTest {
     notice.run(action("core.staff.counterNotice", "rejected"), notice.context)
     assertEquals("CN-7 → rejected", notice.journal.first().str("text"))
     assertEquals(3, notice.journal.size)
+  }
+
+  /**
+   * "Populate from" on a system email test: workspaces, sites and people are searched by the words typed, and picking one fills the
+   * merge tokens the template takes (and the recipient, for a person with an address).
+   */
+  @Test
+  fun thePopulateFromPickerSearchesAndFillsTheTokens() = runTest {
+    val spec = ScreenSpec.parseFile(File(screensDir, "staff.screens.json").readText()).first { it.id == "core.staff.emails" }
+    val test = spec.raw.arr("blocks").flatMap { it.arr("actions") }.mapNotNull { ActionSpec.parse(it) }.first { it.id == "test" }
+    // A template that takes the workspace's name and the person's email, with the staff member as the default recipient.
+    val scope = Json.parseToJsonElement(
+      """{"user":{"email":"ops@example.test"},"item":{"key":"welcome"},
+         "const":{"tokens":{"welcome":[{"name":"org.name","sample":"Acme"},{"name":"user.email","sample":"a@b.co"}]}}}""",
+    )
+    val inputs = test.inputs(scope)
+    assertEquals(listOf("populate", "to", "token.org.name", "token.user.email"), inputs.map { it.key })
+    val picker = inputs.first()
+    assertEquals("lookup", picker.kind)
+    assertEquals(listOf("Workspaces", "Sites", "People"), picker.groups.map { it.label })
+    val keys = inputs.map { it.key }.toSet()
+
+    val org = picker.groups.first { it.id == "org" }
+    assertEquals("/api/admin/orgs?pageSize=10", org.request("  "))
+    assertEquals("/api/admin/orgs?pageSize=10&search=Acme%20%26%20Sons", org.request("Acme & Sons"))
+    // Only the fields the form has are filled: the template takes no org.id.
+    assertEquals(
+      listOf("token.org.name" to "Acme Co"),
+      org.fills(Json.parseToJsonElement("""{"name":"Acme Co","${'$'}id":"o1"}"""), scope, keys),
+    )
+
+    val person = picker.groups.first { it.id == "user" }
+    val row = Json.parseToJsonElement("""{"uid":"u1","email":"dana@example.test","displayName":"Dana"}""")
+    assertEquals("dana@example.test", person.heading(row, scope))
+    assertEquals("Dana", person.detail(row, scope))
+    assertEquals(
+      mapOf("token.user.email" to "dana@example.test", "to" to "dana@example.test"),
+      person.fills(row, scope, keys).toMap(),
+    )
+    // A person with no address sets the token blank and leaves the recipient alone.
+    val noAddress = Json.parseToJsonElement("""{"uid":"u2","displayName":"No Mail"}""")
+    assertEquals(listOf("token.user.email" to ""), person.fills(noAddress, scope, keys))
+    assertEquals("No Mail", person.heading(noAddress, scope))
+
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"orgs":[{"${'$'}id":"o1","name":"Acme Co"},{"${'$'}id":"o2","name":"Acme Two"}]}""", sent = sent)
+    val model = ScreenModel(spec, JsonObject(emptyMap()), api)
+    val rows = model.lookup(org, "acme")
+    assertEquals(listOf("Acme Co", "Acme Two"), rows.map { it.str("name") })
+    assertEquals("/api/admin/orgs", sent.single().url.encodedPath)
+    assertEquals("pageSize=10&search=acme", sent.single().url.encodedQuery)
   }
 
   /** The staff routes mint a custom token for a support session; the action names where in the answer it and its pool are. */
@@ -801,6 +886,23 @@ class ScreenSpecTest {
     assertFalse("list" in model.cursors)
     assertEquals("orgId=o%201&cursor=a", sent.last().url.encodedQuery)
   }
+}
+
+/** A reader that holds a collection of numbered rows and answers each query with as many as its limit allows. */
+private class RowsReader(val total: Int) : com.aglyn.core.FirestoreReader {
+  val limits = mutableListOf<Int>()
+
+  override suspend fun get(path: String): com.aglyn.core.FirestoreDoc? = null
+  override suspend fun page(query: com.aglyn.core.FirestoreQuery): com.aglyn.core.FirestorePage {
+    val limit = query.limit ?: total
+    limits += limit
+    return com.aglyn.core.FirestorePage(
+      (0 until minOf(limit, total)).map { com.aglyn.core.FirestoreDoc("r$it", "${query.collectionPath}/r$it", mapOf("n" to it.toDouble())) },
+      null,
+    )
+  }
+  override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+  override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
 }
 
 /** A reader that holds one site document and counts whatever it is asked to. */

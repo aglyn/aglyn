@@ -82,6 +82,11 @@ class LoadSpec(val key: String, json: JsonElement) {
    */
   val sortParam: String? = json.str("sortParam")
   val sortDefault: String? = json.str("sortDefault")
+  /**
+   * For a Firestore `query` that returned its whole `limit`: how many more rows each "Show more" reads. The query is read again with
+   * the larger limit, so a collection too big for one read can still be gone through to its end.
+   */
+  val more: Int? = ScreenValues.number(json.obj("more"))?.toInt()
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
@@ -273,6 +278,8 @@ class FieldSpec private constructor(
   val generate: JsonElement? = null,
   /** A list (a path) this field repeats for, one field per row, with `item` the row: the values an email is tested with, a field for each. */
   val each: String? = null,
+  /** A `lookup` field's sources: the kinds of record a person can search, and what picking one fills in. */
+  val groups: List<LookupGroup> = emptyList(),
 ) {
   /** This field as it is asked: itself, or one per row of its `each` list, its templates rendered over the row. */
   fun expanded(scope: JsonElement): List<FieldSpec> {
@@ -294,6 +301,7 @@ class FieldSpec private constructor(
         mustMatch = mustMatch,
         generate = generate,
         each = null,
+        groups = groups,
       )
     }
   }
@@ -348,7 +356,64 @@ class FieldSpec private constructor(
         mustMatch = json.str("mustMatch"),
         generate = json.obj("generate"),
         each = json.str("each"),
+        groups = json.arr("groups").mapNotNull { LookupGroup.parse(it) },
       )
+    }
+  }
+}
+
+/**
+ * One kind of record a `lookup` field searches (the system email test's "Populate from": workspaces, sites, people), and the
+ * form fields picking one fills in. The route searches by the `search` word, as a list's search does.
+ */
+class LookupGroup private constructor(
+  val id: String,
+  val label: String,
+  /** The route that lists the records; the words typed go on as `search`. */
+  val url: String,
+  /** The path in the answer of the list of records. */
+  val items: String,
+  val title: String,
+  val subtitle: String?,
+  /** Form fields set from the picked record, whatever it holds: the key is the field's key, the value a template over `item`. */
+  val fill: List<Pair<String, String>>,
+  /** The same, but only when the template comes out with something (the person's address, as the recipient). */
+  val fillWhenSet: List<Pair<String, String>>,
+) {
+  /** The route to ask for the words typed (blank lists the first few). */
+  fun request(words: String): String {
+    val trimmed = words.trim()
+    if (trimmed.isEmpty()) return url
+    return url + (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(trimmed)
+  }
+
+  /** The records an answer holds. */
+  fun rows(response: JsonElement?): List<JsonElement> = ScreenValues.rows(response?.let { ScreenValues.lookup(items, it) })
+
+  fun heading(row: JsonElement, context: JsonElement): String = ScreenValues.render(title, ScreenContext.withItem(context, row))
+
+  fun detail(row: JsonElement, context: JsonElement): String? =
+    subtitle?.let { ScreenValues.render(it, ScreenContext.withItem(context, row)) }?.takeIf { it.isNotEmpty() }
+
+  /**
+   * What picking [row] writes into the form: every `fill` entry, then the `fillWhenSet` entries that came out non-blank, for the
+   * fields the form has ([keys]): a template that takes no `org.id` has no field for it.
+   */
+  fun fills(row: JsonElement, context: JsonElement, keys: Set<String>): List<Pair<String, String>> {
+    val scope = ScreenContext.withItem(context, row)
+    val always = fill.map { it.first to ScreenValues.render(it.second, scope) }
+    val sometimes = fillWhenSet.map { it.first to ScreenValues.render(it.second, scope) }.filter { it.second.isNotEmpty() }
+    return (always + sometimes).filter { it.first in keys }
+  }
+
+  companion object {
+    fun parse(json: JsonElement): LookupGroup? {
+      val id = json.str("id") ?: return null
+      val url = json.str("url") ?: return null
+      val items = json.str("items") ?: return null
+      val title = json.str("title") ?: return null
+      fun entries(key: String) = json.entries(key).mapNotNull { (name, value) -> (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.let { name to it } }
+      return LookupGroup(id, json.str("label") ?: id, url, items, title, json.str("subtitle"), entries("fill"), entries("fillWhenSet"))
     }
   }
 }
