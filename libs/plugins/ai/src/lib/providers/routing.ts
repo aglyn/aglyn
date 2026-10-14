@@ -206,6 +206,9 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
   },
   'job.layout': {
     // The plan was reasoned out and confirmed before the step, so it writes without thinking.
+    // A site's header and footer in the layout language think adaptively, at
+    // low since AGL-3781 (`AI_LAYOUT_LANGUAGE_THINKING`): the live round of
+    // 2026-10-14 built 13 of 13 frames at low, none cut off.
     thinking: 'off',
     effort: null,
     maxTokens: 8000,
@@ -285,7 +288,10 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     // confirmed, so it writes without thinking (AGL-2907). The ceiling here
     // is the MOST a pass may ask for; each pass sizes its own down from it to
     // what fits the time the job beat can give the step, which on the
-    // balanced tier is about half of this.
+    // balanced tier is about half of this. A page in the layout language
+    // thinks adaptively, at low since AGL-3781 (`AI_LAYOUT_LANGUAGE_THINKING`):
+    // the live round of 2026-10-14 built 39 of 39 pages at low, 64 of 65
+    // answers held their rules on the first ask, none cut off.
     thinking: 'off',
     effort: null,
     maxTokens: 2000,
@@ -393,6 +399,12 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['theme'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
   'job.plan': {
+    // A site's plan is an outline written without thinking (AGL-3594), and a
+    // paid site's asks medium (`AI_PAID_SITE_PLAN_EFFORT`, AGL-3781): the live
+    // round of 2026-10-14 planned 11 of 11 paid site briefs at medium in 16
+    // attempts to the default's 22, $0.129 to $0.164, with no refusal and no
+    // rule broken. Every other plan, and a Free site's on the fast tier, asks
+    // this row's effort — the model's default — until a round holds it lower.
     thinking: 'adaptive',
     effort: null,
     maxTokens: 8000,

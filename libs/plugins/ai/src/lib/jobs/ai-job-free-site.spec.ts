@@ -121,6 +121,7 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import {
+  AI_PAID_SITE_PLAN_EFFORT,
   AI_SITE_STORE_PAGES_SENTENCE,
   aiPlanSiteLines,
   aiSitePlanCapabilities,
@@ -274,6 +275,7 @@ interface SentRequest {
   model: string
   maxTokens: number
   thinking?: string
+  effort?: string
   system: Array<{ text: string; cacheBreakpoint?: boolean; volatile?: boolean }>
   tools: unknown[]
   messages: Array<{ role: string; content: unknown }>
@@ -416,6 +418,8 @@ describe('a Free workspace’s site start is one or two pages', () => {
     expect(aiCatalogEntry(first.model)?.tier).toBe('fast')
     expect(first.model).toBe('claude-haiku-5-5')
     expect(first.thinking).toBe('off')
+    // The fast tier was measured at its model's own effort, and keeps it (AGL-3781).
+    expect([first.effort, second.effort]).toEqual([undefined, undefined])
     expect(first.maxTokens).toBe(AI_SITE_PLAN_MAX_TOKENS.free)
     const turn = String(first.messages[0].content)
     expect(turn).toContain('Plan this site\'s home page at / and it replaces this one.')
@@ -426,7 +430,7 @@ describe('a Free workspace’s site start is one or two pages', () => {
     expect(outcome.uncredited).toBeUndefined()
   })
 
-  it('leaves a paid site plan on its own model, without thinking, at the paid outline ceiling', async () => {
+  it('leaves a paid site plan on its own model, without thinking, at medium effort and the paid outline ceiling', async () => {
     mockRunAiRequest.mockReset()
     const five: AiBuildPlan = {
       ...TWO_PAGES,
@@ -437,6 +441,9 @@ describe('a Free workspace’s site start is one or two pages', () => {
     const [request] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
     expect(request.model).toBe('claude-sonnet-5-5')
     expect(request.thinking).toBe('off')
+    // The effort the live round of 2026-10-14 held a paid site's plan at (AGL-3781).
+    expect(AI_PAID_SITE_PLAN_EFFORT).toBe('medium')
+    expect(request.effort).toBe('medium')
     expect(request.maxTokens).toBe(AI_SITE_PLAN_MAX_TOKENS.paid)
     expect(String(request.messages[0].content)).not.toContain('Free workspace')
     expect((outcome.plan as AiJobPlan).screens).toHaveLength(5)

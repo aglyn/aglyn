@@ -37,11 +37,11 @@ const LIVE_MOST = { page: 1_745, frame: 583 }
 const BALANCED = AI_MODEL_CATALOG.filter((entry) => entry.tier === 'balanced').map((entry) => entry.id)
 
 describe('the layout language thinks, with room to (AGL-3660)', () => {
-  it('asks adaptively, at an effort it names', () => {
-    expect(AI_LAYOUT_LANGUAGE_THINKING).toEqual({ thinking: 'adaptive', effort: 'medium' })
+  it('asks adaptively, at the low effort its live round held (AGL-3781)', () => {
+    expect(AI_LAYOUT_LANGUAGE_THINKING).toEqual({ thinking: 'adaptive', effort: 'low' })
   })
 
-  it('sends Claude Sonnet 5.5 adaptive thinking at medium, never a disabled setting', () => {
+  it('sends Claude Sonnet 5.5 adaptive thinking at low, never a disabled setting', () => {
     const body = buildAnthropicRequestBody({
       model: 'claude-sonnet-5-5',
       maxTokens: AI_JOB_PAGE_LANGUAGE_TOKENS,
@@ -51,7 +51,7 @@ describe('the layout language thinks, with room to (AGL-3660)', () => {
       ...AI_LAYOUT_LANGUAGE_THINKING,
     })
     expect(body['thinking']).toEqual({ type: 'adaptive' })
-    expect(body['output_config']).toEqual({ effort: 'medium' })
+    expect(body['output_config']).toEqual({ effort: 'low' })
   })
 
   it.each(BALANCED)('serves a page its whole ceiling on %s: the time budget cuts nothing off', (model) => {

@@ -722,13 +722,18 @@ Every door reads its row rather than a constant of its own.
   so every Free plan would be refused. The wall has to be re-derived for the
   layout language first.
 - **The layout language thinks.** A page's answer and a site's header and
-  footer are asked with adaptive thinking at `effort: medium`
-  (`AI_LAYOUT_LANGUAGE_THINKING`), and each ceiling carries room for it above
+  footer are asked with adaptive thinking at `effort: low`
+  (`AI_LAYOUT_LANGUAGE_THINKING`; medium until AGL-3781, whose live round of
+  2026-10-14 built 39 of 39 pages and 13 of 13 frames at low, 64 of 65 holding
+  their rules on the first ask and none cut off), and each ceiling carries room for it above
   the answer's own: 2,000 tokens on a page (5,000 in all; the live answers
   ran 683–1,745) and 4,000 on a frame (5,200). The page's room is bounded by
   time, not money: the answer, its re-ask and the follow-up must fit the
   least time a beat gives a step, and `aiJobStepBudget` lowers a ceiling that
-  does not — at 5,000 of room it cut the page ceiling to 879. The theme step already thought
+  does not — at 5,000 of room it cut the page ceiling to 879. The room stays sized at
+  medium, and so do the figures priced or measured from it — the Free wall's page and
+  layout, and the measured tables in `ai-credit-estimate.ts` — so none moved: low draws
+  less, and a quote is never under what is drawn. The theme step already thought
   adaptively, at the model's default effort, and is unchanged.
 
 ## Planning, and a job that waits for a person
@@ -3200,7 +3205,11 @@ the element budget its request asks for.
   guided start gives a Free site no content part, whatever the wall leaves. On a paid workspace a site plan's one answer comes to at most 86 credits
   for five pages, where the routing table's ceiling with thinking spent 227. (84 before a paid plan could
   create datasets: the record-template plan tool and the dataset sentence, AGL-3616; 85 before a form could
-  write to one: the plan tool's `writesTo` and the form-dataset sentence.)
+  write to one: the plan tool's `writesTo` and the form-dataset sentence.) A paid site's plan
+  asks `effort: medium` (`AI_PAID_SITE_PLAN_EFFORT`, AGL-3781: the live round of 2026-10-14
+  planned 11 of 11 at medium in 16 attempts to the default's 22, $0.129 to $0.164); the 86
+  is priced at the ceiling, which effort does not move, so it stands. A Free site's plan
+  sends no effort and keeps its model's default.
 - **A site start's home reads as a full website (AGL-3660).** A plan is an outline, and
   the only section figure a site plan was told was the Free wall's ceiling, so a local
   Free yoga start (2026-10-07) planned its home with two sections. The site plan's turn
