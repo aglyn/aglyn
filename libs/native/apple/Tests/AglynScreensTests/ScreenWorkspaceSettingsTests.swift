@@ -12,7 +12,7 @@ import XCTest
 /// owner actions, and the single sign-on steps. The words are held to the console's by
 /// apps/console/specs/native-workspace-settings-match-the-console.spec.ts.
 final class ScreenWorkspaceSettingsTests: XCTestCase {
-  private func spec(_ id: String) throws -> ScreenSpec { try XCTUnwrap(CoreScreens.specs.first { $0.id == id }) }
+  @MainActor private func spec(_ id: String) throws -> ScreenSpec { try XCTUnwrap(CoreScreens.specs.first { $0.id == id }) }
 
   private func actions(_ spec: ScreenSpec, block title: String) throws -> [ActionSpec] {
     let block = try XCTUnwrap(spec.blocks.first { $0.title == title || ($0.id == title) })
@@ -43,6 +43,7 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
     XCTAssertEqual(body["scopes"], ["crm:write", "datasets:read", "media:read", "orders:write"])
   }
 
+  @MainActor
   func testAHoldsOwnerActionsAreTheOnesItsNoticeNames() throws {
     let detail = try spec("core.settings.holds.notice")
     let next = try actions(detail, block: "Next")
@@ -68,6 +69,7 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
     XCTAssertFalse(ScreenValues.condition(asked.when, in: quiet))
   }
 
+  @MainActor
   func testTheSingleSignOnStepsFollowTheDomains() throws {
     let sso = try spec("core.settings.sso")
     func scope(status: String, claims: [JSONValue], tenant: Bool = true) -> JSONValue {
@@ -112,6 +114,7 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
     XCTAssertEqual(shown(turn, in: off), [])
   }
 
+  @MainActor
   func testEnforcingNeedsAWayInThatSurvivesTheProvider() throws {
     let enforcement = try spec("core.settings.sso.enforcement")
     let buttons = try XCTUnwrap(enforcement.blocks.first { $0.type == "actions" })["items"].array.compactMap(ActionSpec.init)
