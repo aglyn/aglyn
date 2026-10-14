@@ -13,6 +13,10 @@ class ScriptedSaleApi(script: Map<String, List<Any>> = emptyMap()) : PosSaleApi 
   val actions get() = calls.map { it.action }
   var opened: PosOpenedSale = opened()
 
+  /** What a store-credit lookup finds, and the lookups asked. */
+  var creditAccounts: Result<List<PosCreditAccount>> = Result.success(emptyList())
+  val lookups = mutableListOf<String>()
+
   fun answer(action: String, vararg next: Any) {
     queues.getOrPut(action) { mutableListOf() }.addAll(next)
   }
@@ -37,6 +41,11 @@ class ScriptedSaleApi(script: Map<String, List<Any>> = emptyMap()) : PosSaleApi 
     return next as? PosPaymentAnswer ?: sale(emptyList())
   }
 
+  override suspend fun creditLookup(providerId: String, query: String): List<PosCreditAccount> {
+    lookups += "$providerId:$query"
+    return creditAccounts.getOrThrow()
+  }
+
   override suspend fun giftCardBalance(code: String): GiftCardBalance {
     calls += Call("gift-card-balance", SaleStep.Sale, null)
     val next = queues["gift-card-balance"]?.removeFirstOrNull()
@@ -56,7 +65,12 @@ fun payment(
   changeCents: Long = 0,
   failureMessage: String? = null,
   readerId: String? = null,
-) = PosSalePayment(id, method, amountCents, tipCents, status, null, null, changeCents, readerId, failureMessage)
+  checkoutUrl: String? = null,
+  creditLabel: String? = null,
+  livemode: Boolean? = null,
+  cardBrand: String? = null,
+  last4: String? = null,
+) = PosSalePayment(id, method, amountCents, tipCents, status, cardBrand, last4, changeCents, readerId, failureMessage, checkoutUrl, creditLabel, livemode)
 
 fun sale(
   payments: List<PosSalePayment>,

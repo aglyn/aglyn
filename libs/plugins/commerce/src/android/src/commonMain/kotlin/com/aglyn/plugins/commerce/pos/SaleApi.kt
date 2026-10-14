@@ -24,8 +24,11 @@ import kotlinx.serialization.json.put
  *   server and opens a PENDING sale with an empty tender ledger;
  * - `commerce/pos-payment` takes each tender against it (`card-present` for
  *   a smart reader, `card-present-sdk` for this device's reader, `cash`,
- *   `gift-card`), re-reads a card payment (`status`), stops one (`cancel`),
- *   voids an unpaid sale (`void`) and sends the receipt (`receipt`).
+ *   `gift-card`, `credit` for store credit another plugin keeps, `folio` for
+ *   a room charge, `card-link` for the QR payment page), re-reads a card
+ *   payment (`status`), stops one (`cancel`), retries a declined reader
+ *   payment (`retry`), taps a test card (`simulate`), voids an unpaid sale
+ *   (`void`) and sends the receipt (`receipt`).
  *
  * Every money-moving call carries an Idempotency-Key the caller keeps for
  * that one press, so a retry after a lost answer finds the payment the first
@@ -55,6 +58,17 @@ data class PosSmartReader(
   val online: Boolean get() = status == "online"
 }
 
+/** A kind of store credit another plugin keeps (a rewards balance, a referral credit) that this site takes at the register. */
+data class PosCreditProvider(
+  val providerId: String,
+  val label: String,
+  /** Staff can look an account up by the customer's email or code, not only apply a code. */
+  val lookup: Boolean,
+)
+
+/** A store-credit account a staff lookup found. */
+data class PosCreditAccount(val reference: String, val label: String, val last4: String, val availableCents: Long, val detail: String?)
+
 data class PosContext(
   val settings: PosRegisterSettings,
   /** Card readers are offered on this deployment at all. */
@@ -65,6 +79,8 @@ data class PosContext(
   val smsReceipts: Boolean,
   /** The site's register rules: shifts, the idle lock, the refund limit. */
   val ops: PosOpsSettings = PosOpsSettings(),
+  /** Store credit other plugins keep, taken as a tender. */
+  val credits: List<PosCreditProvider> = emptyList(),
 )
 
 data class PosSalePayment(
@@ -78,6 +94,12 @@ data class PosSalePayment(
   val changeCents: Long,
   val readerId: String?,
   val failureMessage: String?,
+  /** The QR payment page of a pending `card_link` payment. */
+  val checkoutUrl: String? = null,
+  /** What a store-credit payment's provider calls it. */
+  val creditLabel: String? = null,
+  /** False for a test-mode payment (a smart reader's simulated tap is offered only then). */
+  val livemode: Boolean? = null,
 )
 
 data class PosSale(
@@ -153,6 +175,11 @@ fun readPosContext(body: JsonElement?): PosContext {
     },
     smsReceipts = record["smsReceipts"].bool(),
     ops = readPosOpsSettings(record["ops"]),
+    credits = record["credits"].arr().mapNotNull { entry ->
+      val credit = entry.obj()
+      val id = credit["providerId"].str() ?: return@mapNotNull null
+      PosCreditProvider(id, credit["label"].str() ?: "Store credit", credit["lookup"].bool())
+    },
   )
 }
 
@@ -170,6 +197,9 @@ fun readSalePayment(element: JsonElement): PosSalePayment? {
     changeCents = payment["changeCents"].cents(),
     readerId = payment["readerId"].str(),
     failureMessage = payment["failureMessage"].str(),
+    checkoutUrl = payment["checkoutUrl"].str(),
+    creditLabel = payment["creditLabel"].str(),
+    livemode = if (payment["livemode"] == null) null else payment["livemode"].bool(),
   )
 }
 
@@ -220,8 +250,23 @@ sealed class SaleStep(val action: String, val startsPayment: Boolean) {
   data class CardPresent(val readerId: String, val amountCents: Long, val tipCents: Long) : SaleStep("card-present", true)
   data class Cash(val tenderedCents: Long, val tipCents: Long, val amountCents: Long?) : SaleStep("cash", true)
   data class GiftCard(val code: String, val amountCents: Long?) : SaleStep("gift-card", true)
+
+  /** Store credit by the customer's code, or by the account a lookup found (provider and reference). */
+  data class Credit(val code: String?, val providerId: String?, val reference: String?, val amountCents: Long?) : SaleStep("credit", true)
+
+  /** Charged to a checked-in stay's folio. */
+  data class Folio(val reservationId: String, val amountCents: Long?) : SaleStep("folio", true)
+
+  /** The QR payment page: the customer pays on their phone. */
+  data class CardLink(val amountCents: Long, val tipCents: Long) : SaleStep("card-link", true)
   data class Status(val paymentId: String) : SaleStep("status", false)
   data class Cancel(val paymentId: String) : SaleStep("cancel", false)
+
+  /** Tries a declined reader payment again on the same reader. */
+  data class Retry(val paymentId: String) : SaleStep("retry", false)
+
+  /** Test mode: taps a test card on the smart reader. */
+  data class Simulate(val paymentId: String) : SaleStep("simulate", false)
   data object Sale : SaleStep("sale", false)
   data object Void : SaleStep("void", false)
   data class Receipt(val channel: String, val to: String? = null, val marketingOptIn: Boolean = false) : SaleStep("receipt", false)
@@ -249,8 +294,24 @@ sealed class SaleStep(val action: String, val startsPayment: Boolean) {
         put("code", step.code)
         step.amountCents?.takeIf { it > 0 }?.let { put("amountCents", it) }
       }
+      is Credit -> {
+        step.code?.let { put("code", it) }
+        step.providerId?.let { put("providerId", it) }
+        step.reference?.let { put("reference", it) }
+        step.amountCents?.takeIf { it > 0 }?.let { put("amountCents", it) }
+      }
+      is Folio -> {
+        put("reservationId", step.reservationId)
+        step.amountCents?.takeIf { it > 0 }?.let { put("amountCents", it) }
+      }
+      is CardLink -> {
+        put("amountCents", step.amountCents)
+        put("tipCents", step.tipCents)
+      }
       is Status -> put("paymentId", step.paymentId)
       is Cancel -> put("paymentId", step.paymentId)
+      is Retry -> put("paymentId", step.paymentId)
+      is Simulate -> put("paymentId", step.paymentId)
       is Receipt -> {
         put("channel", step.channel)
         step.to?.let { put("to", it) }
@@ -275,6 +336,9 @@ interface PosSaleApi {
 
   /** A gift card's spendable balance, to read to the customer. */
   suspend fun giftCardBalance(code: String): GiftCardBalance
+
+  /** The store-credit accounts one provider finds for a customer's email or code. */
+  suspend fun creditLookup(providerId: String, query: String): List<PosCreditAccount>
 }
 
 /** The register's calls over the console API, as the signed-in member. */
@@ -325,5 +389,23 @@ class ConsolePosSaleApi(
       voided = body["voided"].bool(),
       last4 = body["last4"].str() ?: "",
     )
+  }
+
+  override suspend fun creditLookup(providerId: String, query: String): List<PosCreditAccount> {
+    val body = api.request(
+      POS_PAYMENT_ROUTE,
+      ApiMethod.POST,
+      buildJsonObject {
+        put("hostId", hostId)
+        put("action", "credit-lookup")
+        put("providerId", providerId)
+        put("query", query)
+      },
+    ).obj()
+    return body["accounts"].arr().mapNotNull { entry ->
+      val account = entry.obj()
+      val reference = account["reference"].str() ?: return@mapNotNull null
+      PosCreditAccount(reference, account["label"].str() ?: "Store credit", account["last4"].str() ?: "", account["availableCents"].cents(), account["detail"].str())
+    }
   }
 }

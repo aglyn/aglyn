@@ -734,9 +734,19 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   grid, and variants and modifiers (`product-modifiers` contracts).
 - **Cart and tender:** `/api/commerce/pos-order` and
   `/api/commerce/pos-payment` (`context`, tender and gift-card balance), the
-  same routes and idempotency keys as the web register.
+  same routes and idempotency keys as the web register. The tenders are cash,
+  a card reader (smart reader or this device's), a gift card, store credit
+  another plugin keeps (`credits` in the context, found by `credit-lookup`),
+  a room charge to a checked-in stay (`reservations` asked for by status), and
+  the QR payment page (`card-link`), drawn as a QR code on the device and never
+  sent anywhere. A split pays part of the balance; a declined reader payment
+  can be retried and, in test mode, tapped with a test card. The one console
+  tender the apps do not take is the typed card: it needs Stripe's card-entry
+  SDK, which neither app carries.
 - **Tips** and **receipts by email or text**, through the routes the web
-  register uses.
+  register uses; **Print receipt** goes to the register's cloud printer (and
+  on Kotlin its direct printer), and a store whose receipt default is print
+  prints it as soon as the sale is paid.
 - **Booking payments:** the bookings plugin contributes a `.pos` screen.
 
 Card readers by platform:

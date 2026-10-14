@@ -52,6 +52,7 @@ private final class FakeSale: PosSaleAPI, @unchecked Sendable {
       paymentID: nil, completed: false, clientSecret: nil, paymentIntentID: nil)
   }
   func giftCardBalance(code: String) async throws -> GiftCardBalance { throw ConsoleAPIError(status: 0, message: "unused") }
+  func creditLookup(providerID: String, query: String) async throws -> [PosCreditAccount] { [] }
 }
 
 @MainActor
