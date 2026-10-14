@@ -94,6 +94,12 @@ xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -destination 'platform=m
 
 After you change a plugin's `mobile` block, run `npm run generate:plugin-manifests`.
 
+Aglyn POS (and only Aglyn POS) links Stripe's card form for a card typed in at the
+register: the `StripePaymentSheet` product of `stripe-ios-spm`, pinned exact in
+`Aglyn.xcodeproj`, filtered to iOS (the Mac build never sees it). The first build
+resolves it from GitHub. The Aglyn app target does not link it, and
+`check-mobile-isolation` keeps it that way.
+
 ## Test
 
 ```bash

@@ -41,18 +41,17 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [ ] | [ ] |
 | Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [ ] | [ ] |
 
-POS register, readers, kiosk: ticked on both platforms for everything the
-console register does except the typed card ("Type card"). That tender loads
-Stripe's Payment Element in the browser; natively it needs Stripe's card-entry
-SDK (or another route), which neither app carries, and the choice is open with
-Zach. Everything else is native and verified by tests and builds (no app was
-launched): the register, returns, the customer lookup, the last receipt and
-printing (cloud printer, then the device's print sheet, as the console prints),
-offline cash sales, the customer display, the self-service kiosk and its queue,
-every tender but the typed card (cash, card readers and Tap to Pay, gift cards,
-store credit, a room charge, the QR payment page), the delivery-app queue in the
-register's `posOrders` zone (the delivery-apps plugin's own native package),
-and the shift, cashier PIN and drawer operations.
+POS register, readers, kiosk: ticked on both platforms. Everything the console
+register does is native, verified by tests and builds (no app was launched): the
+register, returns, the customer lookup, the last receipt and printing (cloud
+printer, then the device's print sheet, as the console prints), offline cash
+sales, the customer display, the self-service kiosk and its queue, every tender
+(cash, card readers and Tap to Pay, the typed card in Stripe's own card form,
+gift cards, store credit, a room charge, the QR payment page), the delivery-app
+queue in the register's `posOrders` zone (the delivery-apps plugin's own native
+package), and the shift, cashier PIN and drawer operations. The typed card is on
+iPhone, iPad and Android phone and tablet, where Stripe has a card SDK; the Mac
+and desktop registers take cards on smart readers and the QR payment page.
 
 Texts (`sms`): the plugin is infrastructure with no console page of its own.
 The console's texts surfaces are the Commerce settings card's "Also send as
