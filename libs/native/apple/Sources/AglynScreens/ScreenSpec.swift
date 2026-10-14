@@ -192,6 +192,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// A change to the signed-in person's own sign-in, made through the
+  /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
+  public let account: String?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// The status of the answer that runs `else` (404 unless the spec names another, such as 409).
@@ -227,7 +230,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
-    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil)
+    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil)
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.elseStatus = json["elseStatus"].flatMap { value -> Int? in
       if case .number(let number) = value { return Int(number) }
@@ -242,6 +245,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.overlay = json["overlay"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.account = json["account"]?.stringValue
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }

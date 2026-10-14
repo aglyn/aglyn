@@ -63,6 +63,8 @@ struct Cart: Codable, Hashable {
   var discountPct = 0
   /// Who the receipt goes to, when the cashier asked.
   var customerEmail = ""
+  /// The customer the lookup attached; their email is the sale's.
+  var customer: PosCustomer?
 
   static let empty = Cart()
 
@@ -121,6 +123,14 @@ struct Cart: Codable, Hashable {
     return cart
   }
 
+  /// Attaches the customer the lookup found (or an email typed for the receipt); nil lets them go.
+  func withCustomer(_ customer: PosCustomer?) -> Cart {
+    var cart = self
+    cart.customer = customer
+    cart.customerEmail = String((customer?.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+    return cart
+  }
+
   /// What `commerce/pos-order` takes for `lines`: picks and counts, never prices.
   var saleLines: JSONValue {
     .array(
@@ -174,12 +184,17 @@ struct Cart: Codable, Hashable {
     }
     if case .number(let pct)? = record["discountPct"] { cart = cart.withDiscount(pct) }
     if case .string(let email)? = record["customerEmail"] { cart = cart.withCustomerEmail(email) }
+    if let customer = PosCustomer.read(record["customer"]) {
+      let email = cart.customerEmail
+      cart = cart.withCustomer(customer)
+      if customer.email == nil { cart = cart.withCustomerEmail(email) }
+    }
     return cart
   }
 
   func encoded() -> Data? {
     // The same keys the reader takes, so a kept basket round-trips.
-    let value = JSONValue.object([
+    var value = JSONValue.object([
       "lines": .array(
         lines.map { line in
           var record: [String: JSONValue] = [
@@ -195,6 +210,10 @@ struct Cart: Codable, Hashable {
       "discountPct": .number(Double(discountPct)),
       "customerEmail": .string(customerEmail),
     ])
+    if let customer, case .object(var record) = value {
+      record["customer"] = customer.json
+      value = .object(record)
+    }
     return try? value.encoded()
   }
 }

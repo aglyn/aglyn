@@ -85,10 +85,18 @@ public protocol FirestoreWriter: Sendable {
   func merge(_ path: [String], _ data: [String: Any]) async throws
   /// Deletes a document (the web SDK's `deleteDoc`); a writer that cannot, throws.
   func delete(_ path: [String]) async throws
+  /// The web SDK's `updateDoc(ref, data)`: each top-level key replaces that
+  /// field whole (a map value is not merged into the stored map), and the
+  /// document must already exist.
+  func update(_ path: [String], _ data: [String: Any]) async throws
 }
 
 extension FirestoreWriter {
   public func delete(_ path: [String]) async throws { throw FirestoreWriteUnavailable() }
+
+  public func update(_ path: [String], _ data: [String: Any]) async throws {
+    throw ConsoleAPIError(status: 0, message: "Saving is not available here.")
+  }
 }
 
 struct FirestoreWriteUnavailable: LocalizedError {
@@ -104,6 +112,9 @@ public struct ReaderMergeWriter: FirestoreWriter {
   }
   public func delete(_ path: [String]) async throws {
     try await reader.deleteDocument(path)
+  }
+  public func update(_ path: [String], _ data: [String: Any]) async throws {
+    try await reader.updateDocument(path, data)
   }
 }
 
@@ -144,6 +155,9 @@ public protocol FirestoreReader: AnyObject, Sendable {
   func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws
   func deleteDocument(_ path: [String]) async throws
 
+  /// The web SDK's `updateDoc`: replaces each top-level field whole, on a document that exists.
+  func updateDocument(_ path: [String], _ fields: [String: Any]) async throws
+
   /// The server's count of a query's documents (the web SDK's
   /// `getCountFromServer`), or nil where the reader cannot ask for one; a
   /// caller then falls back to the rows it holds.
@@ -159,6 +173,10 @@ public protocol FirestoreReader: AnyObject, Sendable {
 extension FirestoreReader {
   public func count(_ query: FirestoreQuery) async throws -> Int? { nil }
   public func sum(_ query: FirestoreQuery, field: String) async throws -> Double? { nil }
+
+  public func updateDocument(_ path: [String], _ fields: [String: Any]) async throws {
+    throw ConsoleAPIError(status: 0, message: "Saving is not available here.")
+  }
 }
 
 /// A listener that does nothing, for a query that cannot run yet.

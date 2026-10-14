@@ -19,11 +19,9 @@ struct OrderDetailView: View {
   @State private var confirming: OrderAction?
   @State private var problem: String?
   @State private var done: String?
-  @State private var confirmingRefund = false
-  @State private var refunding = false
+  @State private var refundingSheet = false
   @State private var refundKey: String?
-  @State private var receiptTo = ""
-  @State private var sendingReceipt = false
+  @State private var receiptSheet = false
 
   var body: some View {
     Group {
@@ -68,11 +66,11 @@ struct OrderDetailView: View {
           // a phone never breaks "Refund" into "Ref / und".
           let buttons = Group {
             if orderCanRefund(order) {
-              Button(role: .destructive) { confirmingRefund = true } label: {
-                if refunding { ProgressView() } else { Label("Refund", systemImage: "arrow.uturn.backward") }
+              Button(role: .destructive) { refundingSheet = true } label: {
+                Label("Refund", systemImage: "arrow.uturn.backward")
               }
               .buttonStyle(.bordered)
-              .disabled(busy != nil || refunding)
+              .disabled(busy != nil)
               .accessibilityIdentifier("order-action-refund")
             }
             ForEach(actions) { action in
@@ -141,27 +139,17 @@ struct OrderDetailView: View {
 
       if row.status != .pending {
         Section {
-          HStack {
-            TextField("Email", text: $receiptTo)
-              .autocorrectionDisabled()
-              #if os(iOS)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.emailAddress)
-              #endif
-              .accessibilityIdentifier("order-receipt-to")
-            Button {
-              Task { await sendReceipt() }
-            } label: {
-              if sendingReceipt { ProgressView() } else { Text("Send") }
-            }
-            .disabled(sendingReceipt || !receiptTo.contains("@"))
+          Button {
+            receiptSheet = true
+          } label: {
+            Label("Send the receipt", systemImage: "envelope")
           }
+          .accessibilityIdentifier("order-receipt")
         } header: {
           Text("Receipt")
         } footer: {
-          Text("Sends the receipt again by email.")
+          Text("Sends the receipt again, by email or text.")
         }
-        .onAppear { if receiptTo.isEmpty { receiptTo = order.customerEmail ?? "" } }
       }
 
       if let payments = order.payments, !payments.isEmpty {
@@ -205,10 +193,13 @@ struct OrderDetailView: View {
     } message: {
       Text("The buyer is not refunded automatically. Refund first if they paid.")
     }
-    .confirmationDialog("Refund this order?", isPresented: $confirmingRefund, titleVisibility: .visible) {
-      Button("Refund \(formatOrderMoney(orderRefundableCents(order)))", role: .destructive) { Task { await refund() } }
-    } message: {
-      Text("Refunds \(formatOrderMoney(orderRefundableCents(order))) to the buyer through Stripe.")
+    .sheet(isPresented: $refundingSheet) {
+      RefundSheet(order: order, number: row.number) { amount in
+        try await refund(amountCents: amount)
+      }
+    }
+    .sheet(isPresented: $receiptSheet) {
+      ReceiptSheet(context: context, order: order, orderID: orderID, number: row.number) { done = "The receipt is on its way." }
     }
   }
 
@@ -228,39 +219,23 @@ struct OrderDetailView: View {
     }
   }
 
-  private func refund() async {
+  /// Refunds the order (all of it when `amountCents` is nil). Throws what the sheet shows.
+  private func refund(amountCents: Int?) async throws {
     guard let hostID = context.hostID else { return }
     let key = refundKey ?? UUID().uuidString
     refundKey = key
-    refunding = true
     problem = nil
-    defer { refunding = false }
     do {
-      try await refundOrder(api: context.api, hostID: hostID, orderID: orderID, attemptKey: key)
+      try await refundOrder(api: context.api, hostID: hostID, orderID: orderID, amountCents: amountCents, attemptKey: key)
       refundKey = nil
       done = "Refund issued."
     } catch let error as ConsoleAPIError where error.status > 0 && error.status < 500 {
       // A definitive refusal: the next press is a new refund.
       refundKey = nil
-      problem = error.message
+      throw SheetFailure(message: error.message)
     } catch {
       // Not known whether it went through: the same key dedupes the next press.
-      problem = "It is not known whether the refund went through. Trying again is safe; it will not refund twice."
-    }
-  }
-
-  private func sendReceipt() async {
-    guard let hostID = context.hostID else { return }
-    sendingReceipt = true
-    problem = nil
-    defer { sendingReceipt = false }
-    do {
-      try await resendOrderReceipt(api: context.api, hostID: hostID, orderID: orderID, to: receiptTo)
-      done = "Receipt sent."
-    } catch let error as ConsoleAPIError where error.status > 0 && error.status < 500 {
-      problem = error.message
-    } catch {
-      problem = "It is not known whether the receipt went. Check the order's history before sending again."
+      throw SheetFailure(message: "It is not known whether the refund went through. Trying again is safe; it will not refund twice.")
     }
   }
 
@@ -277,5 +252,113 @@ struct OrderDetailView: View {
       address.country,
     ].compactMap { $0 }.filter { !$0.isEmpty }
     return lines.isEmpty ? nil : lines.joined(separator: "\n")
+  }
+}
+
+/// A refusal a form sheet shows in place.
+struct SheetFailure: LocalizedError {
+  let message: String
+  var errorDescription: String? { message }
+}
+
+/// Refund: all of what is left, or part of it (the console's dialog).
+struct RefundSheet: View {
+  let order: HostOrder
+  let number: String
+  let refund: (Int?) async throws -> Void
+  @State private var full = true
+  @State private var amount = ""
+
+  private var refundable: Int { orderRefundableCents(order) }
+  private var cents: Int? { full ? refundable : centsFromText(amount) }
+  private var problem: String? { full ? nil : checkRefundAmount(cents, refundableCents: refundable) }
+
+  var body: some View {
+    AglynFormSheet(
+      "Refund \(number)", confirm: cents.flatMap { problem == nil ? "Refund \(formatOrderMoney($0))" : nil } ?? "Refund",
+      destructive: true, canConfirm: problem == nil,
+      save: { try await refund(full ? nil : cents) }
+    ) {
+      Section {
+        Picker("Refund", selection: $full) {
+          Text("Full refund").tag(true)
+          Text("Part of it").tag(false)
+        }
+        .pickerStyle(.segmented)
+        if !full {
+          LabeledContent("Amount") {
+            TextField("0.00", text: $amount)
+              .multilineTextAlignment(.trailing)
+              .monospacedDigit()
+              .accessibilityIdentifier("refund-amount")
+              #if os(iOS)
+                .keyboardType(.decimalPad)
+              #endif
+          }
+          if let problem, !amount.isEmpty { Text(problem).font(AglynFont.caption).foregroundStyle(.red) }
+        }
+      } footer: {
+        Text("\(formatOrderMoney(refundable)) is left to refund on this order, through Stripe.")
+      }
+    }
+  }
+}
+
+/// Send the receipt: by email, or by text where the store has texts on.
+struct ReceiptSheet: View {
+  let context: NativePluginContext
+  let order: HostOrder
+  let orderID: String
+  let number: String
+  let sent: () -> Void
+  @State private var channels: [ReceiptChannel] = [.email]
+  @State private var channel: ReceiptChannel = .email
+  @State private var to = ""
+
+  private var problem: String? { checkReceiptRecipient(channel, to) }
+
+  var body: some View {
+    AglynFormSheet(
+      "Send the receipt", confirm: "Send", canConfirm: problem == nil,
+      save: {
+        guard let hostID = context.hostID else { return }
+        do {
+          try await resendOrderReceipt(api: context.api, hostID: hostID, orderID: orderID, channel: channel, to: to)
+        } catch let error as ConsoleAPIError where error.status > 0 && error.status < 500 {
+          throw SheetFailure(message: error.message)
+        } catch {
+          throw SheetFailure(message: "It is not known whether the receipt went. Check the order's history before sending again.")
+        }
+        sent()
+      }
+    ) {
+      Section {
+        if channels.count > 1 {
+          Picker("Send by", selection: $channel) {
+            ForEach(channels) { Text($0.label).tag($0) }
+          }
+          .pickerStyle(.segmented)
+        }
+        TextField(channel == .email ? "Email address" : "Phone number", text: $to)
+          .autocorrectionDisabled()
+          .accessibilityIdentifier("order-receipt-to")
+          #if os(iOS)
+            .textInputAutocapitalization(.never)
+            .keyboardType(channel == .email ? .emailAddress : .phonePad)
+          #endif
+        if let problem, !to.isEmpty { Text(problem).font(AglynFont.caption).foregroundStyle(.red) }
+      } footer: {
+        Text("The receipt for \(number).")
+      }
+    }
+    .task {
+      to = order.customerEmail ?? ""
+      guard let hostID = context.hostID else { return }
+      channels = await orderReceiptChannels(api: context.api, hostID: hostID)
+      if !channels.contains(channel) { channel = channels.first ?? .email }
+    }
+    .onChange(of: channel) { _, next in
+      to = (next == .email ? order.customerEmail : order.customerPhone) ?? ""
+    }
   }
 }

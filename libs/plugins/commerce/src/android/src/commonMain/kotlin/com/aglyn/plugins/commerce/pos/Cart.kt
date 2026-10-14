@@ -56,6 +56,8 @@ data class Cart(
   val discountPct: Int = 0,
   /** Who the receipt goes to, when the cashier asked. */
   val customerEmail: String = "",
+  /** The customer the lookup attached; their email is the sale's. */
+  val customer: PosCustomer? = null,
 ) {
   val count: Int get() = lines.sumOf { it.quantity }
   val subtotalCents: Long get() = lines.sumOf { it.unitCents * it.quantity }
@@ -123,6 +125,9 @@ fun Cart.withDiscount(pct: Double): Cart =
 
 fun Cart.withCustomerEmail(email: String): Cart = copy(customerEmail = email.trim().take(200))
 
+/** Attaches the customer the lookup found (or an email typed for the receipt); null lets them go. */
+fun Cart.withCustomer(customer: PosCustomer?): Cart = copy(customer = customer, customerEmail = (customer?.email ?: "").trim().take(200))
+
 /** What `commerce/pos-order` takes for `lines`: picks and counts, never prices. */
 fun Cart.saleLines(): JsonArray = buildJsonArray {
   for (line in lines) {
@@ -182,5 +187,9 @@ fun readStoredCart(raw: String?): Cart {
     )
   }
   cart = cart.withDiscount(record["discountPct"].number() ?: 0.0)
-  return cart.withCustomerEmail(record["customerEmail"].text() ?: "")
+  cart = cart.withCustomerEmail(record["customerEmail"].text() ?: "")
+  val customer = PosCustomer.read(record["customer"]) ?: return cart
+  val typed = cart.customerEmail
+  cart = cart.withCustomer(customer)
+  return if (customer.email == null) cart.withCustomerEmail(typed) else cart
 }

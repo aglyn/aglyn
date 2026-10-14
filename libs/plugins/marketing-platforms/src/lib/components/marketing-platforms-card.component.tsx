@@ -419,22 +419,24 @@ function ConnectionDetails(props: {
           ))}
         </TextField>
       ) : null}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
-        <TextField
-          size="small"
-          label="Tag"
-          value={tag}
-          disabled={busy}
-          onChange={(event) => setTag(event.target.value)}
-          helperText="Every contact this site sends carries it, so you can segment them."
-          sx={{ maxWidth: 360 }}
-        />
-        {tag !== connection.tag ? (
-          <Button size="small" disabled={busy} onClick={() => onUpdate({ tag }, 'Saved.')}>
-            Save tag
-          </Button>
-        ) : null}
-      </Stack>
+      {info.tags ? (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
+          <TextField
+            size="small"
+            label="Tag"
+            value={tag}
+            disabled={busy}
+            onChange={(event) => setTag(event.target.value)}
+            helperText="Every contact this site sends carries it, so you can segment them."
+            sx={{ maxWidth: 360 }}
+          />
+          {tag !== connection.tag ? (
+            <Button size="small" disabled={busy} onClick={() => onUpdate({ tag }, 'Saved.')}>
+              Save tag
+            </Button>
+          ) : null}
+        </Stack>
+      ) : null}
       <FormControlLabel
         control={
           <Switch

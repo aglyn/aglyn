@@ -48,8 +48,9 @@ enum FirestoreLoads {
     case .string(let text): return text
     case .array(let items): return items.map(plain)
     case .object(let record):
-      // A write's `{"$timestamp": true}` is the server's time.
-      if record.count == 1, record["$timestamp"] != nil { return FirestoreSentinel.serverTimestamp }
+      // `{"$timestamp": true}` and `{"$serverTimestamp": true}` are the server's time; `{"$delete": true}` removes the field (the web SDK's sentinels).
+      if record.count == 1, record["$timestamp"] != nil || record["$serverTimestamp"] != nil { return FirestoreSentinel.serverTimestamp }
+      if record.count == 1, record["$delete"] != nil { return FirestoreSentinel.delete }
       return record.mapValues(plain)
     }
   }
