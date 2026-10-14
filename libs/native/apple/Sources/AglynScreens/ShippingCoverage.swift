@@ -4,7 +4,7 @@ import Foundation
 /// What a store's saved shipping zones and rates cover, as the console's Shipping card says it (`summarizeShippingCoverage`
 /// in `commerce-shipping.ts`): which of the six destinations checkout collects an address for are reached by at least one
 /// rate, which it turns away, and whether the shopper is asked where the parcel is going. A port of the console's resolver
-/// (zones, the four priced rate kinds, local pickup, the five-option cap) replayed from `shipping-coverage-cases.json`, so a
+/// (zones, the four priced rate kinds, local pickup, the five-option cap) replayed from `function-cases.generated.json`, so a
 /// change to the TypeScript fails there until this follows.
 enum ShippingCoverage {
   /// The destinations a storefront session collects an address for, in the order the console lists them.
@@ -125,8 +125,17 @@ enum ShippingCoverage {
     options.map { "\($0.rateID):\(ScreenValues.numberText($0.amountCents))" }.joined(separator: "|")
   }
 
-  /// The summary the Shipping card reads, as the object a screen's `derive` load answers with.
-  static func summary(_ settings: JSONValue?) -> JSONValue {
+  /// What a store's settings reach (`summarizeShippingCoverage`).
+  struct Coverage: Equatable {
+    var served: [String]
+    var unserved: [String]
+    var shipsNowhere: Bool
+    var asksDestination: Bool
+    var offersLocalPickup: Bool
+    var hasRestOfWorldZone: Bool
+  }
+
+  static func summarize(_ settings: JSONValue?) -> Coverage {
     var served: [String] = []
     var unserved: [String] = []
     var offers = Set<String>()
@@ -136,49 +145,64 @@ enum ShippingCoverage {
       // Asked of the shippable list: local pickup is a collection choice, not a rate, so it never counts as coverage.
       if options.contains(where: { $0.rateID != pickupID }) { served.append(country) } else { unserved.append(country) }
     }
-    let reach = served.isEmpty ? [] : unserved
-    let named: ([String]) -> String = { $0.map { names[$0] ?? $0 }.joined(separator: ", ") }
     let zones = settings?["zones"]?.arrayValue ?? []
-    let pickup = ScreenValues.truthy(settings?["localPickup"])
-    let restOfWorld = zones.contains { codes($0).contains { $0.stringValue == "*" } }
-    // The console's own sentences (`describeShippingCoverage`), so a store reads the same on every surface.
-    var headline = ""
-    var detail = ""
-    var note = ""
-    if !reach.isEmpty {
-      headline = "Checkout turns away \(reach.count) of the \(countries.count) destinations it collects addresses for"
-      detail =
-        "No rate reaches \(named(reach)), so an order shipping there is refused rather than posted for free. "
-        + (pickup
-          ? "Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. "
-          : "")
-        + (restOfWorld
-          ? "A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them."
-          : "Give them a zone with a rate, or add a rest-of-world zone and price one on it.")
-    } else if served.isEmpty {
-      note = pickup
+    return Coverage(
+      served: served, unserved: served.isEmpty ? [] : unserved, shipsNowhere: served.isEmpty, asksDestination: offers.count > 1,
+      offersLocalPickup: ScreenValues.truthy(settings?["localPickup"]),
+      hasRestOfWorldZone: zones.contains { codes($0).contains { $0.stringValue == "*" } })
+  }
+
+  private static func named(_ codes: [String]) -> String { codes.map { names[$0] ?? $0 }.joined(separator: ", ") }
+
+  /// The console's own sentences (`describeShippingCoverage`), so a store reads the same on every surface.
+  static func words(_ coverage: Coverage) -> (headline: String, detail: String, note: String, asks: String) {
+    let asks =
+      coverage.asksDestination
+      ? "Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one." : ""
+    if !coverage.unserved.isEmpty {
+      return (
+        "Checkout turns away \(coverage.unserved.count) of the \(countries.count) destinations it collects addresses for",
+        "No rate reaches \(named(coverage.unserved)), so an order shipping there is refused rather than posted for free. "
+          + (coverage.offersLocalPickup
+            ? "Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. "
+            : "")
+          + (coverage.hasRestOfWorldZone
+            ? "A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them."
+            : "Give them a zone with a rate, or add a rest-of-world zone and price one on it."),
+        "", asks
+      )
+    }
+    let note: String
+    if coverage.shipsNowhere {
+      note =
+        coverage.offersLocalPickup
         ? "No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged."
         : "No rate reaches any destination, so checkout charges no shipping and turns nobody away."
     } else {
-      note = "Checkout can price shipping to every destination it collects an address for: \(named(served))."
+      note = "Checkout can price shipping to every destination it collects an address for: \(named(coverage.served))."
     }
+    return ("", "", note, asks)
+  }
+
+  /// The summary the Shipping card reads, as the object a screen's `derive` load answers with.
+  static func summary(_ settings: JSONValue?) -> JSONValue {
+    let coverage = summarize(settings)
+    let said = words(coverage)
     return .object([
-      "headline": .string(headline),
-      "detail": .string(detail),
-      "note": .string(note),
-      "asks": .string(
-        offers.count > 1
-          ? "Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one." : ""),
-      "served": .array(served.map { .string($0) }),
-      "unserved": .array(reach.map { .string($0) }),
-      "servedNames": .string(named(served)),
-      "unservedNames": .string(named(reach)),
-      "unservedCount": .number(Double(reach.count)),
+      "headline": .string(said.headline),
+      "detail": .string(said.detail),
+      "note": .string(said.note),
+      "asks": .string(said.asks),
+      "served": .array(coverage.served.map { .string($0) }),
+      "unserved": .array(coverage.unserved.map { .string($0) }),
+      "servedNames": .string(named(coverage.served)),
+      "unservedNames": .string(named(coverage.unserved)),
+      "unservedCount": .number(Double(coverage.unserved.count)),
       "countryCount": .number(Double(countries.count)),
-      "shipsNowhere": .bool(served.isEmpty),
-      "asksDestination": .bool(offers.count > 1),
-      "offersLocalPickup": .bool(pickup),
-      "hasRestOfWorldZone": .bool(restOfWorld),
+      "shipsNowhere": .bool(coverage.shipsNowhere),
+      "asksDestination": .bool(coverage.asksDestination),
+      "offersLocalPickup": .bool(coverage.offersLocalPickup),
+      "hasRestOfWorldZone": .bool(coverage.hasRestOfWorldZone),
     ])
   }
 }

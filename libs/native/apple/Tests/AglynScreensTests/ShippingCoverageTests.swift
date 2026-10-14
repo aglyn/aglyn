@@ -7,13 +7,16 @@ import XCTest
 
 @testable import AglynScreens
 
-/// What a store's shipping settings cover, replayed from libs/native/screens/shipping-coverage-cases.json, which the console's
-/// own resolver produced (the Kotlin renderer replays the same file).
+/// What a store's shipping settings cover, replayed from `functionCases` in libs/native/contracts/function-cases.generated.json,
+/// which the console's own functions produced (the Kotlin renderer replays the same file).
 final class ShippingCoverageTests: XCTestCase {
-  private func cases() throws -> [JSONValue] {
-    let data = try Data(contentsOf: ScreenSpecTests.screensDir.appendingPathComponent("shipping-coverage-cases.json"))
-    return try XCTUnwrap(JSONValue.decode(data))["cases"].array
+  private func cases(_ name: String) throws -> [JSONValue] {
+    let file = ScreenSpecTests.screensDir.appendingPathComponent("../contracts/function-cases.generated.json").standardizedFileURL
+    let all = try XCTUnwrap(JSONValue.decode(Data(contentsOf: file)))
+    return try XCTUnwrap(all["functions"]?[name]?["cases"]).array
   }
+
+  private func settings(_ args: JSONValue) -> JSONValue? { args.array.first.flatMap { $0 == .null ? nil : $0 } }
 
   private func options(_ list: [ShippingCoverage.Option]) -> JSONValue {
     .array(
@@ -22,34 +25,46 @@ final class ShippingCoverageTests: XCTestCase {
       })
   }
 
+  private func coverage(_ json: JSONValue?) -> ShippingCoverage.Coverage {
+    func list(_ key: String) -> [String] { (json?[key]?.arrayValue ?? []).compactMap(\.stringValue) }
+    return ShippingCoverage.Coverage(
+      served: list("served"), unserved: list("unserved"), shipsNowhere: json?["shipsNowhere"] == .bool(true),
+      asksDestination: json?["asksDestination"] == .bool(true), offersLocalPickup: json?["offersLocalPickup"] == .bool(true),
+      hasRestOfWorldZone: json?["hasRestOfWorldZone"] == .bool(true))
+  }
+
   func testEveryStoresCoverageReadsAsTheConsolesDoes() throws {
-    let all = try cases()
+    let all = try cases("summarizeShippingCoverage")
     XCTAssertGreaterThan(all.count, 20)
     for item in all {
-      let name = item["name"]?.stringValue ?? ""
-      let settings = item["settings"].flatMap { $0 == .null ? nil : $0 }
-      XCTAssertEqual(ShippingCoverage.summary(settings), item["coverage"], "coverage of: \(name)")
+      XCTAssertEqual(ShippingCoverage.summarize(settings(try XCTUnwrap(item["args"]))), coverage(item["result"]), "\(item["args"] ?? .null)")
+    }
+  }
+
+  func testTheWordsAreTheConsolesWords() throws {
+    let all = try cases("describeShippingCoverage")
+    XCTAssertGreaterThan(all.count, 6)
+    for item in all {
+      let said = ShippingCoverage.words(coverage(item["args"]?.array.first))
+      let expected = item["result"]
+      XCTAssertEqual(said.headline, expected?["headline"]?.stringValue)
+      XCTAssertEqual(said.detail, expected?["detail"]?.stringValue)
+      XCTAssertEqual(said.note, expected?["note"]?.stringValue)
+      XCTAssertEqual(said.asks, expected?["asks"]?.stringValue)
     }
   }
 
   func testEveryDestinationsOptionsAreTheOnesTheConsoleOffers() throws {
-    for item in try cases() {
-      let name = item["name"]?.stringValue ?? ""
-      let settings = item["settings"].flatMap { $0 == .null ? nil : $0 }
-      for scenario in item["options"].array {
-        let cart = (
-          subtotalCents: ScreenValues.number(scenario["cart"]?["subtotalCents"]) ?? 0,
-          totalGrams: ScreenValues.number(scenario["cart"]?["totalGrams"]) ?? 0
-        )
-        for country in ShippingCoverage.countries {
-          XCTAssertEqual(
-            options(ShippingCoverage.checkoutOptions(settings, [country], cart)), scenario["byCountry"]?[country],
-            "\(country) of: \(name), cart \(cart)")
-        }
-        XCTAssertEqual(
-          options(ShippingCoverage.checkoutOptions(settings, ShippingCoverage.countries, cart)), scenario["union"],
-          "every destination of: \(name), cart \(cart)")
-      }
+    let all = try cases("resolveCheckoutShippingOptions")
+    XCTAssertGreaterThan(all.count, 300)
+    for item in all {
+      let args = try XCTUnwrap(item["args"]).array
+      let cart = (
+        subtotalCents: ScreenValues.number(args[2]["subtotalCents"]) ?? 0, totalGrams: ScreenValues.number(args[2]["totalGrams"]) ?? 0
+      )
+      let destinations = args[1].array.compactMap(\.stringValue)
+      XCTAssertEqual(
+        options(ShippingCoverage.checkoutOptions(args[0] == .null ? nil : args[0], destinations, cart)), item["result"], "\(args)")
     }
   }
 

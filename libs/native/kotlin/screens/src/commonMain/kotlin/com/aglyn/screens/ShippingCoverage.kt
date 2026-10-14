@@ -13,7 +13,7 @@ import kotlinx.serialization.json.put
  * What a store's saved shipping zones and rates cover, as the console's Shipping card says it (`summarizeShippingCoverage`
  * in `commerce-shipping.ts`): which of the six destinations checkout collects an address for are reached by at least one
  * rate, which it turns away, and whether the shopper is asked where the parcel is going. A port of the console's resolver
- * (zones, the four priced rate kinds, local pickup, the five-option cap) replayed from `shipping-coverage-cases.json`, so a
+ * (zones, the four priced rate kinds, local pickup, the five-option cap) replayed from `function-cases.generated.json`, so a
  * change to the TypeScript fails there until this follows.
  */
 internal object ShippingCoverage {
@@ -129,8 +129,17 @@ internal object ShippingCoverage {
 
   private fun key(options: List<Option>): String = options.joinToString("|") { "${it.rateId}:${ScreenValues.numberText(it.amountCents)}" }
 
-  /** The summary the Shipping card reads, as the object a screen's `derive` load answers with. */
-  fun summary(settings: JsonElement?): JsonElement {
+  /** What a store's settings reach (`summarizeShippingCoverage`). */
+  data class Coverage(
+    val served: List<String>,
+    val unserved: List<String>,
+    val shipsNowhere: Boolean,
+    val asksDestination: Boolean,
+    val offersLocalPickup: Boolean,
+    val hasRestOfWorldZone: Boolean,
+  )
+
+  fun summarize(settings: JsonElement?): Coverage {
     val served = mutableListOf<String>()
     val unserved = mutableListOf<String>()
     val offers = mutableSetOf<String>()
@@ -140,47 +149,65 @@ internal object ShippingCoverage {
       // Asked of the shippable list: local pickup is a collection choice, not a rate, so it never counts as coverage.
       if (options.any { it.rateId != PICKUP_ID }) served += country else unserved += country
     }
-    val reach = if (served.isEmpty()) emptyList() else unserved
-    fun named(codes: List<String>) = codes.joinToString(", ") { names[it] ?: it }
     val zones = list(field(settings, "zones"))
-    val pickup = ScreenValues.truthy(field(settings, "localPickup"))
-    val restOfWorld = zones.any { zone -> codes(zone).any { text(it) == "*" } }
-    // The console's own sentences (`describeShippingCoverage`), so a store reads the same on every surface.
-    var headline = ""
-    var detail = ""
-    var note = ""
-    if (reach.isNotEmpty()) {
-      headline = "Checkout turns away ${reach.size} of the ${countries.size} destinations it collects addresses for"
-      detail = "No rate reaches ${named(reach)}, so an order shipping there is refused rather than posted for free. " +
-        (if (pickup) "Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. " else "") +
-        (
-          if (restOfWorld) "A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them."
-          else "Give them a zone with a rate, or add a rest-of-world zone and price one on it."
-        )
-    } else if (served.isEmpty()) {
-      note = if (pickup) {
-        "No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged."
-      } else {
-        "No rate reaches any destination, so checkout charges no shipping and turns nobody away."
-      }
-    } else {
-      note = "Checkout can price shipping to every destination it collects an address for: ${named(served)}."
+    return Coverage(
+      served = served,
+      unserved = if (served.isEmpty()) emptyList() else unserved,
+      shipsNowhere = served.isEmpty(),
+      asksDestination = offers.size > 1,
+      offersLocalPickup = ScreenValues.truthy(field(settings, "localPickup")),
+      hasRestOfWorldZone = zones.any { zone -> codes(zone).any { text(it) == "*" } },
+    )
+  }
+
+  private fun named(codes: List<String>) = codes.joinToString(", ") { names[it] ?: it }
+
+  data class Words(val headline: String, val detail: String, val note: String, val asks: String)
+
+  /** The console's own sentences (`describeShippingCoverage`), so a store reads the same on every surface. */
+  fun words(coverage: Coverage): Words {
+    val asks = if (coverage.asksDestination) "Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one." else ""
+    if (coverage.unserved.isNotEmpty()) {
+      return Words(
+        headline = "Checkout turns away ${coverage.unserved.size} of the ${countries.size} destinations it collects addresses for",
+        detail = "No rate reaches ${named(coverage.unserved)}, so an order shipping there is refused rather than posted for free. " +
+          (if (coverage.offersLocalPickup) "Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. " else "") +
+          (
+            if (coverage.hasRestOfWorldZone) "A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them."
+            else "Give them a zone with a rate, or add a rest-of-world zone and price one on it."
+          ),
+        note = "",
+        asks = asks,
+      )
     }
+    val note = when {
+      coverage.shipsNowhere && coverage.offersLocalPickup ->
+        "No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged."
+      coverage.shipsNowhere -> "No rate reaches any destination, so checkout charges no shipping and turns nobody away."
+      else -> "Checkout can price shipping to every destination it collects an address for: ${named(coverage.served)}."
+    }
+    return Words("", "", note, asks)
+  }
+
+  /** The summary the Shipping card reads, as the object a screen's `derive` load answers with. */
+  fun summary(settings: JsonElement?): JsonElement {
+    val coverage = summarize(settings)
+    val said = words(coverage)
     return buildJsonObject {
-      put("headline", headline)
-      put("detail", detail)
-      put("note", note)
-      put("asks", if (offers.size > 1) "Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one." else "")
-      put("served", buildJsonArray { served.forEach { add(JsonPrimitive(it)) } })
-      put("unserved", buildJsonArray { reach.forEach { add(JsonPrimitive(it)) } })
-      put("servedNames", named(served))
-      put("unservedNames", named(reach))
-      put("unservedCount", reach.size)
+      put("headline", said.headline)
+      put("detail", said.detail)
+      put("note", said.note)
+      put("asks", said.asks)
+      put("served", buildJsonArray { coverage.served.forEach { add(JsonPrimitive(it)) } })
+      put("unserved", buildJsonArray { coverage.unserved.forEach { add(JsonPrimitive(it)) } })
+      put("servedNames", named(coverage.served))
+      put("unservedNames", named(coverage.unserved))
+      put("unservedCount", coverage.unserved.size)
       put("countryCount", countries.size)
-      put("shipsNowhere", served.isEmpty())
-      put("asksDestination", offers.size > 1)
-      put("offersLocalPickup", pickup)
-      put("hasRestOfWorldZone", restOfWorld)
+      put("shipsNowhere", coverage.shipsNowhere)
+      put("asksDestination", coverage.asksDestination)
+      put("offersLocalPickup", coverage.offersLocalPickup)
+      put("hasRestOfWorldZone", coverage.hasRestOfWorldZone)
     }
   }
 }

@@ -16,13 +16,28 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** What a store's shipping settings cover, replayed from libs/native/screens/shipping-coverage-cases.json, which the console's own resolver produced (Apple replays the same file). */
+/**
+ * What a store's shipping settings cover, replayed from `functionCases` in libs/native/contracts/function-cases.generated.json,
+ * which the console's own functions produced (Apple replays the same file).
+ */
 class ShippingCoverageTest {
   private val root: File = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "libs/native/screens").isDirectory }
-  private val cases: List<JsonObject> =
-    Json.parseToJsonElement(File(root, "libs/native/screens/shipping-coverage-cases.json").readText()).jsonObject["cases"]!!.jsonArray.map { it.jsonObject }
+  private val functions = Json.parseToJsonElement(File(root, "libs/native/contracts/function-cases.generated.json").readText()).jsonObject["functions"]!!.jsonObject
 
-  private fun settings(case: JsonObject): JsonElement? = case["settings"]?.takeIf { it !is JsonNull }
+  private fun cases(name: String): List<JsonObject> = functions[name]!!.jsonObject["cases"]!!.jsonArray.map { it.jsonObject }
+
+  private fun settings(args: JsonArray): JsonElement? = args.firstOrNull()?.takeIf { it !is JsonNull }
+
+  private fun flag(json: JsonObject, key: String) = (json[key] as? JsonPrimitive)?.content == "true"
+
+  private fun coverage(json: JsonObject) = ShippingCoverage.Coverage(
+    served = json["served"]!!.jsonArray.map { (it as JsonPrimitive).content },
+    unserved = json["unserved"]!!.jsonArray.map { (it as JsonPrimitive).content },
+    shipsNowhere = flag(json, "shipsNowhere"),
+    asksDestination = flag(json, "asksDestination"),
+    offersLocalPickup = flag(json, "offersLocalPickup"),
+    hasRestOfWorldZone = flag(json, "hasRestOfWorldZone"),
+  )
 
   private fun options(list: List<ShippingCoverage.Option>): JsonArray = buildJsonArray {
     list.forEach {
@@ -44,28 +59,35 @@ class ShippingCoverageTest {
 
   @Test
   fun everyStoresCoverageReadsAsTheConsolesDoes() {
-    assertTrue(cases.size > 20)
-    for (case in cases) assertEquals(case["coverage"], ShippingCoverage.summary(settings(case)), "coverage of: ${case["name"]}")
+    val all = cases("summarizeShippingCoverage")
+    assertTrue(all.size > 20)
+    for (case in all) assertEquals(coverage(case["result"]!!.jsonObject), ShippingCoverage.summarize(settings(case["args"]!!.jsonArray)), "${case["args"]}")
+  }
+
+  @Test
+  fun theWordsAreTheConsolesWords() {
+    val all = cases("describeShippingCoverage")
+    assertTrue(all.size > 6)
+    for (case in all) {
+      val said = ShippingCoverage.words(coverage(case["args"]!!.jsonArray[0].jsonObject))
+      val expected = case["result"]!!.jsonObject
+      assertEquals((expected["headline"] as JsonPrimitive).content, said.headline)
+      assertEquals((expected["detail"] as JsonPrimitive).content, said.detail)
+      assertEquals((expected["note"] as JsonPrimitive).content, said.note)
+      assertEquals((expected["asks"] as JsonPrimitive).content, said.asks)
+    }
   }
 
   @Test
   fun everyDestinationsOptionsAreTheOnesTheConsoleOffers() {
-    for (case in cases) {
-      for (scenario in case["options"]!!.jsonArray.map { it.jsonObject }) {
-        val cartJson = scenario["cart"]!!.jsonObject
-        val cart = ShippingCoverage.Cart(
-          ScreenValues.number(cartJson["subtotalCents"]) ?: 0.0,
-          ScreenValues.number(cartJson["totalGrams"]) ?: 0.0,
-        )
-        for (country in ShippingCoverage.countries) {
-          assertEquals(
-            scenario["byCountry"]!!.jsonObject[country],
-            whole(options(ShippingCoverage.checkoutOptions(settings(case), listOf(country), cart))),
-            "$country of: ${case["name"]}, cart $cart",
-          )
-        }
-        assertEquals(scenario["union"], whole(options(ShippingCoverage.checkoutOptions(settings(case), ShippingCoverage.countries, cart))), "every destination of: ${case["name"]}, cart $cart")
-      }
+    val all = cases("resolveCheckoutShippingOptions")
+    assertTrue(all.size > 300)
+    for (case in all) {
+      val args = case["args"]!!.jsonArray
+      val cartJson = args[2].jsonObject
+      val cart = ShippingCoverage.Cart(ScreenValues.number(cartJson["subtotalCents"]) ?: 0.0, ScreenValues.number(cartJson["totalGrams"]) ?: 0.0)
+      val destinations = args[1].jsonArray.map { (it as JsonPrimitive).content }
+      assertEquals(case["result"], whole(options(ShippingCoverage.checkoutOptions(settings(args), destinations, cart))), "$args")
     }
   }
 }
