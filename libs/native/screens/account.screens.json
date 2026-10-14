@@ -462,21 +462,21 @@
               "prompt": [
                 {
                   "key": "kind",
-                  "label": "What is it",
+                  "label": "What kind of report is this?",
                   "kind": "select",
                   "initial": "bug",
                   "options": [
                     {
                       "value": "bug",
-                      "label": "Something is broken"
+                      "label": "Something in Aglyn is broken"
                     },
                     {
                       "value": "idea",
-                      "label": "An idea"
+                      "label": "An idea or request for Aglyn"
                     },
                     {
                       "value": "question",
-                      "label": "A question"
+                      "label": "A question about using Aglyn"
                     }
                   ]
                 },
@@ -484,30 +484,130 @@
                   "key": "summary",
                   "label": "Summary",
                   "kind": "text",
+                  "required": true,
+                  "placeholder": "The media picker forgets the folder I chose"
+                },
+                {
+                  "key": "steps",
+                  "label": "What were you doing when it broke?",
+                  "kind": "multiline",
+                  "when": "form.kind == bug",
+                  "required": true,
+                  "help": "Step by step, so we can follow along. The single most useful thing you can tell us."
+                },
+                {
+                  "key": "expected",
+                  "label": "What did you expect to happen?",
+                  "kind": "multiline",
+                  "when": "form.kind == bug",
                   "required": true
                 },
                 {
-                  "key": "details",
-                  "label": "Details",
+                  "key": "actual",
+                  "label": "What happened instead?",
                   "kind": "multiline",
-                  "help": "What you did, what you expected, what happened."
+                  "when": "form.kind == bug",
+                  "required": true,
+                  "help": "Quote any error message exactly if you saw one."
+                },
+                {
+                  "key": "frequency",
+                  "label": "Does it happen every time?",
+                  "kind": "select",
+                  "when": "form.kind == bug",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "always",
+                      "label": "Every time I try"
+                    },
+                    {
+                      "value": "sometimes",
+                      "label": "Sometimes - it comes and goes"
+                    },
+                    {
+                      "value": "once",
+                      "label": "It happened once"
+                    },
+                    {
+                      "value": "unknown",
+                      "label": "I haven't tried again"
+                    }
+                  ]
+                },
+                {
+                  "key": "problem",
+                  "label": "What are you trying to do that you can't?",
+                  "kind": "multiline",
+                  "when": "form.kind == idea",
+                  "required": true,
+                  "help": "Tell us the problem rather than the feature."
+                },
+                {
+                  "key": "workaround",
+                  "label": "How do you handle it today?",
+                  "kind": "multiline",
+                  "when": "form.kind == idea"
+                },
+                {
+                  "key": "proposal",
+                  "label": "If you already have something in mind (optional)",
+                  "kind": "multiline",
+                  "when": "form.kind == idea"
+                },
+                {
+                  "key": "question",
+                  "label": "What do you need to know?",
+                  "kind": "multiline",
+                  "when": "form.kind == question",
+                  "required": true
+                },
+                {
+                  "key": "tried",
+                  "label": "What have you already tried or read? (optional)",
+                  "kind": "multiline",
+                  "when": "form.kind == question",
+                  "help": "Saves us sending you back to a page you have already read."
+                },
+                {
+                  "key": "skipDeflection",
+                  "label": "Send it even if the documentation may already answer it",
+                  "kind": "toggle",
+                  "when": "form.kind == question"
+                },
+                {
+                  "key": "contactConsent",
+                  "label": "You can contact me about this report",
+                  "kind": "toggle",
+                  "initial": "true"
                 }
               ],
               "body": {
                 "kind": "{form.kind}",
                 "summary": "{form.summary}",
                 "answers": {
-                  "steps": "{form.details}",
-                  "problem": "{form.details}",
-                  "question": "{form.details}"
+                  "steps": "{form.steps}",
+                  "expected": "{form.expected}",
+                  "actual": "{form.actual}",
+                  "frequency": "{form.frequency}",
+                  "problem": "{form.problem}",
+                  "workaround": "{form.workaround}",
+                  "proposal": "{form.proposal}",
+                  "question": "{form.question}",
+                  "tried": "{form.tried}"
                 },
-                "skipDeflection": true,
                 "orgId": "{org.id}",
                 "hostId": "{site.id}",
                 "route": "app",
-                "contactConsent": true
+                "contactConsent": "{form.contactConsent}",
+                "skipDeflection": "{form.skipDeflection}"
               },
-              "success": "Thanks — we have it"
+              "success": "Thank you, your report was filed. {response.reference}",
+              "instead": {
+                "when": "response.deflected",
+                "title": "This may already be answered",
+                "text": "Straight from the documentation. Nothing has been filed yet. If this covers it, you are done; if not, report it again with \"Send it even if the documentation may already answer it\" turned on.\n\n{response.sections.0.title}\n{response.sections.0.text}\n\n{response.sections.1.title}\n{response.sections.1.text}\n\n{response.sections.2.title}\n{response.sections.2.text}"
+              }
             }
           ]
         }
