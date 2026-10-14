@@ -25,10 +25,15 @@ import {
 } from '@mui/material'
 import { Fragment } from 'react'
 import {
-  countedPluginBands,
   meteredBandField,
   meteredPluginBands,
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
+import {
+  NO_RECORDED_METERS,
+  percentChange,
+  recordedUsageLines,
+  type StaffOrgUsageMonth,
+} from '../utils/staff-org-usage-view'
 import {
   PluginListColumnCells,
   PluginListColumnHeaders,
@@ -36,168 +41,7 @@ import {
 } from './plugin-list-columns.component'
 import StaffTableHead from './staff-table-head.component'
 
-/**
- * One monthly org usage rollup as `/api/admin/org-usage` serves it. The row
- * carries more fields than the core columns draw: every field a plugin's cost
- * axis reads, records or serves staff, under its rollup name — a metered
- * band's count among them, which the table draws — and a plugin column reads
- * the ones that are its own off the same row.
- */
-export interface StaffOrgUsageMonth {
-  month: string
-  storageGb: number
-  pageViews: number
-  costUsd: number
-  /**
-   * What the rollup recorded and nothing priced (AGL-2321).
-   *
-   * A detail LINE under the row rather than sixteen more columns: these are
-   * the history a future rate gets derived from, not figures a reader scans
-   * across months, and a table wide enough to hold them all would stop being
-   * readable for the figures that are.
-   *
-   * Every field is optional and every one distinguishes null from zero,
-   * because the route does — a rollup written before a meter existed recorded
-   * nothing, and printing `0` there would be a fabricated measurement.
-   */
-  recorded?: {
-    emailSends?: number
-    emailSendsOverage?: number
-    /**
-     * Each plugin band counted by a per-site counter and never billed past it
-     * (`countedPluginBands`), by band id.
-     */
-    counted?: Readonly<Record<string, number>>
-    actionRuns?: number
-    billableCostUsd?: number
-    apiOverageUsd?: number
-    /**
-     * Each metered band that waits behind a release flag, by band id: whether
-     * the month billed its overage, and what was forgone, at cost, if not.
-     */
-    meteredVerdicts?: Readonly<
-      Record<string, { billed: boolean | null; withheldUsd: number }>
-    >
-    contactsOverageBilled?: boolean | null
-    contactsOverageUsd?: number
-    contactsOverageWithheldUsd?: number
-    orgLibraryStorageGb?: number | null
-    orgLibraryBilled?: boolean | null
-    orgLibraryBilledFrom?: string | null
-    siteSizeMb?: number | null
-    siteSizeTruncated?: boolean | null
-  }
-  deltas: { pageViews: number | null; costUsd: number | null } | null
-  readonly [field: string]: unknown
-}
-
-/**
- * The withheld/billed pair as ONE sentence (AGL-2321).
- *
- * `*WithheldUsd` is zero whenever the release flag was on, so the dollar
- * figure alone cannot tell a withheld month from an in-band one — the writer's
- * own comment says so and it has been true ever since. Rendering the flag with
- * the number is the whole fix.
- */
-function overageSentence(
-  label: string,
-  billed: boolean | null | undefined,
-  withheldUsd: number | undefined,
-  billedUsd?: number,
-): string | null {
-  if (billed == null) return null
-  if (billed) {
-    return billedUsd == null
-      ? `${label} billed`
-      : `${label} billed $${billedUsd.toFixed(2)}`
-  }
-  return `${label} withheld $${Number(withheldUsd ?? 0).toFixed(2)}`
-}
-
-/**
- * The org library's own recorded answer to "was THIS month billed for it".
- *
- * Read off the rollup, never re-derived from `BILL_ORG_LIBRARY_STORAGE_FROM`.
- * The env var answers "what is the switch now", which is the right question
- * for the current-month estimate card and the wrong one for a July row: the
- * switch may have moved since, and a past invoice does not change when it
- * does. The rollup froze the value for exactly this reader (AGL-2321 item 3).
- */
-function librarySentence(
-  recorded: StaffOrgUsageMonth['recorded'],
-): string | null {
-  if (!recorded || recorded.orgLibraryStorageGb == null) return null
-  const size = `Org library ${recorded.orgLibraryStorageGb.toFixed(3)} GB`
-  if (recorded.orgLibraryBilled == null) return size
-  if (!recorded.orgLibraryBilled) return `${size}, not billed`
-  return recorded.orgLibraryBilledFrom
-    ? `${size}, billed from ${recorded.orgLibraryBilledFrom}`
-    : `${size}, billed`
-}
-
-/** The recorded block as the short lines a staff reader actually scans. */
-export function recordedUsageLines(
-  recorded: StaffOrgUsageMonth['recorded'],
-): string[] {
-  if (!recorded) return []
-  const meters: string[] = []
-  if (recorded.emailSends != null) {
-    meters.push(
-      `Emails ${recorded.emailSends.toLocaleString()}` +
-        (recorded.emailSendsOverage
-          ? ` (${recorded.emailSendsOverage.toLocaleString()} over band)`
-          : ''),
-    )
-  }
-  for (const band of countedPluginBands()) {
-    const count = recorded.counted?.[band.id]
-    if (count != null) meters.push(`${band.label} ${count.toLocaleString()}`)
-  }
-  if (recorded.actionRuns != null) {
-    meters.push(`Action runs ${recorded.actionRuns.toLocaleString()}`)
-  }
-  const money: string[] = []
-  if (recorded.billableCostUsd != null) {
-    // The pre-markup twin of `costUsd`. Four decimals for the AGL-2280
-    // reason: a sub-cent month rounded to `$0.00` is the silence this exists
-    // to end.
-    money.push(`Billable $${recorded.billableCostUsd.toFixed(4)}`)
-  }
-  if (recorded.apiOverageUsd) {
-    money.push(`API overage $${recorded.apiOverageUsd.toFixed(2)}`)
-  }
-  const gates = [
-    ...meteredPluginBands().map((band) => {
-      const verdict = recorded.meteredVerdicts?.[band.id]
-      return overageSentence(
-        `${band.label} overage`,
-        verdict?.billed,
-        verdict?.withheldUsd,
-      )
-    }),
-    overageSentence(
-      'Contacts overage',
-      recorded.contactsOverageBilled,
-      recorded.contactsOverageWithheldUsd,
-      recorded.contactsOverageUsd,
-    ),
-    librarySentence(recorded),
-  ].filter(Boolean) as string[]
-  const site: string[] = []
-  if (recorded.siteSizeMb != null) {
-    // The truncation flag changes the NUMBER'S MEANING, so it is rendered on
-    // the number and not beside it: a truncated measurement is a floor.
-    site.push(
-      `Site size ${recorded.siteSizeMb.toFixed(1)} MB` +
-        (recorded.siteSizeTruncated
-          ? ' (at least — measurement truncated)'
-          : ''),
-    )
-  }
-  return [meters, money, gates, site]
-    .filter((group) => group.length > 0)
-    .map((group) => group.join(' · '))
-}
+export { recordedUsageLines, type StaffOrgUsageMonth }
 
 /** The metered bands, each a core column after storage (`meteredPluginBands`). */
 const METERED_COLUMNS = meteredPluginBands()
@@ -289,9 +133,7 @@ const StaffOrgUsageTable = ({
                     }
                     sx={{ ml: 0.5 }}
                   >
-                    {`${row.deltas.pageViews > 0 ? '+' : ''}${Math.round(
-                      row.deltas.pageViews * 100,
-                    )}%`}
+                    {percentChange(row.deltas.pageViews)}
                   </Typography>
                 ) : null}
               </TableCell>
@@ -317,9 +159,7 @@ const StaffOrgUsageTable = ({
                     }
                     sx={{ ml: 0.5 }}
                   >
-                    {`${row.deltas.costUsd > 0 ? '+' : ''}${Math.round(
-                      row.deltas.costUsd * 100,
-                    )}%`}
+                    {percentChange(row.deltas.costUsd)}
                   </Typography>
                 ) : null}
               </TableCell>
@@ -352,7 +192,7 @@ const StaffOrgUsageTable = ({
                     color="text.disabled"
                     component="div"
                   >
-                    {'No additional meters recorded for this month.'}
+                    {NO_RECORDED_METERS}
                   </Typography>
                 )}
               </TableCell>

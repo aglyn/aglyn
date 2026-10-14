@@ -200,6 +200,18 @@ describe('/api/ai/admin/orgs-spend (AGL-2984)', () => {
     ])
   })
 
+  it('answers the column as it prints for ?view=prepared: the cell, and the number its header sorts by (AGL-3667)', async () => {
+    asStaff()
+    const response = await get({ token: 'tok', query: `${staffOrgsAiSpendQuery(ORG_IDS)}&view=prepared` })
+    expect(await response.json()).toEqual({
+      month: '2026-09',
+      // Four decimals, and a dash — never $0 — for an org with nothing measured.
+      cells: { 'org-1': '$2.5000', 'org-2': '$0.0000', 'org-3': '\u2014' },
+      // Null sorts last in both directions.
+      sort: { 'org-1': 2.5, 'org-2': 0, 'org-3': null },
+    })
+  })
+
   it('answers null for every org when the read fails, rather than failing the list', async () => {
     asStaff()
     mockGetAllFails = true

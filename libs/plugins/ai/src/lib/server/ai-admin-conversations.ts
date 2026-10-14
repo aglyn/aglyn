@@ -34,13 +34,15 @@ import {
   type StaffAiConversationKind,
   type StaffAiConversationsResponse,
 } from '../usage/staff-org-ai-conversations'
+import { withRowViews } from '../usage/staff-org-ai-conversations-view'
 
 /**
  * `/api/ai/admin/conversations` (AGL-3675): one page of what an org asked
  * Aglyn AI and what it answered, for the staff org page.
  *
  * `?orgId=` and `?kind=assist|jobs`, newest first, and `?after=<id>` for the
- * next page. Staff-gated exactly as `/api/ai/admin/org` is. The collections
+ * next page. `?id=` reads the one exchange or job a list row opens, and
+ * `?view=prepared` sends each row with the lines the card prints beside it. Staff-gated exactly as `/api/ai/admin/org` is. The collections
  * it reads have no client rules at all — default-deny for every browser —
  * which is why the read is here, on the Admin SDK.
  *
@@ -241,6 +243,31 @@ export async function readStaffAiJob(
   }
 }
 
+/** One Assist exchange of an org, as a one-row page — what a list row on the staff apps opens. */
+export async function readStaffAiExchange(
+  db: Firestore,
+  orgId: string,
+  exchangeId: string,
+): Promise<StaffAiConversationsResponse> {
+  const orgRef = db.collection('orgs').doc(orgId)
+  const [doc, signal, members] = await Promise.all([
+    orgRef.collection('assistExchanges').doc(exchangeId).get(),
+    orgRef.collection('assistSignals').doc(exchangeId).get(),
+    readMembers(orgRef),
+  ])
+  if (!doc.exists) return { kind: 'assist', rows: [], next: null }
+  return {
+    kind: 'assist',
+    rows: [
+      {
+        ...composeStaffAiAssistRow(doc.id, doc.data() ?? {}, signal.exists ? (signal.data() ?? null) : null, members),
+        orgId,
+      },
+    ],
+    next: null,
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -255,12 +282,20 @@ async function handler(request: Request): Promise<Response> {
   // account page; exactly one of the two is the subject.
   const uid = String(query.uid ?? '')
   if (!orgId === !uid) return Response.json({ error: 'Pass orgId or uid' }, { status: 400 })
-  // One job, for a link from an activity or audit row to the job behind it.
-  const jobId = typeof query.jobId === 'string' && query.jobId ? query.jobId : null
   const kind = query.kind
   if (!isStaffAiConversationKind(kind)) {
     return Response.json({ error: 'kind must be assist or jobs' }, { status: 400 })
   }
+  // One row, for a link from an activity or audit row to the job behind it (`jobId`), or from a list row
+  // to the exchange or job it opens (`id`, of the `kind` asked).
+  const rowId = typeof query.id === 'string' && query.id ? query.id : null
+  const jobId =
+    typeof query.jobId === 'string' && query.jobId ? query.jobId : kind === 'jobs' ? rowId : null
+  const exchangeId = !jobId && kind === 'assist' ? rowId : null
+  // The rows with the lines the card prints beside them, for a client that draws none of it (the staff apps).
+  const prepared = String(query.view ?? '') === 'prepared'
+  const present = (page: StaffAiConversationsResponse): StaffAiConversationsResponse =>
+    prepared ? withRowViews(page) : page
   const after = typeof query.after === 'string' && query.after ? query.after : null
 
   try {
@@ -284,23 +319,31 @@ async function handler(request: Request): Promise<Response> {
         before: null,
         after: { kind, rows: page.rows.length, after },
       })
-      return Response.json(page, { headers: { 'Cache-Control': 'no-store' } })
+      return Response.json(present(page), { headers: { 'Cache-Control': 'no-store' } })
     }
     if (!(await db.collection('orgs').doc(orgId).get()).exists) {
       return Response.json({ error: 'No such organization' }, { status: 404 })
     }
     const page = jobId
       ? await readStaffAiJob(db, orgId, jobId)
-      : await readStaffAiConversations(db, orgId, kind, after)
+      : exchangeId
+        ? await readStaffAiExchange(db, orgId, exchangeId)
+        : await readStaffAiConversations(db, orgId, kind, after)
     // Written before the words leave: a read the log cannot record is not served.
     await addAdminAudit(db, {
       actorUid: decoded.uid,
       action: ACTION,
       target: `orgs/${orgId}`,
       before: null,
-      after: { kind: jobId ? 'jobs' : kind, rows: page.rows.length, after, ...(jobId ? { jobId } : {}) },
+      after: {
+        kind: jobId ? 'jobs' : kind,
+        rows: page.rows.length,
+        after,
+        ...(jobId ? { jobId } : {}),
+        ...(exchangeId ? { exchangeId } : {}),
+      },
     })
-    return Response.json(page, { headers: { 'Cache-Control': 'no-store' } })
+    return Response.json(present(page), { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     console.error('[ai/admin/conversations]', error)
     return Response.json({ error: 'The conversations could not be read.' }, { status: 500 })

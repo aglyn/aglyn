@@ -81,6 +81,13 @@ import {
 export type TaxFilingSource = 'console' | 'environment' | 'none'
 
 /** One layer's raw contribution. Every field independently optional. */
+/** What a source chip says, per layer. */
+export const TAX_FILING_SOURCE_LABEL: Record<TaxFilingSource, string> = {
+  console: 'From this console',
+  environment: 'From the environment',
+  none: 'Not set',
+}
+
 export interface TaxFilingConfigLayer {
   jurisdiction?: string | null
   registrationId?: string | null

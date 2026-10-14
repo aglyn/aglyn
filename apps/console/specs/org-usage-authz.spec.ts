@@ -82,10 +82,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import { GET } from '../app/api/admin/org-usage/route'
 
-const get = (opts: { token?: string; orgId?: string } = {}) =>
+const get = (opts: { token?: string; orgId?: string; view?: string } = {}) =>
   GET(
     new Request(
-      `https://app.aglyn.com/api/admin/org-usage?orgId=${opts.orgId ?? 'org-1'}`,
+      `https://app.aglyn.com/api/admin/org-usage?orgId=${opts.orgId ?? 'org-1'}${opts.view ? `&view=${opts.view}` : ''}`,
       {
         headers: opts.token ? { authorization: `Bearer ${opts.token}` } : {},
       },
@@ -345,5 +345,41 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
     const payload = await (await get({ token: 'tok' })).json()
     expect(payload.latest).toBeNull()
     expect(payload.months).toEqual([])
+  })
+
+  /**
+   * The staff apps draw no table, so `?view=prepared` sends each row with the cells the table prints: views and
+   * the change from the older month, storage, the metered bands, the cost and its change, and the recorded lines
+   * (AGL-3667). A month that recorded nothing beyond the core meters says so, as the table does.
+   */
+  it('sends each rollup with what the table prints for ?view=prepared', async () => {
+    mockVerifyIdToken.mockResolvedValueOnce({ uid: 'staff-1', email_verified: true, staff: true })
+    const newer = { month: '2026-08', storageGb: 1.5, pageViews: 150, costUsd: 3, emailSends: 4321, emailSendsOverage: 321 }
+    const older = { month: '2026-07', storageGb: 1, pageViews: 100, costUsd: 2 }
+    mockUsageGet.mockResolvedValueOnce({
+      docs: [newer, older].map((fields) => ({
+        id: fields.month,
+        get: (key: string) => (fields as Record<string, unknown>)[key],
+        data: () => fields,
+      })),
+    })
+    const payload = await (await get({ token: 'tok', view: 'prepared' })).json()
+    expect(payload.months[0].view).toMatchObject({
+      month: '2026-08',
+      views: '150 +50%',
+      storage: '1.50 GB',
+      cost: '$3.00 +50%',
+    })
+    expect(payload.months[0].view.recorded.meters).toMatch(/^Emails 4,321 \(321 over band\)/)
+    expect(payload.months[1].view).toMatchObject({ views: '100', cost: '$2.00' })
+    expect(payload.latest).not.toBeNull()
+  })
+
+  it('leaves the rows as they were without the view', async () => {
+    mockVerifyIdToken.mockResolvedValueOnce({ uid: 'staff-1', email_verified: true, staff: true })
+    const fields = { month: '2026-08', storageGb: 1, pageViews: 2 }
+    mockUsageGet.mockResolvedValueOnce({ docs: [{ id: '2026-08', get: (key: string) => (fields as Record<string, unknown>)[key], data: () => fields }] })
+    const payload = await (await get({ token: 'tok' })).json()
+    expect(payload.months[0].view).toBeUndefined()
   })
 })

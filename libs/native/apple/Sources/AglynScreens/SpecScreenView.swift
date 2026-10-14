@@ -6,6 +6,7 @@ import AglynPluginHost
 import AglynUI
 import AuthenticationServices
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if canImport(UIKit)
   import UIKit
@@ -129,6 +130,7 @@ struct SpecScreenBody: View {
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
   @State private var exporting: TransferExportRequest?
+  @State private var savingFile: (name: String, type: UTType, data: Data)?
   @State private var running: String?
   @State private var searchText = ""
 
@@ -159,7 +161,7 @@ struct SpecScreenBody: View {
         }
       }
       .sheet(item: $prompting) { pending in
-        ActionInputSheet(pending: pending, context: context) { filled in
+        ActionInputSheet(pending: pending, context: context, search: { group, words in try await model.lookup(group, words: words) }) { filled in
           prompting = nil
           Task { await execute(pending.action, scope: filled) }
         }
@@ -177,6 +179,14 @@ struct SpecScreenBody: View {
           exporting = nil
           if let message { show(message, .success) }
         }
+      }
+      .fileExporter(
+        isPresented: Binding(get: { savingFile != nil }, set: { if !$0 { savingFile = nil } }),
+        document: savingFile.map { ExportedText(data: $0.data) }, contentType: savingFile?.type ?? .plainText,
+        defaultFilename: savingFile?.name
+      ) { result in
+        if case .success = result { show("Saved", .success) }
+        savingFile = nil
       }
       .alert(
         revealed?.title ?? "",
@@ -347,6 +357,33 @@ struct SpecScreenBody: View {
             .listRowBackground(Color.clear)
         }
       }
+    case "image":
+      // `{ "type": "image", "src": "{item.url}", "caption": "…" }`: a picture the route hands over (a staff media preview).
+      let source = ScreenValues.render(block["src"]?.stringValue ?? "", in: context)
+      if !source.isEmpty {
+        Section {
+          AglynRemoteImage(URL(string: source), contentMode: .fit, label: block["caption"]?.stringValue.map { ScreenValues.render($0, in: context) })
+            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 320)
+            .listRowInsets(EdgeInsets())
+        } header: {
+          if let title { Text(title) }
+        } footer: {
+          if let footer, !footer.isEmpty { Text(footer) }
+        }
+      }
+    case "html":
+      // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text.
+      // Scripts, styles, frames, forms and images never reach the importer, and a link opens in the system handler.
+      let source = ScreenValues.render(block["source"]?.stringValue ?? "", in: context)
+      section(title, footer) {
+        if source.isEmpty {
+          Text(block["empty"]?.stringValue.map { ScreenValues.render($0, in: context) } ?? "Nothing to show.").foregroundStyle(.secondary)
+        } else {
+          Text(EmailHTML.attributed(source))
+            .font(AglynFont.body)
+            .textSelection(.enabled)
+        }
+      }
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))
@@ -381,7 +418,7 @@ struct SpecScreenBody: View {
   }
 
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
-    if action.asksInputs {
+    if action.asksInputs(in: scope) {
       prompting = PendingAction(action: action, scope: scope)
     } else if action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
       confirming = PendingAction(action: action, scope: scope)
@@ -473,10 +510,27 @@ struct SpecScreenBody: View {
       if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) ?? ScreenValues.lookup(reveal, in: after) {
         revealed = (action.label, ScreenValues.text(value))
       }
+      if let file = action.file, let made = file.contents(in: after) {
+        savingFile = (made.name, UTType(mimeType: file.type) ?? .plainText, Data(made.text.utf8))
+      }
       if let openPath = action.openURL, let link = ScreenValues.lookup(openPath, in: response ?? .null)?.stringValue,
         let url = URL(string: link)
       {
         await webAuthentication.openHostedPage(url)
+      }
+      if let impersonate = action.impersonate {
+        // The route minted a custom token for the customer; the app signs in with it. The token goes to the session
+        // and is shown, logged and kept nowhere else.
+        guard let (token, tenantId) = impersonate.resolve(in: response) else {
+          show("The support session could not be opened.", .error)
+          return
+        }
+        do {
+          try await session.impersonate(token, tenantId)
+        } catch {
+          show("The support session could not be opened. Try again.", .error)
+        }
+        return
       }
       if let navigate = action.navigate {
         plugin.navigate(navigate.screen, navigate.params.mapValues { ScreenValues.render($0, in: after) })
@@ -510,6 +564,16 @@ struct SpecScreenBody: View {
       NSPasteboard.general.setString(text, forType: .string)
     #endif
   }
+}
+
+/// The text an action hands to the device, as a document the file exporter writes.
+struct ExportedText: FileDocument {
+  static var readableContentTypes: [UTType] { [.plainText, .commaSeparatedText, .data] }
+  let data: Data
+
+  init(data: Data) { self.data = data }
+  init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
 func renderParams(_ params: JSONValue?, in context: JSONValue) -> NativeParams {

@@ -75,6 +75,52 @@ object ScreenValues {
     else -> emptyList()
   }
 
+  /**
+   * Rows in the order a list's `sort` asks for: `"value desc"` or `"name"` (ascending), a field of each row (`item.` is not
+   * written). Numbers compare as numbers and anything else as text; a row without the field goes last.
+   */
+  fun sorted(rows: List<JsonElement>, sort: String): List<JsonElement> {
+    val words = sort.split(' ').filter { it.isNotEmpty() }
+    val field = words.firstOrNull() ?: return rows
+    val descending = words.getOrNull(1) == "desc"
+    fun present(row: JsonElement) = lookup(field, row).let { it != null && it != JsonNull }
+    val comparator = Comparator<JsonElement> { a, b ->
+      when {
+        !present(a) && !present(b) -> 0
+        !present(a) -> 1
+        !present(b) -> -1
+        else -> {
+          val left = lookup(field, a)
+          val right = lookup(field, b)
+          val x = number(left)
+          val y = number(right)
+          val order = if (x != null && y != null) x.compareTo(y) else text(left).compareTo(text(right), ignoreCase = true)
+          if (descending) -order else order
+        }
+      }
+    }
+    // `sortedWith` is stable: equal rows keep the order they came in.
+    return rows.sortedWith(comparator)
+  }
+
+  /**
+   * The rows one or more levels down: each segment of [path] names the list (or map) inside every row so far,
+   * and each row found carries `$parent`, the row it came out of (and so on up: `item.$parent.$parent`).
+   */
+  fun flatten(rows: List<JsonElement>, path: String): List<JsonElement> {
+    var current = rows
+    for (segment in path.split('.').filter { it.isNotEmpty() }) {
+      current = current.flatMap { container ->
+        rows(lookup(segment, container)).map { child ->
+          val record = (child as? JsonObject)?.toMutableMap() ?: mutableMapOf("value" to child)
+          record["\$parent"] = container
+          JsonObject(record)
+        }
+      }
+    }
+    return current
+  }
+
   internal fun segments(path: String): List<String> {
     val parts = mutableListOf<String>()
     val current = StringBuilder()
@@ -333,6 +379,43 @@ object ScreenValues {
       // key "*": the row that equals `match` as a whole (a list of rows with no id of their own).
       val whole = if (key == "*") spec["match"]?.let { resolveBody(it, context) } else null
       JsonArray(list.map { row -> if (if (key == "*") row == whole else text(lookup(key, row)) == match) value else row })
+    } else if (body.size == 1 && body["\$if"] is JsonObject) {
+      // `{"$if": {"when": "form.scope == org", "then": X, "else": Y}}`: X or Y resolved, or nothing (the member is left out).
+      val spec = body["\$if"] as JsonObject
+      val branch = if (condition(spec.str("when"), context)) spec["then"] else spec["else"]
+      branch?.let { resolveBody(it, context) } ?: JsonNull
+    } else if (body.size == 1 && body["\$collect"] is JsonObject) {
+      // `{"$collect": {"prefix": "quota.", "as": "number"}}`: the form's `quota.*` inputs as a map, key without the prefix.
+      // `as: number` keeps the filled ones as numbers; `as: flag` reads "true" and "false" and leaves "" (inherit) out.
+      val spec = body["\$collect"] as JsonObject
+      val prefix = spec.str("prefix").orEmpty()
+      val kind = spec.str("as") ?: "text"
+      val map = mutableMapOf<String, JsonElement>()
+      ((lookup("form", context)) as? JsonObject)?.forEach { (key, value) ->
+        if (!key.startsWith(prefix)) return@forEach
+        val name = key.removePrefix(prefix)
+        val primitive = value as? JsonPrimitive
+        when {
+          value is JsonNull -> {}
+          kind == "flag" -> {
+            if (primitive != null && !primitive.isString) map[name] = primitive
+            else if (primitive?.content == "true") map[name] = JsonPrimitive(true)
+            else if (primitive?.content == "false") map[name] = JsonPrimitive(false)
+          }
+          kind == "number" && primitive != null && primitive.isString -> {
+            val trimmed = primitive.content.trim()
+            if (trimmed.isNotEmpty()) map[name] = trimmed.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(trimmed)
+          }
+          primitive != null && primitive.isString -> if (primitive.content.isNotEmpty()) map[name] = value
+          else -> map[name] = value
+        }
+      }
+      JsonObject(map)
+    } else if (body.size == 1 && body["\$afterHours"] != null) {
+      // `{"$afterHours": "{form.hours}"}`: the moment that many hours from now, in epoch milliseconds; nothing when blank or not positive.
+      val hours = number(resolveBody(body.getValue("\$afterHours"), context))
+      if (hours == null || !hours.isFinite() || hours <= 0) JsonNull
+      else JsonPrimitive(round((number(lookup("now.ms", context)) ?: nowMillis().toDouble()) + hours * 3_600_000).toLong())
     } else if (body.size == 1 && body["\$split"] != null) {
       // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       val parts = text(resolveBody(body.getValue("\$split"), context)).split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
@@ -345,9 +428,12 @@ object ScreenValues {
       buildMap {
         for ((key, value) in body) {
           val resolved = resolveBody(value, context)
-          // A template that found nothing is left out; a literal null is sent (it clears the field).
+          // A template that found nothing is left out; a literal null is sent (it clears the field), and so is "$null"
+          // where a branch of $if has to say null (a comp removed).
           // A key written as a template (`{item.id}`) is the text it renders: a map keyed by the row's own id.
-          if (resolved != JsonNull || value == JsonNull || (value is JsonObject && value.containsKey("\$orNull"))) put(if ('{' in key) render(key, context) else key, resolved)
+          val name = if ('{' in key) render(key, context) else key
+          if (resolved == JsonPrimitive("\$null")) put(name, JsonNull)
+          else if (resolved != JsonNull || value == JsonNull || (value is JsonObject && value.containsKey("\$orNull"))) put(name, resolved)
         }
       },
     )
@@ -540,6 +626,62 @@ object ScreenValues {
     return if (unit == 0) "${grouped(amount)} B" else "${grouped(amount, 1)} ${units[unit]}"
   }
 
+  /** Two answers added: numbers sum, objects merge key by key, anything else takes the newer value. */
+  fun sum(total: JsonElement, page: JsonElement): JsonElement {
+    if (total is JsonPrimitive && page is JsonPrimitive && !total.isString && !page.isString) {
+      val left = total.content.toDoubleOrNull()
+      val right = page.content.toDoubleOrNull()
+      if (left != null && right != null) {
+        val added = left + right
+        return if (added == floor(added) && abs(added) < 9.0e15) JsonPrimitive(added.toLong()) else JsonPrimitive(added)
+      }
+    }
+    if (total is JsonObject && page is JsonObject) {
+      val merged = total.toMutableMap()
+      for ((key, value) in page) merged[key] = merged[key]?.let { sum(it, value) } ?: value
+      return JsonObject(merged)
+    }
+    return page
+  }
+
+  /**
+   * An object's plain values as `words: value`, joined by " · ": the readings of a check that
+   * have no screen of their own. Keys are sorted and split from camelCase; `ok`, `ms` and `code`
+   * are shown elsewhere, and nested values are left out.
+   */
+  /** An object's entries as `key: value`, the keys as they are (ids, which `facts` would split into words). */
+  internal fun pairs(value: JsonElement?): String {
+    val record = value as? JsonObject ?: return text(value)
+    return record.keys.sorted().mapNotNull { key ->
+      val shown = text(record[key])
+      if (shown.isEmpty()) null else "$key: $shown"
+    }.joinToString(", ")
+  }
+
+  /** A random value of [length] characters from [alphabet], from the platform's secure generator. */
+  fun generated(length: Int, alphabet: String): String {
+    if (alphabet.isEmpty() || length <= 0) return ""
+    val bytes = com.aglyn.core.secureRandomBytes(length)
+    return String(CharArray(length) { alphabet[(bytes[it].toInt() and 0xff) % alphabet.length] })
+  }
+
+  internal fun facts(value: JsonElement?): String {
+    val record = value as? JsonObject ?: return text(value)
+    return record.keys.sorted().mapNotNull { key ->
+      if (key in setOf("ok", "ms", "code")) return@mapNotNull null
+      val entry = record.getValue(key) as? JsonPrimitive ?: return@mapNotNull null
+      val shown = when {
+        entry.isString -> entry.content.ifEmpty { return@mapNotNull null }
+        entry.content == "true" -> "yes"
+        entry.content == "false" -> "no"
+        entry.content.toDoubleOrNull() != null -> formatted(entry, "number", JsonNull)
+        else -> return@mapNotNull null
+      }
+      val words = buildString { for (character in key) if (character.isUpperCase()) append(' ').append(character.lowercaseChar()) else append(character) }
+      "$words: $shown"
+    }.joinToString(" · ")
+  }
+
   fun formatted(value: JsonElement?, format: String, context: JsonElement): String {
     val parts = format.split('/', limit = 2)
     return when (parts[0]) {
@@ -601,6 +743,38 @@ object ScreenValues {
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
       // `upper/2` also keeps at most that many characters (a country or state code).
       "upper" -> text(value).uppercase().let { upper -> parts.getOrNull(1)?.toIntOrNull()?.let { upper.take(it) } ?: upper }
+      "facts" -> facts(value)
+      "pairs" -> pairs(value)
+      // `before/-` and `after/-`: the text either side of the first separator (a jurisdiction key `US-TX`); no separator, no tail.
+      // `shareOf/<path>`: the value as a whole percent of the number at <path> ("40%"; "0%" when there is nothing to share).
+      "shareOf" -> {
+        val total = parts.getOrNull(1)?.let { number(lookup(it, context)) } ?: 0.0
+        val part = number(value)
+        if (total > 0 && part != null) "${floor(part / total * 100 + 0.5).toLong()}%" else "0%"
+      }
+      "before", "after" -> {
+        val whole = text(value)
+        val separator = parts.getOrNull(1) ?: "-"
+        val at = whole.indexOf(separator)
+        if (at < 0) (if (parts[0] == "before") whole else "") else if (parts[0] == "before") whole.substring(0, at) else whole.substring(at + separator.length)
+      }
+      // `labeled/<path>`: each id (or the one) through the map at <path>; an id the map lacks stays as it is.
+      "labeled" -> {
+        val map = parts.getOrNull(1)?.let { lookup(it, context) } as? JsonObject
+        val ids = (value as? JsonArray)?.toList() ?: listOfNotNull(value)
+        ids.map { id -> text(id).let { key -> map?.get(key)?.let { text(it) } ?: key } }.filter { it.isNotEmpty() }.joinToString(", ")
+      }
+      // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
+      "duration" -> number(value)?.takeIf { it.isFinite() }?.let { millis ->
+        val minutes = (millis / 60_000).toLong()
+        val hours = minutes / 60
+        when {
+          minutes < 1 -> "under a minute"
+          minutes < 60 -> "$minutes min"
+          hours < 48 -> "${hours}h ${minutes % 60}m"
+          else -> "${hours / 24} days"
+        }
+      } ?: "unknown"
       "phone" -> normalizedPhone(text(value)) ?: text(value)
       "json" -> value?.toString() ?: ""
       else -> text(value)

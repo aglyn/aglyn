@@ -201,6 +201,24 @@ public actor IdentityToolkitAuth {
     return user
   }
 
+  /// A custom token for a session: a support session `/api/admin/impersonate` minted for a customer. `tenantId` is the identity
+  /// pool the token was minted in (an SSO account lives in its workspace's tenant), because a custom token exchanged in another
+  /// pool is a cross-pool exchange. The person is read off the ID token the exchange answers with.
+  @discardableResult
+  public func signInWithCustomToken(_ token: String, tenantId: String?) async throws -> AglynUser {
+    var json: [String: JSONValue] = ["token": .string(token), "returnSecureToken": .bool(true)]
+    if let tenantId, !tenantId.isEmpty { json["tenantId"] = .string(tenantId) }
+    let body = try await post("\(identityBase)/v1/accounts:signInWithCustomToken?key=\(apiKey)", json: json)
+    guard case .string(let idToken)? = body["idToken"], case .string(let refreshToken)? = body["refreshToken"] else {
+      throw IdentityToolkitError(code: nil, status: 200)
+    }
+    let claims = TokenClaims(idToken: idToken).values
+    guard let uid = claims["user_id"]?.stringValue ?? claims["sub"]?.stringValue else { throw IdentityToolkitError(code: nil, status: 200) }
+    let user = AglynUser(uid: uid, email: claims["email"]?.stringValue, displayName: claims["name"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
+    accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+    return user
+  }
+
   public func sendPasswordReset(email: String) async throws {
     _ = try await post(
       "\(identityBase)/v1/accounts:sendOobCode?key=\(apiKey)",

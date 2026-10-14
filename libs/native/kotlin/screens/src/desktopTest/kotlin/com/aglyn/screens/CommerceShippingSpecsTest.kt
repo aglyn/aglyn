@@ -132,7 +132,7 @@ class CommerceShippingSpecsTest : SpecTestBase() {
     val model = model("commerce.shipping", ship, writer)
     val edit = model.rowActions("rates").first { it.id == "editCarrier" }
     val rate = model.row("data.store.shipping.rates", 2)
-    val fields = edit.inputsFor(rate)
+    val fields = edit.inputs(rate)
     assertEquals(listOf("name", "zoneId", "svc_ups_ground", "svc_usps_priority", "markupPct", "handling", "fallback"), fields.map { it.key })
     assertEquals(listOf("true", "false"), fields.drop(2).take(2).mapIndexed { i, f -> ScreenValues.text(ScreenValues.resolve(f.initial!!, ScreenContext.with(rate, "item", (ScreenValues.lookup("data.carrier.services", model.context) as JsonArray)[i]))) })
     assertEquals(listOf("", "r1", "r2"), fields.last().choices(rate).map { it.first }, "the other rates of its zone, never a carrier rate")

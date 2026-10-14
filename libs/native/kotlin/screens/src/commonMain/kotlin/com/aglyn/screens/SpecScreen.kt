@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -65,6 +66,7 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
@@ -170,6 +172,7 @@ private fun SpecBody(
   splitting: Boolean,
 ) {
   val session = LocalScreenSession.current
+  val exporter = com.aglyn.ui.LocalFileExporter.current
   val scope = rememberCoroutineScope()
   @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
   var confirming by remember { mutableStateOf<Pending?>(null) }
@@ -256,7 +259,30 @@ private fun SpecBody(
         }
         // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
         action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = action.label to ScreenValues.text(it) } }
+        action.file?.let { file ->
+          file.contents(after)?.let { (name, text) ->
+            if (exporter == null) show("Saving a file is not available here.", StatusTone.WARNING)
+            else if (exporter.export(name, file.type, text.encodeToByteArray())) show("Saved", StatusTone.SUCCESS)
+          }
+        }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
+        action.impersonate?.let { impersonate ->
+          // The route minted a custom token for the customer; the app signs in with it. The token goes to the session and is
+          // shown, logged and kept nowhere else.
+          val resolved = impersonate.resolve(outcome.response)
+          if (resolved == null) {
+            show("The support session could not be opened.", StatusTone.ERROR)
+          } else {
+            try {
+              session.impersonate(resolved.first, resolved.second)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+              throw error
+            } catch (error: Throwable) {
+              show((error as? com.aglyn.core.AuthError)?.message ?: "The support session could not be opened. Try again.", StatusTone.ERROR)
+            }
+          }
+          return
+        }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
         model.followUp?.let { follow -> model.followUp = null; prompting = Pending(follow.action, follow.scope) }
         if (action.back) session.back() else if (action.reload) model.load()
@@ -266,7 +292,7 @@ private fun SpecBody(
 
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
-      action.asksInputs -> prompting = Pending(action, actionScope)
+      action.asksInputs(actionScope) -> prompting = Pending(action, actionScope)
       action.asksConfirmation && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
@@ -355,7 +381,9 @@ private fun SpecBody(
       onDismiss = { confirming = null },
     )
   }
-  prompting?.let { pending -> PromptDialog(pending, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null } }
+  prompting?.let { pending ->
+    PromptDialog(pending, search = { group, words -> model.lookup(group, words) }, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null }
+  }
   reauthing?.let { pending ->
     var password by remember(pending) { mutableStateOf("") }
     var error by remember(pending) { mutableStateOf<String?>(null) }
@@ -417,9 +445,11 @@ private fun SpecBody(
 }
 
 @Composable
-private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
+private fun PromptDialog(pending: Pending, search: suspend (LookupGroup, String) -> List<JsonElement>, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
   val values = remember(pending) { mutableStateMapOf<String, FieldValue>() }
-  val inputs = pending.action.inputsFor(pending.scope)
+  // What each `lookup` field last picked, as the person reads it.
+  val picked = remember(pending) { mutableStateMapOf<String, String>() }
+  val inputs = pending.action.inputs(pending.scope)
   fun filled(): JsonElement = ScreenContext.with(
     pending.scope, "form",
     JsonObject(inputs.associate { it.key to fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)) }),
@@ -440,7 +470,15 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
       val now = filled()
       for (field in inputs.filter { ScreenValues.condition(it.whenCondition, now) }) {
-        FieldInput(field, pending.scope, values[field.key] ?: initialValue(field, pending.scope)) { values[field.key] = it }
+        if (field.kind == "lookup") {
+          LookupInput(field, pending.scope, picked[field.key], search) { group, row ->
+            picked[field.key] = group.heading(row, pending.scope)
+            // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
+            for ((key, value) in group.fills(row, pending.scope, inputs.map { it.key }.toSet())) values[key] = FieldValue.Text(value)
+          }
+        } else {
+          FieldInput(field, pending.scope, values[field.key] ?: initialValue(field, pending.scope)) { values[field.key] = it }
+        }
       }
     }
   }
@@ -463,6 +501,42 @@ private fun Block(
   when (block.type) {
     "notice" -> NoticeBanner(ScreenValues.render(block.string("text").orEmpty(), context), tone(block.string("tone")))
     "list" -> ListBlock(block, title, footer, model, context, selection, open, trigger)
+    "image" -> {
+      // `{ "type": "image", "src": "{item.url}", "caption": "…" }`: a picture the route hands over (a staff media preview).
+      val source = ScreenValues.render(block.string("src").orEmpty(), context)
+      if (source.isNotEmpty()) {
+        SectionCard(title) {
+          RemoteImage(
+            source,
+            block.string("caption")?.let { ScreenValues.render(it, context) },
+            Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 320.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+          )
+          footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+      }
+    }
+    "html" -> {
+      // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text. Scripts, styles,
+      // frames, forms and images never reach the platform's reader, and a link opens in the system handler.
+      val source = ScreenValues.render(block.string("source").orEmpty(), context)
+      SectionCard(title) {
+        if (source.isEmpty()) {
+          Text(
+            block.string("empty")?.let { ScreenValues.render(it, context) } ?: "Nothing to show.",
+            Modifier.padding(horizontal = space(2f), vertical = space(1f)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          val shown = remember(source) { EmailHtml.annotated(source) }
+          androidx.compose.foundation.text.selection.SelectionContainer {
+            Text(shown, Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("spec-html"), style = MaterialTheme.typography.bodyMedium)
+          }
+        }
+        footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
+    }
     "zone" -> {
       // A core screen's zone: whatever plugin screens contribute to it, never named here.
       val name = block.string("name").orEmpty()
@@ -631,10 +705,30 @@ private fun ListBlock(
   trigger: (ActionSpec, JsonElement) -> Unit,
 ) {
   val scope = rememberCoroutineScope()
-  val rows = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
+  val key = ListColumns.key(block)
+  val columns = ListColumns.columns(block)
+  val asked = model.order[key]
+  val chosen = asked?.let { order -> columns.firstOrNull { it.id == order.column } }
+  val found = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
+  val unsorted = (block.string("flatten")?.let { ScreenValues.flatten(found, it) } ?: found)
     .filter { ScreenValues.condition(block.string("filter"), ScreenContext.withItem(context, it)) }
+  val fixed = block.string("sort")?.let { ScreenValues.sorted(unsorted, it) } ?: unsorted
+  // A `page` column orders the rows on the screen; a `route` column already came back from the route in its order.
+  val rows = if (chosen?.page != null && asked != null) ListColumns.sorted(fixed, chosen, asked.descending, context) else fixed
+  val shown = model.shownColumns(key, columns)
   val loadKey = block.string("load")
-  SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {
+  val sortable = columns.filter { it.sortable }
+  val pickable = columns.filter { !it.always }
+  val heading = title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }
+  SectionCard(
+    heading ?: if (sortable.isNotEmpty() || pickable.isNotEmpty()) "" else null,
+    action = if (sortable.isEmpty() && pickable.isEmpty()) null else ({
+      Row {
+        if (sortable.isNotEmpty()) SortMenu(key, sortable, asked, chosen) { next, routed -> scope.launch { model.ask(next, key, routed) } }
+        if (pickable.isNotEmpty()) ColumnsMenu(key, pickable, shown) { model.shown[key] = it }
+      }
+    }),
+  ) {
     Column(Modifier.fillMaxWidth()) {
       if (rows.isEmpty()) {
         Text(
@@ -646,7 +740,8 @@ private fun ListBlock(
       }
       rows.forEachIndexed { index, row ->
         if (index > 0) HorizontalDivider()
-        ListRow(block, ScreenContext.withItem(context, row), selection, open, trigger)
+        val rowScope = ScreenContext.withItem(context, row)
+        ListRow(block, rowScope, selection, open, trigger, columnsLine = ListColumns.line(columns, shown, rowScope))
       }
       if (loadKey != null && model.cursors[loadKey] != null) {
         HorizontalDivider()
@@ -659,6 +754,57 @@ private fun ListBlock(
   }
 }
 
+/** The header sort: a tap on a column asks for its first order, a second for the other, a third for the default again. */
+@Composable
+private fun SortMenu(key: String, columns: List<ListColumn>, asked: ListOrder?, chosen: ListColumn?, ask: (ListOrder?, Boolean) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  Box {
+    IconButton(onClick = { open = true }, modifier = Modifier.testTag("sort-$key")) {
+      Icon(
+        AglynIcons.named("filter_list"),
+        contentDescription = "Sort",
+        tint = if (asked == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+      )
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      DropdownMenuItem(
+        text = { Text(if (asked == null) "\u2713 Default order" else "Default order") },
+        onClick = { open = false; ask(null, chosen?.route != null) },
+        modifier = Modifier.testTag("sort-default"),
+      )
+      for (column in columns) {
+        val active = asked?.takeIf { it.column == column.id }
+        DropdownMenuItem(
+          text = { Text(if (active != null) "\u2713 ${column.label} ${if (active.descending) "\u2193" else "\u2191"}" else column.label) },
+          onClick = { open = false; ask(ListColumns.next(asked, column), column.route != null || chosen?.route != null) },
+          modifier = Modifier.testTag("sort-${column.id}"),
+        )
+      }
+    }
+  }
+}
+
+/** The column picker: which facts each row shows. */
+@Composable
+private fun ColumnsMenu(key: String, columns: List<ListColumn>, shown: Set<String>, pick: (Set<String>) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  Box {
+    IconButton(onClick = { open = true }, modifier = Modifier.testTag("columns-$key")) {
+      Icon(AglynIcons.named("tune"), contentDescription = "Columns", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      for (column in columns) {
+        val on = column.id in shown
+        DropdownMenuItem(
+          text = { Text(if (on) "\u2713 ${column.label}" else column.label) },
+          onClick = { pick(if (on) shown - column.id else shown + column.id) },
+          modifier = Modifier.testTag("column-${column.id}"),
+        )
+      }
+    }
+  }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ListRow(
@@ -667,6 +813,8 @@ private fun ListRow(
   selection: Selection?,
   open: (String, NativeParams) -> Unit,
   trigger: (ActionSpec, JsonElement) -> Unit,
+  /** The row's picked columns as one line (`columns`), empty for a list without them. */
+  columnsLine: String = "",
 ) {
   val actions = block.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.filter { ScreenValues.condition(it.whenCondition, scope) }
   val target = block["open"]?.takeIf { ScreenValues.condition(it.str("when"), scope) }?.let { openSpec ->
@@ -692,7 +840,7 @@ private fun ListRow(
     (if (toggleOn) toggleOffAction != null else toggleOnAction != null)
   val toggleLabel = toggle?.let { ScreenValues.render(it.str("label") ?: "Turn $primary on or off", scope) }
   var menu by remember { mutableStateOf(false) }
-  val supporting = listOfNotNull(secondary, tertiary).joinToString("\n").ifEmpty { null }
+  val supporting = listOfNotNull(secondary, columnsLine.ifEmpty { null }, tertiary).joinToString("\n").ifEmpty { null }
   Column {
     AglynListItem(
       title = primary,
@@ -784,11 +932,13 @@ internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
 internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValue, onChange: (FieldValue) -> Unit) {
   val text = (value as? FieldValue.Text)?.value.orEmpty()
   val help = field.help?.let { ScreenValues.render(it, context) }
+  // A label can name what the loaded data does (a registration number's name for the jurisdiction in force).
+  val label = ScreenValues.render(field.label, context)
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
-      "toggle" -> SwitchRow(field.label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
+      "toggle" -> SwitchRow(label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
       "hours" -> HoursInput(field, text) { onChange(FieldValue.Text(it)) }
-      "select" -> {
+      "select", "country" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -796,7 +946,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
             value = choices.firstOrNull { it.first == text }?.second ?: text,
             onValueChange = {},
             readOnly = true,
-            label = { Text(field.label) },
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
           )
@@ -810,7 +960,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
       else -> OutlinedTextField(
         value = text,
         onValueChange = { onChange(FieldValue.Text(it)) },
-        label = { Text(field.label + if (field.required) " *" else "") },
+        label = { Text(label + if (field.required) " *" else "") },
         placeholder = field.placeholder?.let { { Text(it) } },
         singleLine = field.kind != "multiline",
         minLines = if (field.kind == "multiline") 3 else 1,
@@ -826,6 +976,12 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         ),
         modifier = Modifier.fillMaxWidth(),
       )
+    }
+    if (field.generate != null) {
+      TextButton(
+        onClick = { onChange(FieldValue.Text(field.generatedValue(context).orEmpty())) },
+        modifier = Modifier.testTag("generate-${field.key}"),
+      ) { Text("Generate") }
     }
     if (help != null && field.kind != "toggle") {
       Text(help, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

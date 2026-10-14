@@ -197,6 +197,27 @@ describe('the staff Sites list', () => {
     expect(sites[0]).not.toHaveProperty('screens')
   })
 
+  /*
+   * The apps build every link to a site from one value, so it has to be the
+   * address that answers: the custom domain once it serves, else the
+   * platform subdomain.
+   */
+  it('names the address the site answers at', async () => {
+    hosts = [
+      { id: 'a', data: { subdomain: 'harbor-bakery', cname: 'harbor.com' } },
+      { id: 'b', data: { subdomain: 'harbor-bakery', cname: 'harbor.com', cnameAttachmentPending: true } },
+      { id: 'c', data: { subdomain: 'harbor-bakery' } },
+      { id: 'd', data: {} },
+    ]
+    const { sites } = await (await get()).json()
+    expect(sites.map((site: { liveDomain: string | null }) => site.liveDomain)).toEqual([
+      'harbor.com',
+      'harbor-bakery.aglyn.app',
+      'harbor-bakery.aglyn.app',
+      null,
+    ])
+  })
+
   it('lists a site whose organization is gone, rather than hiding it', async () => {
     const { sites } = await (await get()).json()
     expect(sites[1]).toMatchObject({ $id: 'host-2', orgId: 'gone', org: null, owner: null })

@@ -106,6 +106,7 @@ import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { quarantineLogLines } from '../../../../utils/quarantine-log-lines'
 import { useStaffRole } from '../../../../hooks/use-is-staff'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
@@ -115,6 +116,7 @@ import {
   DENY_FILTER_OPTIONS,
   type DenyListRow,
   LISTED_KIND_LABEL,
+  QUARANTINE_KEY_REACH as KEY_REACH,
   ROW_STATE_LABEL,
 } from '../../../../utils/media-quarantine-list-query'
 
@@ -172,13 +174,6 @@ const DENY_LIST_PARAMS = { view: 'list' } as const
 const DENY_HIDDEN_COLUMNS = { state: false, kind: false }
 
 /** What a key of each kind actually reaches, in the operator's words. */
-const KEY_REACH: Record<AssetKey['kind'], string> = {
-  sha256:
-    'the full sha256 of the bytes — covers EVERY copy of this file, in every workspace',
-  legacy:
-    'the legacy 64-bit digest — same reach, weaker key, and the only one some files have',
-  asset: 'this one document in this one workspace',
-}
 
 function AdminMediaQuarantine() {
   const { data: user } = useUser()
@@ -357,8 +352,10 @@ function AdminMediaQuarantine() {
         if (!response.ok) {
           throw new Error(payload.error ?? `Failed (${response.status})`)
         }
-        const confirmed = payload.confirmed !== false
-        const what = `Released ${target}`
+        const [{ confirmed, text: what }] = quarantineLogLines(
+          { by: 'key', key: target },
+          payload,
+        )
         setLog((entries) =>
           [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
         )
@@ -420,10 +417,10 @@ function AdminMediaQuarantine() {
         // A 200 says the request was accepted. Only `confirmed` says the
         // state changed, and on a release it means NO key can still refuse
         // the file — the two are not the same claim.
-        const confirmed = payload.confirmed !== false
-        const what = `${action === 'quarantine' ? 'Disabled' : 'Released'} ${mediaId.trim()} (${(
-          payload.keys ?? [payload.key]
-        ).length} key${(payload.keys ?? [payload.key]).length === 1 ? '' : 's'})`
+        const [{ confirmed, text: what }] = quarantineLogLines(
+          { action, by: 'media', mediaId },
+          payload,
+        )
         setLog((entries) =>
           [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
         )

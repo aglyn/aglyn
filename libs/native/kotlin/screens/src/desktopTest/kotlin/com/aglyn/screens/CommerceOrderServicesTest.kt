@@ -235,7 +235,7 @@ class CommerceOrderServicesTest : SpecTestBase() {
     val model = labels()
     assertEquals(listOf("buy", "buyReturn", "check"), model.actionsShown("buy"))
     val buy = model.action("buy", "buy")
-    val fields = buy.inputsFor(model.context)
+    val fields = buy.inputs(model.context)
     assertEquals(listOf("qty_0", "qty_2", "presetId", "lengthCm", "widthCm", "heightCm", "weight"), fields.map { it.key }, "only the lines that ship, then the box and weight")
     assertEquals("Mug (of 2)", fields[0].label)
     assertEquals(listOf("2", "2"), fields.take(2).mapIndexed { i, f -> ScreenValues.text(ScreenValues.resolve(f.initial!!, ScreenContext.withItem(model.context, (ScreenValues.lookup("data.order.shipLines", model.context) as JsonArray)[i]))) })
@@ -251,7 +251,7 @@ class CommerceOrderServicesTest : SpecTestBase() {
     val buyStep = buy.then!!
     val answer = """{"shipmentId":"shp_9","messages":["Weight is over the limit"],"rates":[{"rateId":"r1","label":"Ground","amountCents":850,"currency":"USD","estimatedDays":4,"badges":["cheapest"]},{"rateId":"r2","label":"Air","amountCents":2100,"currency":"USD","estimatedDays":null,"badges":[]}]}"""
     val previous = ScreenContext.with(ScreenContext.with(model.context, "response", json(answer)), "previous", json(form))
-    val rateField = buyStep.inputsFor(previous).single()
+    val rateField = buyStep.inputs(previous).single()
     assertEquals(listOf("r1", "r2"), rateField.choices(previous).map { it.first })
     assertEquals("Ground · ${'$'}8.50 4 days cheapest", rateField.choices(previous)[0].second)
     assertEquals("Air · ${'$'}21.00", rateField.choices(previous)[1].second)
@@ -297,8 +297,8 @@ class CommerceOrderServicesTest : SpecTestBase() {
     val model = widget("shipping", "shipping.returnLabel", mapOf("returnId" to "r1", "orderId" to "ord1234567"), """{"ret":$ret,"order":${zone()},"avail":{"available":true},"settings":$settings}""")
     assertEquals(listOf("hint", "buy"), model.shown().filter { it == "hint" || it == "buy" })
     val buy = model.action("buy", "buy")
-    assertEquals(listOf("qty_0", "presetId", "lengthCm", "widthCm", "heightCm", "weight"), buy.inputsFor(model.context).map { it.key })
-    assertEquals("Mug (of 2)", buy.inputsFor(model.context)[0].label)
+    assertEquals(listOf("qty_0", "presetId", "lengthCm", "widthCm", "heightCm", "weight"), buy.inputs(model.context).map { it.key })
+    assertEquals("Mug (of 2)", buy.inputs(model.context)[0].label)
     assertEquals("return", ScreenValues.text(model.body(buy, """{"qty_0":2,"presetId":"box1"}""").jsonObject["kind"]))
     val attach = buy.then!!.then!!
     val bought = ScreenContext.with(model.context, "response", json("""{"label":{"carrier":"UPS","trackingNumber":"1Z","labelUrl":"https://l.test/1"}}"""))

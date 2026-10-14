@@ -60,6 +60,11 @@ data class ScreenSession(
   val openHostedPage: (url: String) -> Unit = {},
   /** Leaves the current screen (an action that ends it, like a delete). */
   val back: () -> Unit = {},
+  /**
+   * Signs in as a customer with the custom token a staff route minted (`/api/admin/impersonate`), in the identity pool it was
+   * minted in; the staff session is set aside and returns when the support session ends. Throws when it is refused.
+   */
+  val impersonate: suspend (token: String, tenantId: String?) -> Unit = { _, _ -> },
   val account: AccountOperations = AccountOperations(),
 ) {
   fun context(plugin: NativePluginContext?, params: NativeParams): JsonElement {
@@ -96,6 +101,7 @@ data class ScreenSession(
       put("now", buildJsonObject {
         val (year, month) = nowParts()
         put("month", "$year-${month.toString().padStart(2, '0')}")
+        put("previousMonth", "${if (month == 1) year - 1 else year}-${(if (month == 1) 12 else month - 1).toString().padStart(2, '0')}")
         put("quarter", "$year-Q${(month - 1) / 3 + 1}")
         put("ms", nowMillis().toDouble())
         // The last twelve months, newest first, as a report picks them: `{ from, to, label }` with ISO instants in UTC.
@@ -151,13 +157,25 @@ class ScreenModel(
   var phase: Phase by mutableStateOf(Phase.Loading)
     private set
   /** A spec's fixed rows (`constants`) read as `const`. */
-  var context: JsonElement by mutableStateOf(spec.raw.obj("constants")?.let { ScreenContext.with(initial, "const", it) } ?: initial)
+  var context: JsonElement by mutableStateOf(
+    ScreenContext.with(spec.raw.obj("constants")?.let { ScreenContext.with(initial, "const", it) } ?: initial, "session", sessionValue(emptyList(), emptySet())),
+  )
+    private set
+  /** What the person has done on this screen since it opened, newest first: `{ at, text, confirmed }` (`session.log`). */
+  var journal: List<JsonElement> by mutableStateOf(emptyList())
+    private set
+  /** Keys an action armed (`arm`) and none has spent (`disarm`): `session.armed.<key>`. */
+  var armed: Set<String> by mutableStateOf(emptySet())
     private set
   val cursors = mutableStateMapOf<String, String>()
   /** How many rows each grown Firestore query load reads now: a list that was asked for more asks for its page size again. */
   private val queryLimits = mutableMapOf<String, Int>()
   val loadingMore = mutableStateMapOf<String, Boolean>()
   val search = mutableStateMapOf<String, String>()
+  /** The order each list was asked for (by its load, else its items); absent is the route's own default. */
+  val order = mutableStateMapOf<String, ListOrder>()
+  /** The columns each list shows, where the person has picked; absent is the list's own defaults. */
+  val shown = mutableStateMapOf<String, Set<String>>()
   /** The `{attempt}` key of each action's last request, by action, path and body: a retry reuses it. */
   private val attempts = mutableMapOf<String, String>()
 
@@ -169,13 +187,78 @@ class ScreenModel(
     phase = Phase.Ready
   }
 
-  internal fun url(load: LoadSpec, cursor: String? = null): String {
+  internal fun url(load: LoadSpec, cursor: String? = null, scope: JsonElement = context): String {
+    val context = scope
     var url = ScreenValues.renderUrl(load.url, context)
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
       url += (if ('?' in url) "&" else "?") + load.searchParam + "=" + ScreenValues.encodeComponent(it)
     }
+    filtersParameter(load.filters, context)?.let { url += (if ('?' in url) "&" else "?") + it }
+    load.sortParam?.let { param ->
+      // A list's `route` columns order the route over every row; nothing asked is the route's own default.
+      val columns = spec.blocks.filter { it.type == "list" && ListColumns.key(it) == load.key }.flatMap { ListColumns.columns(it) }
+      (ListColumns.routeValue(order[load.key], columns) ?: load.sortDefault)?.let { value ->
+        url += (if ('?' in url) "&" else "?") + param + "=" + ScreenValues.encodeComponent(value)
+      }
+    }
     if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     return url
+  }
+
+  /** Asks a list for an order. A `route` column reads the route again in that order, from the first page; a `page` column reorders what is on the screen. */
+  suspend fun ask(asked: ListOrder?, key: String, routed: Boolean) {
+    if (asked == null) order.remove(key) else order[key] = asked
+    if (routed) load()
+  }
+
+  /** A list's columns with the picks made, or its defaults. */
+  internal fun shownColumns(key: String, columns: List<ListColumn>): Set<String> = shown[key] ?: columns.filter { it.show }.map { it.id }.toSet()
+
+  /**
+   * The columns plugins contribute to a list read: one request per plugin column for the rows on the screen (in batches of `max`, as
+   * the route allows), answered under `column.<id>`. A column that cannot be read leaves its cells blank; it never fails the screen.
+   */
+  internal suspend fun loadPluginColumns() {
+    val client = api ?: return
+    val answers = mutableMapOf<String, JsonElement>()
+    for (block in spec.blocks.filter { it.type == "list" }) {
+      val zone = block.string("columnsZone") ?: continue
+      val rows = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
+      for (contribution in ScreenCatalog.zone(zone).filter { ScreenValues.condition(it.requires, context) }) {
+        val column = contribution.raw.obj("column") ?: continue
+        val id = column.str("id") ?: continue
+        val load = column.obj("load") ?: continue
+        val template = load.str("url") ?: continue
+        val idTemplate = load.str("ids") ?: "{item.\$id}"
+        val ids = rows.map { ScreenValues.render(idTemplate, ScreenContext.withItem(context, it)) }.filter { it.isNotEmpty() }
+        val batch = ((load.obj("max") as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 100).coerceAtLeast(1)
+        var answer: JsonElement = JsonObject(emptyMap())
+        for (chunk in ids.chunked(batch)) {
+          val path = ScreenValues.renderUrl(template, ScreenContext.with(context, "ids", JsonPrimitive(chunk.joinToString(","))))
+          val part = try {
+            client.request(path)
+          } catch (error: CancellationException) {
+            throw error
+          } catch (_: Throwable) {
+            null
+          }
+          if (part != null) answer = merged(answer, part)
+        }
+        answers[id] = answer
+      }
+    }
+    if (answers.isNotEmpty()) context = ScreenContext.with(context, "column", JsonObject(answers))
+  }
+
+  /** A staff list route's `filters=` parameter from `{ field, op, value }` clauses, each kept when its value template is not empty. */
+  internal fun filtersParameter(filters: List<JsonElement>, context: JsonElement): String? {
+    val clauses = filters.mapNotNull { clause ->
+      val value = ScreenValues.render(clause.str("value").orEmpty(), context)
+      val field = clause.str("field")
+      if (value.isEmpty() || field == null) null
+      else JsonObject(mapOf("field" to JsonPrimitive(field), "op" to JsonPrimitive(clause.str("op") ?: "equals"), "value" to JsonPrimitive(value)))
+    }
+    return if (clauses.isEmpty()) null else "filters=" + ScreenValues.encodeComponent(JsonArray(clauses).toString())
   }
 
   suspend fun load() {
@@ -184,20 +267,26 @@ class ScreenModel(
       phase = Phase.Failed("Sign in to continue.")
       return
     }
-    val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
-    val results = try {
-      coroutineScope {
-        loads.map { load ->
-          async {
-            try {
-              fetch(client, load)
-            } catch (error: CancellationException) {
-              throw error
-            } catch (error: Throwable) {
-              if (load.optional) Triple(load.key, JsonNull, null) else throw error
+    val results = mutableListOf<Triple<String, JsonElement, String?>>()
+    try {
+      // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too.
+      for (late in listOf(false, true)) {
+        val scope = if (results.isEmpty()) context else ScreenContext.with(context, "data", JsonObject(results.associate { it.first to it.second }))
+        val wave = spec.loads.filter { it.late == late && ScreenValues.condition(it.whenCondition, scope) }
+        if (wave.isEmpty()) continue
+        results += coroutineScope {
+          wave.map { load ->
+            async {
+              try {
+                fetch(client, load, scope)
+              } catch (error: CancellationException) {
+                throw error
+              } catch (error: Throwable) {
+                if (load.optional) Triple(load.key, JsonNull, null) else throw error
+              }
             }
-          }
-        }.awaitAll()
+          }.awaitAll()
+        }
       }
     } catch (error: CancellationException) {
       throw error
@@ -212,9 +301,10 @@ class ScreenModel(
     cursors.clear()
     for ((key, _, cursor) in results) if (!cursor.isNullOrEmpty()) cursors[key] = cursor
     phase = Phase.Ready
+    loadPluginColumns()
   }
 
-  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec): Triple<String, JsonElement, String?> {
+  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec, context: JsonElement): Triple<String, JsonElement, String?> {
     load.doc?.let { doc ->
       return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
     }
@@ -241,21 +331,34 @@ class ScreenModel(
       val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", context))
       return Triple(load.key, SwitchboardRows.site(org, host), null)
     }
-    val value = client.request(url(load), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
+    val value = try {
+      client.request(url(load, scope = context), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
+    } catch (error: ConsoleApiError) {
+      // A probe that answers 503 is reporting, and the report is the body.
+      error.body?.takeIf { error.status in load.accept } ?: throw error
+    }
     return Triple(load.key, value, load.cursor?.let { (ScreenValues.lookup(it, value) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
+  }
+
+  /** The records a `lookup` field's group finds for the words typed. */
+  suspend fun lookup(group: LookupGroup, words: String): List<JsonElement> {
+    val client = api ?: return emptyList()
+    return group.rows(client.request(group.request(words)))
   }
 
   suspend fun loadMore(key: String) {
     val client = api ?: return
     val load = spec.loads.firstOrNull { it.key == key } ?: return
     val cursor = cursors[key] ?: return
-    // A Firestore query has no cursor to continue from here: it reads a bigger window (the page size again) and replaces its rows.
+    // A Firestore query has no cursor to continue from here: it reads a bigger window (the load's `more`, else the page size
+    // again) and replaces its rows.
     load.query?.let { query ->
       if (loadingMore[key] == true) return
       loadingMore[key] = true
       try {
-        queryLimits[key] = (cursor.toIntOrNull() ?: FirestoreLoads.queryLimit(query)) + FirestoreLoads.queryLimit(query)
-        val (_, grown, next) = fetch(client, load)
+        val page = FirestoreLoads.queryLimit(query)
+        queryLimits[key] = (cursor.toIntOrNull() ?: page) + (load.more ?: page)
+        val (_, grown, next) = fetch(client, load, context)
         val record = (data as? JsonObject)?.toMutableMap() ?: return
         record[key] = grown
         context = ScreenContext.with(context, "data", JsonObject(record))
@@ -286,6 +389,7 @@ class ScreenModel(
     } finally {
       loadingMore.remove(key)
     }
+    loadPluginColumns()
   }
 
   /** A step the person is asked to finish next: the previous step's answer is its `response`, its form its `previous`. */
@@ -300,11 +404,22 @@ class ScreenModel(
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
     performed = null
     val outcome = perform(action, scope)
-    if (outcome is ActionOutcome.Done) {
-      (performed ?: action).then?.let { then ->
-        val next = ScreenContext.with(ScreenContext.with(scope, "response", outcome.response), "previous", (scope as? JsonObject)?.get("form"))
-        if (then.asksInputs) followUp = FollowUp(then, next) else perform(then, next)
+    when (outcome) {
+      is ActionOutcome.Done -> {
+        remember(performed ?: action, outcome.response, scope)
+        (performed ?: action).then?.let { then ->
+          val next = ScreenContext.with(ScreenContext.with(scope, "response", outcome.response), "previous", (scope as? JsonObject)?.get("form"))
+          if (then.asksInputs(next)) followUp = FollowUp(then, next) else perform(then, next)
+        }
       }
+      // A preview that failed read nothing, so nothing is armed by it.
+      is ActionOutcome.Failed -> action.arm?.let { key ->
+        if (key in armed) {
+          armed = armed - key
+          publishSession()
+        }
+      }
+      is ActionOutcome.NeedsReauth -> Unit
     }
     return outcome
   }
@@ -390,6 +505,22 @@ class ScreenModel(
     write.str("doc")?.let { target.merge(ScreenValues.render(it, scope), data) }
   }
 
+  private fun publishSession() {
+    context = ScreenContext.with(context, "session", sessionValue(journal, armed))
+  }
+
+  /**
+   * What a successful action leaves on the screen: its `log` lines (the last listed on top, as the console prepends the lines of one act
+   * in the order they happened), and the key it arms or spends.
+   */
+  private fun remember(action: ActionSpec, response: JsonElement?, scope: JsonElement) {
+    val entries = logEntries(action.log, response, scope, nowMillis())
+    if (entries.isNotEmpty()) journal = (entries.reversed() + journal).take(JOURNAL_LIMIT)
+    action.arm?.let { armed = armed + it }
+    action.disarm?.let { armed = armed - it }
+    if (entries.isNotEmpty() || action.arm != null || action.disarm != null) publishSession()
+  }
+
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
     action.account?.let { operation ->
       val target = account ?: return ActionOutcome.Failed("That is not available here.")
@@ -444,37 +575,146 @@ class ScreenModel(
       }
       ScreenContext.with(scope, "overlay", FirestoreLoads.stored(stored ?: return ActionOutcome.Failed("That could not be read. Try again.")))
     } ?: scope
-    val path = ScreenValues.renderUrl(template, scope)
-    val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
+    val path = ScreenValues.renderUrl(template, scope).let { rendered ->
+      filtersParameter(action.filters, scope)?.let { rendered + (if ('?' in rendered) "&" else "?") + it } ?: rendered
+    }
+    val keyed = withAttempt(action, path, scope)
+    val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, keyed) } ?: JsonObject(emptyMap()))
     return try {
-      val response = client.request(path, action.method, body, headers = headers(action, path, body, scope))
+      val sent = action.headers.mapValues { (_, template) -> ScreenValues.render(template, keyed) }
+      val response = action.loop?.let { loop ->
+        paged(loop) { cursor ->
+          val page = if (cursor != null && body is JsonObject) JsonObject(body + (loop.param to JsonPrimitive(cursor))) else body
+          client.request(path, action.method, page, headers = sent)
+        }
+      } ?: client.request(path, action.method, body, headers = sent)
       performed = action
-      ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
+      ActionOutcome.Done(message(action, response, scope), response)
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {
       when {
         wantsReauth(error) -> ActionOutcome.NeedsReauth(error.body.str("message") ?: error.message)
         error.status == action.elseStatus && action.otherwise != null -> perform(action.otherwise, scope)
-        else -> ActionOutcome.Failed(error.message)
+        else -> ActionOutcome.Failed(refusal(action, error, scope))
       }
     } catch (error: Throwable) {
       ActionOutcome.Failed(error.message ?: "That did not work. Try again.")
     }
   }
 
-  /** The action's request headers, rendered; `{attempt}` is the key held for this exact request. */
+  /** What an action says when it succeeds: `success`, then its report lines (`each` repeats a line per row). */
+  internal fun message(action: ActionSpec, response: JsonElement?, scope: JsonElement): String? {
+    val context = ScreenContext.with(scope, "response", response)
+    val lines = mutableListOf<String>()
+    action.success?.let { lines += ScreenValues.render(it, context) }
+    lines += reportLines(action.report, context)
+    return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+  }
+
+  /** What an action says when the route refuses: the route's own words, then its `failure` lines over the answer. */
+  internal fun refusal(action: ActionSpec, error: ConsoleApiError, scope: JsonElement): String =
+    (listOf(error.message) + reportLines(action.failure, ScreenContext.with(scope, "response", error.body))).joinToString("\n")
+
+  internal fun reportLines(report: List<ReportLine>, context: JsonElement): List<String> {
+    val lines = mutableListOf<String>()
+    for (line in report) {
+      if (line.each != null) {
+        // A `when` on a repeated line is read for each row, with `item` its row (the give-back's meters that moved nothing).
+        for (row in ScreenValues.rows(ScreenValues.lookup(line.each, context))) {
+          val scope = ScreenContext.withItem(context, row)
+          if (ScreenValues.condition(line.whenCondition, scope)) lines += ScreenValues.render(line.text, scope)
+        }
+      } else if (ScreenValues.condition(line.whenCondition, context)) {
+        lines += ScreenValues.render(line.text, context)
+      }
+    }
+    return lines
+  }
+
+  /**
+   * Sends a page at a time until the route says it is done, and answers the totals: numbers add up
+   * (a map of counts too), anything else keeps the last page's value. `pages` counts the requests,
+   * and `bounded` is true when `max` pages did not reach the end.
+   */
+  internal suspend fun paged(loop: LoopSpec, send: suspend (cursor: String?) -> JsonElement?): JsonElement? {
+    var totals: JsonElement = JsonNull
+    var cursor: String? = null
+    var pages = 0
+    var finished = false
+    while (pages < loop.max) {
+      val page = send(cursor) ?: JsonNull
+      pages += 1
+      totals = ScreenValues.sum(totals, page)
+      cursor = (ScreenValues.lookup(loop.cursor, page) as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.content
+      val done = loop.until?.let { ScreenValues.truthy(ScreenValues.lookup(it, page)) } ?: false
+      if (done || cursor == null) {
+        finished = true
+        break
+      }
+    }
+    val record = (totals as? JsonObject)?.toMutableMap() ?: return totals
+    record["pages"] = JsonPrimitive(pages)
+    record["bounded"] = JsonPrimitive(!finished)
+    return JsonObject(record)
+  }
+
+  /**
+   * `scope` with `attempt` set when the action's headers or body use `{attempt}`: the key held for this exact
+   * request, found with `{attempt}` blank so a body that carries the key does not change its own signature.
+   */
   @OptIn(ExperimentalUuidApi::class)
-  internal fun headers(action: ActionSpec, path: String, body: JsonElement?, scope: JsonElement): Map<String, String> {
-    if (action.headers.isEmpty()) return emptyMap()
-    val signature = "${action.id}|$path|${body ?: ""}"
-    val key = attempts.getOrPut(signature) { Uuid.random().toString() }
+  internal fun withAttempt(action: ActionSpec, path: String, scope: JsonElement): JsonElement {
+    val bodyText = action.body?.toString() ?: ""
+    if (action.headers.isEmpty() && "{attempt" !in bodyText && "{press" !in bodyText) return scope
+    val blank = ScreenContext.with(ScreenContext.with(scope, "attempt", JsonPrimitive("")), "press", JsonPrimitive(""))
+    val draft = if (action.method == ApiMethod.GET) null else action.body?.let { ScreenValues.resolveBody(it, blank) }
+    val key = attempts.getOrPut("${action.id}|$path|${draft ?: ""}") { Uuid.random().toString() }
     // `{press}`: a key for this one press alone (its own retries share it); a second tap of the same request gets a new one.
-    val withAttempt = ScreenContext.with(ScreenContext.with(scope, "attempt", JsonPrimitive(key)), "press", JsonPrimitive(Uuid.random().toString()))
-    return action.headers.mapValues { (_, template) -> ScreenValues.render(template, withAttempt) }
+    return ScreenContext.with(ScreenContext.with(scope, "attempt", JsonPrimitive(key)), "press", JsonPrimitive(Uuid.random().toString()))
   }
 
   companion object {
+    /** The most lines the session log keeps, as the console's does. */
+    const val JOURNAL_LIMIT = 25
+
+    /** [b] laid over [a]: maps join (by key, down through maps), anything else takes [b]. */
+    internal fun merged(a: JsonElement, b: JsonElement): JsonElement {
+      if (a !is JsonObject || b !is JsonObject) return b
+      val out = a.toMutableMap()
+      for ((key, value) in b) out[key] = out[key]?.let { merged(it, value) } ?: value
+      return JsonObject(out)
+    }
+
+    /** The session the templates read: the log, and what is armed. */
+    internal fun sessionValue(journal: List<JsonElement>, armed: Set<String>): JsonElement = JsonObject(
+      mapOf("log" to JsonArray(journal), "armed" to JsonObject(armed.associateWith { JsonPrimitive(true) })),
+    )
+
+    /** The session-log entries an action's `log` lines make of its answer. */
+    internal fun logEntries(log: List<ReportLine>, response: JsonElement?, scope: JsonElement, at: Long): List<JsonElement> {
+      val context = ScreenContext.with(scope, "response", response)
+      fun entry(line: ReportLine, within: JsonElement): JsonElement = JsonObject(
+        mapOf(
+          "at" to JsonPrimitive(at),
+          "text" to JsonPrimitive(ScreenValues.render(line.text, within)),
+          "confirmed" to JsonPrimitive(line.confirmed?.let { ScreenValues.condition(it, within) } ?: true),
+        ),
+      )
+      val entries = mutableListOf<JsonElement>()
+      for (line in log) {
+        if (line.each != null) {
+          for (row in ScreenValues.rows(ScreenValues.lookup(line.each, context))) {
+            val rowScope = ScreenContext.withItem(context, row)
+            if (ScreenValues.condition(line.whenCondition, rowScope)) entries += entry(line, rowScope)
+          }
+        } else if (ScreenValues.condition(line.whenCondition, context)) {
+          entries += entry(line, context)
+        }
+      }
+      return entries
+    }
+
     /** JSON as the plain values a Firestore merge takes. */
     fun plain(value: JsonElement): Any? = when (value) {
       JsonNull -> null

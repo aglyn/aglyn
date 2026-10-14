@@ -327,7 +327,7 @@ class CommerceStoreSpecsTest : SpecTestBase() {
     assertEquals(listOf("deliveries", "edit", "resume", "roll", "delete"), offered(1))
     val edit = model.rowActions("endpoints").first { it.id == "edit" }
     val first = model.row("data.endpoints.items", 0)
-    val fields = edit.inputsFor(first)
+    val fields = edit.inputs(first)
     assertEquals(listOf("url", "description", "evt_order.paid", "evt_order.refunded"), fields.map { it.key })
     assertEquals("Order paid (order.paid)", fields[2].label)
     assertEquals(listOf("true", "false"), fields.drop(2).map { ScreenValues.text(ScreenValues.resolve(it.initial!!, ScreenContext.with(first, "item", (ScreenValues.lookup("data.status.events", model.context) as JsonArray)[fields.drop(2).indexOf(it)]))) })
@@ -337,7 +337,7 @@ class CommerceStoreSpecsTest : SpecTestBase() {
       ScreenValues.resolveBody(edit.body!!, ScreenContext.with(first, "form", json("""{"url":"https://a.test/new","description":"W","evt_order.paid":false,"evt_order.refunded":true}"""))),
     )
     val add = model.action("add", "addEndpoint")
-    assertEquals(listOf("true", "true"), add.inputsFor(model.context).drop(2).map { ScreenValues.text(ScreenValues.resolve(it.initial!!, model.context)) }, "a new endpoint starts with every event on")
+    assertEquals(listOf("true", "true"), add.inputs(model.context).drop(2).map { ScreenValues.text(ScreenValues.resolve(it.initial!!, model.context)) }, "a new endpoint starts with every event on")
     assertEquals("secret", add.reveal)
     val test = model.rowActions("endpoints").first { it.id == "test" }
     val answer = ScreenContext.with(first, "response", json("""{"delivered":false,"attempt":{"error":"timeout"}}"""))

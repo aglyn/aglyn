@@ -46,14 +46,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   StaffOrgAiJob,
   StaffOrgAiJobs,
-  StaffOrgAiMargin,
-  StaffOrgAiOverage,
-  StaffOrgAiPool,
   StaffOrgAiRefusals,
   StaffOrgAiResponse,
   StaffOrgAiTokens,
   StaffOrgAiUser,
 } from '../usage/staff-org-ai'
+import {
+  allowanceSentence,
+  credits,
+  marginTone,
+  overageStateSentence,
+  poolPartsSentence,
+  rate,
+  refusalChips,
+  tokenCount,
+  usd,
+  JOB_CHIP_STATUSES,
+} from '../usage/staff-org-ai-view'
 import {
   StaffCreditReturnActions,
   StaffCreditReturnDialog,
@@ -90,98 +99,21 @@ import {
  * that job's spend.
  */
 
-const credits = (value: number | null | undefined): string =>
-  value == null ? '—' : Math.round(value).toLocaleString()
-
-/**
- * Four decimals under a dollar, two above (the assist-signals page's rule):
- * a month that really cost eight cents must not read as `$0.00`.
- */
-const usd = (value: number | null | undefined): string => {
-  if (value == null) return '—'
-  const amount = Number(value) || 0
-  return `$${amount.toFixed(Math.abs(amount) < 1 ? 4 : 2)}`
-}
-
 const when = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleDateString() : '—'
 
-/** The pool as one sentence naming every part that is non-zero. */
-export function poolPartsSentence(pool: StaffOrgAiPool): string {
-  const parts: string[] = []
-  if (pool.overrideCredits !== null) {
-    parts.push(`${credits(pool.overrideCredits)} staff override`)
-  } else {
-    parts.push(`${credits(pool.planCredits)} plan band`)
-  }
-  if (pool.addonCredits > 0) {
-    parts.push(`${credits(pool.addonCredits)} ${aiAddonName()} add-on`)
-  }
-  return parts.join(' + ')
-}
-
-/**
- * The overage's state as one line: sold, walled, or capped — or, for an
- * uncapped staff comp (AGL-3049), nothing to sell past at all.
- */
-export function overageStateSentence(
-  overage: StaffOrgAiOverage,
-  uncapped = false,
-): string {
-  if (uncapped) {
-    return 'Nothing is sold past a band: an uncapped staff comp has none, and bills nothing.'
-  }
-  if (overage.hardCap) return 'Stopped at the band — the org’s band switch is on.'
-  if (!overage.sellsOverage) return 'Not sold past the band on this plan.'
-  const rate =
-    overage.rateUsdPer1k === null ? '' : ` at ${usd(overage.rateUsdPer1k)} per 1,000`
-  if (overage.capUsd !== null) {
-    return overage.capReached
-      ? `Stopped — the org’s ${usd(overage.capUsd)} overage ceiling is reached.`
-      : `Sold${rate}, up to the org’s ${usd(overage.capUsd)} ceiling.`
-  }
-  return `Sold${rate}, no ceiling set.`
-}
-
-/** Whether the margin section renders red. */
-export function marginTone(margin: StaffOrgAiMargin): 'error' | 'warning' | 'success' {
-  if (margin.underwater) return 'error'
-  if (margin.multiple >= 1) return 'warning'
-  return 'success'
-}
-
 function RefusalsRow({ refusals }: { refusals: StaffOrgAiRefusals }) {
-  const labels: Record<keyof Omit<StaffOrgAiRefusals, 'total'>, string> = {
-    band: 'band',
-    cap: 'ceiling',
-    messages: 'messages',
-    budget: 'operator backstop',
-    // A hard allotment a manager set on a member, a collaborator or a site
-    // (AGL-2942).
-    allotment: 'allotments',
-    // The Free taste's rungs (AGL-2925): only a Free workspace collects these.
-    account: 'free account',
-    requests: 'free requests/day',
-    refusals: 'free refusals/day',
-    platform: 'platform ceiling',
-  }
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-      {(Object.keys(labels) as Array<keyof typeof labels>).map((reason) => {
-        // A reason the answering server does not yet count reads as zero,
-        // so a console newer than its route draws the row rather than
-        // failing the card.
-        const count = Number(refusals[reason] ?? 0)
-        return (
-          <Chip
-            key={reason}
-            size="small"
-            variant={count > 0 ? 'filled' : 'outlined'}
-            color={count > 0 ? 'warning' : 'default'}
-            label={`${labels[reason]} ${count.toLocaleString()}`}
-          />
-        )
-      })}
+      {refusalChips(refusals).map((chip) => (
+        <Chip
+          key={chip.label}
+          size="small"
+          variant={chip.count > 0 ? 'filled' : 'outlined'}
+          color={chip.count > 0 ? 'warning' : 'default'}
+          label={`${chip.label} ${chip.count.toLocaleString()}`}
+        />
+      ))}
     </Stack>
   )
 }
@@ -212,7 +144,7 @@ function JobsSection({
   return (
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        {(['queued', 'running', 'needs_input', 'needs_review', 'failed'] as const).map((status) => (
+        {JOB_CHIP_STATUSES.map((status) => (
           <Chip
             key={status}
             size="small"
@@ -334,11 +266,6 @@ const jobColumns = (
     />
   )),
 ]
-
-const tokenCount = (value: number): string => Math.round(value).toLocaleString()
-
-const rate = (value: number | null): string =>
-  value == null ? '—' : `${Math.round(value * 100)}%`
 
 /** The month's tokens, and what each kind of request spends of them (AGL-2937). */
 function TokensSection({ tokens }: { tokens: StaffOrgAiTokens }) {
@@ -663,7 +590,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
               </Typography>
             ) : (
               <Typography variant="body2">
-                {`${credits(data.pool.totalCredits)} credits = ${poolPartsSentence(data.pool)}`}
+                {`${credits(data.pool.totalCredits)} credits = ${poolPartsSentence(data.pool, name)}`}
               </Typography>
             )}
             <Typography variant="body2">
@@ -678,12 +605,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
               </Typography>
             ) : null}
             {data.account ? (
-              <Typography variant="body2">
-                {`Owner’s Free allowance: ${credits(data.account.usedCredits)} of ${credits(data.account.limitCredits)} used across their free workspaces` +
-                  (data.account.returnedCredits
-                    ? ` (${credits(data.account.returnedCredits)} given back)`
-                    : '')}
-              </Typography>
+              <Typography variant="body2">{allowanceSentence(data.account, 'org')}</Typography>
             ) : null}
             <Typography variant="body2" color="text.secondary">
               {`Projected month-end at this pace: ${credits(data.pool.projectedCredits)} credits (${usd(data.pool.projectedUsd)}) · ${data.pool.messages.toLocaleString()} model turns, ${data.pool.deflected.toLocaleString()} answered from the docs`}

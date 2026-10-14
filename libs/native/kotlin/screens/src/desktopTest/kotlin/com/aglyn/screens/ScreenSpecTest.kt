@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.util.Base64
 import kotlin.test.BeforeTest
@@ -87,7 +88,7 @@ class ScreenSpecTest {
     }
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
-    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone")
+    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html")
     // Screens a plugin draws by hand rather than from a spec, which a spec may still open.
     val handWritten = setOf("commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.sales")
     for (spec in specs) {
@@ -235,6 +236,433 @@ class ScreenSpecTest {
     assertEquals(mapOf("formId" to "f1"), ScreenModel.plain(ScreenValues.resolveBody(export.obj("filter")!!, scope)))
   }
 
+  /** A route that wants its key in the body (the AI credit give-back) writes `{attempt}` there and gets one key per act. */
+  @Test
+  fun attemptKeyFillsABodyToo() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to "{}", 200 to "{}", 200 to "{}", sent = sent)
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("{}"), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Give back","url":"/api/ai/admin/credits",
+           "body":{"reason":"{form.reason}","idempotencyKey":"{attempt}"}}""",
+      ),
+    )!!
+    model.run(action, Json.parseToJsonElement("""{"form":{"reason":"planner fault"}}"""))
+    model.run(action, Json.parseToJsonElement("""{"form":{"reason":"second look"}}"""))
+    model.run(action, Json.parseToJsonElement("""{"form":{"reason":"planner fault"}}"""))
+    val keys = sent.map { (Json.parseToJsonElement((it.body as TextContent).text) as JsonObject)["idempotencyKey"]?.jsonPrimitive?.content }
+    assertEquals(3, keys.size)
+    assertEquals(36, keys[0]?.length)
+    assertNotEquals(keys[0], keys[1])
+    assertEquals(keys[0], keys[2])
+  }
+
+  /** A paged job sends the cursor back until the route is done, adds the pages up, and reports lines. */
+  @Test
+  fun loopAddsPagesUpAndReportsLines() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(
+      200 to """{"planned":2,"drift":{"byCollection":{"a":1}},"nextCursor":"c1"}""",
+      200 to """{"planned":3,"drift":{"byCollection":{"a":2,"b":1}},"nextCursor":null,"done":true}""",
+      sent = sent,
+    )
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Scan","url":"/api/admin/backfill-scope","body":{"dryRun":true},"success":"Scanned",
+           "loop":{"cursor":"nextCursor","until":"done"},
+           "report":[{"text":"{response.planned} planned"},{"text":"none","when":"response.missing"},
+                     {"each":"response.drift.byCollection","text":"{item.key}: {item.value}"}]}""",
+      ),
+    )!!
+    val outcome = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Done>(outcome)
+    assertEquals("Scanned\n5 planned\na: 3\nb: 1", outcome.message)
+    assertEquals(Json.parseToJsonElement("2"), outcome.response.obj("pages"))
+    assertEquals(Json.parseToJsonElement("false"), outcome.response.obj("bounded"))
+    assertEquals(Json.parseToJsonElement("""{"dryRun":true,"cursor":"c1"}"""), Json.parseToJsonElement((sent[1].body as TextContent).text))
+  }
+
+  /** A `when` on a repeated report line is read for each row: the meters that moved credits are named, and a repeat says only that. */
+  @Test
+  fun reportWhenIsReadForEachRow() = runTest {
+    val api = client(
+      200 to """{"duplicate":false,"lines":[{"meter":"workspace","credits":40},{"meter":"account","credits":0}]}""",
+      200 to """{"duplicate":true,"lines":[{"meter":"workspace","credits":40}]}""",
+      sent = mutableListOf(),
+    )
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Give back","url":"/api/ai/admin/credits","body":{"action":"give"},
+           "report":[{"text":"Already given back.","when":"response.duplicate"},
+                     {"each":"response.lines","when":"item.credits && !response.duplicate",
+                      "text":"Returned {item.credits:number} credits to the {item.meter}."}]}""",
+      ),
+    )!!
+    val first = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Done>(first)
+    assertEquals("Returned 40 credits to the workspace.", first.message)
+    val second = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Done>(second)
+    assertEquals("Already given back.", second.message)
+  }
+
+  /**
+   * The console's "Actions taken in this session": a lock or lift that reached the server leaves its lines, newest first (the lines of one
+   * act with the last listed on top), each verified or not, at most 25 of them.
+   */
+  @Test
+  fun actionsKeepASessionLog() = runTest {
+    val answer = """{"confirmed":true,"logLines":[{"text":"Locked org o1","confirmed":true},{"text":"Billing cancel NOT confirmed","confirmed":false}]}"""
+    val api = client(*Array(14) { 200 to answer }, 500 to """{"error":"no"}""", sent = mutableListOf())
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    assertEquals(0, (ScreenValues.lookup("session.log", model.context) as? JsonArray)?.size)
+    val lock = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Lock","url":"/api/admin/lockdown",
+           "log":[{"each":"response.logLines","text":"{item.text}","confirmed":"item.confirmed"}]}""",
+      ),
+    )!!
+    model.run(lock, model.context)
+    val first = ScreenValues.lookup("session.log", model.context) as JsonArray
+    // The last line of the act is on top, as the console prepends them.
+    assertEquals(listOf("Billing cancel NOT confirmed", "Locked org o1"), first.map { it.str("text") })
+    assertEquals(listOf(false, true), first.map { (it.obj("confirmed") as JsonPrimitive).booleanOrNull })
+    assertNotNull((first.first().obj("at") as? JsonPrimitive)?.content?.toDoubleOrNull())
+    repeat(13) { model.run(lock, model.context) }
+    assertEquals(ScreenModel.JOURNAL_LIMIT, model.journal.size)
+    // A refusal leaves nothing in the log: a click that did not reach the server is a line that never appears.
+    model.run(lock, model.context)
+    assertEquals(ScreenModel.JOURNAL_LIMIT, model.journal.size)
+    assertEquals("Billing cancel NOT confirmed", model.journal.first().str("text"))
+  }
+
+  /** A guarded run waits for a preview that was read: the preview arms a key, a failed preview takes it back, and the run spends it. */
+  @Test
+  fun aPreviewArmsTheRunAndTheRunSpendsIt() = runTest {
+    val api = client(200 to "{}", 500 to """{"error":"down"}""", 200 to "{}", 200 to "{}", sent = mutableListOf())
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val preview = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Preview","method":"GET","url":"/api/admin/audit-archive","arm":"auditArchive"}"""))!!
+    val run = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Run","url":"/api/admin/audit-archive","disarm":"auditArchive"}"""))!!
+    fun armed() = ScreenValues.condition("session.armed.auditArchive", model.context)
+    assertFalse(armed())
+    model.run(preview, model.context)
+    assertTrue(armed())
+    // The next preview fails: nothing was read, so the run is locked again.
+    model.run(preview, model.context)
+    assertFalse(armed())
+    model.run(preview, model.context)
+    assertTrue(armed())
+    model.run(run, model.context)
+    assertFalse(armed())
+  }
+
+  /** A country field offers the platform's own region list in the person's language, by name. */
+  @Test
+  fun countryFieldOffersThePlatformsRegions() {
+    val choices = isoRegions()
+    val codes = choices.map { it.first }
+    for (known in listOf("US", "CA", "GB", "DE", "JP", "AU", "MX")) assertTrue(known in codes, known)
+    assertFalse("ZZ" in codes)
+    assertFalse("EU" in codes)
+    assertTrue(choices.size > 200)
+    assertEquals(codes.size, codes.toSet().size)
+    // By name in the locale's order.
+    val collator = java.text.Collator.getInstance(java.util.Locale.getDefault())
+    val labels = choices.map { it.second }
+    assertEquals(labels.sortedWith { a, b -> collator.compare(a, b) }, labels)
+    val field = FieldSpec.parse(Json.parseToJsonElement("""{"key":"country","label":"Country","kind":"country","options":[{"value":"","label":"Choose a country"}]}"""))!!
+    assertEquals("Choose a country", field.choices(JsonObject(emptyMap())).first().second)
+    assertTrue(field.choices(JsonObject(emptyMap())).any { it.first == "US" })
+  }
+
+  private fun orgsListSpec(): ScreenSpec = ScreenSpec.parse(
+    Json.parseToJsonElement(
+      """{"id":"core.x","title":"X",
+          "load":{"orgs":{"url":"/api/admin/orgs?pageSize=50","sortParam":"sort","sortDefault":"createdAt:desc"}},
+          "blocks":[{"type":"list","load":"orgs","items":"data.orgs.orgs","columnsZone":"testOrgsListColumn",
+            "columns":[
+              {"id":"name","label":"Organization","always":true,"sort":{"route":"nameLower"}},
+              {"id":"plan","label":"Plan","value":"{item.plan:title}","sort":{"page":"item.plan"}},
+              {"id":"limit","label":"Site limit","value":"{item.limit}","sort":{"page":"item.rank","type":"number","first":"desc"}},
+              {"id":"created","label":"Created","value":"{item.created}","sort":{"route":"createdAt","first":"desc"}},
+              {"id":"owner","label":"Owner","value":"{item.owner}","show":false}]}]}""",
+    ),
+  )!!
+
+  /** A list's route columns ask the route in their order over every row, and the route's own default order goes when nothing was asked. */
+  @Test
+  fun aRouteColumnAsksTheRouteAgainInThatOrder() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"orgs":[]}""", 200 to """{"orgs":[]}""", 200 to """{"orgs":[]}""", sent = sent)
+    val model = ScreenModel(orgsListSpec(), JsonObject(emptyMap()), api)
+    model.load()
+    assertEquals("pageSize=50&sort=createdAt%3Adesc", sent.last().url.encodedQuery)
+    model.ask(ListOrder("name", true), "orgs", routed = true)
+    assertEquals("pageSize=50&sort=nameLower%3Adesc", sent.last().url.encodedQuery)
+    // A page column asks nothing of the route.
+    val before = sent.size
+    model.ask(ListOrder("plan", false), "orgs", routed = false)
+    assertEquals(before, sent.size)
+    // The default order comes back with no choice.
+    model.ask(null, "orgs", routed = true)
+    assertEquals("pageSize=50&sort=createdAt%3Adesc", sent.last().url.encodedQuery)
+  }
+
+  /** A tap on a header asks for the column's first order, the second for the other, the third for the default again. */
+  @Test
+  fun tappingAColumnCyclesItsOrder() {
+    val columns = ListColumns.columns(orgsListSpec().blocks.first())
+    val created = columns.first { it.id == "created" }
+    val plan = columns.first { it.id == "plan" }
+    var order = ListColumns.next(null, created)
+    assertEquals(ListOrder("created", true), order)
+    order = ListColumns.next(order, created)
+    assertEquals(ListOrder("created", false), order)
+    assertNull(ListColumns.next(order, created))
+    assertEquals(ListOrder("plan", false), ListColumns.next(order, plan))
+    assertEquals("createdAt:desc", ListColumns.routeValue(ListOrder("created", true), columns))
+    assertNull(ListColumns.routeValue(ListOrder("plan", false), columns))
+  }
+
+  /** A page column orders the rows on the screen: numbers as numbers, text without regard to case; a row without the value goes last either way, and ties keep their order. */
+  @Test
+  fun pageColumnsOrderRowsAndPutMissingLast() {
+    val columns = ListColumns.columns(orgsListSpec().blocks.first())
+    val rows = Json.parseToJsonElement(
+      """[{"id":"a","plan":"pro","rank":10},{"id":"b","plan":"Free","rank":9},{"id":"c"},{"id":"d","plan":"business","rank":100},{"id":"e","plan":"pro","rank":10}]""",
+    ) as JsonArray
+    fun ids(column: String, descending: Boolean) =
+      ListColumns.sorted(rows, columns.first { it.id == column }, descending, JsonObject(emptyMap())).map { it.str("id") }
+    assertEquals(listOf("d", "b", "a", "e", "c"), ids("plan", false))
+    assertEquals(listOf("a", "e", "b", "d", "c"), ids("plan", true))
+    // 100 is more than 9: a number, not text.
+    assertEquals(listOf("b", "a", "e", "d", "c"), ids("limit", false))
+    assertEquals(listOf("d", "a", "e", "b", "c"), ids("limit", true))
+  }
+
+  /** A row shows the columns the person picked as one line, without the ones it has nothing for. */
+  @Test
+  fun aListLineHoldsThePickedColumnsWithValues() {
+    val columns = ListColumns.columns(orgsListSpec().blocks.first())
+    val model = ScreenModel(orgsListSpec(), JsonObject(emptyMap()), null)
+    val defaults = model.shownColumns("orgs", columns)
+    // The shared catalog may hold a plugin column from another test, so this names what must be there, not all of it.
+    assertTrue(defaults.containsAll(setOf("name", "plan", "limit", "created")))
+    assertFalse("owner" in defaults)
+    val scope = Json.parseToJsonElement("""{"item":{"plan":"pro","limit":"5","created":"","owner":"u1"}}""")
+    // The owner column is off by default, the empty Created is skipped, and the row's own name is not repeated.
+    assertEquals("Plan Pro \u00b7 Site limit 5", ListColumns.line(columns, setOf("name", "plan", "limit", "created"), scope))
+    model.shown["orgs"] = setOf("plan", "limit", "created", "owner")
+    assertEquals("Plan Pro \u00b7 Site limit 5 \u00b7 Owner u1", ListColumns.line(columns, model.shownColumns("orgs", columns), scope))
+  }
+
+  /** A column a plugin contributes to a list is read for the rows on the screen, in batches, and its answers join under `column.<id>`. */
+  @Test
+  fun aPluginColumnIsReadForTheRowsOnScreenInBatches() = runTest {
+    ScreenCatalog.add(
+      listOf(
+        ScreenSpec.parse(
+          Json.parseToJsonElement(
+            """{"id":"test.spendColumn","title":"Spend","scope":"staff","zones":["testOrgsListColumn"],
+                "column":{"id":"spend","label":"Spend","value":"{column.spend.cells[@item.id]|'\u2014'}",
+                  "sort":{"page":"column.spend.sort[@item.id]","type":"number","first":"desc"},
+                  "load":{"url":"/api/x/spend?orgIds={ids}","ids":"{item.id}","max":2}}}""",
+          ),
+        )!!,
+      ),
+    )
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(
+      200 to """{"orgs":[{"id":"o1"},{"id":"o2"},{"id":"o3"}]}""",
+      200 to """{"cells":{"o1":"${'$'}1.0000","o2":"${'$'}0.5000"},"sort":{"o1":1,"o2":0.5}}""",
+      200 to """{"cells":{"o3":"\u2014"},"sort":{"o3":null}}""",
+      sent = sent,
+    )
+    val model = ScreenModel(orgsListSpec(), JsonObject(emptyMap()), api)
+    model.load()
+    // One read of the list, then the column's two batches of two ids and one.
+    assertEquals(listOf("orgIds=o1%2Co2", "orgIds=o3"), sent.takeLast(2).map { it.url.encodedQuery })
+    assertEquals(JsonPrimitive("${'$'}0.5000"), ScreenValues.lookup("column.spend.cells.o2", model.context))
+    val block = model.spec.blocks.first()
+    val columns = ListColumns.columns(block)
+    val spend = columns.last()
+    assertEquals("spend", spend.id)
+    val rows = ScreenValues.rows(ScreenValues.lookup("data.orgs.orgs", model.context))
+    // Dearest first, the unmeasured last in both directions.
+    assertEquals(listOf("o1", "o2", "o3"), ListColumns.sorted(rows, spend, true, model.context).map { it.str("id") })
+    assertEquals(listOf("o2", "o1", "o3"), ListColumns.sorted(rows, spend, false, model.context).map { it.str("id") })
+    assertEquals("Spend ${'$'}1.0000", ListColumns.line(columns, setOf("spend"), ScreenContext.withItem(model.context, rows[0])))
+  }
+
+  /** A probe that answers 503 is reporting: its body is the answer. */
+  @Test
+  fun loadAcceptsTheStatusAProbeReportsWith() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(503 to """{"status":"degraded","checks":{"a":{"ok":false}}}""", 503 to """{"status":"degraded"}""", 503 to """{"status":"degraded"}""", sent = sent)
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X","load":{"probe":{"url":"/api/health/crons","accept":[503]}}}"""))!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"data":{}}"""), api)
+    model.load()
+    assertEquals(ScreenModel.Phase.Ready, model.phase)
+    assertEquals(JsonPrimitive("degraded"), ScreenValues.lookup("data.probe.status", model.context))
+  }
+
+  /** A staff list load names its filters; a clause with nothing to filter on is left out. */
+  @Test
+  fun loadFiltersGoInTheQueryOnlyWhenFilled() {
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{"rows":{"url":"/api/x?pageSize=50","filters":[
+           {"field":"status","op":"equals","value":"{params.status}"},{"field":"category","value":"{params.category}"}]}}}""",
+      ),
+    )!!
+    val load = spec.loads.first()
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"params":{"status":"open","category":""}}"""), null)
+    assertEquals("/api/x?pageSize=50&filters=%5B%7B%22field%22%3A%22status%22%2C%22op%22%3A%22equals%22%2C%22value%22%3A%22open%22%7D%5D", model.url(load))
+    val bare = ScreenModel(spec, Json.parseToJsonElement("""{"params":{}}"""), null)
+    assertEquals("/api/x?pageSize=50", bare.url(load))
+  }
+
+  /** A `late` load reads what the others found, and a query can ask for the server's count of what it matches. */
+  @Test
+  fun aLateLoadReadsTheAnswersOfTheOthersAndACountIsAskedOfTheServer() = runTest {
+    val reader = CountingReader()
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{
+           "host":{"doc":"hosts/{params.hostId}"},
+           "media":{"late":true,"query":{"collection":"orgs/{data.host.orgId}/media","aggregate":{"count":true}}},
+           "members":{"late":true,"query":{"collection":"orgs/{data.host.orgId}/members","where":[["role","==","owner"]],"aggregate":{"count":true}}},
+           "orphan":{"late":true,"when":"!data.host.orgId","query":{"collection":"hosts/{params.hostId}/media","aggregate":{"count":true}}}}}""",
+      ),
+    )!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"params":{"hostId":"h1"},"data":{}}"""), client(sent = mutableListOf()), reader)
+    model.load()
+    assertEquals(ScreenModel.Phase.Ready, model.phase)
+    assertEquals(JsonPrimitive(42.0), ScreenValues.lookup("data.media.count", model.context))
+    assertEquals(JsonPrimitive("o9"), ScreenValues.lookup("data.host.orgId", model.context))
+    assertEquals(listOf("orgs/o9/media", "orgs/o9/members"), reader.counted.sorted())
+    assertEquals(listOf("role"), reader.equalities)
+  }
+
+  /** A refusal says what the route says, then its `failure` lines over the route's answer. */
+  @Test
+  fun aRefusalIsExplainedFromTheRoutesAnswer() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(409 to """{"error":"This person owns workspaces","blockers":[{"orgName":"Acme","otherMembers":2},{"orgName":"Beta","otherMembers":0}]}""", sent = sent)
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Erase","url":"/api/admin/users/manage","failure":[{"each":"response.blockers","text":"{item.orgName}: {item.otherMembers} other members"},{"text":"none","when":"response.shared"}]}""",
+      ),
+    )!!
+    val outcome = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Failed>(outcome)
+    assertEquals("This person owns workspaces\nAcme: 2 other members\nBeta: 0 other members", outcome.message)
+  }
+
+  /** An action can hand text to the device as a file: the name is a template, the text a path over the context. */
+  @Test
+  fun anActionCanHandTextToTheDeviceAsAFile() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement("""{"label":"Export","url":"/api/x","file":{"name":"{data.view.filename}","type":"text/csv","from":"response.csv"}}"""),
+    )!!
+    val file = action.file!!
+    assertEquals("text/csv", file.type)
+    val made = file.contents(Json.parseToJsonElement("""{"data":{"view":{"filename":"US-TX-2026-Q3.csv"}},"response":{"csv":"a,b\n1,2"}}"""))
+    assertEquals("US-TX-2026-Q3.csv" to "a,b\n1,2", made)
+    assertNull(file.contents(Json.parseToJsonElement("""{"response":{"csv":""}}""")))
+    assertNull(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Go","url":"/api/x"}"""))!!.file)
+  }
+
+  /** A field can fill itself with a random value from an alphabet; `pairs` prints a map's keys as they are. */
+  @Test
+  fun aGeneratedValueIsTheLengthAskedFromTheAlphabet() {
+    val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    val first = ScreenValues.generated(20, alphabet)
+    assertEquals(20, first.length)
+    assertTrue(first.all { it in alphabet })
+    assertNotEquals(first, ScreenValues.generated(20, alphabet))
+    assertEquals("", ScreenValues.generated(5, ""))
+    assertEquals("Ab1xY: editor, z9: viewer", ScreenValues.render("{h:pairs}", Json.parseToJsonElement("""{"h":{"Ab1xY":"editor","z9":"viewer"}}""")))
+    // A spec names the console's own length and alphabet as constants.
+    val field = FieldSpec.parse(Json.parseToJsonElement("""{"key":"password","kind":"text","generate":{"length":"{const.n}","alphabet":"{const.a}"}}"""))!!
+    val made = field.generatedValue(Json.parseToJsonElement("""{"const":{"n":12,"a":"ab"}}"""))
+    assertEquals(12, made?.length)
+    assertTrue(made?.all { it in "ab" } == true)
+    assertNull(FieldSpec.parse(Json.parseToJsonElement("""{"key":"name"}"""))!!.generatedValue(JsonObject(emptyMap())))
+  }
+
+  /** A GET action can carry the same staff list `filters` a load does, so an export covers what the list shows. */
+  @Test
+  fun anActionCarriesFiltersLikeALoad() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"csv":"a"}""", sent = sent)
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, Json.parseToJsonElement("""{"params":{"scope":"org","from":""}}"""), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Export","method":"GET","url":"/api/admin/audit-log?view=csv","filters":[{"field":"scope","op":"equals","value":"{params.scope}"},{"field":"at","op":"onOrAfter","value":"{params.from}"}]}""",
+      ),
+    )!!
+    model.run(action, model.context)
+    val url = sent[0].url.toString()
+    assertTrue(url.contains("view=csv&filters="))
+    assertTrue(url.contains("scope"))
+    assertFalse(url.contains("onOrAfter"))
+  }
+
+  /** A prompt field with `each` is one field per row of a list, and `$collect` gathers what was typed. */
+  @Test
+  fun aPromptFieldCanRepeatForEveryRowOfAList() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Test","url":"/api/x","prompt":[{"key":"to","kind":"email"},
+           {"each":"const.tokens","key":"token.{item.name}","label":"{item.name}","help":"{item.description}","initial":"{item.sample}"}],
+           "body":{"to":"{form.to}","mergeValues":{"${'$'}collect":{"prefix":"token."}}}}""",
+      ),
+    )!!
+    val scope = Json.parseToJsonElement(
+      """{"const":{"tokens":[{"name":"org.name","description":"The workspace","sample":"Acme {x}"},{"name":"link","description":"","sample":""}]}}""",
+    )
+    val inputs = action.inputs(scope)
+    assertEquals(listOf("to", "token.org.name", "token.link"), inputs.map { it.key })
+    assertEquals("org.name", inputs[1].label)
+    assertEquals("The workspace", inputs[1].help)
+    // A brace in a sample is text, not a template.
+    assertEquals("Acme {x}", ScreenValues.render(inputs[1].initial.orEmpty(), JsonObject(emptyMap())))
+    val sent = ScreenValues.resolveBody(action.body!!, Json.parseToJsonElement("""{"form":{"to":"a@b.c","token.org.name":"Acme","token.link":""}}"""))
+    assertEquals(Json.parseToJsonElement("""{"to":"a@b.c","mergeValues":{"org.name":"Acme"}}"""), sent)
+    assertEquals(listOf("reason"), ActionSpec.parse(Json.parseToJsonElement("""{"label":"Go","url":"/api/x","reason":true}"""))!!.inputs(JsonObject(emptyMap())).map { it.key })
+  }
+
+  /** A list can be ordered by a field of its rows: numbers as numbers, anything else as text, rows without it last. */
+  @Test
+  fun sortOrdersByAFieldWithNumbersAsNumbersAndKeepsTiesInOrder() {
+    val rows = (Json.parseToJsonElement("""[{"key":"a","value":9},{"key":"b","value":10},{"key":"c"},{"key":"d","value":10},{"key":"E","value":2}]""") as JsonArray).toList()
+    fun keys(sort: String) = ScreenValues.sorted(rows, sort).map { ScreenValues.text(it.obj("key")) }
+    assertEquals(listOf("b", "d", "a", "E", "c"), keys("value desc"))
+    assertEquals(listOf("E", "a", "b", "d", "c"), keys("value"))
+    assertEquals(listOf("a", "b", "c", "d", "E"), keys("key"))
+    assertEquals(listOf("a", "b", "c", "d", "E"), keys(""))
+  }
+
+  /** A list can walk down into the lists inside its rows; each row found knows the row it came from. */
+  @Test
+  fun flattenWalksDownAndKeepsTheParent() {
+    val sources = (Json.parseToJsonElement(
+      """[{"id":"s1","tables":[{"heading":"By plugin","rows":[{"name":"A"},{"name":"B"}]},{"heading":"By shop","rows":[{"name":"C"}]}]},
+         {"id":"s2","tables":[{"heading":"Other","rows":[]}]}]""",
+    ) as JsonArray).toList()
+    val rows = ScreenValues.flatten(sources, "tables.rows")
+    assertEquals(listOf("A", "B", "C"), rows.map { ScreenValues.text(it.obj("name")) })
+    assertEquals("By shop", ScreenValues.text(ScreenValues.lookup("item.\$parent.heading", ScreenContext.withItem(JsonObject(emptyMap()), rows[2]))))
+    assertEquals("s1", ScreenValues.text(ScreenValues.lookup("item.\$parent.\$parent.id", ScreenContext.withItem(JsonObject(emptyMap()), rows[0]))))
+    assertEquals(3, ScreenValues.flatten(sources, "tables").size)
+  }
+
   @Test
   fun theTokenSaysHowTheAccountSignsIn() {
     val enc = Base64.getUrlEncoder().withoutPadding()
@@ -262,6 +690,191 @@ class ScreenSpecTest {
     assertTrue(ScreenValues.condition(instead.str("when"), answered))
     assertEquals("Domains: Point a CNAME.", ScreenValues.render(instead.str("text")!!, answered))
     assertFalse(ScreenValues.condition(instead.str("when"), Json.parseToJsonElement("""{"response":{"ok":true}}""")))
+  }
+
+  /**
+   * A collection read straight from Firestore shows its first rows; one that came back full offers "Load more", which reads it again
+   * with a larger limit (the load's `more`, else its own limit again) until the end, so a big site can be gone through to its last
+   * page. The window stays grown across a reload, as the commerce lists' does (QueryGrowthTest).
+   */
+  @Test
+  fun aFullFirestoreQueryOffersMoreRows() = runTest {
+    val reader = RowsReader(total = 6)
+    val api = client(sent = mutableListOf())
+    fun spec(extra: String) = ScreenSpec.parse(
+      Json.parseToJsonElement("""{"id":"core.x","title":"X","load":{"rows":{"query":{"collection":"hosts/h1/screens","limit":3}$extra}}}"""),
+    )!!
+    fun rows(model: ScreenModel) = (ScreenValues.lookup("data.rows.items", model.context) as JsonArray).size
+    val model = ScreenModel(spec(""","more":2"""), JsonObject(emptyMap()), api, reader)
+    model.load()
+    assertEquals(3, rows(model))
+    assertEquals("3", model.cursors["rows"])
+    model.loadMore("rows")
+    assertEquals(5, rows(model))
+    assertEquals("5", model.cursors["rows"])
+    model.loadMore("rows")
+    // The last read came back short: that was everything, and the button goes.
+    assertEquals(6, rows(model))
+    assertNull(model.cursors["rows"])
+    assertEquals(listOf(3, 5, 7), reader.limits)
+    // A load without `more` grows by its own limit.
+    val plainReader = RowsReader(total = 6)
+    val fixed = ScreenModel(spec(""), JsonObject(emptyMap()), api, plainReader)
+    fixed.load()
+    assertEquals("3", fixed.cursors["rows"])
+    fixed.loadMore("rows")
+    assertEquals(listOf(3, 6), plainReader.limits)
+    // A reload keeps the grown window.
+    model.load()
+    assertEquals(6, rows(model))
+    assertNull(model.cursors["rows"])
+  }
+
+  /** The abuse and counter-notice pages keep the console's "Changes made in this session", in its words. */
+  @Test
+  fun abuseDecisionsLeaveTheConsolesSessionLines() = runTest {
+    val screens = ScreenSpec.parseFile(File(screensDir, "staff.screens.json").readText())
+    val api = client(
+      200 to """{"confirmed":true}""",
+      200 to """{"confirmed":true,"scheduling":"scheduled","counterNotice":{"restoreAtMs":1760000000000}}""",
+      200 to """{"confirmed":false,"scheduling":"notSuspended"}""",
+      200 to """{"confirmed":true,"scheduling":"noClock"}""",
+      sent = mutableListOf(),
+    )
+    fun action(screen: String, id: String): ActionSpec =
+      screens.first { it.id == screen }.raw.arr("blocks").flatMap { it.arr("items") }.mapNotNull { ActionSpec.parse(it) }.first { it.id == id }
+
+    val report = ScreenModel(
+      screens.first { it.id == "core.staff.abuseReport" },
+      Json.parseToJsonElement("""{"params":{"reportId":"r1"},"data":{"report":{"report":{"reference":"AR-1"}}}}"""), api,
+    )
+    report.run(action("core.staff.abuseReport", "actioned"), report.context)
+    assertEquals(listOf("AR-1 → actioned"), report.journal.map { it.str("text") })
+    assertEquals(true, (report.journal.first().obj("confirmed") as JsonPrimitive).booleanOrNull)
+
+    val notice = ScreenModel(
+      screens.first { it.id == "core.staff.counterNotice" },
+      Json.parseToJsonElement("""{"params":{"noticeId":"n1"},"data":{"notice":{"counterNotices":[{"id":"n1","reference":"CN-7"}]}}}"""), api,
+    )
+    notice.run(action("core.staff.counterNotice", "forwarded"), notice.context)
+    val scheduled = notice.journal.first().str("text")!!
+    val prefix = "CN-7 → forwarded — restoration scheduled for "
+    assertTrue(scheduled.startsWith(prefix), scheduled)
+    assertTrue(scheduled.length > prefix.length, scheduled)
+    notice.run(action("core.staff.counterNotice", "withdrawn"), notice.context)
+    assertEquals("CN-7 → withdrawn — the site was NOT suspended, so nothing was scheduled", notice.journal.first().str("text"))
+    assertEquals(false, (notice.journal.first().obj("confirmed") as JsonPrimitive).booleanOrNull)
+    // No clock to set says nothing more than the step.
+    notice.run(action("core.staff.counterNotice", "rejected"), notice.context)
+    assertEquals("CN-7 → rejected", notice.journal.first().str("text"))
+    assertEquals(3, notice.journal.size)
+  }
+
+  /**
+   * "Populate from" on a system email test: workspaces, sites and people are searched by the words typed, and picking one fills the
+   * merge tokens the template takes (and the recipient, for a person with an address).
+   */
+  @Test
+  fun thePopulateFromPickerSearchesAndFillsTheTokens() = runTest {
+    val spec = ScreenSpec.parseFile(File(screensDir, "staff.screens.json").readText()).first { it.id == "core.staff.emails" }
+    val test = spec.raw.arr("blocks").flatMap { it.arr("actions") }.mapNotNull { ActionSpec.parse(it) }.first { it.id == "test" }
+    // A template that takes the workspace's name and the person's email, with the staff member as the default recipient.
+    val scope = Json.parseToJsonElement(
+      """{"user":{"email":"ops@example.test"},"item":{"key":"welcome"},
+         "const":{"tokens":{"welcome":[{"name":"org.name","sample":"Acme"},{"name":"user.email","sample":"a@b.co"}]}}}""",
+    )
+    val inputs = test.inputs(scope)
+    assertEquals(listOf("populate", "to", "token.org.name", "token.user.email"), inputs.map { it.key })
+    val picker = inputs.first()
+    assertEquals("lookup", picker.kind)
+    assertEquals(listOf("Workspaces", "Sites", "People"), picker.groups.map { it.label })
+    val keys = inputs.map { it.key }.toSet()
+
+    val org = picker.groups.first { it.id == "org" }
+    assertEquals("/api/admin/orgs?pageSize=10", org.request("  "))
+    assertEquals("/api/admin/orgs?pageSize=10&search=Acme%20%26%20Sons", org.request("Acme & Sons"))
+    // Only the fields the form has are filled: the template takes no org.id.
+    assertEquals(
+      listOf("token.org.name" to "Acme Co"),
+      org.fills(Json.parseToJsonElement("""{"name":"Acme Co","${'$'}id":"o1"}"""), scope, keys),
+    )
+
+    val person = picker.groups.first { it.id == "user" }
+    val row = Json.parseToJsonElement("""{"uid":"u1","email":"dana@example.test","displayName":"Dana"}""")
+    assertEquals("dana@example.test", person.heading(row, scope))
+    assertEquals("Dana", person.detail(row, scope))
+    assertEquals(
+      mapOf("token.user.email" to "dana@example.test", "to" to "dana@example.test"),
+      person.fills(row, scope, keys).toMap(),
+    )
+    // A person with no address sets the token blank and leaves the recipient alone.
+    val noAddress = Json.parseToJsonElement("""{"uid":"u2","displayName":"No Mail"}""")
+    assertEquals(listOf("token.user.email" to ""), person.fills(noAddress, scope, keys))
+    assertEquals("No Mail", person.heading(noAddress, scope))
+
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"orgs":[{"${'$'}id":"o1","name":"Acme Co"},{"${'$'}id":"o2","name":"Acme Two"}]}""", sent = sent)
+    val model = ScreenModel(spec, JsonObject(emptyMap()), api)
+    val rows = model.lookup(org, "acme")
+    assertEquals(listOf("Acme Co", "Acme Two"), rows.map { it.str("name") })
+    assertEquals("/api/admin/orgs", sent.single().url.encodedPath)
+    assertEquals("pageSize=10&search=acme", sent.single().url.encodedQuery)
+  }
+
+  /** The staff routes mint a custom token for a support session; the action names where in the answer it and its pool are. */
+  @Test
+  fun anImpersonateActionReadsTheTokenAndPoolFromTheAnswer() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement("""{"label":"Sign in as this customer","url":"/api/admin/impersonate","impersonate":{"token":"token","tenantId":"tenantId"}}"""),
+    )!!
+    val spec = assertNotNull(action.impersonate)
+    assertEquals("custom-token" to "tenant-9", spec.resolve(Json.parseToJsonElement("""{"token":"custom-token","tenantId":"tenant-9"}""")))
+    // An account in the project's own pool has no tenant.
+    assertEquals("custom-token" to null, spec.resolve(Json.parseToJsonElement("""{"token":"custom-token","tenantId":null}""")))
+    assertNull(spec.resolve(Json.parseToJsonElement("""{"tenantId":"tenant-9"}""")))
+    assertNull(spec.resolve(Json.parseToJsonElement("""{"token":""}""")))
+    assertNull(spec.resolve(null))
+    assertNull(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Plain","url":"/x"}"""))!!.impersonate)
+  }
+
+  /** Person and Workspace both offer the sign-in the console does, asking the reason the route insists on. */
+  @Test
+  fun thePersonAndWorkspaceScreensOfferASupportSession() = runTest {
+    val screens = ScreenSpec.parseFile(File(screensDir, "staff.screens.json").readText())
+    fun offered(id: String): ActionSpec {
+      val screen = screens.first { it.id == id }
+      return screen.raw.arr("blocks").flatMap { it.arr("items") }.mapNotNull { ActionSpec.parse(it) }.first { it.impersonate != null }
+    }
+    val person = offered("core.staff.user")
+    val workspace = offered("core.staff.org")
+    for ((action, uid) in listOf(person to "{params.uid}", workspace to "{data.detail.org.ownerUid}")) {
+      assertEquals("/api/admin/impersonate", action.url)
+      val reason = action.prompt.single { it.key == "reason" }
+      assertTrue(reason.required)
+      assertEquals(uid, action.body?.str("uid"))
+      assertEquals("{form.reason}", action.body?.str("reason"))
+      assertFalse(action.reason, "the reason is asked once, by the prompt")
+    }
+    // The route's own minimum is the one the prompt tells the person about.
+    val min = screens.first { it.id == "core.staff.user" }.raw.obj("constants").obj("impersonation").obj("minReason")!!.jsonPrimitive.content
+    assertTrue(min.toInt() > 1)
+
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"token":"custom-token","tenantId":null}""", sent = sent)
+    val model = ScreenModel(screens.first { it.id == "core.staff.user" }, Json.parseToJsonElement("""{"params":{"uid":"u1"}}"""), api)
+    assertEquals(
+      "At least $min characters. Write what you are reproducing, or the ticket it serves.",
+      ScreenValues.render(person.prompt.single().help!!, model.context),
+    )
+    val scope = Json.parseToJsonElement("""{"params":{"uid":"u1"},"form":{"reason":"ticket 481: billing page"}}""")
+    val outcome = model.run(person, scope)
+    assertIs<ActionOutcome.Done>(outcome)
+    assertEquals("/api/admin/impersonate", sent.single().url.encodedPath)
+    assertEquals(
+      Json.parseToJsonElement("""{"uid":"u1","reason":"ticket 481: billing page"}"""),
+      Json.parseToJsonElement((sent.single().body as TextContent).text),
+    )
+    assertEquals("custom-token" to null, person.impersonate!!.resolve(outcome.response))
   }
 
   @Test
@@ -367,5 +980,38 @@ class ScreenSpecTest {
     assertEquals(2, (ScreenValues.lookup("data.list.rows", model.context) as JsonArray).size)
     assertFalse("list" in model.cursors)
     assertEquals("orgId=o%201&cursor=a", sent.last().url.encodedQuery)
+  }
+}
+
+/** A reader that holds a collection of numbered rows and answers each query with as many as its limit allows. */
+private class RowsReader(val total: Int) : com.aglyn.core.FirestoreReader {
+  val limits = mutableListOf<Int>()
+
+  override suspend fun get(path: String): com.aglyn.core.FirestoreDoc? = null
+  override suspend fun page(query: com.aglyn.core.FirestoreQuery): com.aglyn.core.FirestorePage {
+    val limit = query.limit ?: total
+    limits += limit
+    return com.aglyn.core.FirestorePage(
+      (0 until minOf(limit, total)).map { com.aglyn.core.FirestoreDoc("r$it", "${query.collectionPath}/r$it", mapOf("n" to it.toDouble())) },
+      null,
+    )
+  }
+  override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+  override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
+}
+
+/** A reader that holds one site document and counts whatever it is asked to. */
+private class CountingReader : com.aglyn.core.FirestoreReader {
+  val counted = mutableListOf<String>()
+  val equalities = mutableListOf<String>()
+
+  override suspend fun get(path: String) = com.aglyn.core.FirestoreDoc(path.substringAfterLast('/'), path, mapOf("orgId" to "o9"))
+  override suspend fun page(query: com.aglyn.core.FirestoreQuery) = com.aglyn.core.FirestorePage(emptyList(), null)
+  override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+  override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
+  override suspend fun count(query: com.aglyn.core.FirestoreQuery): Long? {
+    counted += query.collectionPath
+    equalities += query.filters.map { it.field }
+    return 42L
   }
 }

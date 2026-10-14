@@ -75,6 +75,10 @@ public struct LoadSpec: Sendable, Hashable {
   public let body: JSONValue?
   /// A load whose failure leaves its key null instead of failing the screen.
   public let optional: Bool
+  /// Statuses whose body is the answer, not a failure: a health probe answers 503 when it reports degraded.
+  public let accept: [Int]
+  /// The staff list routes' `filters`: `{ field, op, value }` clauses, each kept when its value template is not empty.
+  public let filters: [JSONValue]
   /// A Firestore document path to read instead of a route.
   public let doc: String?
   /// A Firestore collection query to read instead of a route.
@@ -85,6 +89,17 @@ public struct LoadSpec: Sendable, Hashable {
   public let entitlement: String?
   /// An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship.
   public let orderZone: String?
+  /// Runs once the other loads have answered, with their answers under `data`: a read keyed by
+  /// something another read found (a site's workspace id).
+  public let late: Bool
+  /// The query parameter a staff list route orders by (`sort=<path>:<dir>`), and the order it answers when none was asked.
+  /// A list's `route` columns ask for the others.
+  public let sortParam: String?
+  public let sortDefault: String?
+  /// For a Firestore `query` that returned its whole `limit`: how many more rows each "Load more" reads (the query's own
+  /// limit when absent). The query is read again with the larger limit, so a collection too big for one read can still be
+  /// gone through to its end.
+  public let more: Int?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -103,6 +118,12 @@ public struct LoadSpec: Sendable, Hashable {
       self.method = .get
       self.body = nil
       self.optional = false
+      self.accept = []
+      self.filters = []
+      self.late = false
+      self.sortParam = nil
+      self.sortDefault = nil
+      self.more = nil
     } else {
       self.url = json["url"]?.stringValue ?? ""
       self.when = json["when"]?.stringValue
@@ -118,6 +139,12 @@ public struct LoadSpec: Sendable, Hashable {
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
+      self.accept = json["accept"].array.compactMap { value in value.numberValue.map { Int($0) } }
+      self.filters = json["filters"].array
+      self.late = json["late"] == .bool(true)
+      self.sortParam = json["sortParam"]?.stringValue
+      self.sortDefault = json["sortDefault"]?.stringValue
+      self.more = ScreenValues.number(json["more"]).map { Int($0) }
     }
   }
 }
@@ -152,9 +179,13 @@ public struct ActionSpec: Sendable, Identifiable {
   public let method: HTTPMethod
   public let url: String?
   public let body: JSONValue?
+  /// A staff list route's `filters` for a GET action (the audit log's CSV export): `{ field, op, value }` clauses,
+  /// each kept when its value template is not empty, as a load's are.
+  public let filters: [JSONValue]
   /// Request headers, name to template. `{attempt}` is a key that stays the same while the same
   /// action sends the same body (a retry), and changes with the body: `Idempotency-Key` for a
-  /// route that provisions something (enterprise billing).
+  /// route that provisions something (enterprise billing). A route that wants the key in its body
+  /// (`idempotencyKey`) writes `{attempt}` there and gets the same key.
   public let headers: [String: String]
   public let confirm: String?
   /// A confirmation built from segments, `[{ "when": …, "text": … }]`, joined in order, so one
@@ -192,6 +223,27 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// Lines the result is reported in, after `success`: `{ when, each, text }`, one per line.
+  public let report: [ReportLine]
+  /// Lines a refusal is explained in, after the route's own words, over the route's answer as `response`
+  /// (the workspaces that still need an owner, the addresses another account holds).
+  public let failure: [ReportLine]
+  /// Lines the screen keeps in its session log (`session.log`, newest first) when the action succeeds, as the console's
+  /// "Actions taken in this session" does: a lock or lift that reached the server, stamped with when, and verified or not.
+  public let log: [ReportLine]
+  /// A key the screen remembers as armed (`session.armed.<key>`) once the action succeeds, and forgets if it fails: a
+  /// preview that has been read, which a guarded run waits for.
+  public let arm: String?
+  /// A key the screen forgets once the action succeeds: the run that spends its preview.
+  public let disarm: String?
+  /// `{ token, tenantId }`: paths in the route's answer. Once the action succeeds the app signs in as the customer with the
+  /// custom token found at `token` (a support session), in the identity pool named at `tenantId`. The token is a credential:
+  /// it goes to the session and is shown nowhere.
+  public let impersonate: ImpersonateSpec?
+  /// Hands text to the device as a file (Save, or the share sheet): the working papers' CSV, the audit log's.
+  public let file: FileSpec?
+  /// Repeats the request page by page until the route is done, and answers the totals.
+  public let loop: LoopSpec?
   /// A change to the signed-in person's own sign-in, made through the
   /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
   public let account: String?
@@ -218,6 +270,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "POST").uppercased()) ?? .post
     self.url = json["url"]?.stringValue
     self.body = json["body"]
+    self.filters = json["filters"].array
     self.headers = json["headers"].objectEntries.reduce(into: [:]) { $0[$1.key] = $1.value.stringValue ?? ScreenValues.text($1.value) }
     self.confirm = json["confirm"]?.stringValue
     self.confirmParts = json["confirm"].array
@@ -245,6 +298,14 @@ public struct ActionSpec: Sendable, Identifiable {
     self.overlay = json["overlay"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.report = json["report"].array.compactMap(ReportLine.init)
+    self.failure = json["failure"].array.compactMap(ReportLine.init)
+    self.log = json["log"].array.compactMap(ReportLine.init)
+    self.arm = json["arm"]?.stringValue
+    self.disarm = json["disarm"]?.stringValue
+    self.impersonate = json["impersonate"].flatMap(ImpersonateSpec.init)
+    self.loop = json["loop"].flatMap(LoopSpec.init)
+    self.file = json["file"].flatMap(FileSpec.init)
     self.account = json["account"]?.stringValue
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
@@ -270,24 +331,106 @@ public struct ActionSpec: Sendable, Identifiable {
     return entries.first { ScreenValues.condition($0["when"]?.stringValue, in: scope) }
   }
 
-  /// Every field the action asks for before it runs: its prompt, then a reason.
-  public var inputs: [FieldSpec] {
-    reason
-      ? prompt + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true,
-          help: "Recorded in the audit log.")]
-      : prompt
-  }
-
-  /// Whether the action asks for anything before it runs (a prompt, even one the data fills in, or a reason).
-  public var asksInputs: Bool { !promptRaw.isEmpty || reason }
-
-  /// The fields to ask for, with any `fieldsFrom` entry expanded from the data in `context`.
-  public func inputs(in context: JSONValue) -> [FieldSpec] {
-    let asked = FieldSpec.parseAll(promptRaw, in: context)
+  /// Every field the action asks for before it runs: its prompt, with any `fieldsFrom` entry expanded from the data in
+  /// `scope` and a field with `each` becoming one per row, then a reason.
+  public func inputs(in scope: JSONValue) -> [FieldSpec] {
+    let asked = FieldSpec.parseAll(promptRaw, in: scope).flatMap { $0.expanded(in: scope) }
     return reason
       ? asked + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true, help: "Recorded in the audit log.")]
       : asked
   }
+
+  /// Whether the action asks for anything before it runs in `scope`: a reason, or a prompt (even one the data fills in),
+  /// except a prompt made only of `each` fields whose lists are empty there, which has nothing to ask.
+  public func asksInputs(in scope: JSONValue) -> Bool {
+    if reason || promptRaw.contains(where: { $0["each"] == nil }) { return true }
+    return !inputs(in: scope).isEmpty
+  }
+}
+
+/// Where in a route's answer a support session's custom token and identity pool are.
+public struct ImpersonateSpec: Sendable {
+  public let token: String
+  public let tenantId: String?
+
+  init?(_ json: JSONValue) {
+    guard let token = json["token"]?.stringValue else { return nil }
+    self.token = token
+    self.tenantId = json["tenantId"]?.stringValue
+  }
+
+  /// The token and pool a route answered, or nil when it named no token.
+  public func resolve(in response: JSONValue?) -> (token: String, tenantId: String?)? {
+    let answer = response ?? .null
+    guard let found = ScreenValues.lookup(token, in: answer)?.stringValue, !found.isEmpty else { return nil }
+    let pool = tenantId.flatMap { ScreenValues.lookup($0, in: answer)?.stringValue }.flatMap { $0.isEmpty ? nil : $0 }
+    return (found, pool)
+  }
+}
+
+/// `{ name, type, from }`: the file an action hands to the device. `name` is a template, `type` a MIME type, and
+/// `from` the path (over the screen's context and the route's `response`) of the text that is the file.
+public struct FileSpec: Sendable {
+  public let name: String
+  public let type: String
+  public let from: String
+
+  init?(_ json: JSONValue) {
+    guard let name = json["name"]?.stringValue, let from = json["from"]?.stringValue else { return nil }
+    self.name = name
+    self.type = json["type"]?.stringValue ?? "text/plain"
+    self.from = from
+  }
+
+  /// The file name and the text, or nil when there is nothing to hand over.
+  public func contents(in context: JSONValue) -> (name: String, text: String)? {
+    let text = ScreenValues.text(ScreenValues.lookup(from, in: context))
+    return text.isEmpty ? nil : (ScreenValues.render(name, in: context), text)
+  }
+}
+
+/// One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it
+/// (for a repeated line, row by row). In a `log`, `confirmed` is a condition for the line to read as verified (default: it does).
+public struct ReportLine: Sendable {
+  public let text: String
+  public let when: String?
+  public let each: String?
+  public let confirmed: String?
+
+  init?(_ json: JSONValue) {
+    if let text = json.stringValue {
+      self.text = text
+      self.when = nil
+      self.each = nil
+      self.confirmed = nil
+      return
+    }
+    guard let text = json["text"]?.stringValue else { return nil }
+    self.text = text
+    self.when = json["when"]?.stringValue
+    self.each = json["each"]?.stringValue
+    self.confirmed = json["confirmed"]?.stringValue
+  }
+}
+
+/// A route that works in pages: the request repeats, with the cursor it answered, until it says it is done.
+public struct LoopSpec: Sendable {
+  /// The response field holding the next cursor.
+  public let cursor: String
+  /// The body field the cursor goes back in.
+  public let param: String
+  /// The response field that is true on the last page.
+  public let until: String?
+  /// Pages at most.
+  public let max: Int
+
+  init?(_ json: JSONValue) {
+    self.cursor = json["cursor"]?.stringValue ?? "nextCursor"
+    self.param = json["param"]?.stringValue ?? "cursor"
+    self.until = json["until"]?.stringValue
+    self.max = json["max"]?.numberValue.map { Int($0) } ?? 40
+  }
+
 }
 
 /// A screen to open, with its params as templates.
@@ -307,7 +450,7 @@ public struct FieldSpec: Sendable, Identifiable {
   public var id: String { key }
   public let key: String
   public let label: String
-  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `date`, `hours`.
+  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `country`, `date`, `hours`.
   public let kind: String
   public let initial: String?
   public let placeholder: String?
@@ -328,6 +471,25 @@ public struct FieldSpec: Sendable, Identifiable {
   /// An `hours` field's options: `{ noun, sameDay, start, end }` (what an interval is called, whether it must end the day it
   /// starts, and the times a newly opened day gets).
   public let hours: JSONValue?
+  /// A list (a path) this field repeats for, one field per row, with `item` the row: the values a template of an
+  /// email is tested with, a field for each. The key, label, help and initial value are rendered per row.
+  public let each: String?
+  /// `{ length, alphabet }`: the field offers a button that fills it with a random value of that many
+  /// characters drawn from the alphabet (a template; the console's password generator).
+  public let generate: JSONValue?
+  /// A `lookup` field's sources: the kinds of record a person can search, and what picking one fills in.
+  public let groups: [LookupGroup]
+
+  /// A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name
+  /// the console's own constants); nil for a field that does not.
+  public func generatedValue(in context: JSONValue) -> String? {
+    guard let generate else { return nil }
+    let length = generate["length"].flatMap { raw -> Double? in
+      raw.stringValue.map { ScreenValues.number(ScreenValues.resolve($0, in: context)) } ?? ScreenValues.number(raw)
+    }
+    return ScreenValues.generated(
+      length: Int(length ?? 20), alphabet: ScreenValues.render(generate["alphabet"]?.stringValue ?? "", in: context))
+  }
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
@@ -365,6 +527,9 @@ public struct FieldSpec: Sendable, Identifiable {
     self.integer = false
     self.pattern = nil
     self.hours = nil
+    self.generate = nil
+    self.groups = []
+    self.each = nil
   }
 
   /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
@@ -430,6 +595,41 @@ public struct FieldSpec: Sendable, Identifiable {
     self.integer = false
     self.pattern = nil
     self.hours = nil
+    self.generate = nil
+    self.groups = []
+    self.each = nil
+  }
+
+  /// One field of an `each` field's rows: its templates rendered over the row.
+  private init(_ template: FieldSpec, row: JSONValue, in scope: JSONValue) {
+    let item = ScreenContext.with(scope, item: row)
+    func rendered(_ text: String?) -> String? { text.map { ScreenValues.render($0, in: item) } }
+    key = ScreenValues.render(template.key, in: item)
+    label = ScreenValues.render(template.label, in: item)
+    kind = template.kind
+    // The initial value is final here, so a brace in it is text and not a template.
+    initial = rendered(template.initial).map { $0.replacingOccurrences(of: "{", with: "{{") }
+    placeholder = template.placeholder
+    help = rendered(template.help)
+    required = template.required
+    options = template.options
+    optionsFrom = template.optionsFrom
+    when = template.when
+    mustMatch = template.mustMatch
+    min = template.min
+    max = template.max
+    integer = template.integer
+    pattern = template.pattern
+    hours = template.hours
+    generate = template.generate
+    groups = template.groups
+    each = nil
+  }
+
+  /// This field as it is asked: itself, or one per row of its `each` list.
+  public func expanded(in scope: JSONValue) -> [FieldSpec] {
+    guard let each else { return [self] }
+    return ScreenValues.rows(ScreenValues.lookup(each, in: scope)).map { FieldSpec(self, row: $0, in: scope) }
   }
 
   init?(_ json: JSONValue) {
@@ -453,10 +653,15 @@ public struct FieldSpec: Sendable, Identifiable {
     self.integer = json["integer"] == .bool(true)
     self.pattern = json["pattern"]?.stringValue
     self.hours = json["hours"]
+    self.generate = json["generate"]
+    self.groups = json["groups"].array.compactMap(LookupGroup.init)
+    self.each = json["each"]?.stringValue
   }
 
-  /// The choices for a `select`: the static options, then any read from data.
+  /// The choices for a `select`: the static options, then any read from data. A `country` field offers the
+  /// platform's regions after them.
   public func choices(in context: JSONValue) -> [(value: String, label: String)] {
+    if kind == "country" { return options + ScreenRegions.choices() }
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
@@ -476,6 +681,66 @@ public struct FieldSpec: Sendable, Identifiable {
         .trimmingCharacters(in: .whitespaces)
       return (ScreenValues.render(valueTemplate, in: scope), label)
     }
+  }
+}
+
+/// One kind of record a `lookup` field searches (the system email test's "Populate from": workspaces, sites, people), and
+/// the form fields picking one fills in. The route searches by the `search` word, as a list's search does.
+public struct LookupGroup: Sendable, Identifiable {
+  public let id: String
+  public let label: String
+  /// The route that lists the records; the words typed go on as `search`.
+  public let url: String
+  /// The path in the answer of the list of records.
+  public let items: String
+  public let title: String
+  public let subtitle: String?
+  /// Form fields set from the picked record, whatever it holds: `key` is the field's key, the value a template over `item`.
+  public let fill: [(key: String, value: String)]
+  /// The same, but only when the template comes out with something (the person's address, as the recipient).
+  public let fillWhenSet: [(key: String, value: String)]
+
+  init?(_ json: JSONValue) {
+    guard let id = json["id"]?.stringValue, let url = json["url"]?.stringValue, let items = json["items"]?.stringValue,
+      let title = json["title"]?.stringValue
+    else { return nil }
+    self.id = id
+    self.label = json["label"]?.stringValue ?? id
+    self.url = url
+    self.items = items
+    self.title = title
+    self.subtitle = json["subtitle"]?.stringValue
+    self.fill = json["fill"].objectEntries.compactMap { entry in entry.value.stringValue.map { (entry.key, $0) } }
+    self.fillWhenSet = json["fillWhenSet"].objectEntries.compactMap { entry in entry.value.stringValue.map { (entry.key, $0) } }
+  }
+
+  /// The route to ask for the words typed (blank lists the first few).
+  public func request(words: String) -> String {
+    let trimmed = words.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return url }
+    return url + (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(trimmed)
+  }
+
+  /// The records an answer holds.
+  public func rows(in response: JSONValue?) -> [JSONValue] {
+    ScreenValues.rows(response.flatMap { ScreenValues.lookup(items, in: $0) })
+  }
+
+  public func heading(for row: JSONValue, in context: JSONValue) -> String {
+    ScreenValues.render(title, in: ScreenContext.with(context, item: row))
+  }
+
+  public func detail(for row: JSONValue, in context: JSONValue) -> String? {
+    subtitle.map { ScreenValues.render($0, in: ScreenContext.with(context, item: row)) }.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// What picking `row` writes into the form: every `fill` entry, then the `fillWhenSet` entries that came out non-blank,
+  /// for the fields the form has (`keys`): a template that takes no `org.id` has no field for it.
+  public func fills(for row: JSONValue, in context: JSONValue, among keys: Set<String>) -> [(key: String, value: String)] {
+    let scope = ScreenContext.with(context, item: row)
+    let always = fill.map { ($0.key, ScreenValues.render($0.value, in: scope)) }
+    let sometimes = fillWhenSet.map { ($0.key, ScreenValues.render($0.value, in: scope)) }.filter { !$0.1.isEmpty }
+    return (always + sometimes).filter { keys.contains($0.0) }
   }
 }
 

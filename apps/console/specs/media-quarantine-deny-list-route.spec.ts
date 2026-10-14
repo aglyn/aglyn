@@ -242,6 +242,8 @@ describe('AGL-1700 · a release by key removes only the key it names', () => {
     expect(payload.key).toBe(LEGACY_KEY)
     expect(payload.keys).toEqual([LEGACY_KEY])
     expect(payload.confirmed).toBe(true)
+    // The line the page keeps under "Actions taken in this session" (AGL-3667).
+    expect(payload.logLines).toEqual([{ text: `Released ${LEGACY_KEY}`, confirmed: true }])
     // The other two keys cover the SAME asset as the released one. Media mode
     // would have cleared all three, which is right when the subject is a file
     // and wrong when the subject is a row.
@@ -396,8 +398,16 @@ describe('AGL-3321 · the table’s filters and search are answered over every e
     expect(payload).toEqual({
       count: 3,
       maxEntries: 2000,
+      full: false,
       clearable: 1,
       readAtMs: expect.any(Number),
     })
+  })
+
+  it('says when the list is full: the next new takedown is refused with a 409 (AGL-3667)', async () => {
+    mockStore[INDEX_PATH] = {
+      entries: Object.fromEntries(Array.from({ length: 2000 }, (_unused, index) => [`hash--full${index}`, { reason: 'manual' }])),
+    }
+    expect(await (await view({ view: 'summary' })).json()).toMatchObject({ count: 2000, full: true })
   })
 })

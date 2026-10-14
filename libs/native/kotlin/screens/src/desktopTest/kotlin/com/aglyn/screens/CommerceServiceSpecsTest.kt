@@ -495,7 +495,7 @@ class CommerceServiceSpecsTest {
     val follow = model.followUp!!
     assertEquals("Connect Printful", follow.action.label)
     assertEquals("tok", ScreenValues.text(ScreenValues.lookup("previous.token", follow.scope)))
-    val pick = follow.action.inputsFor(follow.scope).single()
+    val pick = follow.action.inputs(follow.scope).single()
     assertEquals(listOf("11" to "Main", "22" to "Spare"), pick.choices(follow.scope))
     val chosen = ScreenContext.with(follow.scope, "form", json("""{"storeId":"22"}"""))
     kotlinx.coroutines.runBlocking { model.run(follow.action, chosen) }

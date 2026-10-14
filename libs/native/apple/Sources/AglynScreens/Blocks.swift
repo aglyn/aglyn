@@ -121,8 +121,17 @@ struct ListBlock: View {
   let trigger: (ActionSpec, JSONValue) -> Void
 
   var body: some View {
-    let rows = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
+    let key = ListColumns.key(of: block)
+    let columns = ListColumns.columns(of: block)
+    let asked = model.order[key]
+    let chosen = asked.flatMap { order in columns.first { $0.id == order.column } }
+    let found = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
+    let unsorted = (block["flatten"]?.stringValue.map { ScreenValues.flatten(found, through: $0) } ?? found)
       .filter { ScreenValues.condition(block["filter"]?.stringValue, in: ScreenContext.with(context, item: $0)) }
+    let fixed = block["sort"]?.stringValue.map { ScreenValues.sorted(unsorted, by: $0) } ?? unsorted
+    // A `page` column orders the rows on the screen; a `route` column already came back from the route in its order.
+    let rows = Self.ordered(fixed, by: chosen, asked: asked, in: context)
+    let shown = model.shownColumns(of: key, in: columns)
     let loadKey = block["load"]?.stringValue
     Section {
       if rows.isEmpty {
@@ -132,7 +141,10 @@ struct ListBlock: View {
           .padding(.vertical, AglynSpace.one)
       }
       ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-        ListRow(block: block, scope: ScreenContext.with(context, item: row), selection: selection, open: open, trigger: trigger)
+        let scope = ScreenContext.with(context, item: row)
+        ListRow(
+          block: block, scope: scope, columnsLine: ListColumns.line(columns, shown: shown, in: scope), selection: selection, open: open,
+          trigger: trigger)
       }
       if let loadKey, model.cursors[loadKey] != nil {
         Button {
@@ -147,22 +159,81 @@ struct ListBlock: View {
         .accessibilityIdentifier("load-more-\(loadKey)")
       }
     } header: {
-      if let title, !title.isEmpty {
+      let sortable = columns.filter(\.sortable)
+      let pickable = columns.filter { !$0.always }
+      if !(title ?? "").isEmpty || !sortable.isEmpty || !pickable.isEmpty {
         HStack {
-          Text(title)
+          Text(title ?? "")
           Spacer()
-          if block["count"] != .bool(false), !rows.isEmpty { Text("\(rows.count)").monospacedDigit() }
+          if block["count"] != .bool(false), !rows.isEmpty, title != nil { Text("\(rows.count)").monospacedDigit() }
+          if !sortable.isEmpty { sortMenu(key: key, columns: sortable, asked: asked, chosen: chosen) }
+          if !pickable.isEmpty { columnsMenu(key: key, columns: pickable, shown: shown) }
         }
       }
     } footer: {
       if let footer, !footer.isEmpty { Text(footer) }
     }
   }
+
+  private static func ordered(_ rows: [JSONValue], by column: ListColumn?, asked: ListOrder?, in context: JSONValue) -> [JSONValue] {
+    guard let column, column.page != nil, let asked else { return rows }
+    return ListColumns.sorted(rows, by: column, descending: asked.descending, in: context)
+  }
+
+  /// The header sort: a tap on a column asks for its first order, a second for the other, a third for the default again.
+  private func sortMenu(key: String, columns: [ListColumn], asked: ListOrder?, chosen: ListColumn?) -> some View {
+    Menu {
+      Button {
+        Task { await model.ask(nil, of: key, routed: chosen?.route != nil) }
+      } label: {
+        if asked == nil { Label("Default order", systemImage: "checkmark") } else { Text("Default order") }
+      }
+      ForEach(columns) { column in
+        let active = asked?.column == column.id ? asked : nil
+        Button {
+          Task { await model.ask(ListColumns.next(after: asked, tapping: column), of: key, routed: column.route != nil || chosen?.route != nil) }
+        } label: {
+          if let active {
+            Label("\(column.label) \(active.descending ? "\u{2193}" : "\u{2191}")", systemImage: "checkmark")
+          } else {
+            Text(column.label)
+          }
+        }
+      }
+    } label: {
+      Image(systemName: "arrow.up.arrow.down").foregroundStyle(asked == nil ? Color.secondary : AglynColor.tint)
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Sort")
+    .accessibilityIdentifier("sort-\(key)")
+  }
+
+  /// The column picker: which facts each row shows.
+  private func columnsMenu(key: String, columns: [ListColumn], shown: Set<String>) -> some View {
+    Menu {
+      ForEach(columns) { column in
+        Toggle(
+          column.label,
+          isOn: Binding(
+            get: { shown.contains(column.id) },
+            set: { on in model.shown[key] = on ? shown.union([column.id]) : shown.subtracting([column.id]) }))
+      }
+    } label: {
+      Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Columns")
+    .accessibilityIdentifier("columns-\(key)")
+  }
 }
 
 struct ListRow: View {
   let block: BlockSpec
   let scope: JSONValue
+  /// The row's picked columns as one line (`columns`), empty for a list without them.
+  var columnsLine: String = ""
   let selection: Binding<ListSelection?>?
   let open: (String, NativeParams) -> Void
   let trigger: (ActionSpec, JSONValue) -> Void
@@ -197,6 +268,9 @@ struct ListRow: View {
         Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(2)
         if let secondary, !secondary.isEmpty {
           Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
+        }
+        if !columnsLine.isEmpty {
+          Text(columnsLine).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(3)
         }
         if let tertiary, !tertiary.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
@@ -347,29 +421,36 @@ struct FieldInput: View {
   }
 
   var body: some View {
+    // A label can name what the loaded data does (a registration number's name for the jurisdiction in force).
+    let label = ScreenValues.render(field.label, in: context)
     VStack(alignment: .leading, spacing: 4) {
       switch field.kind {
       case "toggle":
-        Toggle(field.label, isOn: flag)
-      case "select":
-        Picker(field.label, selection: text) {
+        Toggle(label, isOn: flag)
+      case "select", "country":
+        Picker(label, selection: text) {
           ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
         }
       case "hours":
         HoursInput(field: field, text: text)
       case "multiline":
-        TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
+        TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)
       case "password":
-        SecureField(field.label, text: text, prompt: field.placeholder.map { Text($0) })
+        SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
           .textContentType(.password)
       default:
-        TextField(field.label, text: text, prompt: Text(field.placeholder ?? field.label))
+        TextField(label, text: text, prompt: Text(field.placeholder ?? label))
           #if os(iOS)
             .keyboardType(keyboard)
             .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
           #endif
           .autocorrectionDisabled(field.kind != "text")
+      }
+      if field.generate != nil {
+        Button("Generate") { text.wrappedValue = field.generatedValue(in: context) ?? "" }
+          .buttonStyle(.borderless)
+          .accessibilityIdentifier("generate-\(field.key)")
       }
       if let help = field.help {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
@@ -465,9 +546,13 @@ struct FormBlock: View {
 struct ActionInputSheet: View {
   let pending: PendingAction
   let context: JSONValue
+  /// Finds the records a `lookup` field offers for the words typed.
+  var search: (LookupGroup, String) async throws -> [JSONValue] = { _, _ in [] }
   let run: (JSONValue) -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var values: [String: FieldValue] = [:]
+  /// What each `lookup` field last picked, as the person reads it.
+  @State private var picked: [String: String] = [:]
 
   private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
 
@@ -494,10 +579,20 @@ struct ActionInputSheet: View {
         }
         Section {
           ForEach(inputs.filter { ScreenValues.condition($0.when, in: filled) }) { field in
-            FieldInput(
-              field: field, context: pending.scope,
-              value: Binding(
-                get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+            if field.kind == "lookup" {
+              LookupRow(field: field, context: pending.scope, picked: picked[field.key], search: search) { group, row in
+                picked[field.key] = group.heading(for: row, in: pending.scope)
+                // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
+                for fill in group.fills(for: row, in: pending.scope, among: Set(inputs.map(\.key))) {
+                  values[fill.key] = .text(fill.value)
+                }
+              }
+            } else {
+              FieldInput(
+                field: field, context: pending.scope,
+                value: Binding(
+                  get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+            }
           }
         }
       }
@@ -519,6 +614,107 @@ struct ActionInputSheet: View {
     }
     .frame(minWidth: 360, minHeight: 280)
     .presentationDetents([.medium, .large])
+  }
+}
+
+/// A `lookup` field: a row that opens a search over the kinds of record its groups name. Picking one fills the form's other
+/// fields (the system email test's "Populate from").
+struct LookupRow: View {
+  let field: FieldSpec
+  let context: JSONValue
+  let picked: String?
+  let search: (LookupGroup, String) async throws -> [JSONValue]
+  let pick: (LookupGroup, JSONValue) -> Void
+  @State private var open = false
+
+  var body: some View {
+    let label = ScreenValues.render(field.label, in: context)
+    VStack(alignment: .leading, spacing: 4) {
+      Button {
+        open = true
+      } label: {
+        LabeledContent(label) { Text(picked ?? "Choose").foregroundStyle(picked == nil ? .secondary : .primary) }
+      }
+      .accessibilityIdentifier("lookup-\(field.key)")
+      if let help = field.help {
+        Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
+      }
+    }
+    .sheet(isPresented: $open) {
+      LookupSheet(field: field, context: context, search: search) { group, row in
+        pick(group, row)
+        open = false
+      }
+    }
+  }
+}
+
+/// The search behind a `lookup` field: one section per kind of record, filled as words are typed.
+struct LookupSheet: View {
+  let field: FieldSpec
+  let context: JSONValue
+  let search: (LookupGroup, String) async throws -> [JSONValue]
+  let pick: (LookupGroup, JSONValue) -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var words = ""
+  @State private var found: [String: [JSONValue]] = [:]
+  @State private var failed: [String] = []
+  @State private var loading = false
+
+  var body: some View {
+    NavigationStack {
+      List {
+        ForEach(field.groups) { group in
+          let rows = found[group.id] ?? []
+          Section(group.label) {
+            if rows.isEmpty && !loading {
+              Text(words.isEmpty ? "Nothing yet." : "Nothing found.").foregroundStyle(.secondary)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+              Button {
+                pick(group, row)
+              } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(group.heading(for: row, in: context)).foregroundStyle(.primary)
+                  if let detail = group.detail(for: row, in: context) {
+                    Text(detail).font(AglynFont.caption).foregroundStyle(.secondary)
+                  }
+                }
+              }
+            }
+          }
+        }
+        if !failed.isEmpty {
+          Section { AglynNotice("Could not search \(failed.joined(separator: ", ")). Try again.", tone: .warning) }
+        }
+      }
+      .searchable(text: $words, prompt: "Search by name or email")
+      .navigationTitle(ScreenValues.render(field.label, in: context))
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+      // A short wait after the last key, so a name typed quickly is one search and not one per letter.
+      .task(id: words) {
+        if !words.isEmpty { try? await Task.sleep(nanoseconds: 300_000_000) }
+        guard !Task.isCancelled else { return }
+        await load()
+      }
+    }
+    .frame(minWidth: 360, minHeight: 360)
+  }
+
+  private func load() async {
+    loading = true
+    var next: [String: [JSONValue]] = [:]
+    var missed: [String] = []
+    for group in field.groups {
+      do { next[group.id] = try await search(group, words) } catch { missed.append(group.label.lowercased()) }
+      if Task.isCancelled { return }
+    }
+    found = next
+    failed = missed
+    loading = false
   }
 }
 

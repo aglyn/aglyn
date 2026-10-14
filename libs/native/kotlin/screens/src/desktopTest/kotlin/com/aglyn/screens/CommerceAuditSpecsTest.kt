@@ -65,7 +65,7 @@ class CommerceAuditSpecsTest : SpecTestBase() {
     val model = ret("approved")
     assertEquals(listOf("receive", "refund", "close", "order"), model.actionsShown("progress"))
     val receive = model.action("progress", "receive")
-    val fields = receive.inputsFor(model.context)
+    val fields = receive.inputs(model.context)
     assertEquals(listOf("restock_0", "restock_1", "locationId"), fields.map { it.key })
     assertEquals("Restock: Tee (of 2)", fields[0].label)
     assertEquals(ScreenValues.text(ScreenValues.resolve(fields[0].initial!!, ScreenContext.withItem(model.context, model.context.jsonObject["data"]!!.jsonObject["ret"]!!.jsonObject["lines"]!!.jsonArray[0]))), "2", "starts at everything that came back")

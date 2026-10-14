@@ -933,9 +933,9 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
-| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate; each lands at `data.<key>` |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503; `filters`: `{ field, op, value }` clauses for a staff list route, each kept when its value template is not empty), or `{ doc }` / `{ query: { collection, where, orderBy, limit, aggregate }, more }` for a Firestore read (below: `aggregate: { count: true }` answers `{ count }`, the server's tally, as the console's `getCountFromServer` does), `late: true` on any load to run it after the others, with their answers under `data` (a read keyed by something another read found), or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
-| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
+| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
@@ -965,6 +965,14 @@ with each key of `set` put on top and any whose value is null taken off (a produ
 sheet (`TransferExportSheet`, `TransferExportDialog`) on a transfer resource such as `commerce.products`, which asks for
 the columns and the file type and hands the file to the device. `scope` is `{ "kind": "all" }` unless it names a
 filter; `title`, `fileStem` and `filter` are templates. The site's roles and plan are the server's to enforce.
+`report` is a list of lines (`{ text, when, each }`, or a plain string) appended to `success`, one per
+line (a `when` on an `each` line is read for each row, with `item` that row); `file` (`{ name, type, from }`) hands text to the device as a file, its name a template and `from` the path of the
+text over the screen and the route's `response` (Save, or the share sheet: the working papers' CSV); `failure` is the same list for a refusal, appended to the route's own words and read over the route's
+answer as `response` (the workspaces that still need an owner); `each` repeats a line for every row or map entry as `item`. `loop` (`{ cursor, param, until, max }`)
+sends a route that works in pages again, with the cursor it answered, until it says it is done, and
+answers the totals: numbers add up (a map of counts too), `pages` counts the requests and `bounded` says
+the last page was not reached. Formats `facts` (an object's plain values as `words: value`) and `duration`
+(milliseconds as "12 min", "3h 5m") read the health probes and the stuck claims.
 
 `headers` names request headers, each a template. `{attempt}` there is one key per
 (action, route, resolved body): sending the same request again, a retry or a second tap,
@@ -972,15 +980,68 @@ reuses it, and a changed body gets a new one. A route that provisions something
 (enterprise billing) takes it as `Idempotency-Key`, and a write that carries one is retried
 like a read. `{press}` is a key for one press alone: its retries share it, and the next tap gets
 its own, for a route that must see two deliberate, identical changes (a rewards adjustment) as two.
+A route that wants the key in its body (the AI credit give-back's `idempotencyKey`)
+writes `{attempt}` there; the key is found with `{attempt}` and `{press}` blank, so carrying it does not
+change the request it identifies.
+
+A screen keeps a little state while it is open, read as `session`: `session.log` is what the person has done on it,
+newest first (`{ at, text, confirmed }`, at most 25), and `session.armed.<key>` is a flag. An action's `log` is a list of
+lines like `report`'s (`{ text, when, each, confirmed }`, `confirmed` a condition that defaults to true) appended when it
+succeeds, the lines of one act with the last listed on top: the console's "Actions taken in this session", which the
+lockdown and quarantine routes feed with `logLines`. `arm: "<key>"` sets `session.armed.<key>` when the action succeeds
+and clears it when it fails, and `disarm: "<key>"` clears it when it succeeds: a preview that has been read, which a
+guarded run waits for through its `when`. A block `{ "type": "html", "source": "{…}" }` draws a message's HTML as styled
+text through the platform's own HTML reader (`NSAttributedString` on Apple, `AnnotatedString.fromHtml` on Android, the
+JDK's HTML parser on desktop) after taking out scripts, styles, frames, forms, images (their alternative text stays) and
+every attribute but a link's address; a link opens only when it is http, https, mailto or tel, in the system handler. The
+shared cases both apps replay are `libs/native/screens/email-html-cases.json`, generated from the console's renderer
+(`generate:native-email-html-cases`). A prompt field of kind `country` is a picker over the platform's region list,
+named in the person's language and sorted by name, storing the two-letter code.
+
+A `list` block's `columns` are the facts a row can show and the orders it can take, as the console's grid has a column
+picker and sortable headers: `{ id, label, value, show, always, sort: { route | page, type, first } }`. `value` is the cell's
+template over the row; the picked columns read as one line under the row (`Plan Pro · Site limit 5`), and a `Columns` menu on
+the list turns each on and off (`show: false` starts it off; `always` is the row's own name, shown and not offered). A `Sort` menu
+lists every column with a `sort`: a tap asks for its first order (`first`, `asc` unless `desc`), a second tap for the other, a third
+for the default again, as a header click cycles. A `route` sort is the staff route's own order over every row (`sort=<path>:<dir>`;
+the list's load names the parameter with `sortParam` and the order it answers with none asked as `sortDefault`), so choosing it reads
+the route again from the first page; a `page` sort orders the rows already loaded by a path over the row, as the console does for the
+columns no query can order by (`type` is `text`, `number` or `date`; a row without the value goes last in both directions). A list with
+`columnsZone: "<zone>"` also takes the columns plugins contribute: a plugin spec with `zones: ["<zone>"]` and a `column` of the same
+shape plus `load: { url, ids, max }` (`{ids}` in the url is the ids of the rows on the screen, `ids` the template for each, `max` the
+most a request may name) is read for the rows on the screen in batches and answers under `column.<id>`, which its `value` and `sort`
+read. A column that cannot be read leaves its cells blank.
+
+A staff support session is an action with `impersonate: { token, tenantId }`: the paths in the route's answer of the custom token it
+minted and the identity pool it belongs to (`/api/admin/impersonate`, which takes `{ uid, reason }` and refuses a reason under its
+minimum). The token goes to the app's auth session and is shown, logged and kept nowhere. The session signs the customer in over
+REST in that pool, in memory only, and the staff member's own session is set aside untouched: Apple uses a second
+`IdentityToolkitAuth` with a memory credential store and a Firestore reader that switches to the customer's, desktop does the same
+through `SupportSessions` with a REST backend, and Android signs in on a second Firebase app named `support` (a flag in
+SharedPreferences signs out anything left over at launch). While it lasts the shell wears the console's band (`You are
+impersonating {email} (staff: {staff email}). Actions are audited.`) with **Exit impersonation**, navigation starts again from home
+on entering and leaving, device push registration is skipped for the customer, a refresh the server refuses (the session was
+revoked) ends it and returns to the staff member's, and signing out ends it first. A second session replaces the first without
+losing the staff member's.
+
+A prompt field of kind `lookup` searches records and fills the form: `groups` is a list of `{ id, label, url, items, title,
+subtitle, fill, fillWhenSet }`. Opening it lists the first rows of every group and typing asks each group's `url` again with
+`search=<words>`. Picking a row writes `fill` (a map of form field keys to templates over `item`) into the fields the form has,
+whatever they come out as, and `fillWhenSet` only when a template comes out non-blank (a person's address, as the recipient). The
+system email test's "Populate from" uses it; its fills are generated from the console's `system-email-sample-sources.ts`.
 
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row
-whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
+whose field matches) and `map[key.with.dots]`. `now` has `month`, `previousMonth`, `quarter` and `ms`. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `each: "<list path>"` is one field for every row of that list (key, label, help and initial are templates over `item`, so an email's test asks for each variable it takes, and `{"$collect": {"prefix": "token."}}` gathers what was typed). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
+platform's secure generator (the console's password generator). Formats: `pairs` (a map's entries as
+`key: value`, the keys untouched, where `facts` splits them into words), `labeled/<path>` (each id through the map at
+`<path>`), `before/-` and `after/-` (either side of the first separator), `date`, `datetime`,
 `cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
 `count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
-in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
+in place; `{"$if": {when, then, else}}` is one of two values (or nothing, which leaves the member out) and
+`{"$afterHours": "{form.hours}"}` is that many hours from `now.ms` in epoch milliseconds (nothing when blank); `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
 
 Three small forms serve the cards that list data they cannot shape: a path
@@ -1042,8 +1103,10 @@ its values does (`item.holds.*.expiresAtMs > @now.ms`). A number field takes `mi
 A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with
 `op` any of `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `not-in`, `array-contains` and
 `array-contains-any`, a number or flag in the spec compared as itself. A list block that names its query load (`"load": "key"`) offers "Load more" whenever the window came
-back full: a query has no cursor to continue from, so it reads a window one page size bigger (the spec's `limit`
-again) and replaces its rows, and a reload after an action keeps the window the person grew.
+back full: a query has no cursor to continue from, so it reads a bigger window (the load's `more: <rows>`, else the spec's
+`limit` again) and replaces its rows, until a read comes back short, and a reload after an action keeps the window the person
+grew. A fourth `where` entry is a condition: the clause counts only while it holds (a filter the person has not picked, or a value
+that is empty, is left off).
 With
 `aggregate: { count: true, sum: "field" }` the server counts and adds every matching document
 and no row is read: the answer is `data.<key>.count` and `.sum`, left out where the reader

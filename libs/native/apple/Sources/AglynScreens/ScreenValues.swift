@@ -80,6 +80,46 @@ public enum ScreenValues {
     }
   }
 
+  /// Rows in the order a list's `sort` asks for: `"value desc"` or `"name"` (ascending), a field of each row (`item.` is
+  /// not written). Numbers compare as numbers and anything else as text; a row without the field goes last.
+  public static func sorted(_ rows: [JSONValue], by sort: String) -> [JSONValue] {
+    let words = sort.split(separator: " ").map(String.init)
+    guard let field = words.first else { return rows }
+    let descending = words.dropFirst().first == "desc"
+    func ordered(_ a: JSONValue, _ b: JSONValue) -> Bool {
+      let left = lookup(field, in: a)
+      let right = lookup(field, in: b)
+      if left == nil || left == .null { return false }
+      if right == nil || right == .null { return true }
+      if let x = number(left), let y = number(right) { return descending ? x > y : x < y }
+      let x = text(left)
+      let y = text(right)
+      return descending ? x.localizedCaseInsensitiveCompare(y) == .orderedDescending : x.localizedCaseInsensitiveCompare(y) == .orderedAscending
+    }
+    // Stable: equal rows keep the order they came in.
+    return rows.enumerated().sorted { a, b in
+      if ordered(a.element, b.element) { return true }
+      if ordered(b.element, a.element) { return false }
+      return a.offset < b.offset
+    }.map(\.element)
+  }
+
+  /// The rows one or more levels down: each segment of `path` names the list (or map) inside every row so far,
+  /// and each row found carries `$parent`, the row it came out of (and so on up: `item.$parent.$parent`).
+  public static func flatten(_ rows: [JSONValue], through path: String) -> [JSONValue] {
+    var current = rows
+    for segment in path.split(separator: ".").map(String.init) where !segment.isEmpty {
+      current = current.flatMap { container -> [JSONValue] in
+        Self.rows(lookup(segment, in: container)).map { child in
+          guard case .object(var record) = child else { return ["value": child, "$parent": container] }
+          record["$parent"] = container
+          return .object(record)
+        }
+      }
+    }
+    return current
+  }
+
   /// A path's segments, split on dots outside brackets.
   static func segments(_ path: String) -> [String] {
     var parts: [String] = []
@@ -369,6 +409,40 @@ public enum ScreenValues {
       // key "*": the row that equals `match` as a whole (a list of rows with no id of their own).
       let whole = key == "*" ? resolveBody(spec["match"] ?? .null, in: context) : nil
       return .array(list.map { row in (key == "*" ? row == whole : Self.text(lookup(key, in: row)) == match) ? value : row })
+    case .object(let record) where record.count == 1 && record["$if"] != nil:
+      // `{"$if": {"when": "form.scope == org", "then": X, "else": Y}}`: X or Y resolved, or nothing (the member is left out).
+      let spec = record["$if"] ?? .null
+      let branch = condition(spec["when"]?.stringValue, in: context) ? spec["then"] : spec["else"]
+      return branch.map { resolveBody($0, in: context) } ?? .null
+    case .object(let record) where record.count == 1 && record["$collect"] != nil:
+      // `{"$collect": {"prefix": "quota.", "as": "number"}}`: the form's `quota.*` inputs as a map, key without the prefix.
+      // `as: number` keeps the filled ones as numbers; `as: flag` reads "true" and "false" and leaves "" (inherit) out.
+      let spec = record["$collect"] ?? .null
+      let prefix = spec["prefix"]?.stringValue ?? ""
+      let kind = spec["as"]?.stringValue ?? "text"
+      var map: [String: JSONValue] = [:]
+      if case .object(let form)? = lookup("form", in: context) {
+        for (key, value) in form where key.hasPrefix(prefix) {
+          let name = String(key.dropFirst(prefix.count))
+          switch (kind, value) {
+          case ("flag", .bool(let flag)): map[name] = .bool(flag)
+          case ("flag", .string(let text)): if text == "true" { map[name] = .bool(true) } else if text == "false" { map[name] = .bool(false) }
+          case (_, .null): break
+          case ("number", .string(let text)):
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { map[name] = Double(trimmed).map(JSONValue.number) ?? .string(trimmed) }
+          case (_, .string(let text)): if !text.isEmpty { map[name] = value }
+          case ("flag", _): break
+          default: map[name] = value
+          }
+        }
+      }
+      return .object(map)
+    case .object(let record) where record.count == 1 && record["$afterHours"] != nil:
+      // `{"$afterHours": "{form.hours}"}`: the moment that many hours from now, in epoch milliseconds; nothing when blank or not positive.
+      guard let hours = number(resolveBody(record["$afterHours"] ?? .null, in: context)), hours > 0, hours.isFinite else { return .null }
+      let now = number(lookup("now.ms", in: context)) ?? (Date().timeIntervalSince1970 * 1000).rounded()
+      return .number((now + hours * 3_600_000).rounded())
     case .object(let record) where record.count == 1 && record["$split"] != nil:
       // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))
@@ -394,9 +468,15 @@ public enum ScreenValues {
       var out: [String: JSONValue] = [:]
       for (key, value) in record {
         let resolved = resolveBody(value, in: context)
-        // A template that found nothing is left out; a literal null is sent (it clears the field).
+        // A template that found nothing is left out; a literal null is sent (it clears the field), and so is `"$null"`
+        // where a branch of `$if` has to say null (a comp removed).
         // A key written as a template (`{item.id}`) is the text it renders: a map keyed by the row's own id.
-        if resolved != .null || value == .null || value["$orNull"] != nil { out[key.contains("{") ? render(key, in: context) : key] = resolved }
+        let name = key.contains("{") ? render(key, in: context) : key
+        if resolved == .string("$null") {
+          out[name] = .null
+        } else if resolved != .null || value == .null || value["$orNull"] != nil {
+          out[name] = resolved
+        }
       }
       return .object(out)
     default: return body
@@ -615,6 +695,56 @@ public enum ScreenValues {
     return unit == 0 ? "\(grouped(amount)) B" : "\(grouped(amount, fraction: 1)) \(units[unit])"
   }
 
+  /// Two answers added: numbers sum, objects merge key by key, anything else takes the newer value.
+  public static func sum(_ total: JSONValue, _ page: JSONValue) -> JSONValue {
+    switch (total, page) {
+    case (.number(let left), .number(let right)): return .number(left + right)
+    case (.object(var left), .object(let right)):
+      for (key, value) in right { left[key] = left[key].map { sum($0, value) } ?? value }
+      return .object(left)
+    default: return page
+    }
+  }
+
+  /// An object's plain values as `words: value`, joined by " · ": the readings of a check that
+  /// have no screen of their own. Keys are sorted and split from camelCase; `ok`, `ms` and `code`
+  /// are shown elsewhere, and nested values are left out.
+  /// An object's entries as `key: value`, the keys as they are (ids, which `facts` would split into words).
+  static func pairs(_ value: JSONValue?) -> String {
+    guard case .object(let record)? = value else { return text(value) }
+    return record.keys.sorted().compactMap { key -> String? in
+      let shown = text(record[key])
+      return shown.isEmpty ? nil : "\(key): \(shown)"
+    }.joined(separator: ", ")
+  }
+
+  /// A random value of `length` characters from `alphabet`, from the system's secure generator.
+  public static func generated(length: Int, alphabet: String) -> String {
+    let characters = Array(alphabet)
+    guard !characters.isEmpty, length > 0 else { return "" }
+    var generator = SystemRandomNumberGenerator()
+    return String((0..<length).map { _ in characters.randomElement(using: &generator)! })
+  }
+
+  static func facts(_ value: JSONValue?) -> String {
+    guard case .object(let record)? = value else { return text(value) }
+    return record.keys.sorted().compactMap { key -> String? in
+      guard !["ok", "ms", "code"].contains(key), let entry = record[key] else { return nil }
+      let shown: String
+      switch entry {
+      case .string(let text) where !text.isEmpty: shown = text
+      case .number: shown = formatted(entry, as: "number", in: .null)
+      case .bool(let flag): shown = flag ? "yes" : "no"
+      default: return nil
+      }
+      var words = ""
+      for character in key {
+        if character.isUppercase { words += " " + character.lowercased() } else { words.append(character) }
+      }
+      return "\(words): \(shown)"
+    }.joined(separator: " · ")
+  }
+
   /// A value in a named format. Unknown formats print the plain text.
   public static func formatted(_ value: JSONValue?, as format: String, in context: JSONValue) -> String {
     // `cents/<currency path>` reads the currency beside the amount.
@@ -726,6 +856,38 @@ public enum ScreenValues {
       // `upper/2` also keeps at most that many characters (a country or state code).
       let upper = text(value).uppercased()
       return parts.count > 1 ? Int(parts[1]).map { String(upper.prefix($0)) } ?? upper : upper
+    case "facts":
+      return facts(value)
+    case "pairs":
+      return pairs(value)
+    case "shareOf":
+      // `shareOf/<path>`: the value as a whole percent of the number at <path> ("40%"; "0%" when there is nothing to share).
+      let total = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
+      guard total > 0, let part = number(value) else { return "0%" }
+      return "\(Int((part / total * 100).rounded()))%"
+    case "before", "after":
+      // `before/-` and `after/-`: the text either side of the first separator (a jurisdiction key `US-TX`); no separator, no tail.
+      let whole = text(value)
+      let separator = parts.count > 1 ? parts[1] : "-"
+      guard let found = whole.range(of: separator) else { return name == "before" ? whole : "" }
+      return name == "before" ? String(whole[..<found.lowerBound]) : String(whole[found.upperBound...])
+    case "labeled":
+      // `labeled/<path>`: each id (or the one) through the map at <path>; an id the map lacks stays as it is.
+      let map = parts.count > 1 ? lookup(parts[1], in: context) : nil
+      let ids: [JSONValue]
+      if case .array(let items)? = value { ids = items } else { ids = value.map { [$0] } ?? [] }
+      return ids.map { id -> String in
+        let key = text(id)
+        return map?[key].map { text($0) } ?? key
+      }.filter { !$0.isEmpty }.joined(separator: ", ")
+    case "duration":
+      // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
+      guard let millis = number(value), millis.isFinite else { return "unknown" }
+      let minutes = Int(millis / 60_000)
+      if minutes < 1 { return "under a minute" }
+      if minutes < 60 { return "\(minutes) min" }
+      let hours = minutes / 60
+      return hours < 48 ? "\(hours)h \(minutes % 60)m" : "\(hours / 24) days"
     case "phone":
       return normalizedPhone(text(value)) ?? text(value)
     case "json":

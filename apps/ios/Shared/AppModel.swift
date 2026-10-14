@@ -57,12 +57,15 @@ final class AppModel {
       let auth = AuthSession.make(config)
       self.auth = auth
       // A REST sign-in has no SDK user for Firestore to read as, so Firestore goes over REST too.
+      let rest = RestFirestoreReader(
+        projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost,
+        idToken: { try await auth.idToken(forceRefresh: false) })
+      // The SDK reads as the SDK's signed-in person, the staff member; a support session (signed in as a customer, over REST)
+      // reads through the customer's own token instead, so the rules treat the staff member exactly as they treat the customer.
       self.reader =
         auth.transport == .rest
-        ? RestFirestoreReader(
-          projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost,
-          idToken: { try await auth.idToken(forceRefresh: false) })
-        : FirebaseFirestoreReader()
+        ? rest
+        : SwitchingFirestoreReader(normal: FirebaseFirestoreReader(), impersonated: rest, flag: auth.impersonationFlag)
       self.api = ConsoleAPIClient(origin: config.consoleOrigin) { force in
         try await auth.idToken(forceRefresh: force)
       }
@@ -97,7 +100,8 @@ final class AppModel {
     guard user?.uid != workspace?.uid else { return }
     workspace?.stop()
     workspace = nil
-    push.signedIn(uid: user?.uid, reader: reader)
+    // A support session reads the customer's workspaces but never registers this device's notifications under their account.
+    if auth?.impersonation == nil { push.signedIn(uid: user?.uid, reader: reader) }
     claims = TokenClaims()
     Task { await refreshClaims(force: false) }
     guard let user, let reader else { return }
@@ -127,6 +131,9 @@ final class AppModel {
         try await self?.auth?.signIn(email: email, password: password)
       },
       refreshClaims: { [weak self] in await self?.refreshClaims(force: true) },
+      impersonate: { [weak self] token, tenantId in
+        try await self?.auth?.beginImpersonation(token: token, tenantId: tenantId)
+      },
       account: AccountOperations(
         changePassword: { [weak self] current, new in
           try await self?.auth?.changePassword(current: current, new: new)

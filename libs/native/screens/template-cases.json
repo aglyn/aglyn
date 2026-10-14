@@ -111,7 +111,55 @@
         2,
         1,
         3
-      ]
+      ],
+      "ids": [
+        "h2",
+        "h1",
+        "zz"
+      ],
+      "jur": "US-TX",
+      "plain": "US",
+      "check": {
+        "ok": false,
+        "ms": 12,
+        "code": "job-silent",
+        "schedule": "0 4 * * *",
+        "lastBeatAgeMinutes": 1500,
+        "newestReadyAgeDays": 3,
+        "degradedEpisodes": 2,
+        "held": true,
+        "note": "",
+        "nested": {
+          "a": 1
+        }
+      },
+      "msA": 30000,
+      "msB": 720000,
+      "msC": 11100000,
+      "msD": 360000000,
+      "rolesInfo": {
+        "h1": {
+          "label": "Editor"
+        },
+        "h2": {
+          "label": "Viewer"
+        }
+      }
+    },
+    "now": {
+      "ms": 1790000000000
+    },
+    "form": {
+      "scope": "org",
+      "hours": "2",
+      "blank": "",
+      "quota.hostLimit": 5,
+      "quota.blank": null,
+      "quota.typed": "12",
+      "quota.empty": "",
+      "feature.a": "true",
+      "feature.b": "false",
+      "feature.c": ""
     }
   },
   "render": [
@@ -406,6 +454,34 @@
     {
       "template": "{data.members.0.count ?? 'not recorded':number}",
       "expect": "0"
+    },
+    {
+      "template": "{data.check:facts}",
+      "expect": "degraded episodes: 2 · held: yes · last beat age minutes: 1,500 · newest ready age days: 3 · schedule: 0 4 * * *"
+    },
+    {
+      "template": "{data.access:pairs}|{data.list:pairs}",
+      "expect": "h1: editor, h2: viewer|x, y"
+    },
+    {
+      "template": "{data.msA:shareOf/data.msB}|{data.msB:shareOf/data.msA}|{data.msA:shareOf/data.nothing}",
+      "expect": "4%|2400%|0%"
+    },
+    {
+      "template": "{data.jur:before/-}|{data.jur:after/-}|{data.plain:before/-}|{data.plain:after/-}",
+      "expect": "US|TX|US|"
+    },
+    {
+      "template": "{data.ids:labeled/data.access}|{data.hostKey:labeled/data.access}|{data.list:labeled/data.access}",
+      "expect": "viewer, editor, zz|viewer|x, y"
+    },
+    {
+      "template": "{data.msA:duration}|{data.msB:duration}|{data.msC:duration}|{data.msD:duration}|{data.nothing:duration}",
+      "expect": "under a minute|12 min|3h 5m|4 days|unknown"
+    },
+    {
+      "template": "{data.rolesInfo[@data.hostKey].label}",
+      "expect": "Viewer"
     }
   ],
   "url": [
@@ -941,6 +1017,105 @@
           "extra": "u2",
           "gone": ""
         }
+      }
+    },
+    {
+      "body": {
+        "a": {
+          "$if": {
+            "when": "form.scope == org",
+            "then": "{form.scope}"
+          }
+        },
+        "b": {
+          "$if": {
+            "when": "form.scope == user",
+            "then": true
+          }
+        },
+        "c": {
+          "$if": {
+            "when": "form.scope == org",
+            "then": {
+              "$if": {
+                "when": "form.scope == org,host",
+                "then": true,
+                "else": false
+              }
+            },
+            "else": false
+          }
+        },
+        "until": {
+          "$afterHours": "{form.hours}"
+        },
+        "none": {
+          "$afterHours": "{form.blank}"
+        }
+      },
+      "expect": {
+        "a": "org",
+        "c": true,
+        "until": 1790007200000
+      }
+    },
+    {
+      "body": {
+        "types": {
+          "$put": {
+            "map": {},
+            "key": "{params.uid}",
+            "value": {
+              "enabled": true
+            }
+          }
+        }
+      },
+      "expect": {
+        "types": {
+          "u2": {
+            "enabled": true
+          }
+        }
+      }
+    },
+    {
+      "body": {
+        "quotas": {
+          "$collect": {
+            "prefix": "quota.",
+            "as": "number"
+          }
+        },
+        "features": {
+          "$collect": {
+            "prefix": "feature.",
+            "as": "flag"
+          }
+        },
+        "comp": {
+          "$if": {
+            "when": "form.scope == org",
+            "then": "$null"
+          }
+        },
+        "other": {
+          "$if": {
+            "when": "form.scope == user",
+            "then": "$null"
+          }
+        }
+      },
+      "expect": {
+        "quotas": {
+          "hostLimit": 5,
+          "typed": 12
+        },
+        "features": {
+          "a": true,
+          "b": false
+        },
+        "comp": null
       }
     }
   ],
