@@ -169,6 +169,10 @@ public struct ActionSpec: Sendable, Identifiable {
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
+  /// `{ when, title, text }`: when the route's answer meets `when`, the person is shown `text`
+  /// (a template over `response`) in place of the success message, as the console's report
+  /// dialog shows the documentation that may already answer a question.
+  public let instead: JSONValue?
 
   public init?(_ json: JSONValue) {
     guard let label = json["label"]?.stringValue else { return nil }
@@ -196,6 +200,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.instead = json["instead"]
   }
 
   /// Every field the action asks for before it runs: its prompt, then a reason.

@@ -496,7 +496,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   pos: {
     '#card-readers': 'A card reader takes card payments at the counter: the customer taps, inserts or swipes, and the reader can ask for a tip.',
-    '#registers': 'Create your registers under Commerce → Settings → POS registers — one per till or device that takes in-person payments.',
+    '#registers': 'Create your registers under Products → Settings → POS registers — one per till or device that takes in-person payments.',
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
