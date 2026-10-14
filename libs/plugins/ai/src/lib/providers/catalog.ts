@@ -131,6 +131,14 @@ export interface AiCatalogEntry extends AiModelDescriptor, AiCatalogRates {
    * around a cache it never had.
    */
   cacheMinTokens: number
+  /**
+   * A RETIRED row names the model that serves in its place (AGL-3781). The
+   * row stays so usage recorded under its id keeps its price, but nothing
+   * offers it or routes to it: a setting, an environment override or a pick
+   * that names it is served by the successor, so one model per tier holds
+   * the tier's traffic and its one cache namespace.
+   */
+  successor?: string
 }
 
 /**
@@ -186,19 +194,6 @@ const ANTHROPIC_DATA_RECEIVED_CRM_DRAFTS_AND_IMPORTS =
 export interface AnthropicCrmAssistanceWording {
   record: string
   never: string
-}
-
-/**
- * CRM assistance as `/legal/subprocessors` published it until October 5,
- * 2026: the disclosed fields of a record, with addresses and numbers in its
- * text replaced. It is still what production sends while
- * `release_crm_assist_whole_record` is off, which the published wording
- * covers: the row describes what the CRM can send, not who has it on.
- */
-export const ANTHROPIC_CRM_ASSISTANCE_DISCLOSED: AnthropicCrmAssistanceWording = {
-  record:
-    "For CRM assistance, the opened contact, company, deal or lead as the CRM shows it: its name and, by kind, job title, company, lifecycle stage, tags, capture history and counts, domain, industry, headcount, pipeline stages, status, amount, dates, lost reason, parties and lead status, with its notes, newest timeline entries and open tasks and deals. Email addresses and phone numbers in that text are replaced, and no email, phone or postal field, marketing consent, custom field value, team member or record id is sent.",
-  never: 'No account identifiers, email addresses or authentication tokens.',
 }
 
 /**
@@ -291,8 +286,10 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     cacheMinTokens: 512,
   },
   {
-    // The balanced default until AGL-3660, kept so a workspace that chose it
-    // and every recording that names it still resolve, at the same rates.
+    // The balanced default until AGL-3660, retired to Sonnet 5.5 (AGL-3781):
+    // the same price, a cache read half as dear, and a cache namespace of
+    // its own that every request on it split the tier's prefixes into. Kept
+    // so the usage and recordings that name it still price at its rates.
     id: 'claude-sonnet-5',
     provider: ANTHROPIC,
     label: 'Claude Sonnet 5',
@@ -301,6 +298,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     billedRates: aiRatesPerMTok(3, 15),
     tier: 'balanced',
     cacheMinTokens: 1_024,
+    successor: 'claude-sonnet-5-5',
   },
   {
     id: 'claude-sonnet-4-6',
@@ -312,7 +310,32 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     cacheMinTokens: 1_024,
   },
   {
-    // Rejects an explicit `thinking` setting; the runtime omits it.
+    // THE FAST TIER'S DEFAULT (AGL-3781): the first fast row, so every step
+    // routed to fast, a Free site's plan and look, and a page's listing run
+    // here. Thinking is adaptive and ON when a request names none, so each
+    // fast route says what it wants (`providers/routing.ts`); it accepts
+    // `disabled` at effort high or below, refuses budgets, sampling
+    // parameters and an assistant prefill, which no door sends, and has no
+    // server-side fallback, which none asks for.
+    //
+    // The provider list is $0.10 / $0.50 for a prompt of 100,000 tokens or
+    // fewer and five times that above it; no door sends a prompt near it.
+    // Its tokenizer counts the same text as about 30% more tokens, so a
+    // customer is billed Haiku 4.5's rate per token and the fast tier's
+    // price per token does not move when its default does; the margin is in
+    // the rate, as on the balanced row above.
+    id: 'claude-haiku-5-5',
+    provider: ANTHROPIC,
+    label: 'Claude Haiku 5.5',
+    capabilities: anthropicCapabilities,
+    providerRates: aiRatesPerMTok(0.1, 0.5),
+    billedRates: aiRatesPerMTok(1, 5),
+    tier: 'fast',
+    cacheMinTokens: 512,
+  },
+  {
+    // The fast default until AGL-3781, retired to Haiku 5.5. Rejects an
+    // explicit `thinking` setting; the runtime omits it.
     id: 'claude-haiku-4-5',
     provider: ANTHROPIC,
     label: 'Claude Haiku 4.5',
@@ -320,9 +343,9 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     ...aiRatesAtList(1, 5),
     tier: 'fast',
     // Four times the balanced tier's minimum: the cheapest model per token
-    // is the hardest one to cache for, which is why a short prompt moved
-    // here can cost more per request than it saved per token.
+    // was the hardest one to cache for, so no fast-tier prompt ever cached.
     cacheMinTokens: 4_096,
+    successor: 'claude-haiku-5-5',
   },
   {
     id: 'claude-opus-5',
@@ -788,8 +811,8 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   'job.workflow': 'balanced',
 }
 
-/** The first catalog model of a tier on a provider, or the provider's first model. */
+/** The first current catalog model of a tier on a provider, or the provider's first current model. */
 export function aiDefaultModelFor(providerId: string, tier: AiCatalogEntry['tier']): string | undefined {
-  const onProvider = AI_MODEL_CATALOG.filter((entry) => entry.provider === providerId)
+  const onProvider = AI_MODEL_CATALOG.filter((entry) => entry.provider === providerId && !entry.successor)
   return (onProvider.find((entry) => entry.tier === tier) ?? onProvider[0])?.id
 }

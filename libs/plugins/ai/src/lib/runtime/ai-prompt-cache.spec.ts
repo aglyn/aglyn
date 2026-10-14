@@ -199,8 +199,8 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'runtime/seo-fields.ts': {
     step: 'job.seo',
-    caches: false,
-    why: "a listing's rules are far under the fast tier's minimum; the prompt is kept short instead",
+    caches: true,
+    why: "a listing's rules and tool, kept short while the fast tier could not cache them, over Claude Haiku 5.5's 512-token minimum since it became the fast default (AGL-3781); a page's listings are asked a minute apart, so each reads the one before",
   },
   'jobs/ai-job-plan-step.ts': { step: 'job.plan', caches: true, why: 'the doctrine and the plan rules' },
   'jobs/ai-job-layout-step.ts': {
@@ -230,15 +230,15 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'jobs/ai-job-crm-step.ts': {
     step: 'job.crm',
-    caches: false,
-    why: "a record's, an email's and an import's rules are far under the fast tier's minimum; the prompts are kept short instead",
+    caches: true,
+    why: "a record's, an email's and an import's rules and tool, kept short while the fast tier could not cache them, over Claude Haiku 5.5's 512-token minimum since AGL-3781",
   },
   'server/ai-media-svg.ts': {
     // An illustration in Media (AGL-3602) runs on the fast tier, the row
     // `copy.element` is served from.
     step: 'copy.element',
-    caches: false,
-    why: 'one short instruction block and the doctrine, about 2,100 tokens, under the fast tier’s minimum; the prompt is kept short instead',
+    caches: true,
+    why: 'one short instruction block and the doctrine, about 2,100 tokens: over Claude Haiku 5.5’s 512-token minimum since AGL-3781, under Haiku 4.5’s 4,096 before',
   },
   'server/ai-generate-component.ts': {
     step: 'job.component',
@@ -262,8 +262,8 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'jobs/ai-job-seo-step.ts': {
     step: 'job.seo',
-    caches: false,
-    why: "the audit's site and fix passes, on the same fast tier as a listing",
+    caches: true,
+    why: "the audit's site and fix passes, on the same fast tier as a listing; a fix batch's tool names its own pages, so only its re-ask reads its prefix",
   },
   'jobs/ai-job-workflow-step.ts': {
     step: 'job.workflow',
@@ -912,14 +912,18 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // empty field.
       'workflow-draft': { prefixTokens: 5_001, minimum: 512, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_216, minimum: 512, caches: true, toolsStable: true },
-      'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
-      'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
-      'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
+      // The listing doors were under Claude Haiku 4.5's 4,096-token minimum
+      // and are over Claude Haiku 5.5's 512 since it became the fast default
+      // (AGL-3781), read four characters a token, which errs low; that model
+      // counts the same text as about 30% more tokens.
+      'seo-fields': { prefixTokens: 734, minimum: 512, caches: true, toolsStable: true },
+      'seo-fields-full': { prefixTokens: 873, minimum: 512, caches: true, toolsStable: true },
+      'seo-site': { prefixTokens: 951, minimum: 512, caches: true, toolsStable: true },
       // The fixes tool's schema enumerates the eight pages of THIS batch, so
-      // its prefix is per-batch as well as too short. The enumeration is kept
-      // deliberately: on a door that cannot cache either way, a schema that
-      // refuses a page outside the batch is worth more than a stable prefix.
-      'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
+      // its prefix is per-batch: only a batch's own re-ask reads it. The
+      // enumeration is kept deliberately: a schema that refuses a page outside
+      // the batch is worth more than a prefix shared across batches.
+      'seo-fixes': { prefixTokens: 921, minimum: 512, caches: true, toolsStable: false },
       'eval-grade': { prefixTokens: 2_007, minimum: 512, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
@@ -958,17 +962,20 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // A site's dataset (AGL-3616): the doctrine's fields block, its rules and its tool.
       dataset: { prefixTokens: 1_030, minimum: 512, caches: true, toolsStable: true },
-      // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
-      // so each prompt is only the field rules, the kind's own and its tool.
-      'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },
-      'crm-record-deal': { prefixTokens: 913, minimum: 4_096, caches: false, toolsStable: true },
-      'crm-email': { prefixTokens: 650, minimum: 4_096, caches: false, toolsStable: true },
-      'crm-mapping': { prefixTokens: 680, minimum: 4_096, caches: false, toolsStable: true },
+      // CRM by AI (AGL-2917), on the fast tier: each prompt is only the field
+      // rules, the kind's own and its tool, which no shape took past Claude
+      // Haiku 4.5's minimum and every shape takes past Claude Haiku 5.5's
+      // (AGL-3781).
+      'crm-record-contact': { prefixTokens: 768, minimum: 512, caches: true, toolsStable: true },
+      'crm-record-deal': { prefixTokens: 913, minimum: 512, caches: true, toolsStable: true },
+      'crm-email': { prefixTokens: 650, minimum: 512, caches: true, toolsStable: true },
+      'crm-mapping': { prefixTokens: 680, minimum: 512, caches: true, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 512, caches: false, toolsStable: true },
       'overlay-popup': { prefixTokens: 866, minimum: 512, caches: true, toolsStable: true },
-      'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
+      // Under even Claude Haiku 5.5's 512-token minimum (AGL-3781).
+      'copy.element': { prefixTokens: 339, minimum: 512, caches: false, toolsStable: true },
       'copy.blog': { prefixTokens: 340, minimum: 512, caches: false, toolsStable: true },
       'copy.section': { prefixTokens: 736, minimum: 512, caches: true, toolsStable: true },
     })

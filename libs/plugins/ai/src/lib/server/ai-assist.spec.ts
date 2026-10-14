@@ -648,7 +648,7 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     expect(signals).toHaveLength(1)
     expect(signals[0][1]).toMatchObject({
       route: '/api/ai/assist/element',
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       tier: 'entitled',
       stopReason: 'end_turn',
       inputTokens: 100,
@@ -672,7 +672,7 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     // Haiku $0.0003, Sonnet $0.0009, the dear fallback $0.0030 — for the
     // same 100 in / 40 out — so no pair of them can pass for another.
     const cases: Array<[string, string, number]> = [
-      ['element', 'claude-haiku-4-5', 0.0003],
+      ['element', 'claude-haiku-5-5', 0.0003],
       ['blog', 'claude-sonnet-5-5', 0.0009],
     ]
     for (const [mode, expected, cost] of cases) {
@@ -685,6 +685,10 @@ describe('every answered call is metered per org (AGL-2073)', () => {
       expect(result.status).toBe(200)
       const sent = JSON.parse(String(mockFetch.mock.calls[0][1].body))
       expect(sent.model).toBe(expected)
+      // An element's ceiling holds the copy alone, so it is asked with no
+      // thinking; a post's row names none and leaves the model's default
+      // (AGL-3781).
+      expect(sent.thinking).toEqual(mode === 'element' ? { type: 'disabled' } : undefined)
       const signal = [...mockDocs.entries()].find(([path]) =>
         path.startsWith(`orgs/${ORG}/assistSignals/`),
       )

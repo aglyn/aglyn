@@ -36,7 +36,7 @@ import { resolve } from 'node:path'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { resetPluginServicesForTests } from '@aglyn/aglyn'
 import { anthropicProvider, anthropicUsageFrom, buildAnthropicRequestBody } from './anthropic'
-import { estimateAiBilledUsd } from './catalog'
+import { AI_MODEL_CATALOG, aiCatalogEntry, estimateAiBilledUsd } from './catalog'
 import {
   AI_RAW_OUTPUT_MAX_CHARS,
   AI_UPSTREAM_FAILURE_COPY,
@@ -53,7 +53,7 @@ import {
   openAiCompatibleProvider,
 } from './openai-compatible'
 import { registerAiProvider } from './registry'
-import { aiModelForStep, resolveAiRoute } from './routing'
+import { aiModelForStep, aiServingModelId, resolveAiRoute } from './routing'
 
 interface Fixture {
   status: number
@@ -597,7 +597,7 @@ describe('the routing table (AGL-2937)', () => {
       model: 'claude-sonnet-5-5',
     })
     // The element copy step runs on the fast tier.
-    expect(aiModelForStep('copy.element')).toBe('claude-haiku-4-5')
+    expect(aiModelForStep('copy.element')).toBe('claude-haiku-5-5')
     // Seeded ONCE: a provider an adopter registered first is not displaced.
     resetPluginServicesForTests()
     registerAiProvider(openAiCompatibleProvider, { pluginId: 'acme-llm' })
@@ -636,6 +636,33 @@ describe('the routing table (AGL-2937)', () => {
     // `platform` defers to the environment; an unregistered choice falls back too.
     expect(aiModelForStep('job.text', { provider: 'platform' })).toBe('claude-opus-5')
     expect(resolveAiRoute('job.text', { provider: 'nope' })?.provider.id).toBe('anthropic')
+  })
+
+  it('serves a retired model’s successor wherever a setting or an override names it (AGL-3781)', () => {
+    registerAiProvider(anthropicProvider)
+    // One model per tier holds the tier's traffic, so one cache namespace does.
+    expect(aiServingModelId('claude-sonnet-5')).toBe('claude-sonnet-5-5')
+    expect(aiServingModelId('claude-haiku-4-5')).toBe('claude-haiku-5-5')
+    expect(aiServingModelId('claude-opus-5')).toBe('claude-opus-5')
+    expect(aiServingModelId('not-a-model')).toBe('not-a-model')
+    process.env['AI_DEFAULT_MODEL'] = 'claude-haiku-4-5'
+    process.env['ASSIST_MODEL'] = 'claude-sonnet-5'
+    expect(aiModelForStep('assist.chat')).toBe('claude-sonnet-5-5')
+    expect(aiModelForStep('job.page')).toBe('claude-haiku-5-5')
+    delete process.env['AI_DEFAULT_MODEL']
+    delete process.env['ASSIST_MODEL']
+    expect(aiModelForStep('job.seo', { jobSeoModel: 'claude-haiku-4-5' })).toBe('claude-haiku-5-5')
+    expect(aiModelForStep('job.page', { jobPageModel: 'claude-sonnet-5' })).toBe('claude-sonnet-5-5')
+    // Every retired row names a current row on its own provider and tier.
+    for (const entry of AI_MODEL_CATALOG.filter((row) => row.successor)) {
+      const successor = aiCatalogEntry(aiServingModelId(entry.id))
+      expect([entry.id, successor?.successor, successor?.provider, successor?.tier]).toEqual([
+        entry.id,
+        undefined,
+        entry.provider,
+        entry.tier,
+      ])
+    }
   })
 })
 

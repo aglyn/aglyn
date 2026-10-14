@@ -113,13 +113,25 @@ describe('the catalog carries two rates, and they have not collapsed', () => {
       (entry) => entry.billedRates.inputPerToken > entry.providerRates.inputPerToken,
     )
     // Claude Sonnet 5.5, the balanced default since AGL-3660, carries Sonnet 5's markup at the same list price.
-    expect(marked.map((entry) => entry.id)).toEqual(['claude-sonnet-5-5', 'claude-sonnet-5'])
-    for (const sonnet of marked) {
-      // Pinned as list prices, so a change to either half has to be written
-      // here in the units the vendor publishes and the plan bands were sized in.
-      expect(perMTok(sonnet.providerRates)).toEqual({ input: 2, output: 10 })
-      expect(perMTok(sonnet.billedRates)).toEqual({ input: 3, output: 15 })
+    // Claude Haiku 5.5, the fast default since AGL-3781, is billed Haiku 4.5's
+    // list per token over a tenth of it, so the fast tier's price per token
+    // did not move when its default did.
+    expect(marked.map((entry) => entry.id)).toEqual(['claude-sonnet-5-5', 'claude-sonnet-5', 'claude-haiku-5-5'])
+    // Pinned as list prices, so a change to either half has to be written
+    // here in the units the vendor publishes and the plan bands were sized in.
+    const pinned: Record<string, { provider: object; billed: object }> = {
+      'claude-sonnet-5-5': { provider: { input: 2, output: 10 }, billed: { input: 3, output: 15 } },
+      'claude-sonnet-5': { provider: { input: 2, output: 10 }, billed: { input: 3, output: 15 } },
+      'claude-haiku-5-5': { provider: { input: 0.1, output: 0.5 }, billed: { input: 1, output: 5 } },
     }
+    for (const entry of marked) {
+      expect([entry.id, perMTok(entry.providerRates)]).toEqual([entry.id, pinned[entry.id].provider])
+      expect([entry.id, perMTok(entry.billedRates)]).toEqual([entry.id, pinned[entry.id].billed])
+    }
+    // The fast tier's billed rate is its retired default's, exactly.
+    const retired = AI_MODEL_CATALOG.find((entry) => entry.id === 'claude-haiku-4-5')
+    const current = AI_MODEL_CATALOG.find((entry) => entry.id === 'claude-haiku-5-5')
+    expect(current?.billedRates).toEqual(retired?.billedRates)
   })
 
   it('never bills BELOW what a model costs, on any column', () => {

@@ -414,7 +414,7 @@ describe('a Free workspace’s site start is one or two pages', () => {
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     const [first, second] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
     expect(aiCatalogEntry(first.model)?.tier).toBe('fast')
-    expect(first.model).toBe('claude-haiku-4-5')
+    expect(first.model).toBe('claude-haiku-5-5')
     expect(first.thinking).toBe('off')
     expect(first.maxTokens).toBe(AI_SITE_PLAN_MAX_TOKENS.free)
     const turn = String(first.messages[0].content)
@@ -724,7 +724,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     const outcome = await planStepFor(FREE_ORG, FREE, yogaJob())
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     const [first, second] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
-    expect([first.model, second.model]).toEqual(['claude-haiku-4-5', 'claude-haiku-4-5'])
+    expect([first.model, second.model]).toEqual(['claude-haiku-5-5', 'claude-haiku-5-5'])
     expect([first.maxTokens, second.maxTokens]).toEqual([AI_SITE_PLAN_MAX_TOKENS.free, AI_SITE_PLAN_MAX_TOKENS.free])
     expect(String(second.messages.at(-1)?.content)).toContain('The home page has 2 sections')
     const plan = outcome.plan as AiJobPlan
@@ -1250,6 +1250,6 @@ describe('a plan our checks still refuse', () => {
 
 // Each catalog id this suite names is one the catalog still carries.
 it('names models the catalog carries', () => {
-  expect(AI_MODEL_CATALOG.map((entry) => entry.id)).toEqual(expect.arrayContaining(['claude-haiku-4-5', 'claude-sonnet-5']))
+  expect(AI_MODEL_CATALOG.map((entry) => entry.id)).toEqual(expect.arrayContaining(['claude-haiku-5-5', 'claude-sonnet-5']))
   expect(AI_STEP_TIERS['job.plan']).toBe('balanced')
 })

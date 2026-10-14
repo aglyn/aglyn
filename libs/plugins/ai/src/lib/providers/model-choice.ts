@@ -27,7 +27,7 @@ import {
   type AiStepKind,
 } from './catalog'
 import type { AiUsage } from './contract'
-import { resolveAiRoute, type AiPluginSettings } from './routing'
+import { aiServingModelId, resolveAiRoute, type AiPluginSettings } from './routing'
 
 /**
  * THE MODEL SWITCH (AGL-2942): what a person may pick, what "Auto" means,
@@ -221,13 +221,18 @@ export interface AiModelBounds {
   orgModels?: readonly string[] | null
 }
 
+/** Whether a list names a model, a retired id on it naming its successor (AGL-3781). */
+function names(list: readonly string[], id: string): boolean {
+  return list.some((listed) => aiServingModelId(listed) === id)
+}
+
 function onLists(entry: AiCatalogEntry, bounds: AiModelBounds): boolean {
-  if (bounds.orgModels?.length && !bounds.orgModels.includes(entry.id)) return false
-  if (bounds.allotmentModels && !bounds.allotmentModels.includes(entry.id)) return false
+  if (bounds.orgModels?.length && !names(bounds.orgModels, entry.id)) return false
+  if (bounds.allotmentModels && !names(bounds.allotmentModels, entry.id)) return false
   return true
 }
 
-/** The catalog models a manual pick may name on a provider under these bounds. */
+/** The current catalog models a manual pick may name on a provider under these bounds. */
 export function aiModelsSelectable(
   providerId: string,
   bounds: AiModelBounds,
@@ -235,7 +240,10 @@ export function aiModelsSelectable(
   const tiers = AI_PLAN_MODEL_TIERS[bounds.plan] ?? []
   return AI_MODEL_CATALOG.filter(
     (entry) =>
-      entry.provider === providerId && tiers.includes(entry.tier) && onLists(entry, bounds),
+      entry.provider === providerId &&
+      !entry.successor &&
+      tiers.includes(entry.tier) &&
+      onLists(entry, bounds),
   )
 }
 
@@ -275,9 +283,11 @@ export function resolveAiModelChoice(
 ): AiModelChoice | null {
   const route = resolveAiRoute(kind, settings)
   if (!route) return null
+  // A pick of a retired model, from a job made before it retired, is a pick
+  // of the model that serves in its place.
   const wanted =
     typeof requested === 'string' && requested.trim() && requested.trim() !== AI_MODEL_AUTO
-      ? requested.trim()
+      ? aiServingModelId(requested.trim())
       : null
   if (wanted && aiModelsSelectable(route.provider.id, bounds).some((entry) => entry.id === wanted)) {
     return { model: wanted, auto: false, declined: null }
@@ -286,7 +296,7 @@ export function resolveAiModelChoice(
   let model = route.model
   if (restricted) {
     const allowed = AI_MODEL_CATALOG.filter(
-      (entry) => entry.provider === route.provider.id && onLists(entry, bounds),
+      (entry) => entry.provider === route.provider.id && !entry.successor && onLists(entry, bounds),
     )
     if (allowed.length && !allowed.some((entry) => entry.id === model)) {
       const tier = aiCatalogEntry(model)?.tier ?? AI_STEP_TIERS[kind]

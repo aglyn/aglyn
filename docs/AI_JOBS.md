@@ -406,8 +406,13 @@ that forbids an invented name, contact detail, price or review.
 Nearly all of the provider bill is development, not customers (AGL-3660):
 in October 2026, $20.56 on the provider's console against about $1.05
 metered to workspaces. Most of it was live evals re-run whole on every
-iteration, on Free and on a paid workspace, at $0.35–0.80 a plan a run. So a
-change is verified on the cheapest rung that can see its mistake:
+iteration, on Free and on a paid workspace, at $0.35–0.80 a plan a run.
+Measured again for October 8–14 (AGL-3781): workspaces' own usage records
+account for about 3.3M of the console's 13.7M input tokens, and none of its
+2.8M on Claude Sonnet 5, which no deployed route served after AGL-3660 — that
+was development run from checkouts cut before it. So a change is verified on
+the cheapest rung that can see its mistake, from a checkout cut from
+`origin/main`:
 
 1. **Unit tests** (free). The step's own spec on golden answers, and
    `src/lib/runtime/ai-prompt-cache.spec.ts`, which holds every request's
@@ -627,7 +632,7 @@ Every door reads its row rather than a constant of its own.
 - **The scores are recomputed.** `src/lib/runtime/ai-eval.spec.ts` recomputes
   each row's pass rate and mean score from the harness, and fails when they
   differ from the row, when a row falls under its floor, or when a fast-tier
-  row asks for thinking or effort.
+  row does not say `thinking: 'off'` (its ceiling holds the answer alone).
 - **The ceilings.** A ceiling is sized from the p95 output the *Tokens by
   kind* panel reports for the kind once production has served it. Until then
   `maxTokensBasis` names what it is sized from, and the same spec holds every
@@ -639,7 +644,10 @@ Every door reads its row rather than a constant of its own.
   row of `AI_MODEL_CATALOG` is the tier's default, so Free, "Auto" and every
   step on the balanced tier run on `claude-sonnet-5-5`; `claude-sonnet-5`
   stays listed so a workspace's earlier choice and every recording still
-  resolve. Both bill at the same rates. Sonnet 5.5 refuses
+  resolve. Both bill at the same rates. Since AGL-3781 `claude-sonnet-5` is
+  retired to it (`successor` on the catalog row): a setting, an override or a
+  pick that names it is served by Sonnet 5.5, so the tier's prefixes live in
+  one cache namespace. Sonnet 5.5 refuses
   `thinking: {type: "disabled"}`, so the adapter says a step's `thinking:
   'off'` to it as `{type: "between_tools"}` (accepted at effort high or below,
   every effort the contract names); Claude Opus 5.5 cannot turn thinking off,
@@ -647,6 +655,22 @@ Every door reads its row rather than a constant of its own.
   door forces a tool: every request sends `tool_choice: auto`. Its cache
   minimum is 512 tokens, so the insight, A/B test, overlay and copy-section
   prompts now cache where they did not on Sonnet 5's 1,024.
+- **The fast tier is Claude Haiku 5.5 (AGL-3781).** `claude-haiku-5-5` is
+  the first fast row, so every fast step, a Free site's plan and look, a
+  page's listing and a Media illustration run on it; `claude-haiku-4-5` is
+  retired to it and stays listed so its recorded usage keeps its price. The
+  provider list is $0.10 / $0.50 per million tokens (to a 100,000-token
+  prompt) against Haiku 4.5's $1 / $5; a customer is billed Haiku 4.5's rate
+  per token, so the fast tier's price per token did not move. Its cache
+  minimum is 512 tokens, against 4,096, so the listing, audit, CRM and
+  illustration prompts cache for the first time. It thinks unless told not
+  to, so every fast row says `thinking: 'off'` — each ceiling, and the CRM
+  door's inline budget, was sized for the answer alone — and the listing and
+  CRM rows ask `effort: 'low'`. It counts the same text as about 30% more
+  tokens, so a fast-tier request draws about that much more credit at the
+  same rate per token. It refuses sampling parameters, budgets and an
+  assistant prefill, none of which any door sends, and has no server-side
+  fallback, which no door asks for.
 - **A Free site's plan still runs on the fast tier** (`aiSitePlanModel`,
   AGL-3594). Moving it to the balanced default puts the plan's derived
   worst case at 105 credits rather than 35, and the Free site wall
@@ -3086,7 +3110,8 @@ the element budget its request asks for.
 - **A Free site fits the taste (AGL-3594).** A Free workspace's guided start builds one
   or two pages (`AI_SITE_FREE_PAGES`, a product decision), and its plan is an outline:
   a site plan runs with no thinking, at `AI_SITE_PLAN_MAX_TOKENS` (2,000 Free, 4,000
-  paid), and a Free site plans on its provider's fast tier (claude-haiku-4-5). The
+  paid), and a Free site plans on its provider's fast tier (claude-haiku-5-5 since
+  AGL-3781, claude-haiku-4-5 before). The
   site plan that failed on 2026-10-06 measured 2,201 input, 4,343 cache write, 4,343
   cache read and 13,491 output tokens on claude-sonnet-5 — 227 credits, the output
   nearly all thinking. `ai-job-free-site.spec.ts` replays a Free two-page site through
@@ -3868,8 +3893,9 @@ from the job, and the step writes no CRM record.
   request. Each hands its proposal to the zone's own door — `proposeTask`,
   `proposeStage`, `proposeDraft`, `proposeMapping` — and none writes. The
   customer page is `apps/docs/docs/ai/crm-by-ai.md` (`aiCrm`).
-- **Routing and time.** `job.crm` runs on the fast tier with no thinking and a
-  700-token ceiling: sixty columns matched to fields by number, or an email
+- **Routing and time.** `job.crm` runs on the fast tier with no thinking
+  (`thinking: 'off'`, since the fast tier's model thinks unless told not to),
+  `effort: 'low'` and a 700-token ceiling: sixty columns matched to fields by number, or an email
   draft at its limits, at three characters a token with room. It sends no site
   inventory and so makes no lookup; its own round trips — the facts read, a
   record's reuse lookup and the answer's write — are the declared 1.5 s,
@@ -3877,8 +3903,8 @@ from the job, and the step writes no CRM record.
   create door answers with the proposal. Its three generation kinds are
   scoped to the doctrine's field rules (`AI_DOCTRINE_KIND_SCOPE`), which send
   rule 13 and the acceptable-use block rather than the building rules; the
-  prompts come to 650 to 913 tokens, under the fast tier's minimum, and the
-  ledger records them as not caching.
+  prompts come to 650 to 913 tokens, over Claude Haiku 5.5's 512-token
+  minimum (AGL-3781), and the ledger records them as caching.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
 | --- | --- | --- | --- | --- |
