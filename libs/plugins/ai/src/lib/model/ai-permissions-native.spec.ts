@@ -16,7 +16,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { HOST_ROLE_AI_PERMISSIONS } from '../../../libs/plugins/ai/src/lib/model/ai-permissions'
+import { HOST_ROLE_AI_PERMISSIONS } from './ai-permissions'
 
 /**
  * The native "AI access" screen for a site collaborator restates the role
@@ -26,7 +26,7 @@ import { HOST_ROLE_AI_PERMISSIONS } from '../../../libs/plugins/ai/src/lib/model
  */
 const SPEC = join(
   __dirname,
-  '../../../libs/plugins/ai/src/ios/Sources/AglynAiPlugin/Resources/ai.screens.json',
+  '../../ios/Sources/AglynAiPlugin/Resources/ai.screens.json',
 )
 const screens = JSON.parse(readFileSync(SPEC, 'utf8')).screens as Array<{
   id: string
