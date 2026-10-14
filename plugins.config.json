@@ -3238,7 +3238,7 @@
     {
       "id": "marketing-platforms",
       "mobile": {
-        "$comment": "AGL-3652: the Email platforms cards natively (Mailchimp, Klaviyo, Omnisend, Attentive), from the spec in src/android/screens/marketing-platforms.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "$comment": "AGL-3652: the Email platforms cards natively (Mailchimp, Klaviyo, Omnisend, Attentive), from the spec in src/android/screens/marketing-platforms.screens.json. It sits in the site's plugin settings (sitePluginSettings zone), where the console's hostSettings slot draws it.",
         "ios": {
           "module": "AglynMarketingPlatformsPlugin",
           "register": "registerMarketingPlatformsNative"

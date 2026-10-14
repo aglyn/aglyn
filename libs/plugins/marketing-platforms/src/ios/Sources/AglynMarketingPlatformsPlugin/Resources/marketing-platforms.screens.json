@@ -10,8 +10,9 @@
       "scope": "site",
       "order": 60,
       "zones": [
-        "commerceSettings"
+        "sitePluginSettings"
       ],
+      "requires": "params.pluginId == marketing-platforms",
       "load": {
         "conn": "/api/marketing-platforms/connections?hostId={site.id}"
       },

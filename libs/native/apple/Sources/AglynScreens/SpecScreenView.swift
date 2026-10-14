@@ -435,6 +435,10 @@ struct SpecScreenBody: View {
         dismiss()
         return
       }
+      if let follow = model.followUp {
+        model.followUp = nil
+        prompting = PendingAction(action: follow.action, scope: follow.scope)
+      }
       if action.reload { await model.load() }
     }
   }

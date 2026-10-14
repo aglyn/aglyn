@@ -224,6 +224,7 @@ private fun SpecBody(
         action.reveal?.let { path -> ScreenValues.lookup(path, outcome.response ?: JsonNull)?.let { revealed = action.label to ScreenValues.text(it) } }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
+        model.followUp?.let { follow -> model.followUp = null; prompting = Pending(follow.action, follow.scope) }
         if (action.back) session.back() else if (action.reload) model.load()
       }
     }

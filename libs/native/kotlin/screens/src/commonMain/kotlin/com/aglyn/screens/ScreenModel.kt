@@ -213,9 +213,24 @@ class ScreenModel(
     }
   }
 
+  /** A step the person is asked to finish next: the previous step's answer is its `response`, its form its `previous`. */
+  data class FollowUp(val action: ActionSpec, val scope: JsonElement)
+
+  /** Set by [run] when the action that ran has a `then` that asks for inputs (a chained prompt); the screen takes it. */
+  var followUp: FollowUp? by mutableStateOf(null)
+
+  /** The action that actually made the request last, which may be the `else` of the one that was pressed. */
+  private var performed: ActionSpec? = null
+
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
+    performed = null
     val outcome = perform(action, scope)
-    if (outcome is ActionOutcome.Done) action.then?.let { perform(it, ScreenContext.with(scope, "response", outcome.response)) }
+    if (outcome is ActionOutcome.Done) {
+      (performed ?: action).then?.let { then ->
+        val next = ScreenContext.with(ScreenContext.with(scope, "response", outcome.response), "previous", (scope as? JsonObject)?.get("form"))
+        if (then.asksInputs) followUp = FollowUp(then, next) else perform(then, next)
+      }
+    }
     return outcome
   }
 
@@ -240,13 +255,14 @@ class ScreenModel(
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {
       val response = client.request(path, action.method, body)
+      performed = action
       ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {
       when {
         wantsReauth(error) -> ActionOutcome.NeedsReauth(error.body.str("message") ?: error.message)
-        error.status == 404 && action.otherwise != null -> perform(action.otherwise, scope)
+        error.status == action.elseStatus && action.otherwise != null -> perform(action.otherwise, scope)
         else -> ActionOutcome.Failed(error.message)
       }
     } catch (error: Throwable) {

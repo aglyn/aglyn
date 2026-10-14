@@ -172,6 +172,8 @@ public struct ActionSpec: Sendable, Identifiable {
   public let write: JSONValue?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
+  /// The status of the answer that runs `else` (404 unless the spec names another, such as 409).
+  public let elseStatus: Int
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
   /// `{ when, title, text }`: when the route's answer meets `when`, the person is shown `text`
@@ -199,6 +201,10 @@ public struct ActionSpec: Sendable, Identifiable {
     self.back = json["back"] == .bool(true)
     self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil)
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
+    self.elseStatus = json["elseStatus"].flatMap { value -> Int? in
+      if case .number(let number) = value { return Int(number) }
+      return value.stringValue.flatMap(Int.init)
+    } ?? 404
     self.then = json["then"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.when = json["when"]?.stringValue
     self.link = json["link"]?.stringValue

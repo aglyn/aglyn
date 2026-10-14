@@ -921,6 +921,14 @@ row flag to a kind (`password`, or `yesno` for a No/Yes pick that sends "" or
 whose key matches, replaced) and `{"$uuid": "box_"}` (a fresh id with that prefix), and
 `{form}` reads the whole form as an object.
 
+A condition may compare numbers and times: `path < @now.ms+7d` (also `<=`, `>`, `>=`), the
+right side a number or `@path` with an optional offset in ms, s, m, h or d; a missing
+left side is false. An action's `else` runs on the status named by `elseStatus` (404
+unless set, 409 for "this needs one more answer"), and an action's `then` that has a
+`prompt` is asked of the person next, with the earlier answer as `response` and the
+earlier form as `previous` (print on demand lists the stores a token reaches, then
+connects the one picked).
+
 ### The plugin switchboard
 
 `{ "switchboard": "org" }` reads `orgs/{org}` and `{ "switchboard": "site" }`

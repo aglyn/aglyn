@@ -438,6 +438,42 @@
     {
       "when": "params.uid == @params.uid",
       "expect": true
+    },
+    {
+      "when": "data.money < 200000",
+      "expect": true
+    },
+    {
+      "when": "data.money > 200000",
+      "expect": false
+    },
+    {
+      "when": "data.money <= @data.money",
+      "expect": true
+    },
+    {
+      "when": "data.money < @data.money",
+      "expect": false
+    },
+    {
+      "when": "data.money < @data.money+1d",
+      "expect": true
+    },
+    {
+      "when": "data.money > @data.money-1h",
+      "expect": true
+    },
+    {
+      "when": "data.money < @data.money-1d",
+      "expect": false
+    },
+    {
+      "when": "data.missing < 5",
+      "expect": false
+    },
+    {
+      "when": "data.money > 100 && data.money < 200000",
+      "expect": true
     }
   ]
 }

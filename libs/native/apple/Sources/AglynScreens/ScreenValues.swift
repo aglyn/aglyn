@@ -334,8 +334,46 @@ public enum ScreenValues {
         return op == "==" ? options.contains(left) : !options.contains(left)
       }
     }
+    // `path < @now.ms+7d`: numbers and times compared; the right side is a number or `@path` with an optional offset.
+    for op in ["<=", ">=", "<", ">"] {
+      guard let range = clause.range(of: op) else { continue }
+      guard let left = comparable(lookup(String(clause[..<range.lowerBound]), in: context)),
+        let right = operand(clause[range.upperBound...].trimmingCharacters(in: .whitespaces), in: context)
+      else { return false }
+      switch op {
+      case "<=": return left <= right
+      case ">=": return left >= right
+      case "<": return left < right
+      default: return left > right
+      }
+    }
     if clause.hasPrefix("!") { return !truthy(lookup(String(clause.dropFirst()), in: context)) }
     return truthy(lookup(clause, in: context))
+  }
+
+  /// A number as it is, or a time (epoch milliseconds, a Firestore timestamp, an ISO date) as milliseconds.
+  private static func comparable(_ value: JSONValue?) -> Double? {
+    if case .number(let number)? = value { return number }
+    return epochMillis(value).map(Double.init)
+  }
+
+  /// The right side of `<`: a number, `@path`, or `@path+7d` / `@path-30m` (units ms, s, m, h, d; none is ms).
+  private static func operand(_ text: String, in context: JSONValue) -> Double? {
+    if let number = Double(text) { return number }
+    guard text.hasPrefix("@") else { return nil }
+    let body = String(text.dropFirst())
+    let pattern = #"^(.+?)\s*([+-])\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?$"#
+    if let regex = try? NSRegularExpression(pattern: pattern),
+      let found = regex.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)),
+      let pathRange = Range(found.range(at: 1), in: body), let signRange = Range(found.range(at: 2), in: body),
+      let amountRange = Range(found.range(at: 3), in: body), let base = comparable(lookup(String(body[pathRange]), in: context)),
+      let amount = Double(body[amountRange])
+    {
+      let unit = Range(found.range(at: 4), in: body).map { String(body[$0]) } ?? "ms"
+      let scale: Double = ["s": 1_000, "m": 60_000, "h": 3_600_000, "d": 86_400_000][unit] ?? 1
+      return body[signRange] == "+" ? base + amount * scale : base - amount * scale
+    }
+    return comparable(lookup(body, in: context))
   }
 
   private static func lastUnquotedColon(_ text: String) -> String.Index? {

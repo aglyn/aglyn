@@ -262,12 +262,27 @@ public final class ScreenModel {
   /// Runs an action against `scope` (the screen's context, maybe with an
   /// item and the filled inputs under `form`).
   public func run(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
+    performed = nil
     let outcome = await perform(action, in: scope)
-    if case .done(_, let response) = outcome, let then = action.then?.action {
-      _ = await perform(then, in: ScreenContext.with(scope, "response", response ?? .null))
+    if case .done(_, let response) = outcome, let then = (performed ?? action).then?.action {
+      let next = ScreenContext.with(
+        ScreenContext.with(scope, "response", response ?? .null), "previous", scope["form"] ?? .null)
+      if then.asksInputs { followUp = FollowUp(action: then, scope: next) } else { _ = await perform(then, in: next) }
     }
     return outcome
   }
+
+  /// A step the person is asked to finish next: the previous step's answer is its `response`, its form its `previous`.
+  public struct FollowUp {
+    public let action: ActionSpec
+    public let scope: JSONValue
+  }
+
+  /// Set by `run` when the action that ran has a `then` that asks for inputs (a chained prompt); the screen takes it.
+  public var followUp: FollowUp?
+
+  /// The action that actually made the request last, which may be the `else` of the one that was pressed.
+  private var performed: ActionSpec?
 
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     if let write = action.write {
@@ -288,10 +303,11 @@ public final class ScreenModel {
     do {
       let response = try await api.request(path, method: action.method, body: body ?? (action.method == .get ? nil : [:]))
       let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", response ?? .null)) }
+      performed = action
       return .done(message: message, response: response)
     } catch let error as ConsoleAPIError {
       if Self.wantsReauth(error) { return .needsReauth(error.message) }
-      if error.status == 404, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
+      if error.status == action.elseStatus, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
       return .failed(error.message)
     } catch {
       return .failed(error.localizedDescription)

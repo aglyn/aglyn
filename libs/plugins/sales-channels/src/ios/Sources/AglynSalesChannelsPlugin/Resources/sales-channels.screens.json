@@ -543,7 +543,21 @@
               "tones": {
                 "Connected": "success"
               },
-              "when": "data.state.connect.providers[provider=params.channel].connection"
+              "when": "data.state.connect.providers[provider=params.channel].connection && data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs > @now.ms+7d || data.state.connect.providers[provider=params.channel].connection && !data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs"
+            },
+            {
+              "label": "Status",
+              "value": "Reconnect needed",
+              "chip": true,
+              "tones": {
+                "Reconnect needed": "warning"
+              },
+              "when": "data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs < @now.ms+7d"
+            },
+            {
+              "label": "Connection expires",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs:datetime}",
+              "when": "data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs"
             },
             {
               "label": "Status",
@@ -590,6 +604,13 @@
               "when": "data.state.connect.providers[provider=params.channel].connection.lastSyncResult.errors"
             }
           ]
+        },
+        {
+          "type": "notice",
+          "id": "expiring",
+          "tone": "warning",
+          "when": "data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs < @now.ms+7d",
+          "text": "The connection to {const.channels[id=params.channel].service} expires {data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs:datetime}. Reconnect to keep syncing."
         },
         {
           "type": "notice",
@@ -666,9 +687,9 @@
             },
             {
               "id": "reconnect",
-              "label": "Connect again",
+              "label": "Reconnect",
               "icon": "link|link",
-              "when": "data.state.connect.providers[provider=params.channel].connection",
+              "when": "data.state.connect.providers[provider=params.channel].connection.tokenExpiresAtMs < @now.ms+7d",
               "url": "/api/sales-channels/connect/start",
               "body": {
                 "hostId": "{site.id}",

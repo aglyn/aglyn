@@ -299,8 +299,46 @@ object ScreenValues {
         return if (op == "==") left in options else left !in options
       }
     }
+    // `path < @now.ms+7d`: numbers and times compared; the right side is a number or `@path` with an optional offset.
+    for (op in listOf("<=", ">=", "<", ">")) {
+      val at = clause.indexOf(op)
+      if (at < 0) continue
+      val left = comparable(lookup(clause.substring(0, at), context)) ?: return false
+      val right = operand(clause.substring(at + op.length).trim(), context) ?: return false
+      return when (op) {
+        "<=" -> left <= right
+        ">=" -> left >= right
+        "<" -> left < right
+        else -> left > right
+      }
+    }
     if (clause.startsWith("!")) return !truthy(lookup(clause.substring(1), context))
     return truthy(lookup(clause, context))
+  }
+
+  /** A number as it is, or a time (epoch milliseconds, a Firestore timestamp, an ISO date) as milliseconds. */
+  private fun comparable(value: JsonElement?): Double? = when {
+    value is JsonPrimitive && !value.isString -> value.doubleOrNull
+    else -> epochMillis(value)?.toDouble()
+  }
+
+  private val offset = Regex("""^@(.+?)\s*([+-])\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?$""")
+
+  /** The right side of `<`: a number, `@path`, or `@path+7d` / `@path-30m` (units ms, s, m, h, d; none is ms). */
+  private fun operand(text: String, context: JsonElement): Double? {
+    text.toDoubleOrNull()?.let { return it }
+    if (!text.startsWith("@")) return null
+    val match = offset.matchEntire(text)
+    val base = comparable(lookup(match?.groupValues?.get(1) ?: text.substring(1), context)) ?: return null
+    if (match == null) return base
+    val amount = match.groupValues[3].toDouble() * when (match.groupValues[4]) {
+      "s" -> 1_000.0
+      "m" -> 60_000.0
+      "h" -> 3_600_000.0
+      "d" -> 86_400_000.0
+      else -> 1.0
+    }
+    return if (match.groupValues[2] == "+") base + amount else base - amount
   }
 
   private fun lastUnquotedColon(text: String): Int? {

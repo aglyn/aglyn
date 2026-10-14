@@ -115,6 +115,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val copy: String? = json.str("copy")
   val reveal: String? = json.str("reveal")
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
+  /** The status of the answer that runs `else` (404 unless the spec names another, such as 409). */
+  val elseStatus: Int = ((json.obj("elseStatus") as? JsonPrimitive)?.contentOrNull)?.toIntOrNull() ?: 404
   /** A follow-up the action makes once it succeeds (best effort, like the console's). */
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** `{ when, title, text }`: when the route's answer meets `when`, `text` (a template over `response`) is shown in place of the success message. */

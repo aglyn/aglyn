@@ -21,9 +21,9 @@ class MarketingPlatformsNativeTest {
   }
 
   @Test
-  fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
+  fun everySpecNamesItsRoutesAndTheSitePluginSettingsZone() {
     val specs = MarketingPlatformsScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("marketing-platforms.service", "marketing-platforms.platform").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "sitePluginSettings" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

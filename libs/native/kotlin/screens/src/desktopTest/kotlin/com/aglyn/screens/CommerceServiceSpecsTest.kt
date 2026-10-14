@@ -12,8 +12,11 @@ import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.json.Json
@@ -336,7 +339,16 @@ class CommerceServiceSpecsTest {
       "google",
       channelState(google = "true", extra = ""","connect":{"providers":[{"provider":"google","connection":{"provider":"google","targetId":"t1","targetName":"Acme MC","targets":[{"id":"t1","name":"Acme MC"},{"id":"t2","name":"Other"}],"connectedAtMs":1,"lastSyncAtMs":2,"lastSyncResult":{"sent":9,"failed":1,"errors":["Bad price","No image"]}}}]}"""),
     )
-    assertEquals(listOf("target", "syncNow", "reconnect", "disconnect"), connected.actionsShown("sync"))
+    assertEquals(listOf("target", "syncNow", "disconnect"), connected.actionsShown("sync"), "no reconnect while the grant has more than a week left")
+    fun withExpiry(msFromNow: Long) = channel(
+      "google",
+      channelState(google = "true", extra = ""","connect":{"providers":[{"provider":"google","connection":{"provider":"google","targetId":"t1","targetName":"Acme MC","targets":[{"id":"t1","name":"Acme MC"}],"connectedAtMs":1,"tokenExpiresAtMs":${System.currentTimeMillis() + msFromNow}}}]}"""),
+    )
+    val week = 7L * 24 * 60 * 60 * 1000
+    assertEquals(listOf("target", "syncNow", "disconnect"), withExpiry(week + 3_600_000).actionsShown("sync"))
+    assertEquals(listOf("target", "syncNow", "reconnect", "disconnect"), withExpiry(week - 3_600_000).actionsShown("sync"), "inside the console's seven days")
+    assertEquals(listOf("target", "syncNow", "reconnect", "disconnect"), withExpiry(-3_600_000).actionsShown("sync"), "an expired grant too")
+    assertTrue("expiring" in withExpiry(week - 3_600_000).shown() && "expiring" !in withExpiry(week + 3_600_000).shown())
     assertEquals("Acme MC", ScreenValues.render("{data.state.connect.providers[provider=params.channel].connection.targetName}", connected.context))
     assertEquals("Bad price, No image", ScreenValues.render("{data.state.connect.providers[provider=params.channel].connection.lastSyncResult.errors}", connected.context))
     assertEquals(json("""{"hostId":"h1","provider":"google","targetId":"t2"}"""), connected.body(connected.action("sync", "target"), """{"targetId":"t2"}"""))
@@ -443,16 +455,58 @@ class CommerceServiceSpecsTest {
     assertEquals(listOf("unavailable"), pod("[]", available = false).shown())
     val bare = pod("[]")
     assertEquals(listOf("intro", "connect"), bare.shown())
-    assertEquals(listOf("connectPrintful", "connectPrintify", "storesPrintful", "storesPrintify"), bare.actionsShown("connect"))
+    assertEquals(listOf("connectPrintful", "connectPrintify"), bare.actionsShown("connect"))
     val connect = bare.action("connect", "connectPrintful")
     assertEquals("/api/print-on-demand/connect", connect.url)
-    assertEquals(json("""{"hostId":"h1","provider":"printful","token":"tok","storeId":"7"}"""), bare.body(connect, """{"token":"tok","storeId":"7"}"""))
+    assertEquals(json("""{"hostId":"h1","provider":"printful","token":"tok"}"""), bare.body(connect, """{"token":"tok"}"""))
+    assertEquals(409, connect.elseStatus)
     assertEquals("Make a token. Kept encrypted and used only for this site; Aglyn never asks for your Printful password.", ScreenValues.render(connect.prompt.first().help!!, bare.context))
     val one = pod("[${podConnection("printful")}]")
     assertEquals(listOf("connections", "connect", "lists"), one.shown())
-    assertEquals(listOf("connectPrintify", "storesPrintify"), one.actionsShown("connect"))
-    val stores = bare.action("connect", "storesPrintify")
-    assertEquals("Shops: Main, Spare. Ids in the same order: 1, 2.", ScreenValues.render(stores.success!!, ScreenContext.with(bare.context, "response", json("""{"stores":[{"id":"1","name":"Main"},{"id":"2","name":"Spare"}]}"""))))
+    assertEquals(listOf("connectPrintify"), one.actionsShown("connect"))
+  }
+
+  @Test
+  fun aTokenThatReachesSeveralStoresListsThemAndConnectsToThePickedOne() {
+    val calls = mutableListOf<String>()
+    val api = ConsoleApiClient(
+      "http://localhost",
+      HttpClient(
+        MockEngine { request ->
+          calls += request.method.value + " " + request.url.encodedPath + " " + (request.body as? io.ktor.http.content.TextContent)?.text.orEmpty()
+          when {
+            request.url.encodedPath.endsWith("/stores") -> respond("""{"stores":[{"id":"11","name":"Main"},{"id":"22","name":"Spare"}]}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            calls.count { it.contains("/connect") } == 1 && request.url.encodedPath.endsWith("/connect") ->
+              respond("""{"error":"Choose which Printful store to connect."}""", HttpStatusCode.Conflict, headersOf(HttpHeaders.ContentType, "application/json"))
+            else -> respond("""{"connection":{}}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+          }
+        },
+      ),
+      { "t" },
+    )
+    val spec = spec("print-on-demand", "print-on-demand.service")
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
+    val model = ScreenModel(spec, session.context(Site(), emptyMap()), api)
+    model.seed(Json.parseToJsonElement("""{"conn":{"available":true,"storeCurrency":"USD","providers":$podProviders,"connections":[]}}"""))
+    val connect = model.action("connect", "connectPrintful")
+    val typed = ScreenContext.with(model.context, "form", json("""{"token":"tok"}"""))
+    val outcome = kotlinx.coroutines.runBlocking { model.run(connect, typed) }
+    assertTrue(outcome is ActionOutcome.Done, "the 409 is not an error: the stores are listed instead")
+    val follow = model.followUp!!
+    assertEquals("Connect Printful", follow.action.label)
+    assertEquals("tok", ScreenValues.text(ScreenValues.lookup("previous.token", follow.scope)))
+    val pick = follow.action.inputsFor(follow.scope).single()
+    assertEquals(listOf("11" to "Main", "22" to "Spare"), pick.choices(follow.scope))
+    val chosen = ScreenContext.with(follow.scope, "form", json("""{"storeId":"22"}"""))
+    kotlinx.coroutines.runBlocking { model.run(follow.action, chosen) }
+    assertEquals(
+      listOf(
+        "POST /api/print-on-demand/connect {\"hostId\":\"h1\",\"provider\":\"printful\",\"token\":\"tok\"}",
+        "POST /api/print-on-demand/stores {\"hostId\":\"h1\",\"provider\":\"printful\",\"token\":\"tok\"}",
+        "POST /api/print-on-demand/connect {\"hostId\":\"h1\",\"provider\":\"printful\",\"token\":\"tok\",\"storeId\":\"22\"}",
+      ),
+      calls,
+    )
   }
 
   @Test
@@ -696,7 +750,7 @@ class CommerceServiceSpecsTest {
 
   @Test
   fun theHostSettingsCardsSitInTheirOwnPluginsSettingsAndNobodyElses() {
-    for ((plugin, id) in listOf("live-chat" to "live-chat.settings", "zapier" to "zapier.connections", "ad-conversions" to "ad-conversions.service")) {
+    for ((plugin, id) in listOf("live-chat" to "live-chat.settings", "zapier" to "zapier.connections", "ad-conversions" to "ad-conversions.service", "marketing-platforms" to "marketing-platforms.service")) {
       val spec = spec(plugin, id)
       assertEquals(listOf("sitePluginSettings"), spec.zones, id)
       val mine = screen(spec, mapOf("pluginId" to plugin), "{}")

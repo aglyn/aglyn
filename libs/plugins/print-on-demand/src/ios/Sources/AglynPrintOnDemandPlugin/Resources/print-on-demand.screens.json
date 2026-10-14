@@ -147,21 +147,49 @@
                   "kind": "password",
                   "required": true,
                   "help": "{data.conn.providers[id=const.ids.printful].tokenHelp.steps} Kept encrypted and used only for this site; Aglyn never asks for your Printful password."
-                },
-                {
-                  "key": "storeId",
-                  "label": "Store id",
-                  "kind": "text",
-                  "help": "Only if your token reaches several stores: use Find my stores first to see their ids."
                 }
               ],
               "body": {
                 "hostId": "{site.id}",
                 "provider": "printful",
-                "token": "{form.token}",
-                "storeId": "{form.storeId}"
+                "token": "{form.token}"
               },
-              "success": "Printful is connected. Import products to start selling them."
+              "success": "Printful is connected. Import products to start selling them.",
+              "elseStatus": 409,
+              "else": {
+                "label": "Choose a store",
+                "url": "/api/print-on-demand/stores",
+                "body": {
+                  "hostId": "{site.id}",
+                  "provider": "printful",
+                  "token": "{form.token}"
+                },
+                "then": {
+                  "label": "Connect Printful",
+                  "icon": "link|link",
+                  "url": "/api/print-on-demand/connect",
+                  "prompt": [
+                    {
+                      "key": "storeId",
+                      "label": "Printful store",
+                      "kind": "select",
+                      "required": true,
+                      "optionsFrom": {
+                        "items": "response.stores",
+                        "value": "{item.id}",
+                        "label": "{item.name}"
+                      }
+                    }
+                  ],
+                  "body": {
+                    "hostId": "{site.id}",
+                    "provider": "printful",
+                    "token": "{previous.token}",
+                    "storeId": "{form.storeId}"
+                  },
+                  "success": "Printful is connected. Import products to start selling them."
+                }
+              }
             },
             {
               "id": "connectPrintify",
@@ -176,63 +204,49 @@
                   "kind": "password",
                   "required": true,
                   "help": "{data.conn.providers[id=const.ids.printify].tokenHelp.steps} Kept encrypted and used only for this site; Aglyn never asks for your Printify password."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "printify",
+                "token": "{form.token}"
+              },
+              "success": "Printify is connected. Import products to start selling them.",
+              "elseStatus": 409,
+              "else": {
+                "label": "Choose a shop",
+                "url": "/api/print-on-demand/stores",
+                "body": {
+                  "hostId": "{site.id}",
+                  "provider": "printify",
+                  "token": "{form.token}"
                 },
-                {
-                  "key": "storeId",
-                  "label": "Shop id",
-                  "kind": "text",
-                  "help": "Only if your token reaches several shops: use Find my shops first to see their ids."
+                "then": {
+                  "label": "Connect Printify",
+                  "icon": "link|link",
+                  "url": "/api/print-on-demand/connect",
+                  "prompt": [
+                    {
+                      "key": "storeId",
+                      "label": "Printify shop",
+                      "kind": "select",
+                      "required": true,
+                      "optionsFrom": {
+                        "items": "response.stores",
+                        "value": "{item.id}",
+                        "label": "{item.name}"
+                      }
+                    }
+                  ],
+                  "body": {
+                    "hostId": "{site.id}",
+                    "provider": "printify",
+                    "token": "{previous.token}",
+                    "storeId": "{form.storeId}"
+                  },
+                  "success": "Printify is connected. Import products to start selling them."
                 }
-              ],
-              "body": {
-                "hostId": "{site.id}",
-                "provider": "printify",
-                "token": "{form.token}",
-                "storeId": "{form.storeId}"
-              },
-              "success": "Printify is connected. Import products to start selling them."
-            },
-            {
-              "id": "storesPrintful",
-              "label": "Find my Printful stores",
-              "icon": "magnifyingglass|search",
-              "when": "data.conn.providers[id=const.ids.printful] && !data.conn.connections[provider=const.ids.printful]",
-              "url": "/api/print-on-demand/stores",
-              "prompt": [
-                {
-                  "key": "token",
-                  "label": "Printful token",
-                  "kind": "password",
-                  "required": true
-                }
-              ],
-              "body": {
-                "hostId": "{site.id}",
-                "provider": "printful",
-                "token": "{form.token}"
-              },
-              "success": "Stores: {response.stores.*.name}. Ids in the same order: {response.stores.*.id}."
-            },
-            {
-              "id": "storesPrintify",
-              "label": "Find my Printify shops",
-              "icon": "magnifyingglass|search",
-              "when": "data.conn.providers[id=const.ids.printify] && !data.conn.connections[provider=const.ids.printify]",
-              "url": "/api/print-on-demand/stores",
-              "prompt": [
-                {
-                  "key": "token",
-                  "label": "Printify token",
-                  "kind": "password",
-                  "required": true
-                }
-              ],
-              "body": {
-                "hostId": "{site.id}",
-                "provider": "printify",
-                "token": "{form.token}"
-              },
-              "success": "Shops: {response.stores.*.name}. Ids in the same order: {response.stores.*.id}."
+              }
             }
           ]
         },
