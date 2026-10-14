@@ -3235,6 +3235,23 @@
     },
     {
       "id": "ad-conversions",
+      "mobile": {
+        "$comment": "AGL-3652: ad conversions natively (Meta, TikTok and Pinterest server-side events with the merchant's own token), from the spec in src/android/screens/ad-conversions.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynAdConversionsPlugin",
+          "register": "registerAdConversionsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.adconversions",
+          "register": "registerAdConversionsNative"
+        },
+        "contributes": {
+          "screens": [
+            "ad-conversions.service",
+            "ad-conversions.provider"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-ad-conversions",
       "register": {
         "console": "registerAdConversionsConsole",
@@ -3285,6 +3302,22 @@
     },
     {
       "id": "zapier",
+      "mobile": {
+        "$comment": "AGL-3652: Zapier natively (the Zaps that take this site's records, and disconnecting one), from the spec in src/android/screens/zapier.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynZapierPlugin",
+          "register": "registerZapierNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.zapier",
+          "register": "registerZapierNative"
+        },
+        "contributes": {
+          "screens": [
+            "zapier.connections"
+          ]
+        }
+      },
       "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
       "package": "@aglyn/plugins-zapier",
       "register": {
@@ -3856,6 +3889,22 @@
     },
     {
       "id": "live-chat",
+      "mobile": {
+        "$comment": "AGL-3652: live chat natively (the merchant's own Tidio or LiveChat account), from the spec in src/android/screens/live-chat.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynLiveChatPlugin",
+          "register": "registerLiveChatNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.livechat",
+          "register": "registerLiveChatNative"
+        },
+        "contributes": {
+          "screens": [
+            "live-chat.settings"
+          ]
+        }
+      },
       "$comment": "AGL-3698: the merchant's OWN Tidio or LiveChat account on their site's pages, by the public key or license number its install code carries (not a secret; stored in hosts/{hostId}/pluginSettings/live-chat, written only by the console route /api/live-chat/settings, which a site admin reaches). tenantApi registers the page enricher: a page the chat shows on gets a `liveChat` slice, every other page nothing, so the site bundle loads only where the chat is. The site runtime draws a launcher once the page is idle and loads the vendor's widget only on a press, or for a site that chose 'load with the page', once idle AND for a visitor whose recorded consent grants analytics. `siteCsp` names the vendor hosts the tenant policy admits for a site that runs it. Off for a site until that site turns it on; no workspace switch, no release flag, no env: the merchant's own key is all it needs. Every plan.",
       "package": "@aglyn/plugins-live-chat",
       "register": {

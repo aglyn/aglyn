@@ -685,4 +685,102 @@ class CommerceServiceSpecsTest {
       .map { (it.jsonObject["label"] as JsonPrimitive).content + "=" + (it.jsonObject["value"] as JsonPrimitive).content }
     assertEquals(listOf("Live key=Connected", "Test key=Refused"), shown.take(2))
   }
+
+  // ---- plugin settings cards (the site's plugin settings zone) -------------------------------------------------------
+
+  @Test
+  fun theHostSettingsCardsSitInTheirOwnPluginsSettingsAndNobodyElses() {
+    for ((plugin, id) in listOf("live-chat" to "live-chat.settings", "zapier" to "zapier.connections", "ad-conversions" to "ad-conversions.service")) {
+      val spec = spec(plugin, id)
+      assertEquals(listOf("sitePluginSettings"), spec.zones, id)
+      val mine = screen(spec, mapOf("pluginId" to plugin), "{}")
+      val other = screen(spec, mapOf("pluginId" to "commerce"), "{}")
+      assertTrue(ScreenValues.condition(spec.requires, mine.context), "$id shows in $plugin's settings")
+      assertFalse(ScreenValues.condition(spec.requires, other.context), "$id is not in another plugin's settings")
+    }
+  }
+
+  private fun liveChat(settings: String, canManage: Boolean = true) =
+    screen(spec("live-chat", "live-chat.settings"), emptyMap(), """{"cfg":{"canManage":$canManage,"settings":$settings}}""")
+
+  @Test
+  fun liveChatSavesTheMerchantsKeyAndPagesAsTheConsoleDoes() {
+    val settings = """{"enabled":true,"provider":"tidio","publicKey":"abcdefghijklmnopqrstu","pages":"only","paths":["/contact","/shop/*"],"position":"right","loadWithPage":false}"""
+    val admin = liveChat(settings)
+    assertEquals(listOf("status", "settings"), admin.shown())
+    assertEquals(listOf("admin", "status"), liveChat(settings, canManage = false).shown())
+    fun fields(model: ScreenModel, form: String) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json(form))) }.map { it.key }
+    assertTrue("paths" in fields(admin, """{"pages":"only"}""") && "paths" in fields(admin, """{"pages":"except"}"""))
+    assertFalse("paths" in fields(admin, """{"pages":"all"}"""))
+    assertEquals(
+      json("""{"hostId":"h1","settings":{"enabled":true,"provider":"livechat","publicKey":"1234567","pages":"except","paths":["/a","/b/*","/c"],"position":"left","loadWithPage":true}}"""),
+      admin.body(admin.form("settings"), """{"enabled":true,"provider":"livechat","publicKey":"1234567","pages":"except","paths":"/a\n/b/*, /c","position":"left","loadWithPage":true}"""),
+    )
+    assertEquals("/contact, /shop/*", ScreenValues.render("{data.cfg.settings.paths}", admin.context))
+  }
+
+  private fun zapier(configured: Boolean, hooks: String = "[]") =
+    screen(spec("zapier", "zapier.connections"), emptyMap(), """{"hooks":{"configured":$configured,"appUrl":"https://zapier.com/apps/aglyn","canManage":true,"hooks":$hooks}}""")
+
+  @Test
+  fun zapierListsTheZapsAndDisconnectsOne() {
+    assertEquals(listOf("unavailable"), zapier(false).shown())
+    val model = zapier(true, """[{"id":"hk1","object":"hook","siteId":"h1","events":["order.paid"],"target":"hooks.zapier.com","keyName":"Zapier","created":"2026-10-01T00:00:00Z","lastDeliveryAt":"2026-10-12T10:00:00Z","lastDeliveryStatus":"delivered"}]""")
+    assertEquals(listOf("open", "hooks"), model.shown())
+    assertEquals("https://zapier.com/apps/aglyn", ScreenValues.render(model.action("open", "zapier").link!!, model.context))
+    val block = model.spec.blocks.first { it.id == "hooks" }
+    val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["hooks"]!!.jsonObject["hooks"]!!.jsonArray[0])
+    assertEquals("Order paid", ScreenValues.render(block.string("primary")!!, row))
+    assertEquals("Zapier", ScreenValues.render(block.string("tertiary")!!, row))
+    val disconnect = block.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertEquals(json("""{"hostId":"h1","hookId":"hk1"}"""), ScreenValues.resolveBody(disconnect.body!!, row))
+    assertTrue(ScreenValues.condition(disconnect.whenCondition, model.context))
+  }
+
+  private fun adConnection(provider: String, status: String = "active", extra: String = "") =
+    """{"id":"h1_$provider","provider":"$provider","hostId":"h1","status":"$status","adAccountId":null,"testEventCode":"TEST1","lastSentAtMs":1760000000000,"lastSentEvent":"Purchase","lastSentTest":false,"lastFailedAtMs":null,"lastError":null,"totals":{"sent":7,"failed":0},"connectedAtMs":1$extra}"""
+
+  private fun ads(provider: String, connections: String = "[]", tagIds: String = """{"meta":"123","tiktok":null,"pinterest":null}""", available: Boolean = true) =
+    screen(spec("ad-conversions", "ad-conversions.provider"), mapOf("provider" to provider),
+      """{"conn":{"available":$available,"setup":{"tagIds":$tagIds,"asksAboutAdvertising":true},"connections":$connections}}""")
+
+  @Test
+  fun adConversionsNeedThePixelIdFirstThenConnectWithATokenAndTheRightExtraField() {
+    assertEquals(listOf("needsTag", "hint", "manage"), ads("tiktok").shown())
+    assertTrue("needsTag" in ads("tiktok").shown() && "needsTag" !in ads("meta").shown())
+    assertEquals(emptyList(), ads("tiktok").actionsShown("manage"), "no pixel id yet: nothing to connect to")
+    assertEquals(listOf("connect"), ads("meta").actionsShown("manage"))
+    assertEquals(listOf("connect"), ads("pinterest").actionsShown("manage"), "Pinterest sends to an ad account, so it needs no pixel id")
+    val meta = ads("meta")
+    val connect = meta.action("manage", "connect")
+    assertEquals(listOf("accessToken", "testEventCode"), connect.prompt.filter { ScreenValues.condition(it.whenCondition, meta.context) }.map { it.key })
+    assertEquals(listOf("accessToken", "adAccountId"), ads("pinterest").let { p -> p.action("manage", "connect").prompt.filter { ScreenValues.condition(it.whenCondition, p.context) }.map { it.key } })
+    assertEquals(
+      json("""{"hostId":"h1","provider":"meta","accessToken":"tok","testEventCode":"TEST9"}"""),
+      meta.body(connect, """{"accessToken":"tok","testEventCode":"TEST9"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","provider":"pinterest","accessToken":"tok","adAccountId":"1234567"}"""),
+      ads("pinterest").let { it.body(it.action("manage", "connect"), """{"accessToken":"tok","adAccountId":"1234567"}""") },
+    )
+    assertEquals(emptyList(), ads("meta", available = false).actionsShown("manage"))
+  }
+
+  @Test
+  fun aConnectedAdConversionOffersTheActionsItsStatusAllowsAndSavesTheTestCode() {
+    val active = ads("meta", "[${adConnection("meta")}]")
+    assertEquals(listOf("replace", "pause", "test", "disconnect"), active.actionsShown("manage"))
+    assertEquals(listOf("status", "manage", "testCode"), active.shown())
+    assertEquals(listOf("resume", "replace", "disconnect").sorted(), ads("meta", "[${adConnection("meta", "paused")}]").actionsShown("manage").sorted())
+    val reconnect = ads("meta", "[${adConnection("meta", "reconnect", ",\"lastError\":\"Token expired\"")}]")
+    assertEquals(listOf("reconnect", "disconnect"), reconnect.actionsShown("manage"))
+    assertTrue("failing" in reconnect.shown())
+    assertEquals(json("""{"hostId":"h1","provider":"meta","paused":true}"""), active.body(active.action("manage", "pause")))
+    assertEquals("Meta Conversions API", ScreenValues.render(active.spec.title, active.context))
+    assertEquals(json("""{"hostId":"h1","provider":"meta","testEventCode":"TEST2"}"""), active.body(active.form("testCode"), """{"testEventCode":"TEST2"}"""))
+    val pinterest = ads("pinterest", "[${adConnection("pinterest")}]")
+    assertEquals(listOf("status", "manage", "flag"), pinterest.shown())
+    assertEquals("DELETE", active.action("manage", "disconnect").method.name)
+  }
 }

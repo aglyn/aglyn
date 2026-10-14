@@ -237,10 +237,10 @@ public enum ScreenValues {
       }
       return .object(map)
     case .object(let record) where record.count == 1 && record["$split"] != nil:
-      // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
+      // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))
       return .array(
-        joined.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map { part in
+        joined.split(whereSeparator: { $0 == "," || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.map { part in
           if let number = Double(part) { return .number(number) }
           return .string(part)
         })

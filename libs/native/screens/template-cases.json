@@ -315,6 +315,9 @@
         },
         "words": {
           "$split": "{'a, b,,c'}"
+        },
+        "lines": {
+          "$split": "{'a\nb, c'}"
         }
       },
       "expect": {
@@ -324,6 +327,11 @@
           "x"
         ],
         "words": [
+          "a",
+          "b",
+          "c"
+        ],
+        "lines": [
           "a",
           "b",
           "c"

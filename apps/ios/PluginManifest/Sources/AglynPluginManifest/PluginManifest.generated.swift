@@ -4,6 +4,7 @@
 // block in plugins.config.json.
 
 import AglynPluginHost
+import AglynAdConversionsPlugin
 import AglynAiPlugin
 import AglynBookingsPlugin
 import AglynCommercePlugin
@@ -17,6 +18,7 @@ import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
 import AglynInboxPlugin
 import AglynInventorySyncPlugin
+import AglynLiveChatPlugin
 import AglynMarketingPlugin
 import AglynMarketingPlatformsPlugin
 import AglynMarketplacesPlugin
@@ -28,9 +30,15 @@ import AglynSalesChannelsPlugin
 import AglynSmsPlugin
 import AglynTaxEnginesPlugin
 import AglynWorkflowsPlugin
+import AglynZapierPlugin
 
 public enum NativePluginManifest {
   public static let entries: [NativePluginManifestEntry] = [
+    NativePluginManifestEntry(
+      id: "ad-conversions",
+      contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"]],
+      register: AglynAdConversionsPlugin.registerAdConversionsNative
+    ),
     NativePluginManifestEntry(
       id: "ai",
       contributes: ["screens": ["ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
@@ -97,6 +105,11 @@ public enum NativePluginManifest {
       register: AglynInventorySyncPlugin.registerInventorySyncNative
     ),
     NativePluginManifestEntry(
+      id: "live-chat",
+      contributes: ["screens": ["live-chat.settings"]],
+      register: AglynLiveChatPlugin.registerLiveChatNative
+    ),
+    NativePluginManifestEntry(
       id: "marketing",
       contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
       register: AglynMarketingPlugin.registerMarketingNative
@@ -150,6 +163,11 @@ public enum NativePluginManifest {
       id: "workflows",
       contributes: ["screens": ["workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"], "quickActions": ["workflows.open"], "deepLinks": ["workflows.page"]],
       register: AglynWorkflowsPlugin.registerWorkflowsNative
+    ),
+    NativePluginManifestEntry(
+      id: "zapier",
+      contributes: ["screens": ["zapier.connections"]],
+      register: AglynZapierPlugin.registerZapierNative
     ),
   ]
 }

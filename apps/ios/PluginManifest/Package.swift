@@ -12,6 +12,7 @@ let package = Package(
   products: [.library(name: "AglynPluginManifest", targets: ["AglynPluginManifest"])],
   dependencies: [
     .package(path: "../../../libs/native/apple"),
+    .package(path: "Plugins/AglynAdConversionsPlugin"),
     .package(path: "Plugins/AglynAiPlugin"),
     .package(path: "Plugins/AglynBookingsPlugin"),
     .package(path: "Plugins/AglynCommercePlugin"),
@@ -25,6 +26,7 @@ let package = Package(
     .package(path: "Plugins/AglynFunnelsPlugin"),
     .package(path: "Plugins/AglynInboxPlugin"),
     .package(path: "Plugins/AglynInventorySyncPlugin"),
+    .package(path: "Plugins/AglynLiveChatPlugin"),
     .package(path: "Plugins/AglynMarketingPlugin"),
     .package(path: "Plugins/AglynMarketingPlatformsPlugin"),
     .package(path: "Plugins/AglynMarketplacesPlugin"),
@@ -36,12 +38,14 @@ let package = Package(
     .package(path: "Plugins/AglynSmsPlugin"),
     .package(path: "Plugins/AglynTaxEnginesPlugin"),
     .package(path: "Plugins/AglynWorkflowsPlugin"),
+    .package(path: "Plugins/AglynZapierPlugin"),
   ],
   targets: [
     .target(
       name: "AglynPluginManifest",
       dependencies: [
         .product(name: "AglynPluginHost", package: "apple"),
+        .product(name: "AglynAdConversionsPlugin", package: "AglynAdConversionsPlugin"),
         .product(name: "AglynAiPlugin", package: "AglynAiPlugin"),
         .product(name: "AglynBookingsPlugin", package: "AglynBookingsPlugin"),
         .product(name: "AglynCommercePlugin", package: "AglynCommercePlugin"),
@@ -55,6 +59,7 @@ let package = Package(
         .product(name: "AglynFunnelsPlugin", package: "AglynFunnelsPlugin"),
         .product(name: "AglynInboxPlugin", package: "AglynInboxPlugin"),
         .product(name: "AglynInventorySyncPlugin", package: "AglynInventorySyncPlugin"),
+        .product(name: "AglynLiveChatPlugin", package: "AglynLiveChatPlugin"),
         .product(name: "AglynMarketingPlugin", package: "AglynMarketingPlugin"),
         .product(name: "AglynMarketingPlatformsPlugin", package: "AglynMarketingPlatformsPlugin"),
         .product(name: "AglynMarketplacesPlugin", package: "AglynMarketplacesPlugin"),
@@ -66,6 +71,7 @@ let package = Package(
         .product(name: "AglynSmsPlugin", package: "AglynSmsPlugin"),
         .product(name: "AglynTaxEnginesPlugin", package: "AglynTaxEnginesPlugin"),
         .product(name: "AglynWorkflowsPlugin", package: "AglynWorkflowsPlugin"),
+        .product(name: "AglynZapierPlugin", package: "AglynZapierPlugin"),
       ]
     ),
   ]

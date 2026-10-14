@@ -6,6 +6,7 @@
 package com.aglyn.plugins.manifest
 
 import com.aglyn.pluginhost.NativePluginManifestEntry
+import com.aglyn.plugins.adconversions.registerAdConversionsNative
 import com.aglyn.plugins.ai.registerAINative
 import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
@@ -20,6 +21,7 @@ import com.aglyn.plugins.fulfillmentnetworks.registerFulfillmentNetworksNative
 import com.aglyn.plugins.funnels.registerFunnelsNative
 import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.inventorysync.registerInventorySyncNative
+import com.aglyn.plugins.livechat.registerLiveChatNative
 import com.aglyn.plugins.logic.registerLogicNative
 import com.aglyn.plugins.marketing.registerMarketingNative
 import com.aglyn.plugins.marketingplatforms.registerMarketingPlatformsNative
@@ -33,9 +35,15 @@ import com.aglyn.plugins.saleschannels.registerSalesChannelsNative
 import com.aglyn.plugins.sms.registerSmsNative
 import com.aglyn.plugins.taxengines.registerTaxEnginesNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
+import com.aglyn.plugins.zapier.registerZapierNative
 
 object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
+        NativePluginManifestEntry(
+            id = "ad-conversions",
+            contributes = mapOf("screens" to listOf("ad-conversions.provider", "ad-conversions.service")),
+            register = ::registerAdConversionsNative,
+        ),
         NativePluginManifestEntry(
             id = "ai",
             contributes = mapOf("screens" to listOf("ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
@@ -107,6 +115,11 @@ object NativePluginManifest {
             register = ::registerInventorySyncNative,
         ),
         NativePluginManifestEntry(
+            id = "live-chat",
+            contributes = mapOf("screens" to listOf("live-chat.settings")),
+            register = ::registerLiveChatNative,
+        ),
+        NativePluginManifestEntry(
             id = "logic",
             contributes = mapOf("screens" to listOf("logic.function", "logic.page"), "quickActions" to listOf("logic.open"), "deepLinks" to listOf("logic.page")),
             register = ::registerLogicNative,
@@ -170,6 +183,11 @@ object NativePluginManifest {
             id = "workflows",
             contributes = mapOf("screens" to listOf("workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"), "quickActions" to listOf("workflows.open"), "deepLinks" to listOf("workflows.page")),
             register = ::registerWorkflowsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "zapier",
+            contributes = mapOf("screens" to listOf("zapier.connections")),
+            register = ::registerZapierNative,
         ),
     )
 }
