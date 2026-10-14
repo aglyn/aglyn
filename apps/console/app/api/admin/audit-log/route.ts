@@ -59,7 +59,8 @@ async function handler(request: Request): Promise<Response> {
     const listRequest = readStaffListQuery(query)
     if (!listRequest) return Response.json({ error: 'Unreadable filters' }, { status: 400 })
     const firestore = firebaseAdmin.app().firestore()
-    const collection = firestore.collection('adminAudit')
+    // Named by its path: the list query only reads it (a held reference is kept for the stamped writes, AGL-3321).
+    const collection = 'adminAudit'
 
     if (String(query['view'] ?? '') === 'csv') {
       const page = await runStaffListQuery({
