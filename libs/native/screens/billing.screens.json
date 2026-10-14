@@ -378,6 +378,14 @@
         "ceiling": {
           "url": "/api/billing/email-ceiling?orgId={org.id}",
           "optional": true
+        },
+        "history": {
+          "query": {
+            "collection": "orgs/{org.id}/usage",
+            "orderBy": "__name__ desc",
+            "limit": 12
+          },
+          "optional": true
         }
       },
       "blocks": [
@@ -424,6 +432,58 @@
           "tone": "info",
           "when": "data.budget.lastAlert.threshold",
           "text": "You passed {data.budget.lastAlert.threshold}% of the limit this month."
+        },
+        {
+          "type": "fields",
+          "title": "Spend this month",
+          "when": "data.budget",
+          "footer": "Usage is added up once a day. A budget only alerts; it never stops anything.",
+          "rows": [
+            {
+              "label": "Metered so far in {data.budget.month}",
+              "value": "{data.budget.spend.totalUsd ?? '0':dollars}",
+              "when": "data.budget.spend.meteredFresh"
+            },
+            {
+              "label": "Budget",
+              "value": "{data.budget.amountUsd:dollars} a month",
+              "when": "data.budget.budgetSet"
+            },
+            {
+              "label": "Budget",
+              "value": "No budget set",
+              "when": "!data.budget.budgetSet"
+            },
+            {
+              "label": "Alerts at",
+              "value": "{data.budget.thresholdPcts}%",
+              "when": "data.budget.budgetSet"
+            }
+          ]
+        },
+        {
+          "type": "meters",
+          "when": "data.budget.budgetSet && data.budget.spend.meteredFresh",
+          "meters": [
+            {
+              "label": "Budget used",
+              "used": "{data.budget.spend.totalUsd}",
+              "limit": "{data.budget.amountUsd}",
+              "format": "dollars"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.budget && !data.budget.spend.meteredFresh",
+          "text": "We have not totaled {data.budget.month} yet. Usage is added up once a day. Your budget still applies from the moment you set it."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.budget && !data.budget.metered",
+          "text": "Your plan has nothing metered, so a budget cannot fire."
         },
         {
           "type": "list",
@@ -492,6 +552,26 @@
               "reload": true
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Usage history",
+          "when": "data.history.items",
+          "items": "data.history.items",
+          "count": false,
+          "primary": "{item.$id}",
+          "trailing": "{item.billedCents ?? 'not recorded':cents}",
+          "secondary": "Page views: {item.pageViews ?? 'not recorded':number} · Form submissions: {item.formSubmissions ?? 'not recorded':number}",
+          "tertiary": "Storage (GB): {item.storageGb ?? 'not recorded':number} · Contacts: {item.contactsCount ?? 'not recorded':number}",
+          "badges": [
+            {
+              "text": "In progress",
+              "when": "item.stockBasis == in-progress",
+              "tone": "info"
+            }
+          ],
+          "empty": "A history appears here once this workspace has a month of billing.",
+          "footer": "Metered charges are the trailing figure. A month before a meter existed says not recorded rather than zero."
         },
         {
           "type": "fields",

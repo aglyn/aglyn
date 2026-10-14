@@ -181,6 +181,14 @@
     {
       "template": "{data.addons.quantities[@data.kindKey]|'0'} of {data.addons.catalog[@data.kindKey].max}",
       "expect": "2 of 20"
+    },
+    {
+      "template": "{data.missing ?? 'not recorded':cents}",
+      "expect": "not recorded"
+    },
+    {
+      "template": "{data.members.0.count ?? 'not recorded':number}",
+      "expect": "0"
     }
   ],
   "url": [
