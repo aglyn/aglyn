@@ -463,8 +463,9 @@ function ConnectionDetails(props: {
 
 /**
  * The connection's sync log, newest first: the shared paged list and its
- * footer, opened under the platform's row. The store keeps a connection's latest rows only, so one read is the
- * whole log and the list pages it in memory.
+ * footer, opened under the platform's row. The store keeps a connection's
+ * latest rows only, so one read is the whole log and the list pages it in
+ * memory.
  */
 function ConnectionLog(props: { api: MarketingPlatformsApi; provider: MarketingProviderId }) {
   const { api, provider } = props
