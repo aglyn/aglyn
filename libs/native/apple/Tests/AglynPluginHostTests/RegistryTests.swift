@@ -76,16 +76,19 @@ final class RegistryTests: XCTestCase {
     _ = NativePluginLoader.load(
       [
         entry(
-          contributes: ["screens": ["a.list", "a.register"], "quickActions": ["a.one", "a.two"]],
+          contributes: ["screens": ["a.list", "a.register", "a.display"], "quickActions": ["a.one", "a.two"]],
           register: {
             $0.screen("a.list", title: "A") { _, _ in EmptyView() }
             $0.screen("a.register", title: "Register", apps: [.pos], placement: .register) { _, _ in EmptyView() }
+            $0.screen("a.display", title: "Display", apps: [.pos], placement: .device) { _, _ in EmptyView() }
             $0.quickAction("a.two", title: "Two", icon: "x", order: 2, screen: "a.list")
             $0.quickAction("a.one", title: "One", icon: "x", order: 1, screen: "a.list")
           })
       ], into: registry)
     XCTAssertEqual(registry.quickActions(for: .aglyn).map(\.id), ["a.one", "a.two"])
     XCTAssertEqual(registry.screens(for: .pos, placement: .register).map(\.id), ["a.register"])
+    // A device screen is a mode a tablet is set up as, never a register placement.
+    XCTAssertEqual(registry.screens(for: .pos, placement: .device).map(\.id), ["a.display"])
     XCTAssertEqual(registry.screens(for: .aglyn).map(\.id), ["a.list"])
   }
 }

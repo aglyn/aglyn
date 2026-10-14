@@ -52,7 +52,10 @@ struct MediaScreen: View {
             .padding(.top, AglynSpace.one)
             .accessibilityIdentifier("media-tabs")
           }
-          MediaScopeGate(context: context, scope: scope, initialMediaID: params["media"]).id(scope)
+          MediaScopeGate(context: context, scope: scope) { scopeTokens in
+            MediaLibrary(context: context, scope: scope, scopeTokens: scopeTokens, initialMediaID: params["media"])
+          }
+          .id(scope)
         }
         .background(AglynColor.page)
       } else {
@@ -66,29 +69,24 @@ struct MediaScreen: View {
 /// Resolves who may read what in a workspace library before it loads: an
 /// org-wide member reads it whole; a member limited to some sites reads it
 /// through their scope tokens, as the rules require.
-struct MediaScopeGate: View {
+struct MediaScopeGate<Content: View>: View {
   let context: NativePluginContext
   let scope: MediaScope
-  let initialMediaID: String?
+  @ViewBuilder let content: (_ scopeTokens: [String]?) -> Content
   @State private var member = LiveDocument()
 
   var body: some View {
     switch scope {
     case .site:
-      MediaLibrary(context: context, scope: scope, scopeTokens: nil, initialMediaID: initialMediaID)
+      content(nil)
     case .org(_, let forHostID?):
-      MediaLibrary(
-        context: context, scope: scope,
-        scopeTokens: [OrgAccess.orgScopeToken, OrgAccess.hostScopeToken(forHostID)], initialMediaID: initialMediaID)
+      content([OrgAccess.orgScopeToken, OrgAccess.hostScopeToken(forHostID)])
     case .org(let orgID, nil):
       Group {
         switch member.state {
         case .loading: SkeletonGrid(count: 9)
-        case .failed:
-          MediaLibrary(context: context, scope: scope, scopeTokens: nil, initialMediaID: initialMediaID)
-        case .ready(let doc):
-          MediaLibrary(
-            context: context, scope: scope, scopeTokens: OrgAccess.libraryScope(doc), initialMediaID: initialMediaID)
+        case .failed: content(nil)
+        case .ready(let doc): content(OrgAccess.libraryScope(doc))
         }
       }
       .task(id: orgID) { await member.bind(context.firestore, ["orgs", orgID, "members", context.uid]) }
@@ -120,6 +118,7 @@ struct MediaLibrary: View {
   @State private var selection: String?
   @State private var searchText = ""
   @State private var pickSource: PickSource?
+  @State private var audioBatch: [PickedFile]?
   @State private var uploading: String?
   @State private var undo: (id: String, name: String)?
   @State private var folderSheet: FolderSheet?
@@ -164,7 +163,19 @@ struct MediaLibrary: View {
       if !Task.isCancelled { model.search = searchText }
     }
     .toolbar { toolbar }
-    .aglynMediaPicker($pickSource, multiple: true) { files in upload(files) }
+    .aglynMediaPicker($pickSource, multiple: true) { files in
+      // An audio file needs its uploader's rights confirmation first (AGL-3716).
+      if files.contains(where: isAudioFile) { audioBatch = files } else { upload(files, rightsConfirmed: false) }
+    }
+    .sheet(
+      isPresented: Binding(get: { audioBatch != nil }, set: { if !$0 { audioBatch = nil } })
+    ) {
+      AudioRightsSheet(files: audioBatch ?? []) { confirmed in
+        let files = audioBatch ?? []
+        audioBatch = nil
+        if confirmed { upload(files, rightsConfirmed: true) }
+      }
+    }
     .sheet(isPresented: $filtersSheet) {
       MediaFiltersSheet(filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
         filtersSheet = false
@@ -295,14 +306,14 @@ struct MediaLibrary: View {
     if !restorable { runner.notice = "\(name) deleted." }
   }
 
-  private func upload(_ files: [PickedFile]) {
+  private func upload(_ files: [PickedFile], rightsConfirmed: Bool) {
     let folderID = model.folder.folderID
     let api = api
     runner.run(files.count == 1 ? "\(files[0].name) uploaded." : "\(files.count) files uploaded.") {
       defer { uploading = nil }
       for (index, file) in files.enumerated() {
         uploading = files.count == 1 ? "Uploading \(file.name)…" : "Uploading \(index + 1) of \(files.count)…"
-        try await api.upload(file, folderID: folderID)
+        try await api.upload(file, folderID: folderID, rightsConfirmed: rightsConfirmed)
       }
     }
   }
@@ -553,6 +564,7 @@ struct MediaDetailBody: View {
   @State private var moveTarget: String?
   @State private var deleting = false
   @State private var replaceSource: PickSource?
+  @State private var audioReplacement: PickedFile?
   @State private var references: [MediaReference]?
 
   private var origin: String { context.api.origin }
@@ -567,6 +579,12 @@ struct MediaDetailBody: View {
   }
   /// Privacy is a workspace-wide setting: an owner or admin sets it on a workspace file.
   private var orgWideEditor: Bool { !scope.isOrg || ["owner", "admin"].contains(context.orgRole ?? "") }
+
+  private func replace(with file: PickedFile, rightsConfirmed: Bool) {
+    runner.run("File replaced. Everywhere it is used now shows the new file.") {
+      try await api.replace(item, with: file, rightsConfirmed: rightsConfirmed)
+    }
+  }
 
   private func reset() {
     fileName = item.fileName
@@ -724,8 +742,16 @@ struct MediaDetailBody: View {
     .onChange(of: item, initial: true) { _, _ in reset() }
     .aglynMediaPicker($replaceSource, multiple: false) { files in
       guard let file = files.first else { return }
-      runner.run("File replaced. Everywhere it is used now shows the new file.") {
-        try await api.replace(item, with: file)
+      // An audio file needs its uploader's rights confirmation first (AGL-3716).
+      if isAudioFile(file) { audioReplacement = file } else { replace(with: file, rightsConfirmed: false) }
+    }
+    .sheet(
+      isPresented: Binding(get: { audioReplacement != nil }, set: { if !$0 { audioReplacement = nil } })
+    ) {
+      AudioRightsSheet(files: audioReplacement.map { [$0] } ?? []) { confirmed in
+        let file = audioReplacement
+        audioReplacement = nil
+        if confirmed, let file { replace(with: file, rightsConfirmed: true) }
       }
     }
     .sheet(isPresented: $moving) { moveSheet }

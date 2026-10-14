@@ -1724,6 +1724,97 @@ internal object PosDeviceModeSerializer :
     RawEnumSerializer<PosDeviceMode>("com.aglyn.contracts.PosDeviceMode", PosDeviceMode.entries, PosDeviceMode.UNKNOWN, { it.raw })
 
 @Serializable
+data class PosDisplayCart(
+    val discountCents: Double,
+    val dueCents: Double? = null,
+    val itemsCents: Double,
+    val lines: List<PosDisplayLine>,
+    val paidCents: Double? = null,
+    val taxCents: Double,
+    val tipCents: Double? = null,
+    val totalCents: Double,
+)
+
+@Serializable
+data class PosDisplayLine(
+    val amountCents: Double,
+    val name: String,
+    val quantity: Double,
+    val variantLabel: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosDisplayModeSerializer::class)
+enum class PosDisplayMode(val raw: String) {
+    CART("cart"),
+    IDLE("idle"),
+    PROCESSING("processing"),
+    RECEIPT("receipt"),
+    THANKS("thanks"),
+    TIP("tip"),
+    UNKNOWN(""),
+}
+
+internal object PosDisplayModeSerializer :
+    RawEnumSerializer<PosDisplayMode>("com.aglyn.contracts.PosDisplayMode", PosDisplayMode.entries, PosDisplayMode.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosDisplayResponse(
+    val atMs: Double,
+    val email: String? = null,
+    val marketingOptIn: Boolean? = null,
+    val phone: String? = null,
+    val promptId: String,
+    val receiptChannel: PosReceiptChannel? = null,
+    val tipCents: Double? = null,
+    val tipChoice: PosDisplayResponseTipChoice? = null,
+    val tipPercent: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosDisplayResponseTipChoiceSerializer::class)
+enum class PosDisplayResponseTipChoice(val raw: String) {
+    CUSTOM("custom"),
+    NONE("none"),
+    PERCENT("percent"),
+    UNKNOWN(""),
+}
+
+internal object PosDisplayResponseTipChoiceSerializer :
+    RawEnumSerializer<PosDisplayResponseTipChoice>("com.aglyn.contracts.PosDisplayResponseTipChoice", PosDisplayResponseTipChoice.entries, PosDisplayResponseTipChoice.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosDisplayState(
+    val cart: PosDisplayCart? = null,
+    val currency: String? = null,
+    val mode: PosDisplayMode,
+    val processing: PosDisplayStateProcessing? = null,
+    val promptId: String? = null,
+    val receipt: PosDisplayStateReceipt? = null,
+    val response: PosDisplayResponse? = null,
+    val tip: PosDisplayStateTip? = null,
+    val updatedAtMs: Double,
+)
+
+@Serializable
+data class PosDisplayStateProcessing(
+    val message: String,
+)
+
+@Serializable
+data class PosDisplayStateReceipt(
+    val channels: List<PosReceiptChannel>,
+    val offerMarketing: Boolean,
+)
+
+@Serializable
+data class PosDisplayStateTip(
+    val allowCustom: Boolean,
+    val baseCents: Double,
+    val percentages: List<Double>,
+)
+
+@Serializable
 data class PosKioskCatalog(
     val categories: List<PosKioskCategory>,
     val currency: String,
@@ -2580,6 +2671,9 @@ internal data class ContractValuesPart4(
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
     @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
+    @SerialName("POS_DISPLAY_MAX_LINES") val posDisplayMaxLines: Long,
+    @SerialName("POS_DISPLAY_PAIRING_TTL_MS") val posDisplayPairingTtlMs: Double,
+    @SerialName("POS_DISPLAY_THANKS_MS") val posDisplayThanksMs: Long,
     @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
     @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
@@ -2613,13 +2707,13 @@ internal data class ContractValuesPart4(
     @SerialName("RETURN_REASON_LABELS") val returnReasonLabels: Map<String, String>,
     @SerialName("RETURN_REASONS") val returnReasons: List<ReturnReason>,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
-    @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
-    @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
-    @SerialName("SEO_FINDING_LABELS") val seoFindingLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
+    @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
+    @SerialName("SEO_FINDING_LABELS") val seoFindingLabels: Map<String, String>,
     @SerialName("SEO_KEYWORD_LINES_MAX_CHARS") val seoKeywordLinesMaxChars: Long,
     @SerialName("SEO_MAX_KEYWORDS") val seoMaxKeywords: Long,
     @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
@@ -2809,6 +2903,9 @@ class ContractValues internal constructor(
     val outreachTaskTitleMax: Long get() = part4.outreachTaskTitleMax
     val paymentAcceptedMaxLength: Long get() = part4.paymentAcceptedMaxLength
     val posCashEventLabels: Map<String, String> get() = part4.posCashEventLabels
+    val posDisplayMaxLines: Long get() = part4.posDisplayMaxLines
+    val posDisplayPairingTtlMs: Double get() = part4.posDisplayPairingTtlMs
+    val posDisplayThanksMs: Long get() = part4.posDisplayThanksMs
     val posKioskCatalogLimit: Long get() = part4.posKioskCatalogLimit
     val posKioskDoneSeconds: Long get() = part4.posKioskDoneSeconds
     val posKioskIdleSecondsDefault: Long get() = part4.posKioskIdleSecondsDefault
@@ -2842,9 +2939,9 @@ class ContractValues internal constructor(
     val returnReasonLabels: Map<String, String> get() = part4.returnReasonLabels
     val returnReasons: List<ReturnReason> get() = part4.returnReasons
     val scopedSearchJoin: String get() = part4.scopedSearchJoin
-    val searchEngineVerificationLabels: Map<String, String> get() = part4.searchEngineVerificationLabels
-    val searchEngineVerificationMetaNames: Map<String, String> get() = part4.searchEngineVerificationMetaNames
-    val seoFindingLabels: Map<String, String> get() = part4.seoFindingLabels
+    val searchEngineVerificationLabels: Map<String, String> get() = part5.searchEngineVerificationLabels
+    val searchEngineVerificationMetaNames: Map<String, String> get() = part5.searchEngineVerificationMetaNames
+    val seoFindingLabels: Map<String, String> get() = part5.seoFindingLabels
     val seoKeywordLinesMaxChars: Long get() = part5.seoKeywordLinesMaxChars
     val seoMaxKeywords: Long get() = part5.seoMaxKeywords
     val siteCardsPageSize: Long get() = part5.siteCardsPageSize

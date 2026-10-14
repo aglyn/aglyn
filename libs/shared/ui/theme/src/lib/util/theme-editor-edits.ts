@@ -12,19 +12,26 @@ import {
   SPACING_FIELD,
   SYSTEM_FONT_VALUE,
   THEME_COLOR_FIELDS,
+  THEME_COMPONENT_LOOK_FIELDS,
+  THEME_COMPONENT_LOOK_GROUPS,
   THEME_EDITOR_SCHEMES,
+  THEME_LOOK_DEFAULT,
   TOOLBAR_HEIGHT_FIELDS,
+  readComponentLook,
   readDarkScheme,
   readFontFamily,
   readThemeColor,
   readToolbarHeight,
+  themeComponentLookField,
   writeBorderRadius,
+  writeComponentLook,
   writeDarkScheme,
   writeFontFamily,
   writeSpacing,
   writeThemeColor,
   writeToolbarHeight,
   type ThemeColorToken,
+  type ThemeComponentLookId,
 } from './theme-editor-fields'
 
 /*
@@ -36,7 +43,9 @@ import {
  * as named edits instead — one color for one scheme, the font, the radius,
  * the spacing unit, a nav height, the dark scheme — and `/api/hosts/theme`
  * applies them here with those same writers, so both clients make exactly the
- * same theme from the same choice. `readThemeEditorValues` is the other half:
+ * same theme from the same choice. The Style components card's twelve
+ * choices (buttons, form inputs, cards) are the `componentLook` edit.
+ * `readThemeEditorValues` is the other half:
  * what each control currently shows.
  */
 
@@ -48,9 +57,11 @@ export type ThemeEditorEdit =
   | { control: 'borderRadius'; value: number | null }
   | { control: 'spacing'; value: number | null }
   | { control: 'navHeight'; breakpoint: 'xs' | 'sm'; value: number | null }
+  /** One of the Style components choices; `''` ("Theme default") clears what it wrote. */
+  | { control: 'componentLook'; field: ThemeComponentLookId; value: string }
 
 /** The most edits one save may carry: every color of both schemes and the rest. */
-export const THEME_EDITOR_EDITS_MAX = THEME_COLOR_FIELDS.length * 2 + 8
+export const THEME_EDITOR_EDITS_MAX = THEME_COLOR_FIELDS.length * 2 + 8 + THEME_COMPONENT_LOOK_FIELDS.length
 
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 
@@ -111,6 +122,16 @@ export function readThemeEditorEdit(raw: unknown): ThemeEditorEdit | string {
       const value = readNumber(edit['value'], TOOLBAR_HEIGHT_FIELDS[breakpoint])
       return typeof value === 'string' ? value : { control: 'navHeight', breakpoint, value }
     }
+    case 'componentLook': {
+      const field = THEME_COMPONENT_LOOK_FIELDS.find((entry) => entry.id === edit['field'])
+      if (!field) return 'That is not a component style.'
+      const value = edit['value'] ?? THEME_LOOK_DEFAULT
+      if (typeof value !== 'string') return 'Pick one of the choices.'
+      if (value !== THEME_LOOK_DEFAULT && !field.options.some((option) => option.value === value)) {
+        return 'Pick one of the choices.'
+      }
+      return { control: 'componentLook', field: field.id, value }
+    }
     default:
       return 'That is not a theme control.'
   }
@@ -152,6 +173,9 @@ export function applyThemeEditorEdits(theme: HostTheme, edits: readonly ThemeEdi
       case 'navHeight':
         next = writeToolbarHeight(next, edit.breakpoint, edit.value ?? undefined)
         break
+      case 'componentLook':
+        next = writeComponentLook(next, themeComponentLookField(edit.field), edit.value)
+        break
     }
   }
   return next
@@ -165,6 +189,8 @@ export interface ThemeEditorValues {
   borderRadius: number | null
   spacing: number | null
   navHeight: { xs: number | null; sm: number | null }
+  /** Each Style components field's choice: `''` for the theme's own, `'__custom__'` for a value no choice names. */
+  componentLooks: Record<string, string>
 }
 
 export function readThemeEditorValues(theme: HostTheme | undefined): ThemeEditorValues {
@@ -187,6 +213,9 @@ export function readThemeEditorValues(theme: HostTheme | undefined): ThemeEditor
       xs: readToolbarHeight(safe, 'xs') ?? null,
       sm: readToolbarHeight(safe, 'sm') ?? null,
     },
+    componentLooks: Object.fromEntries(
+      THEME_COMPONENT_LOOK_FIELDS.map((field) => [field.id, readComponentLook(safe, field)]),
+    ),
   }
 }
 
@@ -203,4 +232,19 @@ export const THEME_EDITOR_CATALOG = {
   borderRadius: BORDER_RADIUS_FIELD,
   spacing: SPACING_FIELD,
   navHeight: TOOLBAR_HEIGHT_FIELDS,
+  /** The Style components card: its groups and each field's choices (what a choice stores stays here). */
+  componentLooks: {
+    groups: THEME_COMPONENT_LOOK_GROUPS,
+    fields: THEME_COMPONENT_LOOK_FIELDS.map((field) => ({
+      id: field.id,
+      group: field.group,
+      label: field.label,
+      kind: field.kind,
+      options: field.options.map((option) => ({
+        value: option.value,
+        label: option.label,
+        ...(option.token ? { token: option.token } : {}),
+      })),
+    })),
+  },
 } as const

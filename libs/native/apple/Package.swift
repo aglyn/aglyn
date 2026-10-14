@@ -49,7 +49,7 @@ let package = Package(
     .target(name: "AglynContracts", resources: [.copy("Resources/contracts.generated.json")]),
     .target(name: "AglynHardware"),
     .target(name: "AglynWebView", dependencies: ["AglynCore"]),
-    .target(name: "AglynPluginHost", dependencies: ["AglynCore", "AglynUI", "AglynWebView"]),
+    .target(name: "AglynPluginHost", dependencies: ["AglynContracts", "AglynCore", "AglynUI", "AglynWebView"]),
     // Console screens drawn from specs (§13); Resources/screens links each
     // core spec file in libs/native/screens.
     .target(

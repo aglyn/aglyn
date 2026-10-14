@@ -92,6 +92,15 @@ class PluginHostTest {
     assertEquals(listOf("a.one"), registry.quickActions(NativeApp.AGLYN).map { it.id })
     assertEquals(listOf("a.pos", "a.one"), registry.quickActions().map { it.id })
   }
+
+  @Test
+  fun aDeviceScreenIsAModeATabletIsSetUpAsNeverARegisterPlacement() {
+    val r = registry.registrarFor("a")
+    r.screen("a.register", title = "Register", apps = setOf(NativeApp.POS), placement = PosPlacement.REGISTER) { _, _ -> }
+    r.screen("a.display", title = "Display", apps = setOf(NativeApp.POS), placement = PosPlacement.DEVICE) { _, _ -> }
+    assertEquals(listOf("a.display"), registry.screens(NativeApp.POS).filter { it.placement == PosPlacement.DEVICE }.map { it.id })
+    assertEquals(listOf("a.register"), registry.screens(NativeApp.POS).filter { it.placement == PosPlacement.REGISTER }.map { it.id })
+  }
 }
 
 class DeepLinksTest {

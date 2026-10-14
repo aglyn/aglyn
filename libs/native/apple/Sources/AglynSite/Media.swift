@@ -175,6 +175,12 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   }
 }
 
+/// The sentence an audio uploader confirms, word for word, and the one the server stores with the answer (`AUDIO_RIGHTS_STATEMENT`).
+public let audioRightsStatement = "I own this audio or have a license to use it on my site"
+
+/// Whether a picked file is audio, which the upload routes refuse without a rights confirmation.
+public func isAudioFile(_ file: PickedFile) -> Bool { file.mimeType.lowercased().hasPrefix("audio/") }
+
 /// The kind's SF Symbol, for a tile with no preview.
 public func mediaKindSymbol(_ kind: String) -> String {
   switch kind {
@@ -447,54 +453,64 @@ public struct MediaAPI: Sendable {
     try await api.request(path, method: method, body: body(fields))
   }
 
-  /// Uploads one picked file into `folderID`; answers its media id.
+  /// The field an audio file's rights confirmation rides in (`AUDIO_RIGHTS_FIELD`); sent only when it was given.
+  private func withRights(_ fields: [String: Any?], _ confirmed: Bool) -> [String: Any?] {
+    confirmed ? fields.merging(["rightsConfirmed": true]) { $1 } : fields
+  }
+
+  /// Uploads one picked file into `folderID`; answers its media id. An audio file is refused unless
+  /// `rightsConfirmed` says its uploader confirmed they own it or hold a license (`AUDIO_RIGHTS_STATEMENT`).
   @discardableResult
-  public func upload(_ file: PickedFile, folderID: String?) async throws -> String? {
+  public func upload(_ file: PickedFile, folderID: String?, rightsConfirmed: Bool = false) async throws -> String? {
     let contentType = file.mimeType.isEmpty ? "application/octet-stream" : file.mimeType
     if file.size <= signedUploadThresholdBytes {
       let answer = try await post(
         "/api/media/upload",
-        [
-          "fileName": file.name, "contentType": contentType, "folderId": folderID,
-          "data": file.data.base64EncodedString(),
-        ])
+        withRights(
+          [
+            "fileName": file.name, "contentType": contentType, "folderId": folderID,
+            "data": file.data.base64EncodedString(),
+          ], rightsConfirmed))
       return answer.field("mediaId")
     }
     let minted = try await post(
       "/api/media/upload-url",
-      ["contentType": contentType, "fileName": file.name, "sizeBytes": file.size, "folderId": folderID])
+      withRights(["contentType": contentType, "fileName": file.name, "sizeBytes": file.size, "folderId": folderID], rightsConfirmed))
     guard let mediaID = minted.field("mediaId"), let uploadURL = minted.field("uploadUrl") else { return nil }
     try await api.putSigned(uploadURL, contentType: minted.field("contentType") ?? contentType, data: file.data)
     try await post(
-      "/api/media/upload-url", ["mediaId": mediaID, "fileName": file.name, "folderId": folderID], method: .patch)
+      "/api/media/upload-url", withRights(["mediaId": mediaID, "fileName": file.name, "folderId": folderID], rightsConfirmed),
+      method: .patch)
     return mediaID
   }
 
   /// Replaces the file's bytes in place: the same id and address everywhere it is used.
-  public func replace(_ item: MediaItem, with file: PickedFile) async throws {
+  public func replace(_ item: MediaItem, with file: PickedFile, rightsConfirmed: Bool = false) async throws {
     let contentType = file.mimeType.isEmpty ? item.contentType : file.mimeType
     let expected = item.updatedAt.map { Int(($0.timeIntervalSince1970 * 1000).rounded()) }
     if file.size <= signedUploadThresholdBytes {
       try await post(
         "/api/media/replace",
-        [
-          "mediaId": item.id, "contentType": contentType, "data": file.data.base64EncodedString(),
-          "fileName": file.name, "expectedUpdatedAtMs": expected,
-        ])
+        withRights(
+          [
+            "mediaId": item.id, "contentType": contentType, "data": file.data.base64EncodedString(),
+            "fileName": file.name, "expectedUpdatedAtMs": expected,
+          ], rightsConfirmed))
       return
     }
     let minted = try await post(
       "/api/media/replace",
-      [
-        "mediaId": item.id, "contentType": contentType, "fileName": file.name, "sizeBytes": file.size,
-        "expectedUpdatedAtMs": expected,
-      ], method: .put)
+      withRights(
+        [
+          "mediaId": item.id, "contentType": contentType, "fileName": file.name, "sizeBytes": file.size,
+          "expectedUpdatedAtMs": expected,
+        ], rightsConfirmed), method: .put)
     guard let uploadURL = minted.field("uploadUrl") else {
       throw ConsoleAPIError(status: 0, message: "The upload could not start.")
     }
     try await api.putSigned(uploadURL, contentType: minted.field("contentType") ?? contentType, data: file.data)
     try await post(
-      "/api/media/replace", ["mediaId": item.id, "fileName": file.name, "expectedUpdatedAtMs": expected],
+      "/api/media/replace", withRights(["mediaId": item.id, "fileName": file.name, "expectedUpdatedAtMs": expected], rightsConfirmed),
       method: .patch)
   }
 

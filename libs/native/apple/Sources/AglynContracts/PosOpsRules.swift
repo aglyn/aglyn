@@ -31,3 +31,31 @@ private func jsRounded(_ value: Double) -> Int { value.isFinite ? Int((value + 0
 public func posCashVarianceCents(counted: Double, expected: Double) -> Int {
   jsRounded(counted) - jsRounded(expected)
 }
+
+/*
+ * The customer display's own checks (commerce-pos.ts), ported once and replayed
+ * against the console's answers: what a customer may type on the screen and what
+ * a tip may be.
+ */
+
+/// An email address as the display may keep it, or "" when it is not one (`posDisplayEmail`).
+public func posDisplayEmail(_ value: String?) -> String {
+  let email = String((value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased().prefix(254))
+  return email.range(of: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$", options: .regularExpression) != nil ? email : ""
+}
+
+/// A phone number as digits with an optional leading +, or "" when too short or long (`posDisplayPhone`).
+public func posDisplayPhone(_ value: String?) -> String {
+  let raw = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+  let digits = raw.filter { $0 >= "0" && $0 <= "9" }
+  guard digits.count >= 7, digits.count <= 15 else { return "" }
+  return (raw.hasPrefix("+") ? "+" : "") + digits
+}
+
+/// Why a tip cannot be taken on a payment, or nil when it can: a whole number of cents, no more than the payment (`posTipProblem`).
+public func posTipProblem(tipCents: Double, amountCents: Double) -> String? {
+  if !(tipCents.isFinite && tipCents == tipCents.rounded()) || tipCents < 0 { return "Enter a tip of $0 or more." }
+  let amount = amountCents.isFinite ? max(0, (amountCents + 0.5).rounded(.down)) : 0
+  if tipCents > amount { return "A tip can be at most the amount being paid. Check the amount and try again." }
+  return nil
+}

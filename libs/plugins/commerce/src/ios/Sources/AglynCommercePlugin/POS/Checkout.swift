@@ -294,7 +294,7 @@ final class Checkout {
   /// Sends (or records) the receipt: `email` or `sms` to `to`, `print` when
   /// it printed here, `none` when the customer declined. "No receipt" never
   /// holds the next customer, so its note is best-effort. True when the sale is done.
-  func sendReceipt(channel: String, to: String? = nil) async -> Bool {
+  func sendReceipt(channel: String, to: String? = nil, marketingOptIn: Bool = false) async -> Bool {
     guard !busy else { return false }
     if channel == "none" || channel == "print" {
       _ = try? await api.payment(orderID: opened.orderID, step: .receipt(channel: channel, to: nil))
@@ -305,7 +305,8 @@ final class Checkout {
     do {
       _ = try await api.payment(
         orderID: opened.orderID,
-        step: .receipt(channel: channel, to: to?.trimmingCharacters(in: .whitespacesAndNewlines)))
+        step: .receipt(
+          channel: channel, to: to?.trimmingCharacters(in: .whitespacesAndNewlines), marketingOptIn: marketingOptIn))
       busy = false
       notice = CheckoutNotice(tone: .success, message: channel == "sms" ? "Receipt texted." : "Receipt emailed.")
       return true

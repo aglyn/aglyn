@@ -13,6 +13,8 @@ public enum AglynAppKind: String, Sendable, CaseIterable {
 /// Where a POS contribution sits in the register.
 public enum POSPlacement: String, Sendable {
   case register, tender, peripheral, menu
+  /// A whole-screen mode a tablet can be set up as, with nobody signed in: the customer display and the self-service kiosk (AGL-3608, AGL-3623). The shell offers these at sign-in and is handed a context with no member.
+  case device
 }
 
 /// The staff console's card zones a plugin may fill (the web's

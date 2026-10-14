@@ -181,10 +181,12 @@ describe('a site in another language with no photo words (AGL-3771)', () => {
     })
   })
 
-  it('is searched by its kind of site, never its business type in its own language', () => {
-    const terms = aiStockSourceTerms({ business: BRIEF, language: 'es', kindWords: 'restaurant cafe' })
+  it('is searched by its kind of site where its type names no business listed in English, never its type in its own language', () => {
+    const terms = aiStockSourceTerms({ business: 'Un negocio familiar de San Antonio con pan dulce', language: 'es', kindWords: 'restaurant cafe' })
     expect(terms).toEqual(aiStockSiteTerms('restaurant cafe'))
     expect(JSON.stringify(terms)).not.toContain('dulce')
+    // A panadería is a bakery before it is its kind of site (AGL-3779): "restaurant cafe" placed a coffee mug.
+    expect(aiStockSourceTerms({ business: BRIEF, language: 'es', kindWords: 'restaurant cafe' })).toEqual(aiStockSiteTerms('bakery'))
   })
 
   it('keeps its plan photo words first, and an English site its business type', () => {
