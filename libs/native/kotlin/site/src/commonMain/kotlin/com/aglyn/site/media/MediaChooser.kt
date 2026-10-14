@@ -1,0 +1,136 @@
+package com.aglyn.site.media
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.EmptyState
+import com.aglyn.ui.LoadContent
+import com.aglyn.ui.SearchField
+import com.aglyn.ui.SkeletonGrid
+import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.space
+
+/**
+ * What a person picked in the chooser: the file and the library it came from.
+ * [reference] is the stored form the console's `formatMediaRef` mints
+ * (`media:{scope}/{mediaId}`), the asset by identity, so replacing or moving
+ * the file never breaks what names it.
+ */
+data class ChosenMedia(val item: MediaItem, val scope: MediaScope) {
+  val reference: String get() = "media:${scope.cdnScope}/${item.id}"
+}
+
+/**
+ * The media library as a chooser, the native side of the console's media
+ * picker: this site's files and the workspace's, filtered to one [kind], one
+ * tap to choose. Shown over whatever screen needs a file.
+ */
+@Composable
+fun MediaChooserDialog(context: NativePluginContext, onChoose: (ChosenMedia) -> Unit, onDismiss: () -> Unit, kind: String = "image") {
+  val hostId = context.hostId
+  val orgId = context.orgId
+  var tab by remember { mutableStateOf(0) }
+  val scope: MediaScope? = when {
+    hostId != null && tab == 0 -> MediaScope.Site(hostId)
+    orgId != null -> MediaScope.Org(orgId, hostId)
+    else -> null
+  }
+  Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Surface(
+      Modifier.widthIn(max = 640.dp).fillMaxWidth(0.96f).heightIn(max = 860.dp).testTag("media-chooser"),
+      shape = MaterialTheme.shapes.extraLarge,
+      color = MaterialTheme.colorScheme.surface,
+    ) {
+      Column {
+        Row(Modifier.padding(horizontal = space(2f), vertical = space(1.5f)), verticalAlignment = Alignment.CenterVertically) {
+          Text("Choose from media", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+          TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+        HorizontalDivider()
+        if (hostId != null) {
+          SecondaryTabRow(selectedTabIndex = tab) {
+            Tab(tab == 0, { tab = 0 }, text = { Text("This site") }, modifier = Modifier.testTag("chooser-tab-site"))
+            Tab(tab == 1, { tab = 1 }, text = { Text("Workspace") }, modifier = Modifier.testTag("chooser-tab-org"))
+          }
+        }
+        if (scope == null) {
+          EmptyState("Pick a workspace first", icon = AglynIcons.named("photo_library"))
+        } else {
+          MediaScopeGate(context, scope) { tokens -> MediaChooserGrid(context, scope, tokens, kind, onChoose) }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, scopeTokens: List<String>?, kind: String, onChoose: (ChosenMedia) -> Unit) {
+  val coroutines = rememberCoroutineScope()
+  val model = remember(scope, context.firestore) { MediaListModel(scope, context.firestore, coroutines, initialType = kind) }
+  LaunchedEffect(model, scopeTokens) { model.start(scopeTokens) }
+  Column(Modifier.fillMaxSize()) {
+    SearchField(model.search, model::type, placeholder = "Search files", modifier = Modifier.padding(space(2f)))
+    LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load the library", skeleton = { SkeletonGrid(tiles = 12) }) { rows ->
+      if (rows.isEmpty()) {
+        EmptyState(
+          if (model.search.isBlank()) "No files here yet" else "No files match",
+          body = if (model.search.isBlank()) "Upload photos in the Media library, then choose them here." else null,
+          icon = AglynIcons.named("photo_library"),
+        )
+      } else {
+        val grid = rememberLazyGridState()
+        val nearEnd by remember(grid) {
+          derivedStateOf { (grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= grid.layoutInfo.totalItemsCount - 6 }
+        }
+        LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
+        LazyVerticalGrid(
+          GridCells.Adaptive(110.dp),
+          Modifier.fillMaxSize().testTag("media-chooser-grid"),
+          state = grid,
+          contentPadding = PaddingValues(space(2f)),
+          horizontalArrangement = Arrangement.spacedBy(space(1f)),
+          verticalArrangement = Arrangement.spacedBy(space(1f)),
+        ) {
+          items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, selected = false) { onChoose(ChosenMedia(item, scope)) } }
+          if (model.hasMore) item(span = { GridItemSpan(maxLineSpan) }) { SkeletonList(rows = 1) }
+        }
+      }
+    }
+  }
+}
