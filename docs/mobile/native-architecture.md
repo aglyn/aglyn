@@ -986,7 +986,16 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   `{"$index": {rows, key, value}}` makes a map of rows, and `{"$merge": [a, b]}` lays maps over
   one another deeply. A row's position is `index`; `*` also walks an object's values; the format
   `first3` keeps a list's first three entries; a condition may mix `&&` and `||` (`&&` binds
-  tighter).
+  tighter). `$index` takes a `filter` too, run with the outer row (the item a button was pressed
+  on) as `parent`; `head` and `tail` are the two halves of a `kind/id` key.
+- `after` chains: an action's `after` may carry an `after` of its own, each step reading the stash
+  the one before made (the site package import works its decisions out, then who is still waiting,
+  so every change to a default or a choice shares the two steps).
+- `{ "compute": "name", "args": ["data.a.b", "data.c"] }` is a load that calls a pure function of the
+  console, over paths of what has loaded (a number is passed as one). The functions are ports
+  replayed from `function-cases.generated.json`, in `ScreenFunctions` (Swift and Kotlin): the site
+  package import's `packageJsonDiff` (every value an imported item changes) and `packageMergeKeys`
+  (the keys a merge chooses between).
 - Arithmetic in a template is a sum (`a + b - c`) or, with products and brackets, the usual
   precedence: `{max(0, used - included) / 1000 * rate:usd}`. A path is a number (a list adds up),
   `x?` is zero where it is missing, the functions are `max`, `min`, `round`, `floor`, `ceil` and

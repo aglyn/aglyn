@@ -360,4 +360,20 @@ class ScreenImportTest {
     assertEquals(listOf("results"), shown("applied"))
     assertEquals(listOf("results"), shown("undone"))
   }
+
+  /** The console's own answers for the two comparisons a site item import shows, replayed. */
+  @Test
+  fun theItemDiffAndMergeKeysReplayTheConsolesCases() {
+    val file = json(File(root, "libs/native/contracts/function-cases.generated.json").readText()) as JsonObject
+    val functions = file.getValue("functions") as JsonObject
+    for (name in listOf("packageJsonDiff", "packageMergeKeys", "packageItemChanges")) {
+      val cases = ((functions.getValue(name) as JsonObject).getValue("cases") as kotlinx.serialization.json.JsonArray)
+      assertTrue(cases.size > 5, name)
+      for (one in cases) {
+        val args = (((one as JsonObject).getValue("args")) as kotlinx.serialization.json.JsonArray).toList()
+        assertEquals(one.getValue("result"), ScreenFunctions.call(name, args), "$name $args")
+      }
+    }
+    assertEquals(null, ScreenFunctions.call("nothing", emptyList()))
+  }
 }

@@ -1,0 +1,359 @@
+{
+  "$comment": "Cases for how a site package import decides what happens to each item (AGL-3671). The console's packageDecisions (site-package-import-state.ts) answers each one in native-site-import-matches-the-console.spec.ts; the native apps replay them through the import screen's own expressions (ScreenSiteImportTests, ScreenSiteImportTest).",
+  "decisions": [
+    {
+      "name": "a new item is added, an unchanged one left, and a changed one waits for the person",
+      "items": [
+        {
+          "key": "page/n1",
+          "comparison": "new",
+          "proposed": "create",
+          "choices": [
+            "create",
+            "skip"
+          ]
+        },
+        {
+          "key": "email/i1",
+          "comparison": "identical",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth"
+          ]
+        },
+        {
+          "key": "page/d1",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth",
+            "merge"
+          ]
+        },
+        {
+          "key": "layout/d2",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace"
+          ]
+        }
+      ],
+      "bulk": {
+        "new": "create",
+        "differs": "",
+        "identical": "skip"
+      },
+      "overrides": {},
+      "expect": {
+        "decisions": {
+          "page/n1": "create",
+          "email/i1": "skip"
+        },
+        "undecided": [
+          "layout/d2",
+          "page/d1"
+        ]
+      }
+    },
+    {
+      "name": "a default for changed items applies where the item may take it",
+      "items": [
+        {
+          "key": "page/n1",
+          "comparison": "new",
+          "proposed": "create",
+          "choices": [
+            "create",
+            "skip"
+          ]
+        },
+        {
+          "key": "email/i1",
+          "comparison": "identical",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth"
+          ]
+        },
+        {
+          "key": "page/d1",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth",
+            "merge"
+          ]
+        },
+        {
+          "key": "layout/d2",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace"
+          ]
+        }
+      ],
+      "bulk": {
+        "new": "create",
+        "differs": "keepBoth",
+        "identical": "skip"
+      },
+      "overrides": {},
+      "expect": {
+        "decisions": {
+          "page/n1": "create",
+          "email/i1": "skip",
+          "page/d1": "keepBoth"
+        },
+        "undecided": [
+          "layout/d2"
+        ]
+      }
+    },
+    {
+      "name": "a default every changed item can take decides them all",
+      "items": [
+        {
+          "key": "page/n1",
+          "comparison": "new",
+          "proposed": "create",
+          "choices": [
+            "create",
+            "skip"
+          ]
+        },
+        {
+          "key": "email/i1",
+          "comparison": "identical",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth"
+          ]
+        },
+        {
+          "key": "page/d1",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth",
+            "merge"
+          ]
+        },
+        {
+          "key": "layout/d2",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace"
+          ]
+        }
+      ],
+      "bulk": {
+        "new": "create",
+        "differs": "replace",
+        "identical": "skip"
+      },
+      "overrides": {},
+      "expect": {
+        "decisions": {
+          "page/n1": "create",
+          "email/i1": "skip",
+          "page/d1": "replace",
+          "layout/d2": "replace"
+        },
+        "undecided": []
+      }
+    },
+    {
+      "name": "a choice of the person's own beats the defaults",
+      "items": [
+        {
+          "key": "page/n1",
+          "comparison": "new",
+          "proposed": "create",
+          "choices": [
+            "create",
+            "skip"
+          ]
+        },
+        {
+          "key": "email/i1",
+          "comparison": "identical",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth"
+          ]
+        },
+        {
+          "key": "page/d1",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth",
+            "merge"
+          ]
+        },
+        {
+          "key": "layout/d2",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace"
+          ]
+        }
+      ],
+      "bulk": {
+        "new": "skip",
+        "differs": "replace",
+        "identical": "replace"
+      },
+      "overrides": {
+        "page/d1": "merge",
+        "layout/d2": "skip"
+      },
+      "expect": {
+        "decisions": {
+          "page/n1": "skip",
+          "email/i1": "replace",
+          "page/d1": "merge",
+          "layout/d2": "skip"
+        },
+        "undecided": []
+      }
+    },
+    {
+      "name": "a default an unchanged item cannot take falls back to the plan's proposal",
+      "items": [
+        {
+          "key": "email/i1",
+          "comparison": "identical",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth"
+          ]
+        },
+        {
+          "key": "theme/i2",
+          "comparison": "identical",
+          "proposed": "skip",
+          "choices": [
+            "skip"
+          ]
+        }
+      ],
+      "bulk": {
+        "new": "create",
+        "differs": "",
+        "identical": "replace"
+      },
+      "overrides": {},
+      "expect": {
+        "decisions": {
+          "email/i1": "replace",
+          "theme/i2": "skip"
+        },
+        "undecided": []
+      }
+    },
+    {
+      "name": "a choice the item cannot take is ignored",
+      "items": [
+        {
+          "key": "page/n1",
+          "comparison": "new",
+          "proposed": "create",
+          "choices": [
+            "create",
+            "skip"
+          ]
+        },
+        {
+          "key": "layout/d2",
+          "comparison": "differs",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace"
+          ]
+        }
+      ],
+      "bulk": {
+        "new": "create",
+        "differs": "",
+        "identical": "skip"
+      },
+      "overrides": {
+        "layout/d2": "keepBoth",
+        "page/n1": "replace"
+      },
+      "expect": {
+        "decisions": {
+          "page/n1": "create"
+        },
+        "undecided": [
+          "layout/d2"
+        ]
+      }
+    },
+    {
+      "name": "no default for new items leaves the plan's proposal",
+      "items": [
+        {
+          "key": "page/n1",
+          "comparison": "new",
+          "proposed": "create",
+          "choices": [
+            "create",
+            "skip"
+          ]
+        },
+        {
+          "key": "email/i1",
+          "comparison": "identical",
+          "proposed": "skip",
+          "choices": [
+            "skip",
+            "replace",
+            "keepBoth"
+          ]
+        }
+      ],
+      "bulk": {
+        "new": "",
+        "differs": "",
+        "identical": ""
+      },
+      "overrides": {},
+      "expect": {
+        "decisions": {
+          "page/n1": "create",
+          "email/i1": "skip"
+        },
+        "undecided": []
+      }
+    }
+  ]
+}

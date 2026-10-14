@@ -142,6 +142,10 @@
       "why": "The where-used scan's answer and its one-line summary; the native Logic screens word a delete's warning from it (AGL-3668). No imports."
     },
     {
+      "path": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "why": "What an imported site item changes: the leaf-by-leaf diff and the keys a merge chooses between, shown by the site package import (AGL-3671)."
+    },
+    {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
       "why": "Reached by booking-contact-fields: contact shapes and the phone normalizer; no imports."
     },
