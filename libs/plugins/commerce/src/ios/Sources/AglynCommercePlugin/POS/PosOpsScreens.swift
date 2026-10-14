@@ -19,6 +19,7 @@ struct RegisterOpsSheet: View {
   let model: RegisterModel
   @Environment(\.dismiss) private var dismiss
   @State private var switching = false
+  @State private var returning = false
 
   var body: some View {
     let cashier = model.cashier
@@ -46,6 +47,11 @@ struct RegisterOpsSheet: View {
         }
         Section("Shift") { ShiftControls(model: model) }
         LastReceiptSection(model: model)
+        Section("Returns") {
+          Button("Return items") { returning = true }
+            .disabled(model.register == nil)
+            .accessibilityIdentifier("pos-return")
+        }
         StaffPinsSection(model: model)
       }
       .formStyle(.grouped)
@@ -56,6 +62,7 @@ struct RegisterOpsSheet: View {
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
     .frame(minWidth: 420, minHeight: 420)
+    .sheet(isPresented: $returning) { PosReturnSheet(model: model) }
     .sheet(isPresented: $switching) {
       PinPadSheet(model: model, purpose: "cashier", title: "Switch cashier", prompt: nil, dismissible: true) {
         cashier.switchTo($0)

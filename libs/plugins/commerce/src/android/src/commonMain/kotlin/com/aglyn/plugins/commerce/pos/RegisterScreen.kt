@@ -140,6 +140,7 @@ fun RegisterScreen(context: NativePluginContext) {
       customersApi = ConsolePosCustomersApi(context.api, hostId),
       uid = context.uid,
       offlineApi = ConsolePosOfflineApi(context.api, hostId),
+      returnsApi = ConsolePosReturnsApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
