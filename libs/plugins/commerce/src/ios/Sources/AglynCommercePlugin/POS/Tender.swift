@@ -38,7 +38,7 @@ func isLostAnswer(_ error: Error) -> Bool {
   return api.status == 0
 }
 
-private func failedOrUnknown(_ error: Error, _ fallback: String) -> TenderOutcome {
+func failedOrUnknown(_ error: Error, _ fallback: String) -> TenderOutcome {
   if isLostAnswer(error) { return .unknown(lostAnswer) }
   let message = (error as? ConsoleAPIError)?.message ?? ""
   return .failed(message.isEmpty ? fallback : message, nil)
@@ -265,6 +265,63 @@ func payGiftCard(_ deps: TenderDeps, code: String, amountCents: Int?, attemptKey
     return outcomeOfPayment(answer) ?? .settled(answer, answer.payment)
   } catch {
     return failedOrUnknown(error, "The gift card could not be used.")
+  }
+}
+
+/// Store credit another plugin keeps: by the customer's code, or the account a lookup found. The server takes the smallest of what the account holds, what is left to pay and what was asked.
+func payCredit(
+  _ deps: TenderDeps, code: String?, providerID: String?, reference: String?, amountCents: Int?, attemptKey: String
+) async -> TenderOutcome {
+  do {
+    let answer = try await deps.api.payment(
+      orderID: deps.orderID,
+      step: .credit(
+        code: code?.trimmingCharacters(in: .whitespacesAndNewlines), providerID: providerID, reference: reference,
+        amountCents: amountCents),
+      attemptKey: attemptKey)
+    return outcomeOfPayment(answer) ?? .settled(answer, answer.payment)
+  } catch {
+    return failedOrUnknown(error, "The store credit could not be used.")
+  }
+}
+
+/// A room charge: the amount goes on a checked-in stay's folio.
+func payFolio(_ deps: TenderDeps, reservationID: String, amountCents: Int?, attemptKey: String) async -> TenderOutcome {
+  do {
+    let answer = try await deps.api.payment(
+      orderID: deps.orderID, step: .folio(reservationID: reservationID, amountCents: amountCents), attemptKey: attemptKey)
+    return outcomeOfPayment(answer) ?? .settled(answer, answer.payment)
+  } catch {
+    return failedOrUnknown(error, "The room charge could not be recorded.")
+  }
+}
+
+/// What the register calls each way of paying (`ORDER_PAYMENT_METHOD_LABELS`).
+let paymentMethodLabels: [String: String] = [
+  "cash": "Cash", "card_present": "Card reader", "card_keyed": "Typed card", "card_link": "Card (QR)",
+  "gift_card": "Gift card", "folio": "Charged to room", "credit": "Store credit",
+]
+
+/// One payment as a line of the sale's ledger: `Card reader (visa •••• 4242) $12.00 + $2.00 tip` (`describeOrderPayment`).
+func describePayment(_ payment: PosSalePayment, money: (Int) -> String) -> String {
+  let label = (payment.method == "credit" ? payment.creditLabel : nil) ?? paymentMethodLabels[payment.method] ?? "Payment"
+  let card: String =
+    if payment.cardBrand != nil || payment.last4 != nil {
+      " (" + [payment.cardBrand, payment.last4.map { "•••• \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ") + ")"
+    } else { "" }
+  let tip = payment.tipCents > 0 ? " + \(money(payment.tipCents)) tip" : ""
+  return "\(label)\(card) \(money(payment.amountCents))\(tip)"
+}
+
+/// What a payment's status is called on the register.
+func paymentStatusLabel(_ status: String) -> String {
+  switch status {
+  case "pending": "Waiting"
+  case "succeeded": "Approved"
+  case "failed": "Declined"
+  case "canceled": "Canceled"
+  case "reversed": "Returned"
+  default: status
   }
 }
 

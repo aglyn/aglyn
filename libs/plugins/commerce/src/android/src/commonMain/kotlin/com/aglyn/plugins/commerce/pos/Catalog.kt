@@ -254,3 +254,12 @@ fun categoryLevel(categories: List<PosCategory>, parentId: String?): List<PosCat
 }
 
 fun categoriesQuery(hostId: String) = FirestoreQuery("hosts/$hostId/productCategories", limit = POS_CATEGORY_CEILING)
+
+/** A checked-in stay a sale can be charged to. */
+data class PosStay(val id: String, val name: String)
+
+/** The stays a sale can be charged to, asked for BY STATUS as the console's register asks (AGL-3321). */
+fun staysQuery(hostId: String) =
+  FirestoreQuery("hosts/$hostId/reservations", filters = listOf(com.aglyn.core.FirestoreFilter("status", com.aglyn.core.FilterOp.EQ, "checked_in")), limit = 100)
+
+fun posStayFrom(doc: FirestoreDoc): PosStay = PosStay(id = doc.id, name = doc.data["guestName"].asText() ?: doc.data["guestEmail"].asText() ?: doc.id)
