@@ -3564,6 +3564,22 @@
     },
     {
       "id": "inventory-sync",
+      "mobile": {
+        "$comment": "AGL-3652: inventory and ERP natively (Cin7 Core, inFlow Inventory with the merchant's keys; Brightpearl by signing in): stock counts, location, product sync, sending paid orders, the orders not sent and recent activity, from the spec in src/android/screens/inventory-sync.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynInventorySyncPlugin",
+          "register": "registerInventorySyncNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.inventorysync",
+          "register": "registerInventorySyncNative"
+        },
+        "contributes": {
+          "screens": [
+            "inventory-sync.service"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-inventory-sync",
       "register": {
         "console": "registerInventorySyncConsole",

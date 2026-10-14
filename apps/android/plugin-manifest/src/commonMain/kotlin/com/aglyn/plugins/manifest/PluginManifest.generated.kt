@@ -18,6 +18,7 @@ import com.aglyn.plugins.forms.registerFormsNative
 import com.aglyn.plugins.fulfillmentnetworks.registerFulfillmentNetworksNative
 import com.aglyn.plugins.funnels.registerFunnelsNative
 import com.aglyn.plugins.inbox.registerInboxNative
+import com.aglyn.plugins.inventorysync.registerInventorySyncNative
 import com.aglyn.plugins.logic.registerLogicNative
 import com.aglyn.plugins.marketing.registerMarketingNative
 import com.aglyn.plugins.marketingplatforms.registerMarketingPlatformsNative
@@ -93,6 +94,11 @@ object NativePluginManifest {
             id = "inbox",
             contributes = mapOf("screens" to listOf("inbox.people", "inbox.submission", "inbox.submissions"), "widgets" to listOf("inbox.glance"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
             register = ::registerInboxNative,
+        ),
+        NativePluginManifestEntry(
+            id = "inventory-sync",
+            contributes = mapOf("screens" to listOf("inventory-sync.service")),
+            register = ::registerInventorySyncNative,
         ),
         NativePluginManifestEntry(
             id = "logic",

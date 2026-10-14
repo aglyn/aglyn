@@ -567,4 +567,70 @@ class CommerceServiceSpecsTest {
     )
     assertTrue(action.back)
   }
+
+  // ---- inventory and ERP -------------------------------------------------------------------------------------------
+
+  private fun inventoryConnection(provider: String, status: String = "active", source: String = "system", sync: String = "import", extra: String = "") =
+    """{"hostId":"h1","provider":"$provider","status":"$status","accountName":"Acme Co","stockSource":"$source","productSync":"$sync","sendOrders":true,"locationId":"L1",
+       "orderCustomer":"Web","taxRule":"","stock":{"syncedAtMs":1760000000000,"direction":"$source","skus":40,"updated":3,"unchanged":37,"unknown":1,"untracked":0,"perLocation":0,"failed":0},
+       "products":{"syncedAtMs":1760000000000,"created":2,"updated":1,"unchanged":5,"failed":0,"more":false},"lastError":null,"connectedAtMs":1,"totals":{"ordersSent":9,"ordersFailed":1}$extra}"""
+
+  private fun inventory(connection: String?, importProducts: Boolean = true) =
+    screen(spec("inventory-sync", "inventory-sync.service"), emptyMap(),
+      """{"conn":{"offered":[{"id":"cin7-core"},{"id":"inflow"},{"id":"brightpearl"}],"connection":${connection ?: "null"},"capabilities":{"importProducts":$importProducts}},
+         "locations":{"locations":[{"id":"L1","name":"Main"},{"id":"L2","name":"Spare"}]},"attn":{"orders":[{"recordId":"r1","displayRef":"#1042","note":"Customer not found"}]},"log":{"entries":[{"id":"1","atMs":1,"kind":"order","message":"Order #1 sent"}]}}""")
+
+  @Test
+  fun inventorySyncOffersEachSystemItsOwnWayToConnectUntilOneIsConnected() {
+    val bare = inventory(null)
+    assertEquals(listOf("intro", "connect"), bare.shown())
+    assertEquals(listOf("connectCin7", "connectInflow", "connectBrightpearl"), bare.actionsShown("connect"))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"cin7-core","accountId":"a1","apiKey":"k"}"""),
+      bare.body(bare.action("connect", "connectCin7"), """{"accountId":"a1","apiKey":"k"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","provider":"inflow","companyId":"c1","apiKey":"k"}"""),
+      bare.body(bare.action("connect", "connectInflow"), """{"companyId":"c1","apiKey":"k"}"""),
+    )
+    val bright = bare.action("connect", "connectBrightpearl")
+    assertEquals("url", bright.openUrl)
+    assertEquals(json("""{"hostId":"h1","accountCode":"acme","returnTo":"/"}"""), bare.body(bright, """{"accountCode":"acme"}"""))
+  }
+
+  @Test
+  fun aConnectedSystemShowsItsSettingsOrdersNotSentAndActivity() {
+    val cin7 = inventory(inventoryConnection("cin7-core"))
+    assertEquals(listOf("status", "manage", "settings", "attention", "activity"), cin7.shown())
+    assertEquals(listOf("sync", "pause", "disconnect"), cin7.actionsShown("manage"))
+    assertEquals("Cin7 Core", ScreenValues.render(cin7.spec.blocks.first { it.id == "status" }.title!!, cin7.context))
+    assertEquals(listOf("resume", "disconnect"), inventory(inventoryConnection("cin7-core", status = "paused")).actionsShown("manage"))
+    val reconnect = inventory(inventoryConnection("inflow", status = "reconnect", extra = ",\"lastError\":\"Keys refused\""))
+    assertEquals(listOf("reconnectInflow", "disconnect"), reconnect.actionsShown("manage"))
+    assertTrue("settings" !in reconnect.shown() && "failing" in reconnect.shown())
+
+    fun fields(model: ScreenModel) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { ScreenValues.condition(it.whenCondition, model.context) }.map { it.key }
+    assertEquals(listOf("stockSource", "locationId", "productSyncAll", "sendOrders", "orderCustomer", "taxRule"), fields(cin7))
+    assertEquals(listOf("stockSource", "locationId", "productSyncImport", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"))))
+    assertEquals(listOf("stockSource", "locationId", "productSyncExport", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("inflow"), importProducts = false)))
+    assertEquals(listOf("stockSource", "locationId", "productSyncOff", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"), importProducts = false)))
+    val location = FieldSpec.parse(cin7.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray[1])!!
+    assertEquals(listOf("", "L1", "L2"), location.choices(cin7.context).map { it.first })
+    assertEquals(
+      json("""{"hostId":"h1","stockSource":"store","locationId":"","productSync":"export","sendOrders":false,"orderCustomer":"Web","taxRule":"GST"}"""),
+      cin7.body(cin7.form("settings"), """{"stockSource":"store","locationId":"","productSyncAll":"export","sendOrders":false,"orderCustomer":"Web","taxRule":"GST"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","stockSource":"off","locationId":"L2","productSync":"off","sendOrders":true,"orderCustomer":"123"}"""),
+      inventory(inventoryConnection("brightpearl")).let { it.body(it.form("settings"), """{"stockSource":"off","locationId":"L2","productSyncImport":"off","sendOrders":true,"orderCustomer":"123"}""") },
+    )
+    assertEquals("PATCH", cin7.form("settings").method.name)
+    assertEquals("DELETE", cin7.action("manage", "disconnect").method.name)
+    val again = cin7.spec.blocks.first { it.id == "attention" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    val row = ScreenContext.with(cin7.context, "item", json("""{"recordId":"r1","displayRef":"#1042"}"""))
+    assertEquals(json("""{"hostId":"h1","recordId":"r1"}"""), ScreenValues.resolveBody(again.body!!, row))
+    assertEquals("Customer not found", ScreenValues.render(cin7.spec.blocks.first { it.id == "attention" }.string("secondary")!!, ScreenContext.with(cin7.context, "item", json("""{"note":"Customer not found"}"""))))
+    assertEquals("Customer for web orders: The name of a Cin7 Core customer that store orders are recorded under.", ScreenValues.render(FieldSpec.parse(cin7.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.first { (it.jsonObject["key"] as JsonPrimitive).content == "orderCustomer" })!!.help!!, cin7.context))
+  }
 }
