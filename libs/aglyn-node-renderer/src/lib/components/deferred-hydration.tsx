@@ -20,7 +20,12 @@ import type * as Aglyn from '@aglyn/aglyn'
 import { components } from '@aglyn/aglyn/aglyn'
 import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
 import { isNamespacedComponentId } from '@aglyn/aglyn/plugin-manager/plugin-contributions'
-import { useCallback, useState, useSyncExternalStore } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 
 /**
  * Static subtrees of a published page skip hydration until the visitor
@@ -74,6 +79,16 @@ import { useCallback, useState, useSyncExternalStore } from 'react'
  * render is part of the tree's first commit (see `treeHydrated`). A subtree
  * mounted by a client-side navigation renders at once and can never be left
  * empty.
+ *
+ * ## A scheme change releases it (AGL-3772)
+ *
+ * The held HTML was styled in the scheme the server rendered, and it cannot
+ * follow the theme: nothing in it re-renders. A dark device that sent no
+ * `Sec-CH-Prefers-Color-Scheme` hint gets a light server render that turns
+ * dark after hydration (see the tenant middleware), and a visitor can flip
+ * the scheme from the switcher at any time. Either way, a hold rendered in
+ * one scheme is released as soon as the active scheme is another, so every
+ * subtree re-renders against the theme the visitor actually has.
  *
  * ## Interaction before release
  *
@@ -183,16 +198,29 @@ export function markTreeHydrated(): void {
 /**
  * Should this leaf render its root with {@link HELD_SERVER_HTML} instead of
  * its children? True only from a hydration render of an `eligible` leaf that
- * is far from the viewport, until it comes near.
+ * is far from the viewport, until it comes near or the active `scheme` stops
+ * being the one it was hydrated in.
  */
-export function useHeldServerHtml(eligible: boolean, nodeId: string): boolean {
-  const [held] = useState(
-    () =>
-      eligible &&
-      !treeHydrated &&
-      typeof document !== 'undefined' &&
-      holdIfFar(nodeId),
+export function useHeldServerHtml(
+  eligible: boolean,
+  nodeId: string,
+  scheme: string,
+): boolean {
+  // The scheme the held HTML was rendered in, or null for no hold.
+  const [heldScheme] = useState(() =>
+    eligible &&
+    !treeHydrated &&
+    typeof document !== 'undefined' &&
+    holdIfFar(nodeId)
+      ? scheme
+      : null,
   )
+  const stale = heldScheme !== null && heldScheme !== scheme
+  // Released for good rather than only while the schemes differ: holding
+  // again after the children rendered would empty the element.
+  useEffect(() => {
+    if (stale) release(nodeId)
+  }, [stale, nodeId])
   const subscribe = useCallback(
     (listener: () => void) => {
       const hold = holds.get(nodeId)
@@ -211,7 +239,7 @@ export function useHeldServerHtml(eligible: boolean, nodeId: string): boolean {
     () => holds.get(nodeId)?.released ?? false,
     () => false,
   )
-  return held && !released
+  return heldScheme !== null && !stale && !released
 }
 
 const staticSubtrees = new WeakMap<object, boolean>()
