@@ -31,11 +31,13 @@ name: Native tests
 #
 # THE SWIFT BUILD IS CACHED, FROM MAIN (AGL-3783)
 #   One cache entry holds the SwiftPM scratch path and the xcodebuild
-#   DerivedData (about 0.9 GB compressed). A push to `main` saves it under its
-#   own sha; a PR restores main's newest, so it recompiles only what differs
-#   from that commit. A PR saves its own entry only when nothing was restored,
-#   because a PR's entry is readable by that PR alone and per-PR entries would
-#   evict main's (the repository has 10 GB of cache). For a restored build to
+#   DerivedData (1.7 GB compressed). A run on `main` saves it under its own
+#   sha: a push, or the dispatch auto-merge-green.yml sends after it merges
+#   (a merge made with GITHUB_TOKEN starts no push run). A PR restores main's
+#   newest, so it recompiles only what differs from that commit. A PR saves its
+#   own entry only when nothing was restored, because a PR's entry is readable
+#   by that PR alone and per-PR entries would evict main's (the repository has
+#   10 GB of cache). For a restored build to
 #   be reusable, every tracked file is first stamped with a modification time
 #   derived from its content (`native-swift-tests.mjs mtimes`): a fresh
 #   checkout otherwise dates every file "now", and both build systems would
@@ -47,6 +49,11 @@ on:
   push:
     branches: [main, production]
   workflow_dispatch:
+    inputs:
+      base:
+        description: 'Run only what changed since this commit. Empty runs everything.'
+        required: false
+        default: ''
 
 concurrency:
   # A PR's re-push supersedes its running check. A push is never cancelled
@@ -79,7 +86,7 @@ jobs:
       - name: Did anything native change?
         id: changed
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base }}
         run: node tools/scripts/native-ci-changed.mjs --base "$BASE" --head HEAD
 
   kotlin:
@@ -217,14 +224,15 @@ jobs:
             echo "::endgroup::"
           done
 
-      # Main's push saves (each under its own sha; the oldest are evicted
-      # first). A PR saves only when it restored nothing at all. The git
-      # mirrors are left out: the checkouts beside them are what a build reads.
+      # A run on a branch saves (each under its own sha; the oldest are
+      # evicted first). A PR saves only when it restored nothing at all. The
+      # git mirrors are left out: the checkouts beside them are what a build
+      # reads.
       - name: Trim the Swift build for the cache
         id: save
         if: >-
           ${{ !cancelled() && env.RUN == 'true' && steps.swift-cache.outcome == 'success'
-          && (github.event_name == 'push' || steps.swift-cache.outputs.cache-matched-key == '') }}
+          && (github.event_name != 'pull_request' || steps.swift-cache.outputs.cache-matched-key == '') }}
         run: |
           rm -rf "$RUNNER_TEMP/spm-scratch/repositories" "$RUNNER_TEMP/DerivedData/SourcePackages/repositories" "$RUNNER_TEMP/DerivedData/Logs"
           du -sh "$RUNNER_TEMP/spm-scratch" "$RUNNER_TEMP/DerivedData" || true
