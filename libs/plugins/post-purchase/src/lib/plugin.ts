@@ -36,7 +36,7 @@ export function registerPostPurchaseConsole(): void {
     featureFlag: POST_PURCHASE_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsShipping',
         widgetId: 'post-purchase-services',
         title: 'Tracking and protection',
         Component: PostPurchaseSettingsCards,

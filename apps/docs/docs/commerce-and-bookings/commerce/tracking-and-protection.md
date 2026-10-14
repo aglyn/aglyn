@@ -9,8 +9,8 @@ unlisted: true
 
 :::caution Rolling out
 Tracking and protection are **not yet available** on aglyn.com-hosted
-workspaces. Until they are, no AfterShip, Route or Narvar card appears in your
-store's settings, and your orders are tracked the way they are today.
+workspaces. Until they are, no AfterShip, Route or Narvar card appears on
+**Products → Shipping & delivery**, and your orders are tracked the way they are today.
 :::
 
 If you already use **AfterShip**, **Route** or **Narvar**, connect that account
@@ -28,7 +28,7 @@ every plan that includes selling, at no extra cost.
 
 ## Connect a service
 
-1. Open the store's settings and find the card for the service:
+1. Open **Products → Shipping & delivery** and find the card for the service:
    **AfterShip**, **Route** or **Narvar**. Only the services your deployment
    offers are shown.
 2. Paste the credentials from your account:

@@ -34,7 +34,7 @@ however many emails it sends.
 Invite customers to review your store on Trustpilot after their order ships or
 arrives, by copying one order email to your Trustpilot invitation address.
 
-Go to **Commerce → Settings** and find the **Trustpilot** card. Under **How
+Go to **Products → Promotions** and find the **Trustpilot** card. Under **How
 Trustpilot hears about orders**, choose one way, and under **When to invite**,
 choose:
 
@@ -85,7 +85,7 @@ for a review.
 1. In your Yotpo Reviews settings, copy the **app key** and **secret key**. These
    are not the keys of Yotpo Loyalty & Referrals, which connects under
    [Rewards](./connect-smile-io-or-yotpo.md).
-2. On the **Yotpo Reviews** card under **Commerce → Settings**, paste both, turn on
+2. On the **Yotpo Reviews** card under **Products → Promotions**, paste both, turn on
    **Send shipped orders to Yotpo for review requests**, and select **Save**.
 
 When an order first ships or is picked up, Aglyn sends it to Yotpo with its items,

@@ -42,11 +42,12 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 function standInCommerceRoutes() {
   const products = ({ orgSlug, host }: { orgSlug: string; host: string | null }) => (host ? `/${orgSlug}/hosts/${host}/products` : null)
   registerPluginRecordRoute('product', { list: products, record: products }, { pluginId: 'commerce' })
-  const settings = (context: { orgSlug: string; host: string | null }) => {
+  // A settings page each (AGL-3713): the list is Payments, a record its page.
+  const settings = (context: { orgSlug: string; host: string | null }, page = 'payments') => {
     const list = products(context)
-    return list ? `${list}/settings` : null
+    return list ? `${list}/${page}` : null
   }
-  registerPluginRecordRoute('store-settings', { list: settings, record: settings }, { pluginId: 'commerce' })
+  registerPluginRecordRoute('store-settings', { list: (context) => settings(context), record: settings }, { pluginId: 'commerce' })
 }
 
 const storeJob = (store: string | null): Pick<AiJobSummary, 'kind' | 'status' | 'items' | 'outputs'> => ({
@@ -65,14 +66,14 @@ describe('what is left to finish an AI-built store', () => {
   it('links connecting payments, the products, shipping and tax, and the policies, each to its console page', () => {
     const steps = aiStoreFinishLinks(storeJob('succeeded'), 'acme')
     expect(steps?.map((step) => [step.id, step.href])).toEqual([
-      ['payments', '/acme/hosts/ember/products/settings'],
+      ['payments', '/acme/hosts/ember/products/payments'],
       ['products', '/acme/hosts/ember/products'],
-      ['shipping', '/acme/hosts/ember/products/settings'],
+      ['shipping', '/acme/hosts/ember/products/shipping'],
       ['policies', '/acme/hosts/ember/screens'],
     ])
     render(<AiStoreFinishCard steps={steps ?? []} />)
     expect(screen.getByRole('heading', { name: 'Finish your store' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Set up payments' }).getAttribute('href')).toBe('/acme/hosts/ember/products/settings')
+    expect(screen.getByRole('link', { name: 'Set up payments' }).getAttribute('href')).toBe('/acme/hosts/ember/products/payments')
     expect(screen.getByRole('link', { name: 'Open products' }).getAttribute('href')).toBe('/acme/hosts/ember/products')
   })
 

@@ -81,6 +81,7 @@ import StaffUserProductEmail, {
 } from '../../../../../components/staff-user-product-email.component'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
 import StaffUserSendEmailCard from '../../../../../components/staff-user-send-email-card.component'
+import StaffUserAdAudience from '../../../../../components/staff-user-ad-audience.component'
 
 /** Where a resolved name or photo came from, as the page says it. */
 const IDENTITY_SOURCE_LABEL = {
@@ -227,6 +228,8 @@ interface UserDetail {
    * response from a deployment that predates it renders nothing.
    */
   marketing?: StaffUserMarketing
+  /** The account's own document, as stored; the ad audience opt-out reads it (AGL-3780). */
+  profile?: Record<string, unknown> | null
 }
 
 /**
@@ -634,6 +637,14 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   the operator's marketing sends would do — beside the
                                   phone line because both answer "may we contact them?". */}
                               <StaffUserProductEmail marketing={detail.marketing} />
+                              {/* The account-holder ad audiences (AGL-3780). */}
+                              <StaffUserAdAudience
+                                profile={detail.profile}
+                                onChange={async (optOut) =>
+                                  (await callManage({ action: 'setAdAudienceOptOut', optOut }))
+                                    ?.adAudienceOptOut ?? null
+                                }
+                              />
                               {!detail.user.staff ? (
                                 <Button
                                   size="small"

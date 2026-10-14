@@ -114,6 +114,9 @@ jest.mock('../hooks/use-org-hosts', () => ({
 }))
 jest.mock('../hooks/use-console-plugins', () => ({
   useConsoleRoutePlugins: () => true,
+  // The rail asks which zone-only sections have a card (AGL-3713); the
+  // zones' plugins are the same double.
+  useConsoleSlotPlugins: () => true,
 }))
 jest.mock('../hooks/use-release-flags', () => ({
   __esModule: true,

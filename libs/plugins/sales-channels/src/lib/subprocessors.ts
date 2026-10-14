@@ -64,17 +64,23 @@ export const SALES_CHANNELS_API_HOSTS: PluginEgressHostDeclaration[] = [
       "Customer-chosen destination. The Merchant API of the merchant's own Google Merchant Center account, which a site admin connects on the store's Sales channels card (`libs/plugins/sales-channels/src/lib/server/connect/google-merchant.ts`): listing the Merchant Center accounts the grant reaches, creating one API data source in the chosen account, and inserting and deleting the store's product inputs in it when a member syncs.",
     dataReceived: PRODUCT_DATA,
   },
+]
+
+/**
+ * Hosts declared elsewhere that the connections reach as well.
+ *
+ * `graph.facebook.com` is core's since AGL-3780: the platform's own
+ * account-holder audience sync sends hashed addresses there, a recipient the
+ * platform chose, so the host carries core's stricter `subprocessor`
+ * declaration and this plugin's customer-chosen use rides on it.
+ */
+export const SALES_CHANNELS_USES: PluginEgressUseDeclaration[] = [
   {
     host: host(META_HOSTS.graph),
-    disposition: 'not-a-subprocessor',
     reason:
       "Customer-chosen destination. The Graph API of the merchant's own Meta business, which a site admin connects on the store's Sales channels card (`libs/plugins/sales-channels/src/lib/server/connect/meta-catalog.ts`): the code exchange and long-lived token exchange at connect, listing the businesses and product catalogs the grant reaches, writing the store's products into the chosen catalog through its `items_batch` edge when a member syncs, and revoking the app's permissions on disconnect.",
     dataReceived: PRODUCT_DATA,
   },
-]
-
-/** Hosts declared elsewhere that the connections reach as well. */
-export const SALES_CHANNELS_USES: PluginEgressUseDeclaration[] = [
   {
     host: host(GOOGLE_ENDPOINTS.token),
     reason:

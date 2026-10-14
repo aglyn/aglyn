@@ -249,6 +249,15 @@ const SUPERVISORY_AUTHORITY_ENTRY: EgressHost = {
 }
 
 /**
+ * The published purpose cells of the two advertising entities, shared by each
+ * entity's hosts so the derived row cannot read differently host to host.
+ */
+const META_ADVERTISING_PURPOSE =
+  "Advertising measurement and retargeting on Aglyn's own surfaces — the marketing site, the console and the docs — and on a customer site whose owner has enabled the advertising question and configured a pixel"
+const LINKEDIN_ADVERTISING_PURPOSE =
+  "Advertising measurement and retargeting on Aglyn's own surfaces — the marketing site, the console and the docs — and on a customer site whose owner has enabled the advertising question and configured a partner id"
+
+/**
  * The third-party hosts this registry declares itself: every host named in
  * `apps/`, `libs/` and `tools/` but those a plugin declares, which
  * `EGRESS_HOSTS` below folds in.
@@ -464,8 +473,9 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'Primary application database, file storage, authentication, backups, and platform logging',
     publishedOn: '2026-08-05',
     reason:
-      'Service-account token exchange for the Drive reads above and for the admin surfaces.',
-    dataReceived: "Aglyn's own service-account assertion. No customer data.",
+      'Service-account token exchange for the Drive reads above and for the admin surfaces, and the refresh-token exchange the account-holder audience sync makes before it calls the Data Manager API (AGL-3780).',
+    dataReceived:
+      "Aglyn's own service-account assertion, and the operator's own OAuth client id, client secret and refresh token for the audience sync. No customer data.",
   },
 
   /**
@@ -513,6 +523,18 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       "Page views and events from a visitor's browser, with the identifiers gtag sets. Loaded only where an id is configured and, in prior-consent regions, only after the visitor allowed analytics. ⚠️ A CONTAINER is a loader rather than a tag: what it fetches is configured in Google's interface and is not visible from this repository, so this row describes what the container can carry and cannot enumerate what a given container holds.",
   },
+  'datamanager.googleapis.com': {
+    disposition: 'subprocessor',
+    entity: 'Google LLC (Google Analytics)',
+    region: 'United States',
+    purpose:
+      'Product and commerce analytics, including server-reported purchase and subscription events, and the Google Tag Manager container and Google Ads tag where either is configured',
+    publishedOn: '2026-08-18',
+    reason:
+      "The Data Manager API's `audienceMembers:ingest` and `audienceMembers:remove`, reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when the `GOOGLE_AUDIENCE_SYNC_*` variables are set and `release_ad_audience_sync` is on, to keep the operator's own Google Ads Customer Match list of US account holders in step. The Data Manager API, not the Google Ads API, because Google stopped accepting Customer Match uploads through the latter for projects with no recent use. ⚠️ Not yet in the published Privacy Policy: the disclosure is drafted in the legal Google Doc and is not on the website, so `release_ad_audience_sync` stays off (it is OFF by default) and nothing is sent until that publication; on it, the /legal/subprocessors purpose cell for this entity owes the customer-list use as well.",
+    dataReceived:
+      "For each account holder the nightly sync finds eligible — a verified address, not staff, not locked, banned or opted out, and a United States billing or sign-up country — the SHA-256 hash of the address normalized as Google documents, and nothing else about the person; on later nights, the hashes of accounts no longer eligible, to remove them. No address in the clear, no name, no account id. Also the operator's own OAuth access token, which authenticates each call.",
+  },
   'fonts.googleapis.com': {
     disposition: 'subprocessor',
     entity: 'Google LLC (Google Fonts)',
@@ -543,12 +565,32 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     entity: 'Meta Platforms, Inc.',
     region: 'United States',
     purpose:
-      "Advertising measurement and retargeting on Aglyn's own surfaces — the marketing site, the console and the docs — and on a customer site whose owner has enabled the advertising question and configured a pixel",
+      META_ADVERTISING_PURPOSE,
     publishedOn: '2026-08-27',
     reason:
       'The Meta Pixel loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted on a tenant page by the tenant runtime, on the console by `apps/console/components/advertising-tags.component.tsx`, and on the docs site by its standalone copy in `apps/docs/src/advertising-tags.ts`. Disclosed by CAPABILITY rather than by rollout, which is the standing rule — the code can load it, so the document says so.',
     dataReceived:
       'Page views and conversion events from a visitor whose recorded consent grants advertising on a surface that asks about it, with the identifiers the pixel sets. On the console that visitor may be signed in, so the pageviews describe an identified account holder moving through a product rather than an anonymous reader of a marketing page.',
+  },
+
+  /**
+   * Core's since AGL-3780. The host was a plugin's customer-chosen
+   * destination until the platform's own audience sync began sending there,
+   * and a host carries one disposition, so it takes the stricter one — the
+   * Wistia rule. The sales-channels and ad-conversions plugins declare their
+   * customer-chosen uses of it, which ride on this entry.
+   */
+  'graph.facebook.com': {
+    disposition: 'subprocessor',
+    entity: 'Meta Platforms, Inc.',
+    region: 'United States',
+    purpose:
+      META_ADVERTISING_PURPOSE,
+    publishedOn: '2026-08-27',
+    reason:
+      "The Marketing API's Custom Audiences replace session (`POST /{audience}/usersreplace`), reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when `META_AUDIENCE_SYNC_ACCESS_TOKEN` and `META_AUDIENCE_SYNC_AUDIENCE_ID` are set and `release_ad_audience_sync` is on, to keep the operator's own customer-list audience of US account holders in step for retargeting and prospecting exclusion. ⚠️ Not yet in the published Privacy Policy: the disclosure is drafted in the legal Google Doc and is not on the website, so `release_ad_audience_sync` stays off (it is OFF by default) and nothing is sent until that publication; on it, the /legal/subprocessors purpose cell for this entity owes the customer-list use as well.",
+    dataReceived:
+      "For each account holder the nightly sync finds eligible — a verified address, not staff, not locked, banned or opted out, and a United States billing or sign-up country — the SHA-256 hash of the address normalized as Meta documents, and nothing else about the person; on later nights, the hashes of accounts no longer eligible, to remove them. No address in the clear, no name, no account id. Also the operator's own access token, which authenticates each call.",
   },
 
   // MARK – TikTok and Pinterest (a site owner's own tags, AGL-3694)
@@ -575,12 +617,25 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     entity: 'LinkedIn Corporation',
     region: 'United States',
     purpose:
-      "Advertising measurement and retargeting on Aglyn's own surfaces — the marketing site, the console and the docs — and on a customer site whose owner has enabled the advertising question and configured a partner id",
+      LINKEDIN_ADVERTISING_PURPOSE,
     publishedOn: '2026-08-27',
     reason:
       'The LinkedIn Insight Tag loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted on the same three first-party surfaces as the Meta Pixel above. Disclosed by CAPABILITY rather than by rollout, the same standing rule Meta is declared under — the code can load it, so the document says so.',
     dataReceived:
       "Page views and conversion events from a visitor whose consent state permits advertising on a surface that asks about it, with the identifiers the tag sets. LinkedIn additionally sets cookies on its own domain, which a page on our origin cannot read or clear. On the console that visitor may be signed in, so the same caveat the Meta row carries applies here.",
+  },
+
+  'api.linkedin.com': {
+    disposition: 'subprocessor',
+    entity: 'LinkedIn Corporation',
+    region: 'United States',
+    purpose:
+      LINKEDIN_ADVERTISING_PURPOSE,
+    publishedOn: '2026-08-27',
+    reason:
+      "The Marketing API's DMP segment users endpoint (`POST /rest/dmpSegments/{id}/users`), reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when `LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN` and `LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID` are set and `release_ad_audience_sync` is on, to keep the operator's own matched audience of US account holders in step. ⚠️ Not yet in the published Privacy Policy: the disclosure is drafted in the legal Google Doc and is not on the website, so `release_ad_audience_sync` stays off (it is OFF by default) and nothing is sent until that publication; on it, the /legal/subprocessors purpose cell for this entity owes the customer-list use as well.",
+    dataReceived:
+      "For each account holder the nightly sync finds eligible — a verified address, not staff, not locked, banned or opted out, and a United States billing or sign-up country — the SHA-256 hash of the address normalized as LinkedIn documents, and nothing else about the person; on later nights, the hashes of accounts no longer eligible, to remove them. No address in the clear, no name, no account id. Also the operator's own access token, which authenticates each call.",
   },
 
   // MARK – Wistia

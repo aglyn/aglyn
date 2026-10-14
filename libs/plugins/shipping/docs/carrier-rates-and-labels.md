@@ -19,7 +19,7 @@ along: in transit, out for delivery, delivered.
 
 ## Set up
 
-Under **Products → Settings**:
+Under **Products → Shipping & delivery**:
 
 - **Shipping labels** — where parcels ship from (one of your locations, or an
   address of its own), the boxes you ship in with their sizes and empty
