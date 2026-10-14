@@ -60,6 +60,7 @@ import {
 } from './ai-eval'
 import { aiEvalMemoryFirestore, aiEvalMemoryInventory } from './ai-eval-memory-firestore'
 import { aiCategoriesPrompt, aiProductCopyPrompt } from './ai-products-generation'
+import { aiLiveBatchWanted } from './ai-dev-env'
 import { aiModelReadsImages } from './ai-runtime'
 
 /**
@@ -1314,6 +1315,14 @@ function messageOfThrown(error: unknown): string {
  *
  * A brief whose GRADE threw is in both halves: recorded, with its grade
  * marked missing, and failed, naming what the grader threw.
+ *
+ * ONE BATCH A ROUND (AGL-3781). In batch mode (`AGLYN_LIVE_AI_BATCH`) the
+ * briefs run side by side: a batch gathers the requests that arrive within
+ * its window, so briefs asked one after another went as one batch each,
+ * minutes apart, while side by side every brief's answer goes in one batch,
+ * each re-ask in the next and every grade in the one after. Each brief still
+ * runs on its own and the report keeps the briefs' order. Outside batch mode
+ * they run one after another, as a live run's rate limits want.
  */
 export async function recordAiEvalLive(
   cases: readonly AiEvalCase[],
@@ -1326,12 +1335,12 @@ export async function recordAiEvalLive(
       `${unreadable.map((evalCase) => evalCase.id).join(', ')} name media, and this run was given no readFixture to read them with`,
     )
   }
-  const report: AiEvalLiveReport = { recorded: [], skipped: [], failed: [] }
-  for (const evalCase of cases) {
+  const runCase = async (evalCase: AiEvalCase): Promise<AiEvalLiveReport> => {
+    const report: AiEvalLiveReport = { recorded: [], skipped: [], failed: [] }
     const recorder = aiEvalRecorderFor(evalCase.kind)
     if (!recorder) {
       report.skipped.push({ caseId: evalCase.id, kind: evalCase.kind, why: aiEvalSkipReason(evalCase.kind) })
-      continue
+      return report
     }
     const failure = (step: AiEvalLiveStep, error: unknown): void => {
       report.failed.push({
@@ -1347,7 +1356,7 @@ export async function recordAiEvalLive(
       answer = await recorder(evalCase, options)
     } catch (error) {
       failure('record', error)
-      continue
+      return report
     }
     // A GRADER THAT THROWS DOES NOT TAKE THE ANSWER WITH IT (AGL-3143). The
     // brief is already paid for by here, and grading is a second request that
@@ -1362,6 +1371,19 @@ export async function recordAiEvalLive(
       report.recorded.push({ caseId: evalCase.id, kind: evalCase.kind, candidate: { ...answer, rubric: null } })
       failure('grade', error)
     }
+    return report
+  }
+  const reports: AiEvalLiveReport[] = []
+  if (aiLiveBatchWanted(options.env)) {
+    reports.push(...(await Promise.all(cases.map(runCase))))
+  } else {
+    for (const evalCase of cases) reports.push(await runCase(evalCase))
+  }
+  const report: AiEvalLiveReport = { recorded: [], skipped: [], failed: [] }
+  for (const one of reports) {
+    report.recorded.push(...one.recorded)
+    report.skipped.push(...one.skipped)
+    report.failed.push(...one.failed)
   }
   return report
 }

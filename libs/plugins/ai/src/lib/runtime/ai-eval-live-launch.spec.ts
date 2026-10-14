@@ -63,6 +63,8 @@ interface SetupReport {
   keyKept: boolean
   /** What the stand-in `npx` was asked to run. */
   args: string[]
+  /** `AGLYN_LIVE_AI_BATCH` as the run was started with it. */
+  batch: string | null
 }
 
 /**
@@ -87,6 +89,7 @@ function sandbox(): { dir: string; bin: string; report: string } {
       `require('node:fs').writeFileSync(${JSON.stringify(report)}, JSON.stringify({`,
       `  keyKept: process.env[${JSON.stringify(KEY_ENV)}] === ${JSON.stringify(MADE_UP_KEY)},`,
       '  args: process.argv.slice(2),',
+      '  batch: process.env.AGLYN_LIVE_AI_BATCH ?? null,',
       '}))',
       '',
     ].join('\n'),
@@ -139,6 +142,13 @@ describe('a live eval run keeps the provider key it was started with (AGL-3038)'
     const { status, report } = run(viaLauncher, { AI_EVAL_LIVE: '1', [KEY_ENV]: MADE_UP_KEY })
     expect(status).toBe(0)
     expect(report?.keyKept).toBe(true)
+  })
+
+  it('the launcher sends the round as Message Batches unless the caller says not to (AGL-3781)', () => {
+    expect(run(viaLauncher, { AI_EVAL_LIVE: '1', [KEY_ENV]: MADE_UP_KEY }).report?.batch).toBe('1')
+    expect(
+      run(viaLauncher, { AI_EVAL_LIVE: '1', [KEY_ENV]: MADE_UP_KEY, AGLYN_LIVE_AI_BATCH: '0' }).report?.batch,
+    ).toBe('0')
   })
 
   it('the launcher names the live spec by path, so the unit spec its name also matches does not run', () => {

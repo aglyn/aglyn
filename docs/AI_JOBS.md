@@ -428,7 +428,10 @@ the cheapest rung that can see its mistake, from a checkout cut from
    at list. `live: 0` means nothing new was asked; it is not a live pass.
 4. **The full live sweep, only before landing**: `AGLYN_AI_REPLAY=refresh`
    asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends each round as
-   one Message Batch at half price.
+   one Message Batch at half price. `npm run eval:ai-live` batches by default
+   (AGL-3781; `AGLYN_LIVE_AI_BATCH=0` for one quick brief), and in batch mode
+   its briefs run side by side, so a round of answers is one batch, its
+   re-asks the next and its grades the one after.
 
 ### The development layers
 
@@ -447,7 +450,9 @@ deployed server — `NODE_ENV=production`, `VERCEL_ENV` of `production` or
   had every changed prompt answered live. A prompt that carries something
   per run — a fresh job id, a random seed — never replays; a spec that wants
   replays builds its ids from its briefs.
-- **Batch** (`ai-live-batch.ts`). `AGLYN_LIVE_AI_BATCH=1` turns every
+- **Batch** (`ai-live-batch.ts`). On by default under `npm run
+  eval:ai-live`, whose briefs then run side by side (AGL-3781); a spec run
+  some other way asks for it. `AGLYN_LIVE_AI_BATCH=1` turns every
   non-streaming request into an entry of a Message Batch: requests that
   arrive within `AGLYN_LIVE_AI_BATCH_WINDOW_MS` (2 s) of each other — a
   `Promise.all` over the briefs — go as one batch, and the re-asks, asked

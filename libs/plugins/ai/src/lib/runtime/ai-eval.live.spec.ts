@@ -25,6 +25,7 @@ import { readFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { readAiEvalCase, type AiEvalCase } from './ai-eval'
 import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
+import { aiLiveBatchWanted } from './ai-dev-env'
 import { aiLiveRunLedger } from './ai-dev-replay'
 import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 
@@ -49,8 +50,9 @@ import { aiActiveProvider, aiProviderReady } from './ai-runtime'
  *      for the prompts you changed — read `run.live` in the table: 0 means
  *      nothing new was asked and the run proves nothing;
  *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
- *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
- *      as one Message Batch at half price (minutes, not seconds).
+ *      asks every request again; the launcher sends the round as Message
+ *      Batches at half price (minutes, not seconds) unless
+ *      `AGLYN_LIVE_AI_BATCH=0` (AGL-3781).
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -72,6 +74,15 @@ const files = (dir: string): string[] =>
   )
 
 const live = aiEvalLiveAllowed(process.env)
+
+/**
+ * How long a batched round may take (AGL-3781): the adapter waits up to an
+ * hour on each batch, and a round is its answers, their re-asks, the grades
+ * and the grades' re-asks, one batch after another. A run that timed out
+ * would write none of the answers it already paid for, so the bound is the
+ * worst case rather than the usual one, which is minutes.
+ */
+const AI_EVAL_LIVE_BATCH_TIMEOUT_MS = 5 * 60 * 60_000
 
 ;(live ? describe : describe.skip)('the live eval run', () => {
   it(
@@ -127,6 +138,6 @@ const live = aiEvalLiveAllowed(process.env)
       expect(report.recorded.length).toBeGreaterThan(0)
       expect(report.failed).toEqual([])
     },
-    30 * 60_000,
+    aiLiveBatchWanted(process.env) ? AI_EVAL_LIVE_BATCH_TIMEOUT_MS : 30 * 60_000,
   )
 })
