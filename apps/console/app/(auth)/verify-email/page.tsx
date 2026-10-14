@@ -74,10 +74,16 @@ function announceVerified(): void {
 /**
  * The one-shot code's lifecycle on this page (AGL-1524).
  *
- * `pending`, `applied` and `failed` all mean "this page is the redemption
+ * `confirm`, `pending`, `applied` and `failed` all mean "this page is the redemption
  * surface for a code right now", and while any holds, NOTHING may navigate
  * away on its own:
  *
+ * - `confirm`: the link was opened and is waiting for a person to press the
+ *   button (AGL-3786). Mail security scanners fetch and render every link in
+ *   inbound mail, often within seconds of delivery. Redeeming the code on page
+ *   load meant a scanner verified an address nobody had read, which let a
+ *   fraudster verify a stolen work address. A rendered page doesn't press
+ *   buttons, so nothing is redeemed until someone does.
  * - `pending`: the apply call is in flight. `window.location.assign` (a hard
  *   navigation) aborts in-flight fetches, so any bounce that fires here can
  *   cancel the redemption before the request even leaves the browser — the
@@ -97,7 +103,7 @@ function announceVerified(): void {
  *   one and moves on only when asked. Navigating away at once, or to a bare
  *   /signin when this browser had no session, read as "it went nowhere".
  */
-type ApplyState = 'pending' | 'applied' | 'failed' | null
+type ApplyState = 'confirm' | 'pending' | 'applied' | 'failed' | null
 
 function VerifyEmail() {
   const firebaseAuth = useAuth()
@@ -247,7 +253,8 @@ function VerifyEmail() {
     }
   }, [firebaseAuth, goToApp])
 
-  // Redeem the code from the emailed link (AGL-1112).
+  // Redeem the code from the emailed link (AGL-1112), once the person has
+  // pressed "Confirm" on it (AGL-3786, see `ApplyState`).
   //
   // Aglyn's own link points here directly instead of at Firebase's
   // `/__/auth/action` handler, so this page has to do what that handler used
@@ -263,7 +270,7 @@ function VerifyEmail() {
   const [applyState, setApplyState] = useState<ApplyState>(() =>
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('oobCode')
-      ? 'pending'
+      ? 'confirm'
       : null,
   )
   const applying = applyState === 'pending'
@@ -329,7 +336,8 @@ function VerifyEmail() {
   // check can still report the session unverified for a beat after the apply,
   // and either exit here would carry the person off a page that exists to let
   // them choose (AGL-3384).
-  const redeemed = applying || applyState === 'applied'
+  const redeemed =
+    applyState === 'confirm' || applying || applyState === 'applied'
   useEffect(() => {
     if (redeemed || authLoading || !signedIn || sessionVerified) return
     if (!sentOnceRef.current) {
@@ -374,6 +382,29 @@ function VerifyEmail() {
       channel?.close()
     }
   }, [applyState, authLoading, signedIn, sessionVerified, checkNow])
+
+  if (applyState === 'confirm') {
+    return (
+      <AuthFormComponent
+        headingTop={'Verify your email'}
+        headingBottom={'Confirm this is your email address'}
+      >
+        <Stack spacing={2} sx={{ mt: 2, alignItems: 'stretch' }}>
+          <Typography variant="body2" sx={{ textAlign: 'center' }}>
+            {`Press the button to finish setting up your ${PLATFORM_BRAND_NAME} account. ` +
+              'If you didn’t sign up, close this page and nothing happens.'}
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => setApplyState('pending')}
+          >
+            {'Confirm my email'}
+          </Button>
+        </Stack>
+      </AuthFormComponent>
+    )
+  }
 
   if (applying) {
     return (
