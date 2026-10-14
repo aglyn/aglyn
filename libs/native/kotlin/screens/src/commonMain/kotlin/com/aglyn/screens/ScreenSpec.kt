@@ -90,6 +90,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val method: ApiMethod = runCatching { ApiMethod.valueOf((json.str("method") ?: "POST").uppercase()) }.getOrDefault(ApiMethod.POST)
   val url: String? = json.str("url")
   val body: JsonElement? = json.obj("body")
+  /**
+   * Request headers, name to template. `{attempt}` is a key that stays the same while the same
+   * action sends the same body (a retry) and changes with the body: `Idempotency-Key` for a
+   * route that provisions something (enterprise billing).
+   */
+  val headers: Map<String, String> = json.entries("headers").associate { (k, v) -> k to ((v as? JsonPrimitive)?.contentOrNull ?: ScreenValues.text(v)) }
   val confirm: String? = json.str("confirm")
   /** When set, the confirmation is asked only while this condition holds. */
   val confirmWhen: String? = json.str("confirmWhen")

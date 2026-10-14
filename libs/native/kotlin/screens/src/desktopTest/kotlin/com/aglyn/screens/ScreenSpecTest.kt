@@ -27,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -163,6 +164,33 @@ class ScreenSpecTest {
       Json.parseToJsonElement("""{"orgId":"o1","email":"a@b.c"}"""),
       Json.parseToJsonElement((sent[0].body as TextContent).text),
     )
+  }
+
+  /** An action's `headers` go out with the request, and `{attempt}` holds one key while the same request is sent again. */
+  @Test
+  fun headersCarryAnAttemptKeyThatFollowsTheRequest() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(503 to "{}", 200 to "{}", 200 to "{}", sent = sent)
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!
+    val first = Json.parseToJsonElement("""{"form":{"amount":"900"}}""")
+    val model = ScreenModel(spec, first, api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Provision","url":"/api/admin/enterprise-billing","body":{"amountMonthlyUsd":"{form.amount}"},
+           "headers":{"Idempotency-Key":"{attempt}","X-Staff":"yes"}}""",
+      ),
+    )!!
+    model.run(action, first)
+    model.run(action, Json.parseToJsonElement("""{"form":{"amount":"1200"}}"""))
+    val keys = sent.map { it.headers["Idempotency-Key"] }
+    assertEquals(3, keys.size)
+    assertNotNull(keys[0])
+    // The 503 was retried with the very same key, because a keyed write is safe to repeat.
+    assertEquals(keys[0], keys[1])
+    assertNotEquals(keys[1], keys[2])
+    assertEquals("yes", sent[0].headers["X-Staff"])
+    model.run(action, first)
+    assertEquals(keys[0], sent.last().headers["Idempotency-Key"])
   }
 
   @Test

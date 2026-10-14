@@ -41,6 +41,36 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [ ] | [ ] |
 | Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [ ] | [ ] |
 
+## Staff gaps (AGL-3667)
+
+The audit of every page under the console `admin/*` route and the plugin staff
+pages that render at `/admin/{id}` (`apps/console/app/(app)/admin`,
+`constants/admin-nav-tabs.ts`, the `staffPages` of the AI and marketplace
+plugins), against `libs/native/screens/staff.screens.json` and the AI plugin's
+`ai.signals`. The Staff row above stays unticked on both platforms until every
+line here is done; each line names the console source it was read from.
+
+| page | what the console has that the screens lack | state |
+| -- | -- | -- |
+| Organization | Enterprise custom billing (`org-detail` page, `/api/admin/enterprise-billing`, needs `Idempotency-Key`) | done (action `headers`) |
+| Organization | Override editor: stored plan, comp plan and caps, quota overrides, feature and release-flag overrides, reason code (`StaffOrgActions`, `/api/admin/org-override`) | open |
+| Organization | Request or cancel erasure (`/api/admin/erasure-request`); pause AI (`/api/admin/lockdown` scope `ai`) | open |
+| Organization | Acquisition card (`StaffAcquisitionCard`, `/api/admin/acquisition`) | open |
+| Organization | Subscription card with cancel (`StaffOrgSubscriptionCard`, `/api/admin/billing/cancel-subscription`) | open |
+| Organization | Edit organization, ownership transfer, owner handoff (`StaffOrgOwnershipTransfer`, `StaffOrgOwnerHandoff`) | open |
+| Organization | Effective entitlements table, media library card (`/api/admin/media-library`, `/asset`), activity card | open |
+| Site | Domain card (`StaffDomainCard`), content card, media library card, usage and settings snapshot | open |
+| Person | System email composer (`/api/admin/users/system-email`), product-email consent, acquisition, erase card | open |
+| Overview | Users total, Top usage, anomalies banner, marketplace overview cards (`/api/marketplace/admin/overview`) | open |
+| Health | Scope drift (`/api/admin/backfill-scope`), pending erasures (`/api/admin/run-erasures`), idempotency claims | open |
+| Maintenance | `/admin/maintenance`: schedule readings and the three guarded jobs (audit archive, plugin artifact reaper, plugin verdict re-verification) | open |
+| System emails | Suppressions (`/api/admin/emails/suppressions`), history import, message viewer, test send | open |
+| Abuse reports | Counter-notices (DMCA put-back) queue, risk-notice actions, session log | open |
+| Lockdown | Platform and feature locks, "what would this caller be told", session log | open |
+| Plugin reviews | `/admin/plugin-reviews` queue and a submission, plugin signing (`/api/marketplace/admin/{reviews,trust}`) | open |
+| Marketplace reports | `/admin/marketplace-reports` (`/api/marketplace/admin/reports`) | open |
+| Revenue, Margin, Sales tax, Audit log, Support, Coupons, Flags, Settings | read against the console page by page in the PRs that follow; findings are added to this table | open |
+
 Texts (`sms`): the plugin is infrastructure with no console page of its own.
 The console's texts surfaces are the Commerce settings card's "Also send as
 texts" switch (native: `sms.texts`, Customer texts) and the order dialog's

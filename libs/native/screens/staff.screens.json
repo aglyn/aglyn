@@ -390,6 +390,25 @@
           ]
         },
         {
+          "type": "fields",
+          "title": "Enterprise custom billing",
+          "when": "data.detail.org.subscription.customMonthlyUsd",
+          "rows": [
+            {
+              "label": "Custom price",
+              "value": "{data.detail.org.subscription.customMonthlyUsd:dollars} per month"
+            },
+            {
+              "label": "Billing interval",
+              "value": "{data.detail.org.subscription.interval|'month':title}"
+            },
+            {
+              "label": "Plan",
+              "value": "{data.detail.org.plan|'Free':title}"
+            }
+          ]
+        },
+        {
           "type": "list",
           "title": "Sites",
           "items": "data.hosts.hosts",
@@ -823,6 +842,168 @@
                 "action": "withdraw"
               },
               "success": "Withdrawn",
+              "reload": true
+            },
+            {
+              "id": "enterpriseInvoice",
+              "label": "Provision a custom-price subscription",
+              "icon": "briefcase|business",
+              "url": "/api/admin/enterprise-billing",
+              "prompt": [
+                {
+                  "key": "amount",
+                  "label": "Custom price (USD per month)",
+                  "kind": "number",
+                  "required": true,
+                  "help": "What this workspace pays each month. The route refuses a price under the full-use floor (1.30 times cost, net of Stripe fees) and says by how much."
+                },
+                {
+                  "key": "interval",
+                  "label": "Billed",
+                  "kind": "select",
+                  "initial": "month",
+                  "options": [
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    },
+                    {
+                      "value": "year",
+                      "label": "Annually (x12)"
+                    }
+                  ]
+                },
+                {
+                  "key": "plan",
+                  "label": "Base plan",
+                  "kind": "select",
+                  "initial": "enterprise",
+                  "options": [
+                    {
+                      "value": "enterprise",
+                      "label": "Enterprise"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    }
+                  ]
+                }
+              ],
+              "confirm": "Invoice this workspace now on net-30 terms, with no card? A second tap of the same quote does not bill twice.",
+              "headers": {
+                "Idempotency-Key": "{attempt}"
+              },
+              "body": {
+                "orgId": "{params.orgId}",
+                "amountMonthlyUsd": "{form.amount}",
+                "interval": "{form.interval}",
+                "plan": "{form.plan}",
+                "mode": "invoice"
+              },
+              "open": "hostedInvoiceUrl",
+              "success": "Provisioned; the first invoice opens",
+              "reload": true
+            },
+            {
+              "id": "enterpriseCheckout",
+              "label": "Create a Checkout link for a custom price",
+              "icon": "link|link",
+              "url": "/api/admin/enterprise-billing",
+              "prompt": [
+                {
+                  "key": "amount",
+                  "label": "Custom price (USD per month)",
+                  "kind": "number",
+                  "required": true,
+                  "help": "What this workspace pays each month. The route refuses a price under the full-use floor (1.30 times cost, net of Stripe fees) and says by how much."
+                },
+                {
+                  "key": "interval",
+                  "label": "Billed",
+                  "kind": "select",
+                  "initial": "month",
+                  "options": [
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    },
+                    {
+                      "value": "year",
+                      "label": "Annually (x12)"
+                    }
+                  ]
+                },
+                {
+                  "key": "plan",
+                  "label": "Base plan",
+                  "kind": "select",
+                  "initial": "enterprise",
+                  "options": [
+                    {
+                      "value": "enterprise",
+                      "label": "Enterprise"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    }
+                  ]
+                }
+              ],
+              "confirm": "Create a Checkout link at this price to send to the customer?",
+              "headers": {
+                "Idempotency-Key": "{attempt}"
+              },
+              "body": {
+                "orgId": "{params.orgId}",
+                "amountMonthlyUsd": "{form.amount}",
+                "interval": "{form.interval}",
+                "plan": "{form.plan}",
+                "mode": "checkout"
+              },
+              "open": "checkoutUrl",
+              "success": "Checkout link ready",
               "reload": true
             }
           ]

@@ -22,6 +22,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * Who is signed in and where, beyond what a plugin context carries. The
@@ -117,6 +119,8 @@ class ScreenModel(
   val cursors = mutableStateMapOf<String, String>()
   val loadingMore = mutableStateMapOf<String, Boolean>()
   val search = mutableStateMapOf<String, String>()
+  /** The `{attempt}` key of each action's last request, by action, path and body: a retry reuses it. */
+  private val attempts = mutableMapOf<String, String>()
 
   val data: JsonElement get() = context.obj("data") ?: JsonObject(emptyMap())
 
@@ -239,7 +243,7 @@ class ScreenModel(
     val path = ScreenValues.renderUrl(template, scope)
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {
-      val response = client.request(path, action.method, body)
+      val response = client.request(path, action.method, body, headers = headers(action, path, body, scope))
       ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
     } catch (error: CancellationException) {
       throw error
@@ -252,6 +256,16 @@ class ScreenModel(
     } catch (error: Throwable) {
       ActionOutcome.Failed(error.message ?: "That did not work. Try again.")
     }
+  }
+
+  /** The action's request headers, rendered; `{attempt}` is the key held for this exact request. */
+  @OptIn(ExperimentalUuidApi::class)
+  internal fun headers(action: ActionSpec, path: String, body: JsonElement?, scope: JsonElement): Map<String, String> {
+    if (action.headers.isEmpty()) return emptyMap()
+    val signature = "${action.id}|$path|${body ?: ""}"
+    val key = attempts.getOrPut(signature) { Uuid.random().toString() }
+    val withAttempt = ScreenContext.with(scope, "attempt", JsonPrimitive(key))
+    return action.headers.mapValues { (_, template) -> ScreenValues.render(template, withAttempt) }
   }
 
   companion object {
