@@ -15,6 +15,9 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **native:** rewards sentence, home glance, batch label total, row filters ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** the shipping page says what its zones and rates cover ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** turn a product's related products on and off ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 - **native:** site setup hosts the business profile and SEO zones, filled by the AI plugin ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **native:** edit an image: rotate, flip, crop and shrink, then replace it or save a copy ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **native:** uploaded filters and the cover film's poster ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
@@ -59,6 +62,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **e2e:** the signup canary presses Confirm when shown, so it works on either verify page ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
 - **marketplace:** a plugin's page uninstall runs the impact check ([AGL-3790](https://linear.app/aglyn/issue/AGL-3790))
 - **auth:** verify-email link waits for a press before redeeming ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
 - **billing:** every staff refund carries a Stripe reason derived from ours ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
@@ -82,6 +86,7 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **native:** one weekly hours model and one picker for every screen ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 - **tenant:** name the shared consent reader for what it reads, not a plugin
 
 ### Documentation
