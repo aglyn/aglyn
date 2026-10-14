@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **ai:** templates and theme ask medium effort, text low, from the golden A/B ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **ai:** a paid site plan asks medium effort, layout-language pages and frames low ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 
 ### Fixed
