@@ -11,6 +11,7 @@ import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -97,5 +98,54 @@ class DataTest {
     assertEquals("Rye", record.title(model))
     assertEquals("Price: 7.5 · Category: Bread", record.supporting(model))
     assertEquals("x1 (not found)", recordValueText(model.fields!!["supplier"]!!, "x1", emptyList()))
+  }
+
+  // The console's own specs for the Image and Page field types (dataset-image-field.spec.ts, dataset-page-field.spec.ts).
+  @Test
+  fun anImageFieldTakesWhatTheLibraryMints() {
+    for (value in listOf(
+      "media:host-1/m-1", "media:org:fiL5LrShn9/abc123", "media:org:fiL5LrShn9:host-1/abc123",
+      "media:org:fiL5LrShn9/abc123@f00d", "media:host-1/m-1@f00d", "/api/media/cdn/org:fiL5LrShn9/abc123",
+      "https://images.example.com/a.jpg",
+    )) assertTrue(isDatasetImageValue(value), value)
+    for (value in listOf(
+      "media:", "media:org:/abc", "media:org:a:b:c/abc", "media:host-1/", "media:host 1/m-1", "media:host-1/m-1/extra",
+      "http://example.com/a.jpg", "//evil.example/a.jpg", "javascript:alert(1)", "a bowl on a shelf", "",
+    )) assertFalse(isDatasetImageValue(value), value)
+  }
+
+  @Test
+  fun aPhotoPreviewIsQualifiedForTheSiteBeingEdited() {
+    assertEquals("https://console.test/api/media/cdn/org:o1:h1/m1?w=320", datasetImagePreviewUrl("media:org:o1/m1", "https://console.test/", "h1"))
+    assertEquals("https://console.test/api/media/cdn/h1/m1?w=320", datasetImagePreviewUrl("media:h1/m1", "https://console.test", "h2"))
+    assertEquals("https://console.test/api/media/cdn/h1/m1", datasetImagePreviewUrl("/api/media/cdn/h1/m1", "https://console.test", null))
+    assertNull(datasetImagePreviewUrl("", "https://console.test", null))
+  }
+
+  @Test
+  fun aPageFieldHoldsAScreenReference() {
+    assertEquals("screen:abc_12", datasetPageValue("abc_12"))
+    assertEquals("abc_12", datasetPageScreenId("screen:abc_12"))
+    for (value in listOf("", "abc", "/pricing", "screen:", "screen:a/b", "screen:a b", "collection:c1", "https://x.test")) assertNull(datasetPageScreenId(value), value)
+  }
+
+  @Test
+  fun aPageAddressIsALowercaseSegment() {
+    assertTrue(isRecordAddress("kitchen-remodeling"))
+    for (value in listOf("", "Kitchen", "a--b", "-a", "a-", "a b", "a".repeat(65))) assertFalse(isRecordAddress(value), value)
+  }
+
+  @Test
+  fun theTypeMenuMapsNamedTypesOntoTheirStorageType() {
+    var definition = DatasetFieldDefinition(name = "Photo", type = DatasetFieldType.TEXT)
+    assertEquals("text", datasetTypeSelection(definition))
+    definition = applyDatasetTypeSelection("custom:rating", definition)
+    assertEquals(DatasetFieldType.INT32, definition.type)
+    assertEquals("rating", definition.customType)
+    assertEquals("custom:rating", datasetTypeSelection(definition))
+    assertEquals("rating", applyDatasetTypeSelection("custom:nope", definition).customType)
+    definition = applyDatasetTypeSelection("bool", definition)
+    assertEquals(DatasetFieldType.BOOL, definition.type)
+    assertNull(definition.customType)
   }
 }

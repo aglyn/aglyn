@@ -148,6 +148,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
    */
   val headers: Map<String, String> = json.entries("headers").associate { (k, v) -> k to ((v as? JsonPrimitive)?.contentOrNull ?: ScreenValues.text(v)) }
   val confirm: String? = json.str("confirm")
+  /** A confirmation built from segments, `[{ "when": …, "text": … }]`, joined in order, so one sentence can change with the route's answer. */
+  val confirmParts: List<JsonElement> = (json.obj("confirm") as? JsonArray).orEmpty()
   /** When set, the confirmation is asked only while this condition holds. */
   val confirmWhen: String? = json.str("confirmWhen")
   val destructive: Boolean = json.isTrue("destructive")
@@ -171,8 +173,28 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
   /** A follow-up the action makes once it succeeds (best effort, like the console's). */
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
-  /** `{ when, title, text }`: when the route's answer meets `when`, `text` (a template over `response`) is shown in place of the success message. */
+  /**
+   * `{ when, title, text }` (or a list of them, the first that matches wins): when the route's answer
+   * meets `when`, `text` (a template over `response`) is shown in place of the success message.
+   */
   val instead: JsonElement? = json.obj("instead")
+  /** A route call made first, whose answer is `preview` in the confirmation (what an add-on change would charge). */
+  val check: ActionSpec? = json.obj("check")?.let { parse(it) }
+
+  /** Whether the action asks the person to confirm before it runs. */
+  val asksConfirmation: Boolean get() = confirm != null || confirmParts.isNotEmpty()
+
+  /** The confirmation as the person reads it, over [scope]. */
+  fun confirmText(scope: JsonElement): String? =
+    if (confirmParts.isNotEmpty()) {
+      confirmParts.filter { ScreenValues.condition(it.str("when"), scope) }.joinToString("") { ScreenValues.render(it.str("text").orEmpty(), scope) }
+    } else {
+      confirm?.let { ScreenValues.render(it, scope) }
+    }
+
+  /** The `instead` entry the route's answer meets, if any. */
+  fun insteadEntry(scope: JsonElement): JsonElement? =
+    ((instead as? JsonArray) ?: instead?.let { listOf(it) }.orEmpty()).firstOrNull { ScreenValues.condition(it.str("when"), scope) }
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
   /** Lines the result is reported in, after `success`: `{ when, each, text }`, one per line. */

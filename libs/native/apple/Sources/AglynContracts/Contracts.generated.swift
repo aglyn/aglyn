@@ -3397,6 +3397,22 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ReturnReason: String, Codable, CaseIterable, Hashable, Sendable {
+  case damaged = "damaged"
+  case noLongerNeeded = "no_longer_needed"
+  case notAsDescribed = "not_as_described"
+  case other = "other"
+  case sizeOrFit = "size_or_fit"
+  case wrongItem = "wrong_item"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct ScreenTrafficRow: Codable, Hashable, Sendable {
   public var devices: [String: Double]
   public var referrers: [String: Double]
@@ -3691,6 +3707,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let reminderWindowStartHours: Int
   public let replyBodyMax: Int
   public let replySubjectMax: Int
+  public let returnReasonLabels: [String: String]
+  public let returnReasons: [ReturnReason]
   public let scopedSearchJoin: String
   public let searchEngineVerificationLabels: [String: String]
   public let searchEngineVerificationMetaNames: [String: String]
@@ -3888,6 +3906,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
+    case returnReasonLabels = "RETURN_REASON_LABELS"
+    case returnReasons = "RETURN_REASONS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
     case searchEngineVerificationLabels = "SEARCH_ENGINE_VERIFICATION_LABELS"
     case searchEngineVerificationMetaNames = "SEARCH_ENGINE_VERIFICATION_META_NAMES"
