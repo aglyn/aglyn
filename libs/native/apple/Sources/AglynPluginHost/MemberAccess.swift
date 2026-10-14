@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import Foundation
 
@@ -12,9 +13,6 @@ import Foundation
 
 /// Roles that may change org data (`canWriteOrgData()` in the rules).
 public let orgWriterRoles: Set<String> = ["owner", "admin", "editor"]
-
-/// The most sites one stored scope may name (`MAX_SCOPE_HOSTS`).
-public let maxScopeHosts = 30
 
 private func hostIDs(_ visibleTo: [String]?) -> [String] {
   (visibleTo ?? []).filter { $0.hasPrefix("host:") && $0.count > 5 }.map { String($0.dropFirst(5)) }
