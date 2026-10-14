@@ -104,7 +104,6 @@ export function ZapierCard(props: ZapierCardProps) {
 
   return (
     <CardDisplay
-      variant="outlined"
       header="Zapier"
       help={pluginDocsHelp('zapier', {
         anchor: '#see-and-disconnect-your-zaps',

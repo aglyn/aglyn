@@ -4,10 +4,20 @@ Twenty-five Vercel environment records hold **one value across production and a
 non-production environment**. This is the runbook for splitting them, and for
 rotating the ones whose production value has already left the building.
 
+> **Isolation is not enforced today — owner decision 2026-10-13 (AGL-2401).**
+> Production and development/preview share secrets and live data on purpose
+> for now. The checker runs **report-only**: every probe still runs and every
+> finding below is still printed (under `REPORT ONLY — not enforced`, and in
+> `--json` with `"enforced": false`), but findings exit 0. A run that could
+> not check at all still exits 2. To enforce again, see
+> [Turning enforcement back on](#turning-enforcement-back-on). Everything else
+> on this page is the runbook for that day.
+
 Nobody has to trust this document's inventory. Regenerate it:
 
 ```bash
-npm run check:env-isolation          # exit 0 clean, 1 findings, 2 cannot check
+npm run check:env-isolation          # report-only: exit 0 with findings listed, 2 cannot check
+                                     # enforced:    exit 0 clean, 1 findings, 2 cannot check
 npm run check:env-isolation -- --json
 ```
 
@@ -387,7 +397,43 @@ against the previous one. Two things to know reading it:
 - **Do not** add `continue-on-error` to `.github/workflows/env-isolation.yml`,
   and do not move a finding into the checker's `ACCEPTED` table to quiet it. An
   `ACCEPTED` entry requires a name and a reason and is still printed on every
-  run — that is the point. A guard that cannot be red is not a guard.
+  run — that is the point. Whether findings fail the run is decided in one
+  place, the checker's `ENV_ISOLATION_ENFORCED` switch (see below), and
+  report-only mode still prints every finding.
+
+## Isolation is not enforced (owner decision 2026-10-13)
+
+Environments are not isolated for now: production and development/preview
+share secrets and live data on purpose (AGL-2401). `verify-env-isolation.mjs`
+encodes that as one named constant, `ENV_ISOLATION_ENFORCED = false`.
+
+With it off (today):
+
+- every probe still runs — both scopes, both projects, both negative
+  controls, the sharing and the mode questions;
+- every finding is still printed, under a `REPORT ONLY — not enforced`
+  heading and a closing tally, and carried in `--json` (`"enforced": false`,
+  `"isolated": false`, `"ok": true`). The scheduled
+  `.github/workflows/env-isolation.yml` run also raises the count as a run
+  annotation, so it shows on the run page without opening the log;
+- findings exit 0. A check that could not run — no token, an HTTP or auth
+  error, an empty shared scope, a project with no per-environment split —
+  still exits 2. A red scheduled run means the probe is broken, not that a
+  secret is shared.
+
+### Turning enforcement back on
+
+When isolation becomes a goal:
+
+1. Set `ENV_ISOLATION_ENFORCED = true` in
+   `tools/deploy/verify-env-isolation.mjs`. That restores the pre-decision
+   behavior exactly — any sharing or mode finding exits 1 — and the
+   live-Stripe exemption below still applies until it is emptied separately.
+2. `npm run test:env-isolation` — the self-test drives both values of the
+   switch, so it passes either way; it is the proof the enforced path still
+   goes red.
+3. Work the inventory above, block by block, until the run is green again.
+   Then make the workflow's schedule daily, as its comment says.
 
 ## Live Stripe outside production (owner decision 2026-10-13)
 
@@ -405,9 +451,10 @@ use the LIVE Stripe keys, so pre-release builds exercise real production data.
 It covers both verdicts — the shared Stripe records (sharing) and the
 `pk_live_`/UNKNOWN publishable key (mode) — and every exempted record is still
 printed on every run under a `NOTE — live Stripe outside production` section
-and in `--json` as `exempted`. Every other finding on this page still fails
-the run. To enforce test-mode keys again, empty the constant's `keys` and
-follow step 5 above; `npm run test:env-isolation` covers both directions.
+and in `--json` as `exempted`. Every other finding on this page fails the
+run whenever `ENV_ISOLATION_ENFORCED` is on (it is off today — see above). To
+enforce test-mode keys again, empty the constant's `keys` and follow step 5
+above; `npm run test:env-isolation` covers both directions.
 
 ## Related
 
