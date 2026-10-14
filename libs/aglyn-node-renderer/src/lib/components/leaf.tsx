@@ -326,6 +326,7 @@ export const Leaf = observer(
     const holdServerHtml = useHeldServerHtml(
       deferHydration && !offForSite && mayHoldServerHtml(node),
       node?.$id ?? '',
+      activeScheme,
     )
     // Each realm element hydrates in a boundary of its own (AGL-3390), so one
     // waiting for its bundle holds only itself. Rendered on the server too:
