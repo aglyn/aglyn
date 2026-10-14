@@ -27,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -165,6 +166,101 @@ class ScreenSpecTest {
     )
   }
 
+  /** An action's `headers` go out with the request, and `{attempt}` holds one key while the same request is sent again. */
+  @Test
+  fun headersCarryAnAttemptKeyThatFollowsTheRequest() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(503 to "{}", 200 to "{}", 200 to "{}", sent = sent)
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!
+    val first = Json.parseToJsonElement("""{"form":{"amount":"900"}}""")
+    val model = ScreenModel(spec, first, api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Provision","url":"/api/admin/enterprise-billing","body":{"amountMonthlyUsd":"{form.amount}"},
+           "headers":{"Idempotency-Key":"{attempt}","X-Staff":"yes"}}""",
+      ),
+    )!!
+    model.run(action, first)
+    model.run(action, Json.parseToJsonElement("""{"form":{"amount":"1200"}}"""))
+    val keys = sent.map { it.headers["Idempotency-Key"] }
+    assertEquals(3, keys.size)
+    assertNotNull(keys[0])
+    // The 503 was retried with the very same key, because a keyed write is safe to repeat.
+    assertEquals(keys[0], keys[1])
+    assertNotEquals(keys[1], keys[2])
+    assertEquals("yes", sent[0].headers["X-Staff"])
+    model.run(action, first)
+    assertEquals(keys[0], sent.last().headers["Idempotency-Key"])
+  }
+
+  @Test
+  fun theTokenSaysHowTheAccountSignsIn() {
+    val enc = Base64.getUrlEncoder().withoutPadding()
+    fun token(claims: String) = TokenClaims.fromIdToken("h.${enc.encodeToString(claims.toByteArray())}.s")
+    val both = token("""{"email_verified":true,"firebase":{"identities":{"google.com":["1"],"email":["a@b.c"]},"sign_in_provider":"password"}}""")
+    assertEquals(listOf("password", "google.com"), both.signInMethods)
+    assertTrue(both.emailVerified)
+    assertEquals(emptyList(), token("{}").signInMethods)
+    assertFalse(token("{}").emailVerified)
+    val context = ScreenSession(email = "a@b.c", claims = both).context(null, emptyMap())
+    assertEquals("password, google.com", ScreenValues.render("{user.providers}", context))
+    assertEquals("Yes", ScreenValues.render("{user.emailVerified:yesno}", context))
+  }
+
+  @Test
+  fun anActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Report","url":"/api/issue-reports","success":"Filed",
+           "instead":{"when":"response.deflected","title":"Already answered","text":"{response.sections.0.title}: {response.sections.0.text}"}}""",
+      ),
+    )!!
+    val instead = assertNotNull(action.instead)
+    val answered = Json.parseToJsonElement("""{"response":{"deflected":true,"sections":[{"title":"Domains","text":"Point a CNAME."}]}}""")
+    assertTrue(ScreenValues.condition(instead.str("when"), answered))
+    assertEquals("Domains: Point a CNAME.", ScreenValues.render(instead.str("text")!!, answered))
+    assertFalse(ScreenValues.condition(instead.str("when"), Json.parseToJsonElement("""{"response":{"ok":true}}""")))
+  }
+
+  @Test
+  fun theReportFormShowsOnlyTheFieldsOfItsKind() {
+    val file = File(screensDir, "account.screens.json")
+    val support = ScreenSpec.parseFile(file.readText()).first { it.id == "core.support" }
+    val block = support.blocks.first { it.title == "Report an issue" }
+    val action = ActionSpec.parse(block.raw.arr("items").first())!!
+    fun asked(kind: String): List<String> {
+      val form = Json.parseToJsonElement("""{"form":{"kind":"$kind"}}""")
+      return action.prompt.filter { ScreenValues.condition(it.whenCondition, form) }.map { it.key }
+    }
+    assertEquals(listOf("kind", "summary", "steps", "expected", "actual", "frequency", "contactConsent"), asked("bug"))
+    assertEquals(listOf("kind", "summary", "problem", "workaround", "proposal", "contactConsent"), asked("idea"))
+    assertEquals(listOf("kind", "summary", "question", "tried", "skipDeflection", "contactConsent"), asked("question"))
+  }
+
+  @Test
+  fun theAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() {
+    val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }
+    val list = spec.blocks.first { it.type == "list" }
+    val set = ActionSpec.parse(list.raw.arr("actions").first())!!
+    assertNotNull(set.check)
+    assertTrue(set.asksConfirmation)
+    fun scope(form: String, extra: String) = Json.parseToJsonElement(
+      """{"data":{"addons":{"interval":"month","catalog":{"hosts":{"unitUsd":5}}}},"item":{"kind":"hosts","label":"Extra sites"},"form":$form,$extra}""",
+    )
+    assertEquals(
+      "Extra sites: 3? $12.50 will be charged to your card now, prorated for the rest of this period, including tax. Ongoing: 3 at $5.00/mo each.",
+      set.confirmText(scope("""{"quantity":3}""", """"preview":{"chargedNowCents":1250,"currency":"usd","taxCents":100,"taxComplete":true}""")),
+    )
+    assertEquals(
+      "Extra sites: 0? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.",
+      set.confirmText(scope("""{"quantity":0}""", """"preview":{"defersToPeriodEnd":true,"effectiveAt":"2026-11-01T00:00:00Z","currency":"usd"}""")),
+    )
+    val bank = scope("{}", """"response":{"paymentPending":true,"requiresAction":true,"hostedInvoiceUrl":"https://invoice.test/i"}""")
+    assertEquals("hostedInvoiceUrl", set.insteadEntry(bank).str("open"))
+    assertEquals("Card declined", set.insteadEntry(scope("{}", """"response":{"paymentPending":true,"declined":true}""")).str("title"))
+    assertNull(set.insteadEntry(scope("{}", """"response":{"ok":true,"quantities":{"hosts":3}}""")))
+  }
+
   @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
@@ -173,6 +269,41 @@ class ScreenSpecTest {
     val outcome = model.run(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Close","url":"/api/account/close"}"""))!!, JsonObject(emptyMap()))
     assertIs<ActionOutcome.NeedsReauth>(outcome)
     assertEquals("Confirm it is you", outcome.message)
+  }
+
+  @Test
+  fun accountActionsChangeThePasswordAndNameThroughTheSession() = runTest {
+    val passwords = mutableListOf<Pair<String, String>>()
+    val names = mutableListOf<String>()
+    val account = AccountOperations(
+      changePassword = { current, new -> passwords += current to new },
+      updateDisplayName = { names += it },
+    )
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!
+    val model = ScreenModel(spec, JsonObject(emptyMap()), client(sent = mutableListOf()), account = account)
+    val change = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Change","account":"changePassword","success":"Done",
+           "body":{"current":"{form.current}","new":"{form.password}","confirm":"{form.confirm}"}}""",
+      ),
+    )!!
+    fun form(password: String, confirm: String) = Json.parseToJsonElement("""{"form":{"current":"old","password":"$password","confirm":"$confirm"}}""")
+    assertEquals(ActionOutcome.Failed("Use at least 12 characters."), model.run(change, form("short", "short")))
+    assertEquals(ActionOutcome.Failed("The two new passwords do not match."), model.run(change, form("a-long-enough-one", "different-long-one")))
+    assertTrue(passwords.isEmpty())
+    assertEquals(ActionOutcome.Done("Done", null), model.run(change, form("a-long-enough-one", "a-long-enough-one")))
+    assertEquals(listOf("old" to "a-long-enough-one"), passwords)
+    val name = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Name","account":"updateDisplayName","body":{"name":"{form.first} {form.last}"}}"""))!!
+    model.run(name, Json.parseToJsonElement("""{"form":{"first":"Ada","last":"Lovelace"}}"""))
+    assertEquals(listOf("Ada Lovelace"), names)
+  }
+
+  @Test
+  fun writeTurnsSentinelObjectsIntoFirestoreSentinels() {
+    val plain = ScreenModel.plain(Json.parseToJsonElement("""{"a":{"${'$'}serverTimestamp":true},"b":{"${'$'}delete":true},"c":{"d":"x"}}""")) as Map<*, *>
+    assertEquals(com.aglyn.core.ServerTimestamp, plain["a"])
+    assertEquals(com.aglyn.core.FirestoreDelete, plain["b"])
+    assertEquals("x", (plain["c"] as Map<*, *>)["d"])
   }
 
   @Test

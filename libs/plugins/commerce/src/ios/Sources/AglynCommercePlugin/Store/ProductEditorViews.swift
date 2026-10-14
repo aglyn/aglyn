@@ -48,13 +48,14 @@ struct ProductEditorSheet: View {
           }
         }
       }
+      optionsSection
       ForEach($model.draft.variants) { $variant in
         Section(model.draft.variants.count > 1 ? variant.label : "Price and codes") {
           amountField("Price", text: $variant.price).accessibilityIdentifier("variant-price-\(variant.id)")
           amountField("Compare-at price", text: $variant.compareAt)
           TextField("SKU", text: $variant.sku).autocorrectionDisabled()
           TextField("Barcode", text: $variant.barcode).autocorrectionDisabled()
-          if model.draft.create {
+          if model.draft.create || variant.fresh {
             TextField("Starting stock (leave empty to not track)", text: $variant.stock)
               #if os(iOS)
                 .keyboardType(.numberPad)
@@ -62,6 +63,48 @@ struct ProductEditorSheet: View {
           }
         }
       }
+    }
+  }
+
+  /// Up to three options, each a name and its comma-separated values; the variants below are their combinations.
+  @ViewBuilder private var optionsSection: some View {
+    Section {
+      ForEach(Array(model.draft.options.enumerated()), id: \.element.id) { index, option in
+        VStack(alignment: .leading, spacing: 8) {
+          HStack {
+            TextField(
+              "Option name (Size)",
+              text: Binding(get: { option.name }, set: { model.draft = model.draft.withOptionName(index, $0) })
+            )
+            .accessibilityIdentifier("option-name-\(index)")
+            Button(role: .destructive) {
+              model.draft = model.draft.withOptionRemoved(index)
+            } label: {
+              Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove option \(option.name.isEmpty ? String(index + 1) : option.name)")
+            .accessibilityIdentifier("option-remove-\(index)")
+          }
+          TextField(
+            "Values (Small, Medium, Large)",
+            text: Binding(get: { option.valuesText }, set: { model.draft = model.draft.withOptionValues(index, $0) })
+          )
+          .accessibilityIdentifier("option-values-\(index)")
+        }
+      }
+      if model.draft.options.count < commerceMaxOptions {
+        Button {
+          model.draft = model.draft.withOptionAdded()
+        } label: {
+          Label(model.draft.options.isEmpty ? "Add options like size or color" : "Add another option", systemImage: "plus")
+        }
+        .accessibilityIdentifier("option-add")
+      }
+    } header: {
+      Text("Options")
+    } footer: {
+      if model.draft.variants.count > 1 { Text("\(model.draft.variants.count) variants. Separate values with commas.") }
     }
   }
 

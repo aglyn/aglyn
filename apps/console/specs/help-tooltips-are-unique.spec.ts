@@ -65,7 +65,8 @@ const SAME_SURFACE: Record<string, string> = {
  * it leaves with the fix that makes it stale.
  */
 const HANDED_OFF: Record<string, string> = {
-  'plugin:shipping#carrier-accounts':
+  // Moved with its section to the unlisted carrier guide (AGL-3777).
+  'plugin:carrierAccounts#carrier-accounts':
     'Your shipping accounts renders only on a deployment that offers Easyship, Sendcloud or ShipperHQ, so its docs wait for that release; the commerce v3 lane holds the draft (from-tooltip-session.md).',
 }
 

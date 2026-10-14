@@ -472,7 +472,7 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.settings"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
@@ -1069,6 +1069,7 @@
       },
       "mobile": {
         "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app: browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
+        "ios": { "module": "AglynMarketplacePlugin", "register": "registerMarketplaceNative" },
         "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
         "contributes": {
           "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"],
@@ -1622,6 +1623,7 @@
       },
       "mobile": {
         "$comment": "AGL-3668: the workspace's datasets in the Aglyn app: the list a member can see, create (and a join collection), each dataset's records count, fields, sharing and references, its records with the quick search and filters as one query, record create, edit and delete (reference integrity through /api/orgs/datasets), export, the schema editor (names, sharing, fields, reorder) and delete; list and detail side by side on tablets and desktop.",
+        "ios": { "module": "AglynDataPlugin", "register": "registerDataNative" },
         "android": { "package": "com.aglyn.plugins.data", "register": "registerDataNative" },
         "contributes": {
           "screens": ["data.datasets", "data.records", "data.schema"],
@@ -2101,7 +2103,8 @@
         "consoleServerDeclarations": "registerLogicConsoleServerDeclarations"
       },
       "mobile": {
-        "$comment": "AGL-3668: a site's Functions & Variables in the Aglyn app: variables (type, value, the workflow that fills one) and no-code functions (parameters with what a visitor sees, variables, if/then/otherwise operations, the return value), where each is used (the console's scan, a page's Besigner from it), create through the resources route, edit and delete with the site's cache drop.",
+        "$comment": "AGL-3668: a site's Functions & Variables in the Aglyn app: variables (type, value, the workflow that fills one; a dictionary or list as rows) and no-code functions (parameters with what a visitor sees and their choices as rows, variables, if/then/otherwise operations with an ƒx formula builder, the return value, a test run), where each is used (the console's scan, a page's Besigner from it), the reference health audit, create through the resources route, edit and delete with the site's cache drop.",
+        "ios": { "module": "AglynLogicPlugin", "register": "registerLogicNative" },
         "android": { "package": "com.aglyn.plugins.logic", "register": "registerLogicNative" },
         "contributes": {
           "screens": ["logic.function", "logic.page"],
@@ -2753,7 +2756,9 @@
             "ai.member",
             "ai.staffOrg",
             "ai.staffUser",
-            "ai.signals"
+            "ai.signals",
+            "ai.hostMember",
+            "ai.allotment"
           ],
           "quickActions": [
             "ai.open"
@@ -2992,6 +2997,22 @@
     },
     {
       "id": "post-purchase",
+      "mobile": {
+        "$comment": "AGL-3652: post-purchase services natively: AfterShip tracking, Route package protection and Narvar, with their keys, switches and disconnect, from the spec in src/android/screens/post-purchase.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynPostPurchasePlugin",
+          "register": "registerPostPurchaseNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.postpurchase",
+          "register": "registerPostPurchaseNative"
+        },
+        "contributes": {
+          "screens": [
+            "post-purchase.service"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-post-purchase",
       "register": {
         "console": "registerPostPurchaseConsole",
@@ -3091,6 +3112,22 @@
     },
     {
       "id": "tax-engines",
+      "mobile": {
+        "$comment": "AGL-3652: the tax service card natively: connect a merchant's own Avalara AvaTax or TaxJar account, test or disconnect it, the ship-from address, the default tax code, whether paid orders are recorded, and exempt customers, from the spec in src/android/screens/tax-engines.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynTaxEnginesPlugin",
+          "register": "registerTaxEnginesNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.taxengines",
+          "register": "registerTaxEnginesNative"
+        },
+        "contributes": {
+          "screens": [
+            "tax-engines.service"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-tax-engines",
       "register": {
         "console": "registerTaxEnginesConsole",
@@ -3270,6 +3307,23 @@
     },
     {
       "id": "fulfillment-networks",
+      "mobile": {
+        "$comment": "AGL-3652: fulfillment networks natively: ShipBob and Amazon Multi-Channel Fulfillment by signing in (the consent page opens in the secure browser), ShipMonk with its API key; each network's status, settings, stock counts and activity, from the spec in src/android/screens/fulfillment-networks.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynFulfillmentNetworksPlugin",
+          "register": "registerFulfillmentNetworksNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.fulfillmentnetworks",
+          "register": "registerFulfillmentNetworksNative"
+        },
+        "contributes": {
+          "screens": [
+            "fulfillment-networks.service",
+            "fulfillment-networks.network"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-fulfillment-networks",
       "register": {
         "console": "registerFulfillmentNetworksConsole",

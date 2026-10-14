@@ -5,12 +5,14 @@ import AglynUI
 import SwiftUI
 
 /// Taking the money for an opened sale: the total, a tip, a split, then a
-/// card reader, cash or a gift card; then the receipt.
+/// card reader, cash, a gift card, store credit, a room charge or the QR
+/// payment page; then the receipt.
 struct CheckoutView: View {
   let model: RegisterModel
   let checkout: Checkout
   @State private var tendered = ""
   @State private var giftCode = ""
+  @State private var creditText = ""
   @State private var partText = ""
   @State private var receiptTo = ""
 
@@ -26,6 +28,9 @@ struct CheckoutView: View {
           case .tender: tender
           case .cash: cash
           case .giftCard: giftCard
+          case .credit(let providerID): credit(providerID)
+          case .room: room
+          case .qr(let paymentID, let url, let amount): qr(paymentID, url, amount)
           case .card(let label, _): card(label)
           case .receipt(let change): receipt(change)
           }
@@ -80,7 +85,16 @@ struct CheckoutView: View {
   @ViewBuilder private var tender: some View {
     if !checkout.tips.isEmpty {
       VStack(alignment: .leading, spacing: AglynSpace.one) {
-        AglynSectionHeader("Tip")
+        AglynSectionHeader("Tip") {
+          if model.display.connected {
+            Button(model.display.asking == .tip ? "Waiting for the customer…" : "Ask on display") {
+              Task { await model.askTipOnDisplay() }
+            }
+            .buttonStyle(.borderless)
+            .disabled(model.display.asking != nil || checkout.busy)
+            .accessibilityIdentifier("tip-ask-display")
+          }
+        }
         ScrollView(.horizontal, showsIndicators: false) {
           HStack {
             ForEach(checkout.tips) { tip in
@@ -103,10 +117,10 @@ struct CheckoutView: View {
         #endif
         .onChange(of: partText) { _, text in checkout.setPart(centsFromText(text)) }
     }
-    if !checkout.inFlight.isEmpty {
-      ForEach(checkout.inFlight) { payment in
-        AglynNotice("A card payment of \(model.money(payment.amountCents)) is still at a reader.", tone: .warning)
-        Button("Stop that payment") { Task { await checkout.cancelPending(payment.id) } }
+    if !checkout.sale.payments.isEmpty {
+      VStack(alignment: .leading, spacing: AglynSpace.one) {
+        AglynSectionHeader("Payments")
+        ForEach(checkout.sale.payments) { payment in paymentRow(payment) }
       }
     }
     VStack(spacing: AglynSpace.oneAndHalf) {
@@ -117,12 +131,68 @@ struct CheckoutView: View {
       }
       tenderButton("Cash", systemImage: "banknote") { checkout.go(to: .cash) }
       tenderButton("Gift card", systemImage: "giftcard") { checkout.go(to: .giftCard) }
+      tenderButton("Card (QR)", systemImage: "qrcode") { Task { await checkout.payLink() } }
+        .accessibilityIdentifier("tender-qr")
+      ForEach(model.context?.credits ?? []) { provider in
+        tenderButton(provider.label, systemImage: "gift") {
+          creditText = ""
+          checkout.clearCreditLookup()
+          checkout.go(to: .credit(providerID: provider.providerID))
+        }
+      }
+      if !model.stays.isEmpty {
+        tenderButton("Room", systemImage: "bed.double") { checkout.go(to: .room) }
+      }
       if model.readers.isEmpty {
         Text("No card reader is connected. Pair one in Card readers.").font(AglynFont.caption).foregroundStyle(.secondary)
       }
       if checkout.lost {
         Button("Check the sale") { Task { await checkout.recheck() } }.buttonStyle(.bordered)
       }
+    }
+  }
+
+  /// One payment on the sale: what it was, its status, and what can still be done with it.
+  private func paymentRow(_ payment: PosSalePayment) -> some View {
+    VStack(alignment: .leading, spacing: AglynSpace.half) {
+      HStack {
+        Text(describePayment(payment, money: model.money)).font(AglynFont.subheadline)
+        if payment.changeCents > 0 { Text("· change \(model.money(payment.changeCents))").font(AglynFont.caption) }
+        Spacer()
+        StatusChip(paymentStatusLabel(payment.status), tone: paymentTone(payment.status))
+      }
+      if let failure = payment.failureMessage, payment.status == "failed" {
+        Text(failure).font(AglynFont.caption).foregroundStyle(AglynColor.error)
+      }
+      if payment.status == "pending", payment.method.hasPrefix("card") {
+        HStack {
+          if payment.method == "card_link", payment.checkoutURL != nil {
+            Button("Show QR") { checkout.showLink(payment) }.buttonStyle(.borderless)
+          }
+          if payment.method == "card_present", payment.livemode == false, model.context?.testMode == true {
+            Button("Simulate tap") { Task { await checkout.simulateTap(payment.id) } }.buttonStyle(.borderless)
+              .accessibilityIdentifier("simulate-tap")
+          }
+          Button("Stop that payment", role: .destructive) { Task { await checkout.cancelPending(payment.id) } }
+            .buttonStyle(.borderless)
+        }
+        .disabled(checkout.busy)
+      }
+      if payment.status == "failed", payment.method == "card_present" {
+        Button("Retry") { Task { await checkout.retryReaderPayment(payment.id) } }.buttonStyle(.borderless).disabled(!checkout.canTender)
+      }
+    }
+    .padding(AglynSpace.one)
+    .aglynCardSurface()
+  }
+
+  private func paymentTone(_ status: String) -> AglynTone {
+    switch status {
+    case "succeeded": .success
+    case "failed": .error
+    case "pending": .info
+    case "reversed": .warning
+    default: .neutral
     }
   }
 
@@ -191,6 +261,107 @@ struct CheckoutView: View {
     }
   }
 
+  /// Store credit another plugin keeps: the customer reads out a code, or staff find the account by email or code.
+  private func credit(_ providerID: String) -> some View {
+    let provider = model.context?.credits.first { $0.providerID == providerID }
+    return VStack(alignment: .leading, spacing: AglynSpace.two) {
+      AglynSectionHeader(provider?.label ?? "Store credit")
+      TextField(provider?.lookup == true ? "Code or customer email" : "Code", text: $creditText)
+        .textFieldStyle(.roundedBorder)
+        .autocorrectionDisabled()
+        #if os(iOS)
+          .textInputAutocapitalization(.never)
+        #endif
+        .onChange(of: creditText) { _, _ in checkout.clearCreditLookup() }
+        .onSubmit { if provider?.lookup == true { Task { await checkout.lookUpCredit(providerID: providerID, query: creditText) } } }
+        .accessibilityIdentifier("credit-query")
+      if let accounts = checkout.creditAccounts {
+        if accounts.isEmpty {
+          AglynNotice("No account matches.", tone: .info)
+        } else {
+          ForEach(accounts) { account in
+            Button {
+              Task { await checkout.payCredit(providerID: providerID, account: account) }
+            } label: {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(
+                  "\(account.label)\(account.last4.isEmpty ? "" : " •• \(account.last4)") · \(model.money(account.availableCents)) available"
+                )
+                .font(AglynFont.headline)
+                if let detail = account.detail { Text(detail).font(AglynFont.caption).foregroundStyle(.secondary) }
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+            .disabled(checkout.busy || account.availableCents <= 0)
+          }
+        }
+      }
+      HStack {
+        Button("Back") {
+          creditText = ""
+          checkout.clearCreditLookup()
+          checkout.go(to: .tender)
+        }
+        .buttonStyle(.bordered)
+        if provider?.lookup == true {
+          Button("Find") { Task { await checkout.lookUpCredit(providerID: providerID, query: creditText) } }
+            .buttonStyle(.bordered)
+            .disabled(checkout.busy || creditText.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        Spacer()
+        Button("Apply code") {
+          let code = creditText
+          creditText = ""
+          Task { await checkout.payCredit(providerID: providerID, code: code) }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(checkout.busy || creditText.trimmingCharacters(in: .whitespaces).isEmpty || creditText.contains("@"))
+        .accessibilityIdentifier("credit-apply")
+      }
+    }
+  }
+
+  /// Charge to a checked-in stay's folio.
+  private var room: some View {
+    VStack(alignment: .leading, spacing: AglynSpace.two) {
+      AglynSectionHeader("Charge to room — \(model.money(checkout.amountCents))")
+      ForEach(model.stays) { stay in
+        Button {
+          Task { await checkout.payFolio(reservationID: stay.id) }
+        } label: {
+          Label(stay.name, systemImage: "bed.double").frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .disabled(checkout.busy)
+      }
+      Button("Back") { checkout.go(to: .tender) }.buttonStyle(.bordered)
+    }
+  }
+
+  /// The QR payment page: the customer scans it and pays on their phone; the payment shows here as soon as it goes through.
+  private func qr(_ paymentID: String, _ url: String, _ amountCents: Int) -> some View {
+    VStack(spacing: AglynSpace.two) {
+      Text("Scan to pay \(model.money(amountCents))").font(AglynFont.title2)
+      Text("The customer scans this and pays on their phone. The payment shows here as soon as it goes through.")
+        .font(AglynFont.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+      AglynQRCode(url)
+      if let link = URL(string: url) { Link("Open payment page", destination: link) }
+      Button("Close", role: .destructive) { Task { await checkout.cancelLink() } }.buttonStyle(.bordered).disabled(checkout.busy)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(AglynSpace.three)
+    .aglynCardSurface()
+    .task(id: paymentID) {
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(2))
+        if Task.isCancelled { return }
+        await checkout.pollLink()
+      }
+    }
+  }
+
   private func card(_ label: String) -> some View {
     VStack(spacing: AglynSpace.two) {
       Image(systemName: "wave.3.right.circle")
@@ -220,6 +391,9 @@ struct CheckoutView: View {
           .aglynCardSurface()
       }
       AglynSectionHeader("Receipt")
+      if model.display.asking == .receipt {
+        AglynNotice("The customer is choosing a receipt on the display…", tone: .info)
+      }
       TextField(model.context?.smsReceipts == true ? "Email or phone" : "Email", text: $receiptTo)
         .textFieldStyle(.roundedBorder)
         .autocorrectionDisabled()
@@ -228,12 +402,31 @@ struct CheckoutView: View {
           .keyboardType(.emailAddress)
         #endif
         .onAppear { if receiptTo.isEmpty { receiptTo = model.cart.customerEmail } }
+        .task {
+          await model.askReceiptOnDisplay(checkout)
+          await model.printReceiptByDefault(checkout)
+        }
       HStack {
-        Button("No receipt") { Task { if await checkout.sendReceipt(channel: "none") { model.finished() } } }
+        Button(checkout.printed ? "New sale" : "No receipt") {
+          // The cashier answers for the customer: the display's prompt ends with a thank-you.
+          model.display.cancelAsk()
+          Task { if await checkout.sendReceipt(channel: "none") { model.finished() } }
+        }
           .buttonStyle(.bordered)
+          .accessibilityIdentifier("receipt-none")
+        if model.lastReceipt.hasPrinter {
+          Button("Print receipt") {
+            model.display.cancelAsk()
+            Task { if await checkout.printToCloud() { model.finished() } }
+          }
+          .buttonStyle(.bordered)
+          .disabled(checkout.busy)
+          .accessibilityIdentifier("receipt-print")
+        }
         Spacer()
         Button("Send receipt") {
           let channel = isReceiptEmail(receiptTo) ? "email" : "sms"
+          model.display.cancelAsk()
           Task { if await checkout.sendReceipt(channel: channel, to: receiptTo) { model.finished() } }
         }
         .buttonStyle(.borderedProminent)

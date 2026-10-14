@@ -48,5 +48,6 @@ object ReleaseFlagDefaults {
     "release_video_delivery" to ReleaseFlagValue(false, 0, listOf()),
     "release_ai_generative" to ReleaseFlagValue(true, 0, listOf()),
     "release_crm_assist_whole_record" to ReleaseFlagValue(true, 0, listOf()),
+    "release_ad_audience_sync" to ReleaseFlagValue(false, 0, listOf()),
   )
 }

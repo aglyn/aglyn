@@ -37,6 +37,7 @@ import {
   deleteDoc,
   doc,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -183,6 +184,36 @@ export function DiscountsCard(props: DiscountsCardProps) {
     discountsStatus,
   ])
 
+  /**
+   * Switches a discount on or off (AGL-3774). Imported and AI-proposed
+   * discounts start switched off, and Save keeps `enabled` as it was, so
+   * without this a disabled discount could never be turned back on here.
+   *
+   * Writes ONLY `enabled`: unlike Save it carries no copy of the seeded row,
+   * so it cannot roll back the live `redemptions` counter (AGL-1358).
+   */
+  const handleToggle = useCallback(
+    async (discount: any) => {
+      const enabled = discount.enabled === false
+      try {
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'discounts', discount.$id),
+          { enabled },
+        )
+        enqueueSnackbar(enabled ? 'Discount enabled' : 'Discount disabled', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch {
+        enqueueSnackbar('Could not change the discount. Try again.', {
+          variant: 'error',
+          persist: false,
+        })
+      }
+    },
+    [firestore, hostId, enqueueSnackbar],
+  )
+
   const describe = (discount: any) => {
     const value =
       discount.kind === 'percent'
@@ -225,7 +256,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
       HeaderProps={{
         action: <TransferHeaderActions resource={COMMERCE_DISCOUNTS_TRANSFER} hostId={hostId} />,
       }}
-      help={pluginDocsHelp('commerce', { anchor: '#discounts' })}
+      help={pluginDocsHelp('discountsAndCoupons', { anchor: '#add-a-discount' })}
       contentGutterX
       contentGutterY
     >
@@ -253,6 +284,9 @@ export function DiscountsCard(props: DiscountsCardProps) {
                 {describe(discount)}
                 {discount.enabled === false ? ' · disabled' : ''}
               </Typography>
+              <Button size="small" onClick={() => void handleToggle(discount)}>
+                {discount.enabled === false ? 'Enable' : 'Disable'}
+              </Button>
               <Button
                 size="small"
                 onClick={() => setDraft({ id: discount.$id, ...discount })}

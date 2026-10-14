@@ -16,7 +16,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,7 +46,13 @@ import com.aglyn.ui.space
 import kotlinx.coroutines.launch
 
 @Composable
-fun SignInScreen(services: ShellServices, autoSignIn: Boolean = false) {
+fun SignInScreen(
+  services: ShellServices,
+  autoSignIn: Boolean = false,
+  /** The whole-screen modes a plugin offers this tablet instead of a register (the POS app only). */
+  deviceModes: List<com.aglyn.pluginhost.NativeScreen> = emptyList(),
+  onDeviceMode: (com.aglyn.pluginhost.NativeScreen) -> Unit = {},
+) {
   var email by remember { mutableStateOf(services.debugSignIn?.first ?: "") }
   var password by remember { mutableStateOf(services.debugSignIn?.second ?: "") }
   var busy by remember { mutableStateOf(false) }
@@ -129,6 +137,21 @@ fun SignInScreen(services: ShellServices, autoSignIn: Boolean = false) {
               CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
             } else {
               Text("Sign in")
+            }
+          }
+          if (deviceModes.isNotEmpty()) {
+            HorizontalDivider()
+            Text("Not a register?", style = MaterialTheme.typography.titleMedium)
+            Text(
+              "Set this tablet up as a screen for your customers. A code from a register pairs it.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            for (mode in deviceModes) {
+              OutlinedButton(
+                onClick = { onDeviceMode(mode) },
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("device-mode-${mode.id}"),
+              ) { Text(mode.title) }
             }
           }
         }

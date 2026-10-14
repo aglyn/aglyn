@@ -131,6 +131,106 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(JSONValue.decode(sent[0].httpBody ?? Data()), ["orgId": "o1", "email": "a@b.c"])
   }
 
+  func testTheTokenSaysHowTheAccountSignsIn() {
+    func token(_ claims: String) -> TokenClaims {
+      let payload = Data(claims.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+      return TokenClaims(idToken: "h.\(payload).s")
+    }
+    let both = token(#"{"email_verified":true,"firebase":{"identities":{"google.com":["1"],"email":["a@b.c"]},"sign_in_provider":"password"}}"#)
+    XCTAssertEqual(both.signInMethods, ["password", "google.com"])
+    XCTAssertTrue(both.emailVerified)
+    XCTAssertEqual(token("{}").signInMethods, [])
+    XCTAssertFalse(token("{}").emailVerified)
+    let session = ScreenSession(email: "a@b.c", claims: both)
+    let context = session.context(nil, params: [:])
+    XCTAssertEqual(ScreenValues.lookup("user.providers", in: context), ["password", "google.com"])
+    XCTAssertEqual(ScreenValues.render("{user.emailVerified:yesno}", in: context), "Yes")
+  }
+
+  func testAnActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() throws {
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Report", "url": "/api/issue-reports", "success": "Filed",
+        "instead": ["when": "response.deflected", "title": "Already answered", "text": "{response.sections.0.title}: {response.sections.0.text}"],
+      ]))
+    let instead = try XCTUnwrap(action.instead)
+    let answered: JSONValue = ["response": ["deflected": true, "sections": [["title": "Domains", "text": "Point a CNAME."]]]]
+    XCTAssertTrue(ScreenValues.condition(instead["when"]?.stringValue, in: answered))
+    XCTAssertEqual(ScreenValues.render(instead["text"]?.stringValue ?? "", in: answered), "Domains: Point a CNAME.")
+    XCTAssertFalse(ScreenValues.condition(instead["when"]?.stringValue, in: ["response": ["ok": true]]))
+  }
+
+  @MainActor
+  func testTheReportFormShowsOnlyTheFieldsOfItsKind() throws {
+    let support = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.support" })
+    let block = try XCTUnwrap(support.blocks.first { $0.title == "Report an issue" })
+    let action = try XCTUnwrap(block["items"].array.first.flatMap(ActionSpec.init))
+    func asked(_ kind: String) -> [String] {
+      let form: JSONValue = ["form": ["kind": .string(kind)]]
+      return action.prompt.filter { ScreenValues.condition($0.when, in: form) }.map(\.key)
+    }
+    XCTAssertEqual(asked("bug"), ["kind", "summary", "steps", "expected", "actual", "frequency", "contactConsent"])
+    XCTAssertEqual(asked("idea"), ["kind", "summary", "problem", "workaround", "proposal", "contactConsent"])
+    XCTAssertEqual(asked("question"), ["kind", "summary", "question", "tried", "skipDeflection", "contactConsent"])
+  }
+
+  /// An action's `headers` go out with the request, and `{attempt}` holds one key while the same
+  /// request is sent again and takes a new one when the body changes (enterprise billing).
+  @MainActor
+  func testHeadersCarryAnAttemptKeyThatFollowsTheRequest() async throws {
+    let transport = RecordingTransport(responses: [(503, "{}"), (200, "{}"), (200, "{}")])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: ["form": ["amount": "900"]], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Provision", "url": "/api/admin/enterprise-billing", "body": ["amountMonthlyUsd": "{form.amount}"],
+        "headers": ["Idempotency-Key": "{attempt}", "X-Staff": "yes"],
+      ]))
+    _ = await model.run(action, in: model.context)
+    _ = await model.run(action, in: ["form": ["amount": "1200"]])
+    let keys = transport.requests.map { $0.value(forHTTPHeaderField: "Idempotency-Key") }
+    XCTAssertEqual(keys.count, 3)
+    XCTAssertNotNil(keys[0])
+    // The 503 was retried with the very same key, because a keyed write is safe to repeat.
+    XCTAssertEqual(keys[0], keys[1])
+    XCTAssertNotEqual(keys[1], keys[2])
+    XCTAssertEqual(transport.requests[0].value(forHTTPHeaderField: "X-Staff"), "yes")
+    _ = await model.run(action, in: model.context)
+    XCTAssertEqual(transport.requests.last?.value(forHTTPHeaderField: "Idempotency-Key"), keys[0])
+  }
+
+  @MainActor
+  func testTheAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() throws {
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })
+    let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })
+    let set = try XCTUnwrap(list["actions"].array.first.flatMap(ActionSpec.init))
+    XCTAssertNotNil(set.check)
+    XCTAssertTrue(set.asksConfirmation)
+    let base: JSONValue = [
+      "data": ["addons": ["interval": "month", "catalog": ["hosts": ["unitUsd": 5]]]],
+      "item": ["kind": "hosts", "label": "Extra sites"],
+    ]
+    let now = ScreenContext.with(
+      ScreenContext.with(base, "form", ["quantity": 3]), "preview",
+      ["chargedNowCents": 1250, "currency": "usd", "taxCents": 100, "taxComplete": true])
+    XCTAssertEqual(
+      set.confirmText(in: now),
+      "Extra sites: 3? $12.50 will be charged to your card now, prorated for the rest of this period, including tax. Ongoing: 3 at $5.00/mo each.")
+    let later = ScreenContext.with(
+      ScreenContext.with(base, "form", ["quantity": 0]), "preview",
+      ["defersToPeriodEnd": true, "effectiveAt": "2026-11-01T00:00:00Z", "currency": "usd"])
+    XCTAssertEqual(
+      set.confirmText(in: later),
+      "Extra sites: 0? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.")
+    // The bank asking for confirmation opens the invoice; a decline says so; success shows the message.
+    let bank = ScreenContext.with(base, "response", ["paymentPending": true, "requiresAction": true, "hostedInvoiceUrl": "https://invoice.test/i"])
+    XCTAssertEqual(set.insteadEntry(in: bank)?["open"]?.stringValue, "hostedInvoiceUrl")
+    let declined = ScreenContext.with(base, "response", ["paymentPending": true, "declined": true])
+    XCTAssertEqual(set.insteadEntry(in: declined)?["title"]?.stringValue, "Card declined")
+    XCTAssertNil(set.insteadEntry(in: ScreenContext.with(base, "response", ["ok": true, "quantities": ["hosts": 3]])))
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
@@ -138,6 +238,42 @@ final class ScreenSpecTests: XCTestCase {
     let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
     let outcome = await model.run(try XCTUnwrap(ActionSpec(["label": "Close", "url": "/api/account/close"])), in: [:])
     guard case .needsReauth = outcome else { return XCTFail("expected a reauth, got \(outcome)") }
+  }
+
+  @MainActor
+  func testAccountActionsChangeThePasswordAndNameThroughTheSession() async throws {
+    final class Calls: @unchecked Sendable { var passwords: [[String]] = []; var names: [String] = [] }
+    let calls = Calls()
+    let account = AccountOperations(
+      changePassword: { calls.passwords.append([$0, $1]) }, updateDisplayName: { calls.names.append($0) },
+      message: { _ in "nope" })
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: RecordingTransport(responses: []))
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api, account: account)
+    let change = try XCTUnwrap(
+      ActionSpec([
+        "label": "Change", "account": "changePassword",
+        "body": ["current": "{form.current}", "new": "{form.password}", "confirm": "{form.confirm}"], "success": "Done",
+      ]))
+    let short: JSONValue = ["form": ["current": "old", "password": "short", "confirm": "short"]]
+    do { let outcome = await model.run(change, in: short); XCTAssertEqual(outcome, .failed("Use at least 12 characters.")) }
+    let mismatch: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "different-long-one"]]
+    do { let outcome = await model.run(change, in: mismatch); XCTAssertEqual(outcome, .failed("The two new passwords do not match.")) }
+    XCTAssertTrue(calls.passwords.isEmpty)
+    let good: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "a-long-enough-one"]]
+    do { let outcome = await model.run(change, in: good); XCTAssertEqual(outcome, .done(message: "Done", response: nil)) }
+    XCTAssertEqual(calls.passwords, [["old", "a-long-enough-one"]])
+    let name = try XCTUnwrap(ActionSpec(["label": "Name", "account": "updateDisplayName", "body": ["name": "{form.first} {form.last}"]]))
+    _ = await model.run(name, in: ["form": ["first": "Ada", "last": "Lovelace"]])
+    XCTAssertEqual(calls.names, ["Ada Lovelace"])
+  }
+
+  @MainActor
+  func testWriteTurnsSentinelObjectsIntoFirestoreSentinels() throws {
+    let plain = FirestoreLoads.plain(["a": ["$serverTimestamp": true], "b": ["$delete": true], "c": ["d": "x"]])
+    let record = try XCTUnwrap(plain as? [String: Any])
+    XCTAssertEqual(record["a"] as? FirestoreSentinel, .serverTimestamp)
+    XCTAssertEqual(record["b"] as? FirestoreSentinel, .delete)
+    XCTAssertEqual((record["c"] as? [String: Any])?["d"] as? String, "x")
   }
 
   @MainActor

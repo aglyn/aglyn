@@ -2524,6 +2524,18 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Sends each new account the getting-started email its stage owes it, once per crossing: confirm your email, build your site, publish your changes, your site is live, pick up where you left off (AGL-3692). If it stops, an account that stalls hears nothing after the welcome email.',
   },
   {
+    id: 'ad-audience-sync',
+    label: 'Account-holder ad audiences',
+    // Nightly (AGL-3780). It beats on every scheduled POST, flag on or off,
+    // so the row is watched from the first night.
+    cron: '40 7 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/ad-audience-sync',
+    graceMinutes: 90,
+    drives:
+      'Keeps the operator’s own Meta, Google and LinkedIn customer-list audiences in step with eligible US account holders, as hashed addresses (AGL-3780). If it stops, an account that was erased, banned or opted out stays in the audiences, and new sign-ups are never added.',
+  },
+  {
     id: 'firestore-export',
     label: 'Weekly Firestore export',
     cron: '0 5 * * 1',

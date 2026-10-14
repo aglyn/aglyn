@@ -217,6 +217,16 @@ data class ThemeFontOption(val family: String, val category: String)
 /** A number control's label and range. */
 data class ThemeRange(val label: String, val min: Int, val max: Int)
 
+/** One choice a Style components field offers; a color choice names the theme color it draws in. */
+data class ThemeLookOption(val value: String, val label: String, val token: String?)
+
+/** One Style components field: a site-wide look of buttons, form inputs or cards, a choice from a list. */
+data class ThemeLookField(val id: String, val group: String, val label: String, val kind: String, val options: List<ThemeLookOption>)
+
+/** The select's value for a look the site does not set (the theme's own) and for one no choice names. */
+const val THEME_LOOK_DEFAULT = ""
+const val THEME_LOOK_CUSTOM = "__custom__"
+
 /** The editor's controls as the theme route hands them out (`THEME_EDITOR_CATALOG`). */
 data class ThemeCatalog(
   val schemes: List<String>,
@@ -229,6 +239,8 @@ data class ThemeCatalog(
   val spacing: ThemeRange,
   val navHeightXs: ThemeRange,
   val navHeightSm: ThemeRange,
+  val lookGroups: List<Pair<String, String>> = emptyList(),
+  val looks: List<ThemeLookField> = emptyList(),
 )
 
 /** One of the built-in themes a site can start from (`ThemePresetSummary`): its id, name, one line and swatches. */
@@ -266,6 +278,8 @@ data class ThemeValues(
   val spacing: Double?,
   val navHeightXs: Double?,
   val navHeightSm: Double?,
+  /** Each Style components field's choice: [THEME_LOOK_DEFAULT] for the theme's own, [THEME_LOOK_CUSTOM] for a value no choice names. */
+  val componentLooks: Map<String, String> = emptyMap(),
 )
 
 internal fun JsonElement?.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject
@@ -286,6 +300,13 @@ fun themeCatalogOf(json: JsonElement?): ThemeCatalog = ThemeCatalog(
   spacing = rangeOf(json.obj("spacing")),
   navHeightXs = rangeOf(json.obj("navHeight").obj("xs")),
   navHeightSm = rangeOf(json.obj("navHeight").obj("sm")),
+  lookGroups = json.obj("componentLooks").arr("groups").map { it.str("group").orEmpty() to it.str("label").orEmpty() },
+  looks = json.obj("componentLooks").arr("fields").map { field ->
+    ThemeLookField(
+      field.str("id").orEmpty(), field.str("group").orEmpty(), field.str("label").orEmpty(), field.str("kind") ?: "select",
+      field.arr("options").map { ThemeLookOption(it.str("value").orEmpty(), it.str("label").orEmpty(), it.str("token")) },
+    )
+  },
 )
 
 fun themeValuesOf(json: JsonElement?): ThemeValues = ThemeValues(
@@ -296,6 +317,7 @@ fun themeValuesOf(json: JsonElement?): ThemeValues = ThemeValues(
   spacing = json.num("spacing"),
   navHeightXs = json.obj("navHeight").num("xs"),
   navHeightSm = json.obj("navHeight").num("sm"),
+  componentLooks = (json.obj("componentLooks") ?: JsonObject(emptyMap())).mapValues { (_, v) -> (v as? JsonPrimitive)?.contentOrNull.orEmpty() },
 )
 
 /** One edit of the theme editor, as the route reads it (`ThemeEditorEdit`). */
@@ -320,6 +342,9 @@ sealed interface ThemeEdit {
   data class NavHeight(val breakpoint: String, val value: Double?) : ThemeEdit {
     override fun body() = mapOf("control" to "navHeight", "breakpoint" to breakpoint, "value" to value)
   }
+  data class ComponentLook(val field: String, val value: String) : ThemeEdit {
+    override fun body() = mapOf("control" to "componentLook", "field" to field, "value" to value)
+  }
 }
 
 /** The edits that turn [before] into [after]: only the controls that changed. */
@@ -333,6 +358,10 @@ fun themeEdits(before: ThemeValues, after: ThemeValues): List<ThemeEdit> = build
   if (before.spacing != after.spacing) add(ThemeEdit.Spacing(after.spacing))
   if (before.navHeightXs != after.navHeightXs) add(ThemeEdit.NavHeight("xs", after.navHeightXs))
   if (before.navHeightSm != after.navHeightSm) add(ThemeEdit.NavHeight("sm", after.navHeightSm))
+  // A look no choice names (Custom) is left alone, as the console's select leaves it.
+  for ((field, value) in after.componentLooks) {
+    if (before.componentLooks[field].orEmpty() != value && value != THEME_LOOK_CUSTOM) add(ThemeEdit.ComponentLook(field, value))
+  }
 }
 
 /** The site's setup writes, each the console's own. */

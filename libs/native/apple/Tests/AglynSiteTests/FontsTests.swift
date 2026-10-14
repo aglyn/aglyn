@@ -148,3 +148,35 @@ extension JSONValue {
     return []
   }
 }
+
+final class MediaRightsTests: XCTestCase {
+  private func api(_ transport: FontsTransport) -> MediaAPI {
+    MediaAPI(api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }, transport: transport), scope: .site(hostID: "h1"))
+  }
+
+  func testAnAudioUploadCarriesItsRightsConfirmationAndOtherFilesCarryNone() async throws {
+    let transport = FontsTransport()
+    transport.answers["/api/media/upload"] = (200, #"{"mediaId":"m1"}"#)
+    transport.answers["/api/media/upload-url"] = (200, #"{"mediaId":"m2","uploadUrl":"https://upload.test/x"}"#)
+    let song = PickedFile(name: "song.mp3", mimeType: "audio/mpeg", data: Data([1, 2, 3]))
+    XCTAssertTrue(isAudioFile(song))
+    XCTAssertFalse(isAudioFile(PickedFile(name: "a.png", mimeType: "image/png", data: Data())))
+    _ = try await api(transport).upload(song, folderID: nil, rightsConfirmed: true)
+    _ = try await api(transport).upload(PickedFile(name: "a.png", mimeType: "image/png", data: Data([1])), folderID: nil)
+    let bodies = transport.sent.compactMap { $0.httpBody.flatMap { JSONValue.decode($0) } }
+    XCTAssertEqual(bodies[0]["rightsConfirmed"]?.boolValue, true)
+    XCTAssertEqual(bodies[0]["contentType"]?.stringValue, "audio/mpeg")
+    XCTAssertNil(bodies[1]["rightsConfirmed"])
+    XCTAssertEqual(audioRightsStatement, "I own this audio or have a license to use it on my site")
+  }
+
+  func testAReplacementCarriesItToo() async throws {
+    let transport = FontsTransport()
+    let item = try XCTUnwrap(
+      MediaItem(FirestoreDocument(id: "m1", data: ["fileName": "old.mp3", "contentType": "audio/mpeg", "kind": "audio"])))
+    try await api(transport).replace(item, with: PickedFile(name: "new.mp3", mimeType: "audio/mpeg", data: Data([1])), rightsConfirmed: true)
+    let body = JSONValue.decode(transport.sent.last?.httpBody ?? Data())
+    XCTAssertEqual(body?["rightsConfirmed"]?.boolValue, true)
+    XCTAssertEqual(body?["mediaId"]?.stringValue, "m1")
+  }
+}

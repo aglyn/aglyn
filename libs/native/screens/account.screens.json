@@ -40,14 +40,51 @@
               "key": "phoneNumber",
               "label": "Phone",
               "kind": "text",
-              "initial": "{item.phoneNumber}"
+              "initial": "{item.phoneNumber}",
+              "help": "Saved in international form, like +15125550123."
             },
             {
-              "key": "photoURL",
-              "label": "Photo URL",
-              "kind": "url",
-              "initial": "{item.photoURL}",
-              "placeholder": "https://"
+              "key": "organization",
+              "label": "Organization name",
+              "kind": "text",
+              "initial": "{item.organization}"
+            },
+            {
+              "key": "line1",
+              "label": "Address",
+              "kind": "text",
+              "initial": "{item.address.line1}"
+            },
+            {
+              "key": "line2",
+              "label": "Apartment, suite, etc.",
+              "kind": "text",
+              "initial": "{item.address.line2}"
+            },
+            {
+              "key": "city",
+              "label": "City",
+              "kind": "text",
+              "initial": "{item.address.city}"
+            },
+            {
+              "key": "state",
+              "label": "State / Province",
+              "kind": "text",
+              "initial": "{item.address.state}"
+            },
+            {
+              "key": "postalCode",
+              "label": "Postal code",
+              "kind": "text",
+              "initial": "{item.address.postalCode}"
+            },
+            {
+              "key": "country",
+              "label": "Country (2 letters)",
+              "kind": "text",
+              "initial": "{item.address.country}",
+              "placeholder": "US"
             }
           ],
           "submit": {
@@ -57,12 +94,118 @@
               "fields": {
                 "firstName": "{form.firstName}",
                 "lastName": "{form.lastName}",
-                "phoneNumber": "{form.phoneNumber}",
-                "photoURL": "{form.photoURL}"
+                "phoneNumber": "{form.phoneNumber:phone}",
+                "organization": "{form.organization}",
+                "address": {
+                  "line1": "{form.line1}",
+                  "line2": "{form.line2}",
+                  "city": "{form.city}",
+                  "state": "{form.state}",
+                  "postalCode": "{form.postalCode}",
+                  "country": "{form.country:upper}"
+                },
+                "addressErasedAt": {
+                  "$delete": true
+                }
+              }
+            },
+            "then": {
+              "label": "Name",
+              "account": "updateDisplayName",
+              "body": {
+                "name": "{form.firstName} {form.lastName}"
               }
             },
             "success": "Saved"
+          },
+          "title": "Basic info",
+          "footer": "Your name and contact details, shown to teammates. Your address is private to you."
+        },
+        {
+          "type": "form",
+          "title": "Profile image",
+          "id": "photo",
+          "object": "data.me",
+          "fields": [
+            {
+              "key": "photoUrl",
+              "label": "Image URL",
+              "kind": "url",
+              "initial": "{item.photoUrl}",
+              "placeholder": "https://",
+              "help": "An https:// link to an image."
+            }
+          ],
+          "submit": {
+            "label": "Save image",
+            "write": {
+              "doc": "users/{user.uid}",
+              "fields": {
+                "photoUrl": "{form.photoUrl}",
+                "photoUrlErasedAt": {
+                  "$delete": true
+                }
+              }
+            },
+            "then": {
+              "label": "Roster",
+              "url": "/api/account/photo",
+              "body": {
+                "photoUrl": "{form.photoUrl}"
+              }
+            },
+            "success": "Profile image saved"
           }
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "removePhoto",
+              "label": "Remove my image",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "data.me.photoUrl",
+              "confirm": "Remove your profile image?",
+              "write": {
+                "doc": "users/{user.uid}",
+                "fields": {
+                  "photoUrl": {
+                    "$delete": true
+                  },
+                  "photoUrlErasedAt": {
+                    "$serverTimestamp": true
+                  }
+                }
+              },
+              "then": {
+                "label": "Roster",
+                "url": "/api/account/photo",
+                "body": {
+                  "photoUrl": ""
+                }
+              },
+              "success": "Image removed"
+            },
+            {
+              "id": "eraseAddress",
+              "label": "Erase my address",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "data.me.address",
+              "confirm": "Erase your address? It will not be filled in again from your sign-in provider.",
+              "write": {
+                "doc": "users/{user.uid}",
+                "fields": {
+                  "address": null,
+                  "addressErasedAt": {
+                    "$serverTimestamp": true
+                  }
+                }
+              },
+              "success": "Address erased"
+            }
+          ]
         },
         {
           "type": "fields",
@@ -73,12 +216,46 @@
               "value": "{user.email}"
             },
             {
+              "label": "Email confirmed",
+              "value": "{user.emailVerified:yesno}",
+              "chip": true,
+              "tones": {
+                "Yes": "success",
+                "*": "warning"
+              }
+            },
+            {
               "label": "Account ID",
               "value": "{user.uid}"
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Sign-in methods",
+          "when": "user.providers",
+          "items": "user.providers",
+          "count": false,
+          "primary": "{const.providers[@item]|item}",
+          "secondary": "{const.providerNotes[@item]|'Connected'}",
+          "icon": "lock|lock",
+          "footer": "How you sign in to Aglyn."
         }
-      ]
+      ],
+      "constants": {
+        "providers": {
+          "password": "Email & password",
+          "google.com": "Google",
+          "apple.com": "Apple",
+          "github.com": "GitHub",
+          "microsoft.com": "Microsoft",
+          "phone": "Phone number"
+        },
+        "providerNotes": {
+          "password": "Sign in with your email and password",
+          "phone": "Sign in with a code sent to your phone"
+        }
+      }
     },
     {
       "id": "core.account.emails",
@@ -257,6 +434,38 @@
           "title": "Password",
           "items": [
             {
+              "id": "change",
+              "label": "Change my password",
+              "icon": "key|password",
+              "account": "changePassword",
+              "prompt": [
+                {
+                  "key": "current",
+                  "label": "Current password",
+                  "kind": "password",
+                  "required": true
+                },
+                {
+                  "key": "password",
+                  "label": "New password (12 or more characters)",
+                  "kind": "password",
+                  "required": true
+                },
+                {
+                  "key": "confirm",
+                  "label": "New password again",
+                  "kind": "password",
+                  "required": true
+                }
+              ],
+              "body": {
+                "current": "{form.current}",
+                "new": "{form.password}",
+                "confirm": "{form.confirm}"
+              },
+              "success": "Password changed"
+            },
+            {
               "id": "reset",
               "label": "Email me a password reset link",
               "icon": "key|password",
@@ -266,7 +475,8 @@
               },
               "success": "Check {user.email} for the link"
             }
-          ]
+          ],
+          "footer": "Changing it needs your current password. Accounts that sign in with Google or a company login have no password to change."
         },
         {
           "type": "list",
@@ -428,21 +638,21 @@
               "prompt": [
                 {
                   "key": "kind",
-                  "label": "What is it",
+                  "label": "What kind of report is this?",
                   "kind": "select",
                   "initial": "bug",
                   "options": [
                     {
                       "value": "bug",
-                      "label": "Something is broken"
+                      "label": "Something in Aglyn is broken"
                     },
                     {
                       "value": "idea",
-                      "label": "An idea"
+                      "label": "An idea or request for Aglyn"
                     },
                     {
                       "value": "question",
-                      "label": "A question"
+                      "label": "A question about using Aglyn"
                     }
                   ]
                 },
@@ -450,30 +660,130 @@
                   "key": "summary",
                   "label": "Summary",
                   "kind": "text",
+                  "required": true,
+                  "placeholder": "The media picker forgets the folder I chose"
+                },
+                {
+                  "key": "steps",
+                  "label": "What were you doing when it broke?",
+                  "kind": "multiline",
+                  "when": "form.kind == bug",
+                  "required": true,
+                  "help": "Step by step, so we can follow along. The single most useful thing you can tell us."
+                },
+                {
+                  "key": "expected",
+                  "label": "What did you expect to happen?",
+                  "kind": "multiline",
+                  "when": "form.kind == bug",
                   "required": true
                 },
                 {
-                  "key": "details",
-                  "label": "Details",
+                  "key": "actual",
+                  "label": "What happened instead?",
                   "kind": "multiline",
-                  "help": "What you did, what you expected, what happened."
+                  "when": "form.kind == bug",
+                  "required": true,
+                  "help": "Quote any error message exactly if you saw one."
+                },
+                {
+                  "key": "frequency",
+                  "label": "Does it happen every time?",
+                  "kind": "select",
+                  "when": "form.kind == bug",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "always",
+                      "label": "Every time I try"
+                    },
+                    {
+                      "value": "sometimes",
+                      "label": "Sometimes - it comes and goes"
+                    },
+                    {
+                      "value": "once",
+                      "label": "It happened once"
+                    },
+                    {
+                      "value": "unknown",
+                      "label": "I haven't tried again"
+                    }
+                  ]
+                },
+                {
+                  "key": "problem",
+                  "label": "What are you trying to do that you can't?",
+                  "kind": "multiline",
+                  "when": "form.kind == idea",
+                  "required": true,
+                  "help": "Tell us the problem rather than the feature."
+                },
+                {
+                  "key": "workaround",
+                  "label": "How do you handle it today?",
+                  "kind": "multiline",
+                  "when": "form.kind == idea"
+                },
+                {
+                  "key": "proposal",
+                  "label": "If you already have something in mind (optional)",
+                  "kind": "multiline",
+                  "when": "form.kind == idea"
+                },
+                {
+                  "key": "question",
+                  "label": "What do you need to know?",
+                  "kind": "multiline",
+                  "when": "form.kind == question",
+                  "required": true
+                },
+                {
+                  "key": "tried",
+                  "label": "What have you already tried or read? (optional)",
+                  "kind": "multiline",
+                  "when": "form.kind == question",
+                  "help": "Saves us sending you back to a page you have already read."
+                },
+                {
+                  "key": "skipDeflection",
+                  "label": "Send it even if the documentation may already answer it",
+                  "kind": "toggle",
+                  "when": "form.kind == question"
+                },
+                {
+                  "key": "contactConsent",
+                  "label": "You can contact me about this report",
+                  "kind": "toggle",
+                  "initial": "true"
                 }
               ],
               "body": {
                 "kind": "{form.kind}",
                 "summary": "{form.summary}",
                 "answers": {
-                  "steps": "{form.details}",
-                  "problem": "{form.details}",
-                  "question": "{form.details}"
+                  "steps": "{form.steps}",
+                  "expected": "{form.expected}",
+                  "actual": "{form.actual}",
+                  "frequency": "{form.frequency}",
+                  "problem": "{form.problem}",
+                  "workaround": "{form.workaround}",
+                  "proposal": "{form.proposal}",
+                  "question": "{form.question}",
+                  "tried": "{form.tried}"
                 },
-                "skipDeflection": true,
                 "orgId": "{org.id}",
                 "hostId": "{site.id}",
                 "route": "app",
-                "contactConsent": true
+                "contactConsent": "{form.contactConsent}",
+                "skipDeflection": "{form.skipDeflection}"
               },
-              "success": "Thanks — we have it"
+              "success": "Thank you, your report was filed. {response.reference}",
+              "instead": {
+                "when": "response.deflected",
+                "title": "This may already be answered",
+                "text": "Straight from the documentation. Nothing has been filed yet. If this covers it, you are done; if not, report it again with \"Send it even if the documentation may already answer it\" turned on.\n\n{response.sections.0.title}\n{response.sections.0.text}\n\n{response.sections.1.title}\n{response.sections.1.text}\n\n{response.sections.2.title}\n{response.sections.2.text}"
+              }
             }
           ]
         }

@@ -74,7 +74,8 @@ public struct SpecScreenView: View {
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {
       let fresh = ScreenModel(
-        spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer)
+        spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer,
+        account: session.account)
       model = fresh
       selection = nil
       await fresh.load()
@@ -144,7 +145,7 @@ struct SpecScreenBody: View {
       .animation(.default, value: notice?.text)
       .toolbar { toolbar }
       .confirmationDialog(
-        confirming.map { ScreenValues.render($0.action.confirm ?? $0.action.label, in: $0.scope) } ?? "",
+        confirming.map { $0.action.confirmText(in: $0.scope) ?? ScreenValues.render($0.action.label, in: $0.scope) } ?? "",
         isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
         titleVisibility: .visible
       ) {
@@ -305,8 +306,11 @@ struct SpecScreenBody: View {
       }
     case "zone":
       // A core screen's zone: whatever plugin screens contribute to it, never named here.
-      let contributions = ScreenCatalog.shared.zone(block["name"]?.stringValue ?? "")
+      let name = block["name"]?.stringValue ?? ""
+      let contributions = ScreenCatalog.shared.zone(name)
         .filter { ScreenValues.condition($0.requires, in: context) }
+      // Native widgets other plugins put in the same slot sit beside the spec screens.
+      let widgets = plugin.slotWidgets(name)
       if !contributions.isEmpty {
         section(title, footer) {
           ForEach(contributions) { spec in
@@ -320,6 +324,12 @@ struct SpecScreenBody: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("zone-\(spec.id)")
           }
+        }
+      }
+      ForEach(widgets) { widget in
+        Section {
+          widget.make(plugin)
+            .accessibilityIdentifier("zone-widget-\(widget.id)")
         }
       }
     case "notice":
@@ -358,7 +368,7 @@ struct SpecScreenBody: View {
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
     if !action.inputs.isEmpty {
       prompting = PendingAction(action: action, scope: scope)
-    } else if action.confirm != nil, ScreenValues.condition(action.confirmWhen, in: scope) {
+    } else if action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
       confirming = PendingAction(action: action, scope: scope)
     } else {
       Task { await execute(action, scope: scope) }
@@ -387,6 +397,21 @@ struct SpecScreenBody: View {
       }
       return
     }
+    // A route is asked first what the action would do; its answer is `preview` in the confirmation.
+    if let check = action.check?.action, ScreenValues.lookup("preview", in: scope) == nil {
+      running = action.id
+      let checked = await model.run(check, in: scope)
+      running = nil
+      switch checked {
+      case .done(_, let response):
+        confirming = PendingAction(action: action, scope: ScreenContext.with(scope, "preview", response ?? .object([:])))
+      case .needsReauth(let message):
+        reauthing = PendingAction(action: action, scope: scope, reauthMessage: message)
+      case .failed(let message):
+        show(message, .error)
+      }
+      return
+    }
     running = action.id
     let outcome = await model.run(action, in: scope)
     running = nil
@@ -403,7 +428,20 @@ struct SpecScreenBody: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
       let after = ScreenContext.with(scope, "response", response ?? .null)
-      if let message, !message.isEmpty { show(message, .success) }
+      if let instead = action.insteadEntry(in: after) {
+        revealed = (
+          instead["title"]?.stringValue.map { ScreenValues.render($0, in: after) } ?? action.label,
+          ScreenValues.render(instead["text"]?.stringValue ?? "", in: after)
+        )
+        // The entry may also open a page the route named (an invoice the bank has to confirm).
+        if let key = instead["open"]?.stringValue, let link = ScreenValues.lookup(key, in: response ?? .null)?.stringValue,
+          let url = URL(string: link)
+        {
+          await webAuthentication.openHostedPage(url)
+        }
+      } else if let message, !message.isEmpty {
+        show(message, .success)
+      }
       if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) {
         revealed = (action.label, ScreenValues.text(value))
       }

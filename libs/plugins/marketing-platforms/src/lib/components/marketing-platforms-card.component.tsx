@@ -27,8 +27,10 @@ import { useClientPagination } from '@aglyn/shared-ui-jsx/hooks/use-client-pagin
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Box,
   Button,
   CircularProgress,
+  Divider,
   FormControlLabel,
   List,
   ListItem,
@@ -84,10 +86,14 @@ const help = (excerpt: string, anchor: '#connect' | '#settings' | '#sync-log' | 
 
 /**
  * EMAIL PLATFORMS (AGL-3639): a site's connections to the merchant's own
- * Mailchimp, Klaviyo, Omnisend or Attentive account — one card per platform
- * the deployment offers, its state and actions in its header, and the sync
- * log under each connected one. Draws nothing where the deployment cannot
- * hold a connection, or the member cannot read the site's.
+ * Mailchimp, Klaviyo, Omnisend or Attentive account. Draws nothing where the
+ * deployment cannot hold a connection, or the member cannot read the site's.
+ *
+ * ONE card, one row per platform the deployment offers (AGL-3711). It was a
+ * full card per platform plus a sync-log card per connection, which stacked
+ * into a column of cards longer than every other integration put together on
+ * the page it shares. A row carries the platform's state and actions; the
+ * connect form, the connection's settings and its sync log open under it.
  */
 export function MarketingPlatformsCard(props: MarketingPlatformsCardProps) {
   const routesApi = useMarketingPlatformsApi(props.hostId)
@@ -129,23 +135,34 @@ export function MarketingPlatformsCard(props: MarketingPlatformsCardProps) {
   if (!shown.length) return null
 
   return (
-    <Stack spacing={2}>
-      {shown.map((provider) => (
-        <ProviderCard
-          key={provider}
-          api={api}
-          provider={provider}
-          offer={state.available.find((offer) => offer.id === provider) ?? null}
-          connection={state.connections.find((entry) => entry.provider === provider) ?? null}
-          onChange={(connection) => replace(provider, connection)}
-        />
-      ))}
-    </Stack>
+    <CardDisplay
+      header="Email platforms"
+      subheader="Keep your own email platform in step with this site: who may be sent marketing, and who unsubscribed on either side."
+      help={help(
+        'Connect your own Mailchimp, Klaviyo, Omnisend or Attentive account, so contacts, unsubscribes and orders stay in step with this site.',
+        '#connect',
+      )}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack divider={<Divider flexItem />} spacing={2}>
+        {shown.map((provider) => (
+          <ProviderRow
+            key={provider}
+            api={api}
+            provider={provider}
+            offer={state.available.find((offer) => offer.id === provider) ?? null}
+            connection={state.connections.find((entry) => entry.provider === provider) ?? null}
+            onChange={(connection) => replace(provider, connection)}
+          />
+        ))}
+      </Stack>
+    </CardDisplay>
   )
 }
 MarketingPlatformsCard.displayName = 'MarketingPlatformsCard'
 
-function ProviderCard(props: {
+function ProviderRow(props: {
   api: MarketingPlatformsApi
   provider: MarketingProviderId
   offer: MarketingProviderOffer | null
@@ -160,6 +177,7 @@ function ProviderCard(props: {
   const [error, setError] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [connecting, setConnecting] = useState(false)
+  const [showLog, setShowLog] = useState(false)
   const [logKey, setLogKey] = useState(0)
 
   const run = async (work: () => Promise<string | null>) => {
@@ -219,7 +237,7 @@ function ProviderCard(props: {
   }
 
   const actions = connection ? (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+    <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
       <StatusChip label={STATUS[connection.status].label} tone={STATUS[connection.status].tone} />
       {connection.status === 'active' || connection.status === 'error' ? (
         <Button
@@ -246,6 +264,9 @@ function ProviderCard(props: {
           Connect again
         </Button>
       ) : null}
+      <Button size="small" aria-expanded={showLog} onClick={() => setShowLog((open) => !open)}>
+        {showLog ? 'Hide sync log' : 'Sync log'}
+      </Button>
       <Button size="small" color="error" disabled={busy} onClick={() => void disconnect()}>
         Disconnect
       </Button>
@@ -257,48 +278,48 @@ function ProviderCard(props: {
   ) : null
 
   return (
-    <>
-      <CardDisplay
-        variant="outlined"
-        header={info.label}
-        subheader={READS_BACK[provider]}
-        help={help(
-          `Keep your ${info.label} account in step with this site: who may be sent marketing, and who unsubscribed on either side.`,
-          '#connect',
-        )}
-        contentGutterX
-        contentGutterY
-        HeaderProps={{ action: actions }}
+    <Stack spacing={1.5} component="section" aria-label={info.label}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        sx={{ alignItems: { sm: 'flex-start' }, justifyContent: 'space-between' }}
       >
-        <Stack spacing={1.5}>
-          {error ? (
-            <Alert severity="error" onClose={() => setError(null)}>
-              {error}
-            </Alert>
-          ) : null}
-          {connecting ? (
-            <ConnectForm
-              info={info}
-              offer={offer}
-              apiKey={apiKey}
-              busy={busy}
-              onApiKey={setApiKey}
-              onConnectKey={connectWithKey}
-              onConnectOAuth={connectWithOAuth}
-              onCancel={() => setConnecting(false)}
-            />
-          ) : null}
-          {connection ? (
-            <ConnectionDetails connection={connection} busy={busy} onUpdate={update} />
-          ) : !connecting ? (
-            <Typography variant="body2" color="text.secondary">
-              {`Not connected. Connect your own ${info.label} account with ${offer?.apiKey ? 'its API key' : 'your sign-in'}; ${PLATFORM_BRAND_NAME} never asks for your password.`}
-            </Typography>
-          ) : null}
-        </Stack>
-      </CardDisplay>
-      {connection ? <ConnectionLog key={logKey} api={api} provider={provider} /> : null}
-    </>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle1" component="h3">
+            {info.label}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {READS_BACK[provider]}
+          </Typography>
+        </Box>
+        {actions ? <Box sx={{ flexShrink: 0 }}>{actions}</Box> : null}
+      </Stack>
+      {error ? (
+        <Alert severity="error" onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      ) : null}
+      {connecting ? (
+        <ConnectForm
+          info={info}
+          offer={offer}
+          apiKey={apiKey}
+          busy={busy}
+          onApiKey={setApiKey}
+          onConnectKey={connectWithKey}
+          onConnectOAuth={connectWithOAuth}
+          onCancel={() => setConnecting(false)}
+        />
+      ) : null}
+      {connection ? (
+        <ConnectionDetails connection={connection} busy={busy} onUpdate={update} />
+      ) : !connecting ? (
+        <Typography variant="body2" color="text.secondary">
+          {`Not connected. Connect your own ${info.label} account with ${offer?.apiKey ? 'its API key' : 'your sign-in'}; ${PLATFORM_BRAND_NAME} never asks for your password.`}
+        </Typography>
+      ) : null}
+      {connection && showLog ? <ConnectionLog key={logKey} api={api} provider={provider} /> : null}
+    </Stack>
   )
 }
 
@@ -398,22 +419,24 @@ function ConnectionDetails(props: {
           ))}
         </TextField>
       ) : null}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
-        <TextField
-          size="small"
-          label="Tag"
-          value={tag}
-          disabled={busy}
-          onChange={(event) => setTag(event.target.value)}
-          helperText="Every contact this site sends carries it, so you can segment them."
-          sx={{ maxWidth: 360 }}
-        />
-        {tag !== connection.tag ? (
-          <Button size="small" disabled={busy} onClick={() => onUpdate({ tag }, 'Saved.')}>
-            Save tag
-          </Button>
-        ) : null}
-      </Stack>
+      {info.tags ? (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
+          <TextField
+            size="small"
+            label="Tag"
+            value={tag}
+            disabled={busy}
+            onChange={(event) => setTag(event.target.value)}
+            helperText="Every contact this site sends carries it, so you can segment them."
+            sx={{ maxWidth: 360 }}
+          />
+          {tag !== connection.tag ? (
+            <Button size="small" disabled={busy} onClick={() => onUpdate({ tag }, 'Saved.')}>
+              Save tag
+            </Button>
+          ) : null}
+        </Stack>
+      ) : null}
       <FormControlLabel
         control={
           <Switch
@@ -442,8 +465,9 @@ function ConnectionDetails(props: {
 
 /**
  * The connection's sync log, newest first: the shared paged list and its
- * footer. The store keeps a connection's latest rows only, so one read is the
- * whole log and the list pages it in memory.
+ * footer, opened under the platform's row. The store keeps a connection's
+ * latest rows only, so one read is the whole log and the list pages it in
+ * memory.
  */
 function ConnectionLog(props: { api: MarketingPlatformsApi; provider: MarketingProviderId }) {
   const { api, provider } = props
@@ -463,13 +487,10 @@ function ConnectionLog(props: { api: MarketingPlatformsApi; provider: MarketingP
   }, [api, provider])
 
   return (
-    <CardDisplay
-      variant="outlined"
-      header={`${MARKETING_PROVIDERS[provider].label} sync log`}
-      help={help('What each sync sent and read back, and every error, newest first.', '#sync-log')}
-      contentGutterX
-      contentGutterY
-    >
+    <Box component="section" aria-label={`${MARKETING_PROVIDERS[provider].label} sync log`}>
+      <Typography variant="subtitle2" component="h4" gutterBottom>
+        Sync log
+      </Typography>
       {error ? (
         <Alert severity="error">{error}</Alert>
       ) : rows === null ? (
@@ -501,7 +522,7 @@ function ConnectionLog(props: { api: MarketingPlatformsApi; provider: MarketingP
       ) : (
         <EmptyStateComponent compact label="Nothing has run yet." />
       )}
-    </CardDisplay>
+    </Box>
   )
 }
 

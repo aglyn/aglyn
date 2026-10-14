@@ -13,6 +13,8 @@ public enum AglynAppKind: String, Sendable, CaseIterable {
 /// Where a POS contribution sits in the register.
 public enum POSPlacement: String, Sendable {
   case register, tender, peripheral, menu
+  /// A whole-screen mode a tablet can be set up as, with nobody signed in: the customer display and the self-service kiosk (AGL-3608, AGL-3623). The shell offers these at sign-in and is handed a context with no member.
+  case device
 }
 
 /// The staff console's card zones a plugin may fill (the web's
@@ -70,6 +72,7 @@ public struct NativePluginContext {
   private let openBesignerAction: @MainActor (String) -> Void
   private let selectSiteAction: (@MainActor (String) -> Void)?
   private let backAction: (@MainActor () -> Void)?
+  private let slotWidgetsAction: (@MainActor (String) -> [NativeWidget])?
 
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
@@ -79,7 +82,8 @@ public struct NativePluginContext {
     openBesigner: @escaping @MainActor (String) -> Void,
     siteRole: String? = nil, orgRole: String? = nil,
     selectSite: (@MainActor (String) -> Void)? = nil,
-    back: (@MainActor () -> Void)? = nil
+    back: (@MainActor () -> Void)? = nil,
+    slotWidgets: (@MainActor (String) -> [NativeWidget])? = nil
   ) {
     self.uid = uid
     self.orgID = orgID
@@ -96,6 +100,14 @@ public struct NativePluginContext {
     self.orgRole = orgRole
     self.selectSiteAction = selectSite
     self.backAction = back
+    self.slotWidgetsAction = slotWidgets
+  }
+
+  /// The widgets other plugins put in a core page's named slot
+  /// (`commerceSettings`, `hostAnalytics`), in order. A screen that hosts a
+  /// slot draws these; core and the host never name the plugins that contribute.
+  @MainActor public func slotWidgets(_ slot: String) -> [NativeWidget] {
+    slotWidgetsAction?(slot) ?? []
   }
 
   /// Makes `hostID` the picked site, as the site switcher does.

@@ -138,6 +138,16 @@
               "success": "Your plan continues"
             },
             {
+              "id": "cancel",
+              "label": "Cancel my plan",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "data.billing.subscription && !data.billing.subscription.cancelAtPeriodEnd",
+              "navigate": {
+                "screen": "core.billing.cancel"
+              }
+            },
+            {
               "id": "plans",
               "label": "Choose a plan",
               "icon": "sparkles|workspace_premium",
@@ -155,6 +165,12 @@
               "subtitle": "Spend limits and storage",
               "icon": "chart.bar|bar_chart",
               "screen": "core.billing.usage"
+            },
+            {
+              "title": "Plan add-ons",
+              "subtitle": "Seats, extra sites and more on your plan",
+              "icon": "plus.square.on.square|add",
+              "screen": "core.billing.addons"
             },
             {
               "title": "Invoices",
@@ -362,6 +378,14 @@
         "ceiling": {
           "url": "/api/billing/email-ceiling?orgId={org.id}",
           "optional": true
+        },
+        "history": {
+          "query": {
+            "collection": "orgs/{org.id}/usage",
+            "orderBy": "__name__ desc",
+            "limit": 12
+          },
+          "optional": true
         }
       },
       "blocks": [
@@ -408,6 +432,58 @@
           "tone": "info",
           "when": "data.budget.lastAlert.threshold",
           "text": "You passed {data.budget.lastAlert.threshold}% of the limit this month."
+        },
+        {
+          "type": "fields",
+          "title": "Spend this month",
+          "when": "data.budget",
+          "footer": "Usage is added up once a day. A budget only alerts; it never stops anything.",
+          "rows": [
+            {
+              "label": "Metered so far in {data.budget.month}",
+              "value": "{data.budget.spend.totalUsd ?? '0':dollars}",
+              "when": "data.budget.spend.meteredFresh"
+            },
+            {
+              "label": "Budget",
+              "value": "{data.budget.amountUsd:dollars} a month",
+              "when": "data.budget.budgetSet"
+            },
+            {
+              "label": "Budget",
+              "value": "No budget set",
+              "when": "!data.budget.budgetSet"
+            },
+            {
+              "label": "Alerts at",
+              "value": "{data.budget.thresholdPcts}%",
+              "when": "data.budget.budgetSet"
+            }
+          ]
+        },
+        {
+          "type": "meters",
+          "when": "data.budget.budgetSet && data.budget.spend.meteredFresh",
+          "meters": [
+            {
+              "label": "Budget used",
+              "used": "{data.budget.spend.totalUsd}",
+              "limit": "{data.budget.amountUsd}",
+              "format": "dollars"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.budget && !data.budget.spend.meteredFresh",
+          "text": "We have not totaled {data.budget.month} yet. Usage is added up once a day. Your budget still applies from the moment you set it."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.budget && !data.budget.metered",
+          "text": "Your plan has nothing metered, so a budget cannot fire."
         },
         {
           "type": "list",
@@ -476,6 +552,26 @@
               "reload": true
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Usage history",
+          "when": "data.history.items",
+          "items": "data.history.items",
+          "count": false,
+          "primary": "{item.$id}",
+          "trailing": "{item.billedCents ?? 'not recorded':cents}",
+          "secondary": "Page views: {item.pageViews ?? 'not recorded':number} · Form submissions: {item.formSubmissions ?? 'not recorded':number}",
+          "tertiary": "Storage (GB): {item.storageGb ?? 'not recorded':number} · Contacts: {item.contactsCount ?? 'not recorded':number}",
+          "badges": [
+            {
+              "text": "In progress",
+              "when": "item.stockBasis == in-progress",
+              "tone": "info"
+            }
+          ],
+          "empty": "A history appears here once this workspace has a month of billing.",
+          "footer": "Metered charges are the trailing figure. A month before a meter existed says not recorded rather than zero."
         },
         {
           "type": "fields",
@@ -946,6 +1042,626 @@
             }
           ],
           "empty": "No sites yet."
+        }
+      ]
+    },
+    {
+      "id": "core.billing.addons",
+      "title": "Plan add-ons",
+      "subtitle": "Seats, sites and extras on your plan",
+      "icon": "plus.square.on.square|add",
+      "scope": "org",
+      "load": {
+        "addons": {
+          "url": "/api/billing/addons",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.addons",
+          "text": "Plan add-ons are not available right now: billing may not be configured yet, or we could not reach it to find out. This says nothing about your billing, and nothing has changed. Pull down to try again."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.addons && !data.addons.hasSubscription",
+          "text": "Add-ons bill onto an active plan subscription. This workspace does not have one (its plan is managed by Aglyn, or checkout has not been completed), so these are shown for reference and cannot be changed here. Contact support to adjust them."
+        },
+        {
+          "type": "list",
+          "when": "data.addons",
+          "items": "const.addons",
+          "count": false,
+          "primary": "{item.label}",
+          "secondary": "{item.description}",
+          "badges": [
+            {
+              "text": "{data.addons.catalog[@item.kind].unitUsd:dollars}/mo",
+              "when": "data.addons.catalog[@item.kind].unitUsd",
+              "tone": "neutral"
+            },
+            {
+              "text": "{data.addons.quantities[@item.kind]|'0':number} in use",
+              "when": "!item.toggle && data.addons.quantities[@item.kind]",
+              "tone": "info"
+            },
+            {
+              "text": "On",
+              "when": "item.toggle && data.addons.quantities[@item.kind]",
+              "tone": "success"
+            },
+            {
+              "text": "Included in your plan",
+              "when": "item.kind == aiAddon && data.addons.plan == enterprise",
+              "tone": "success"
+            },
+            {
+              "text": "Upgrade your plan to add these",
+              "when": "data.addons.catalog[@item.kind].upgradeRequired && data.addons.plan != enterprise",
+              "tone": "warning"
+            },
+            {
+              "text": "Upgrade your plan to add these",
+              "when": "data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon && data.addons.plan == enterprise",
+              "tone": "warning"
+            },
+            {
+              "text": "Needs an active subscription",
+              "when": "!data.addons.hasSubscription && !data.addons.catalog[@item.kind].upgradeRequired",
+              "tone": "neutral"
+            },
+            {
+              "text": "Not configured",
+              "when": "data.addons.hasSubscription && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.catalog[@item.kind].configured",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "set",
+              "label": "Change quantity",
+              "icon": "slider.horizontal.3|tune",
+              "when": "!item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired",
+              "prompt": [
+                {
+                  "key": "quantity",
+                  "label": "How many",
+                  "kind": "number",
+                  "initial": "{data.addons.quantities[@item.kind]|'0'}",
+                  "help": "Up to {data.addons.catalog[@item.kind].max} on your plan."
+                }
+              ],
+              "check": {
+                "label": "Preview",
+                "url": "/api/billing/addons",
+                "body": {
+                  "orgId": "{org.id}",
+                  "action": "preview",
+                  "kind": "{item.kind}",
+                  "quantity": "{form.quantity}"
+                }
+              },
+              "confirm": [
+                {
+                  "text": "{item.label}: {form.quantity}? "
+                },
+                {
+                  "when": "preview.defersToPeriodEnd",
+                  "text": "Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on {preview.effectiveAt:date}. From then: "
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": "{preview.chargedNowCents:cents/preview.currency} will be charged to your card now, prorated for the rest of this period"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxComplete == false",
+                  "text": ", plus sales tax (Stripe could not finish calculating tax for your billing address, so your invoice may be higher)"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxCents && preview.taxComplete != false",
+                  "text": ", including tax"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": ". Ongoing: "
+                },
+                {
+                  "when": "form.quantity == 0",
+                  "text": "nothing, this add-on is removed."
+                },
+                {
+                  "when": "form.quantity != 0",
+                  "text": "{form.quantity} at {data.addons.catalog[@item.kind].unitUsd:dollars}/mo each"
+                },
+                {
+                  "when": "form.quantity != 0 && data.addons.interval == year",
+                  "text": " (billed yearly with your plan)"
+                },
+                {
+                  "when": "form.quantity != 0",
+                  "text": "."
+                }
+              ],
+              "url": "/api/billing/addons",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set",
+                "kind": "{item.kind}",
+                "quantity": "{form.quantity}"
+              },
+              "instead": [
+                {
+                  "when": "response.paymentPending && response.requiresAction && response.hostedInvoiceUrl",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment. Finish it on the invoice page we just opened; {item.label} changes once it is paid.",
+                  "open": "hostedInvoiceUrl"
+                },
+                {
+                  "when": "response.paymentPending && response.requiresAction",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment, but it cannot be finished here. Nothing has changed and nothing has been charged."
+                },
+                {
+                  "when": "response.declined",
+                  "title": "Card declined",
+                  "text": "Your saved card was declined, so nothing has changed. Update your payment method under Billing details and try again."
+                },
+                {
+                  "when": "response.paymentPending",
+                  "title": "Payment did not go through",
+                  "text": "The payment did not go through, so nothing has changed. Try again in a moment."
+                },
+                {
+                  "when": "response.scheduleRefreshFailed",
+                  "title": "Purchased, with a catch",
+                  "text": "{item.label} was purchased, but your scheduled plan change did not pick it up. It will be dropped at the end of this billing period. Contact support to keep it."
+                }
+              ],
+              "success": "{item.label} updated"
+            },
+            {
+              "id": "on",
+              "label": "Turn on",
+              "icon": "power|power_settings_new",
+              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind]",
+              "check": {
+                "label": "Preview",
+                "url": "/api/billing/addons",
+                "body": {
+                  "orgId": "{org.id}",
+                  "action": "preview",
+                  "kind": "{item.kind}",
+                  "quantity": 1
+                }
+              },
+              "confirm": [
+                {
+                  "text": "{item.label}: 1? "
+                },
+                {
+                  "when": "preview.defersToPeriodEnd",
+                  "text": "Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on {preview.effectiveAt:date}. From then: "
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": "{preview.chargedNowCents:cents/preview.currency} will be charged to your card now, prorated for the rest of this period"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxComplete == false",
+                  "text": ", plus sales tax (Stripe could not finish calculating tax for your billing address, so your invoice may be higher)"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxCents && preview.taxComplete != false",
+                  "text": ", including tax"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": ". Ongoing: "
+                },
+                {
+                  "text": "{data.addons.catalog[@item.kind].unitUsd:dollars}/mo"
+                },
+                {
+                  "when": "data.addons.interval == year",
+                  "text": " (billed yearly with your plan)"
+                },
+                {
+                  "text": "."
+                }
+              ],
+              "url": "/api/billing/addons",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set",
+                "kind": "{item.kind}",
+                "quantity": 1
+              },
+              "instead": [
+                {
+                  "when": "response.paymentPending && response.requiresAction && response.hostedInvoiceUrl",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment. Finish it on the invoice page we just opened; {item.label} changes once it is paid.",
+                  "open": "hostedInvoiceUrl"
+                },
+                {
+                  "when": "response.paymentPending && response.requiresAction",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment, but it cannot be finished here. Nothing has changed and nothing has been charged."
+                },
+                {
+                  "when": "response.declined",
+                  "title": "Card declined",
+                  "text": "Your saved card was declined, so nothing has changed. Update your payment method under Billing details and try again."
+                },
+                {
+                  "when": "response.paymentPending",
+                  "title": "Payment did not go through",
+                  "text": "The payment did not go through, so nothing has changed. Try again in a moment."
+                },
+                {
+                  "when": "response.scheduleRefreshFailed",
+                  "title": "Purchased, with a catch",
+                  "text": "{item.label} was purchased, but your scheduled plan change did not pick it up. It will be dropped at the end of this billing period. Contact support to keep it."
+                }
+              ],
+              "success": "{item.label} updated"
+            },
+            {
+              "id": "off",
+              "label": "Turn off",
+              "icon": "poweroff|power_settings_new",
+              "when": "item.toggle && org.manager && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && data.addons.quantities[@item.kind]",
+              "check": {
+                "label": "Preview",
+                "url": "/api/billing/addons",
+                "body": {
+                  "orgId": "{org.id}",
+                  "action": "preview",
+                  "kind": "{item.kind}",
+                  "quantity": 0
+                }
+              },
+              "confirm": [
+                {
+                  "text": "{item.label}: 0? "
+                },
+                {
+                  "when": "preview.defersToPeriodEnd",
+                  "text": "Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on {preview.effectiveAt:date}. From then: "
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": "{preview.chargedNowCents:cents/preview.currency} will be charged to your card now, prorated for the rest of this period"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxComplete == false",
+                  "text": ", plus sales tax (Stripe could not finish calculating tax for your billing address, so your invoice may be higher)"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd && preview.taxCents && preview.taxComplete != false",
+                  "text": ", including tax"
+                },
+                {
+                  "when": "!preview.defersToPeriodEnd",
+                  "text": ". Ongoing: "
+                },
+                {
+                  "text": "nothing, this add-on is removed."
+                }
+              ],
+              "url": "/api/billing/addons",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set",
+                "kind": "{item.kind}",
+                "quantity": 0
+              },
+              "instead": [
+                {
+                  "when": "response.paymentPending && response.requiresAction && response.hostedInvoiceUrl",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment. Finish it on the invoice page we just opened; {item.label} changes once it is paid.",
+                  "open": "hostedInvoiceUrl"
+                },
+                {
+                  "when": "response.paymentPending && response.requiresAction",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment, but it cannot be finished here. Nothing has changed and nothing has been charged."
+                },
+                {
+                  "when": "response.declined",
+                  "title": "Card declined",
+                  "text": "Your saved card was declined, so nothing has changed. Update your payment method under Billing details and try again."
+                },
+                {
+                  "when": "response.paymentPending",
+                  "title": "Payment did not go through",
+                  "text": "The payment did not go through, so nothing has changed. Try again in a moment."
+                },
+                {
+                  "when": "response.scheduleRefreshFailed",
+                  "title": "Purchased, with a catch",
+                  "text": "{item.label} was purchased, but your scheduled plan change did not pick it up. It will be dropped at the end of this billing period. Contact support to keep it."
+                }
+              ],
+              "success": "{item.label} updated"
+            }
+          ],
+          "empty": "No add-ons."
+        }
+      ],
+      "constants": {
+        "addons": [
+          {
+            "kind": "managers",
+            "label": "Manager seats",
+            "description": "Workspace manager seats beyond the ones your plan includes.",
+            "toggle": false,
+            "icon": "person.badge.key|admin_panel_settings"
+          },
+          {
+            "kind": "members",
+            "label": "Collaborator seats",
+            "description": "Per-site collaborator (teammate) seats beyond the included count.",
+            "toggle": false,
+            "icon": "person.2|group"
+          },
+          {
+            "kind": "datasets",
+            "label": "Extra datasets",
+            "description": "Additional shared datasets across your workspace.",
+            "toggle": false,
+            "icon": "square.stack.3d.up|tune"
+          },
+          {
+            "kind": "hosts",
+            "label": "Extra sites",
+            "description": "Publish more sites than your plan includes.",
+            "toggle": false,
+            "icon": "globe|language"
+          },
+          {
+            "kind": "posRegisters",
+            "label": "POS registers",
+            "description": "Additional point-of-sale registers/locations.",
+            "toggle": false,
+            "icon": "creditcard|point_of_sale"
+          },
+          {
+            "kind": "eventCalendar",
+            "label": "Event Calendar",
+            "description": "The Event Calendar add-on for your whole workspace, supported directly by Aglyn.",
+            "toggle": true,
+            "icon": "calendar|event_available"
+          },
+          {
+            "kind": "aiAddon",
+            "label": "Aglyn AI",
+            "description": "Generate pages, components, emails, campaigns, products and more, then edit anything. Adds {const.aiCredits[@data.addons.plan]:number} AI credits a month to your workspace's pool.",
+            "toggle": true,
+            "icon": "sparkles|auto_awesome"
+          }
+        ],
+        "aiCredits": {
+          "free": 0,
+          "starter": 4000,
+          "pro": 9000,
+          "business": 19000,
+          "scale": 34000,
+          "advanced": 49000,
+          "agency": 149000,
+          "enterprise": 298000
+        }
+      }
+    },
+    {
+      "id": "core.billing.cancel",
+      "title": "Before you go",
+      "icon": "xmark.circle|cancel",
+      "scope": "org",
+      "requires": "org.manager",
+      "blocks": [
+        {
+          "type": "form",
+          "title": "Before you go, what went wrong?",
+          "id": "survey",
+          "footer": "One question, and it genuinely shapes what we build next.",
+          "fields": [
+            {
+              "key": "reason",
+              "label": "Reason",
+              "kind": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "too_expensive",
+                  "label": "It's too expensive"
+                },
+                {
+                  "value": "missing_features",
+                  "label": "Missing features I need"
+                },
+                {
+                  "value": "not_using_enough",
+                  "label": "I'm not using it enough"
+                },
+                {
+                  "value": "switching_provider",
+                  "label": "I'm switching to something else"
+                },
+                {
+                  "value": "technical_issues",
+                  "label": "Technical problems"
+                },
+                {
+                  "value": "temporary_pause",
+                  "label": "Just pausing for now"
+                },
+                {
+                  "value": "other",
+                  "label": "Something else"
+                }
+              ]
+            },
+            {
+              "key": "detail",
+              "label": "Anything else? (optional)",
+              "kind": "multiline"
+            }
+          ],
+          "submit": {
+            "label": "Continue",
+            "url": "/api/billing/retention",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "survey",
+              "surface": "{params.surface|'subscription_cancel'}",
+              "reason": "{form.reason}",
+              "detail": "{form.detail}"
+            },
+            "navigate": {
+              "screen": "core.billing.cancel.offers",
+              "params": {
+                "funnelId": "{response.funnelId}",
+                "downsellPlan": "{response.downsellPlan}",
+                "winbackAvailable": "{response.winbackAvailable}",
+                "winbackPercentOff": "{response.winbackPercentOff}",
+                "winbackMonths": "{response.winbackDurationMonths}",
+                "surface": "{params.surface|'subscription_cancel'}"
+              }
+            },
+            "reload": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.billing.cancel.offers",
+      "title": "Before you go",
+      "icon": "xmark.circle|cancel",
+      "scope": "org",
+      "requires": "org.manager",
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}"
+        },
+        "billing": {
+          "doc": "orgs/{org.id}/billing/stripe",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "actions",
+          "title": "Would a smaller plan work better?",
+          "when": "params.downsellPlan && data.org.subscription.status == active,trialing,past_due",
+          "footer": "{params.downsellPlan:title} costs less and keeps your sites, data and team exactly where they are. Moving down takes effect at the end of your current billing period; you keep everything you have already paid for until then.",
+          "items": [
+            {
+              "id": "downsell",
+              "label": "Switch to {params.downsellPlan:title}",
+              "icon": "arrow.down.circle|expand_more",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "switch",
+                "plan": "{params.downsellPlan}",
+                "interval": "{data.billing.subscription.interval|data.org.subscription.interval}"
+              },
+              "instead": [
+                {
+                  "when": "response.scheduled",
+                  "title": "Plan change scheduled",
+                  "text": "Moving to {params.downsellPlan:title} on {response.effectiveAt:date}. You keep your current plan until then."
+                }
+              ],
+              "success": "Plan switched to {params.downsellPlan:title}",
+              "back": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Stay for {params.winbackPercentOff}% off?",
+          "when": "params.winbackAvailable == true && data.org.subscription.status == active,trialing,past_due",
+          "footer": "Keep your current plan at {params.winbackPercentOff}% off for the next {params.winbackMonths} months. After that your plan returns to its regular price. One offer per organization.",
+          "items": [
+            {
+              "id": "winback",
+              "label": "Apply the discount",
+              "icon": "tag|sell",
+              "url": "/api/billing/retention",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "winback",
+                "funnelId": "{params.funnelId}"
+              },
+              "success": "Discount applied: {response.percentOff}% off for the next {response.durationMonths} months.",
+              "back": true
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Your plan stays active until the end of the paid period, then this workspace moves to the Free plan. Nothing is deleted, and you can resume any time before it ends.",
+          "when": "params.surface != account_delete"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "when": "params.surface == account_delete",
+          "text": "This starts the deletion of this workspace and everything in it. You can cancel the request during the 7-day hold; after that all of its sites, files and data are permanently erased."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "cancel",
+              "label": "Yes, cancel my plan",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "confirm": "Cancel your subscription at the end of the paid period?",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "cancel",
+                "funnelId": "{params.funnelId}"
+              },
+              "success": "Subscription cancels {response.currentPeriodEnd|'at the end of the period':date}",
+              "back": true
+            }
+          ],
+          "when": "params.surface != account_delete"
+        },
+        {
+          "type": "actions",
+          "when": "params.surface == account_delete",
+          "items": [
+            {
+              "id": "delete",
+              "label": "Yes, delete this workspace",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "confirm": "Delete {org.name}? Nothing is removed for 7 days and you can cancel until then.",
+              "url": "/api/orgs/delete",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "request",
+                "funnelId": "{params.funnelId}"
+              },
+              "success": "Deletion requested. Your data is erased after a 7-day hold; cancel on the delete screen to keep the workspace.",
+              "back": true
+            }
+          ]
         }
       ]
     }

@@ -614,6 +614,275 @@
           "empty": "Nothing new."
         }
       ]
+    },
+    {
+      "id": "ai.hostMember",
+      "title": "AI access",
+      "subtitle": "What this collaborator may do with AI on this site",
+      "label": "AI access",
+      "icon": "sparkles|auto_awesome",
+      "scope": "site",
+      "zones": [
+        "hostMember"
+      ],
+      "order": 10,
+      "load": {
+        "member": {
+          "doc": "hosts/{site.id}/members/{params.memberId}"
+        }
+      },
+      "constants": {
+        "assist": [
+          {
+            "label": "Assist",
+            "detail": "Ask the assistant, rewrite copy with AI, and generate a section."
+          }
+        ],
+        "generate": [
+          {
+            "label": "Generate",
+            "detail": "Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows."
+          }
+        ],
+        "defaults": {
+          "admin": {
+            "ai.use": true,
+            "ai.generate": true
+          },
+          "editor": {
+            "ai.use": true,
+            "ai.generate": true
+          },
+          "author": {
+            "ai.use": true,
+            "ai.generate": true
+          },
+          "viewer": {
+            "ai.use": false,
+            "ai.generate": false
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.member.role == owner",
+          "text": "The site owner's AI access follows their workspace role."
+        },
+        {
+          "type": "list",
+          "when": "data.member && data.member.role != owner",
+          "items": "const.assist",
+          "count": false,
+          "primary": "{item.label}",
+          "secondary": "{item.detail}",
+          "icon": "sparkles|auto_awesome",
+          "toggle": {
+            "value": "{data.member.aiPermissions[ai.use] ?? const.defaults[@data.member.role][ai.use]}",
+            "disabled": "!org.manager || data.member.status == invited",
+            "label": "Assist with AI",
+            "on": {
+              "id": "on",
+              "label": "Allow",
+              "method": "PATCH",
+              "url": "/api/ai/host-permissions",
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{params.memberId}",
+                "aiPermissions": {
+                  "ai.use": true
+                }
+              },
+              "success": "AI access updated",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Block",
+              "method": "PATCH",
+              "url": "/api/ai/host-permissions",
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{params.memberId}",
+                "aiPermissions": {
+                  "ai.use": false
+                }
+              },
+              "success": "AI access updated",
+              "reload": true
+            }
+          },
+          "title": "AI access"
+        },
+        {
+          "type": "list",
+          "when": "data.member && data.member.role != owner",
+          "items": "const.generate",
+          "count": false,
+          "primary": "{item.label}",
+          "secondary": "{item.detail}",
+          "icon": "sparkles|auto_awesome",
+          "toggle": {
+            "value": "{data.member.aiPermissions[ai.generate] ?? const.defaults[@data.member.role][ai.generate]}",
+            "disabled": "!org.manager || data.member.status == invited",
+            "label": "Generate with AI",
+            "on": {
+              "id": "on",
+              "label": "Allow",
+              "method": "PATCH",
+              "url": "/api/ai/host-permissions",
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{params.memberId}",
+                "aiPermissions": {
+                  "ai.generate": true
+                }
+              },
+              "success": "AI access updated",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Block",
+              "method": "PATCH",
+              "url": "/api/ai/host-permissions",
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{params.memberId}",
+                "aiPermissions": {
+                  "ai.generate": false
+                }
+              },
+              "success": "AI access updated",
+              "reload": true
+            }
+          }
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.member && data.member.role != owner",
+          "text": "A collaborator's role decides these unless you change them here."
+        }
+      ]
+    },
+    {
+      "id": "ai.allotment",
+      "title": "{params.who|'AI allotment'}",
+      "subtitle": "What may be drawn from the workspace's AI credits each month",
+      "label": "AI allotment",
+      "icon": "gauge.with.dots.needle.33percent|speed",
+      "scope": "org",
+      "zones": [
+        "orgMember",
+        "hostMembers",
+        "hostMember"
+      ],
+      "order": 20,
+      "load": {
+        "allot": {
+          "url": "/api/ai/allotments?orgId={org.id}&hostId={params.hostId}&uid={params.uid}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.allot",
+          "text": "This allotment is not available to you, or could not be read."
+        },
+        {
+          "type": "fields",
+          "title": "This month",
+          "when": "data.allot",
+          "rows": [
+            {
+              "label": "Allotment",
+              "value": "{data.allot.allotments[subject=params.subject].credits|'No cap':number}"
+            },
+            {
+              "label": "When it runs out",
+              "value": "{data.allot.allotments[subject=params.subject].mode:title}",
+              "when": "data.allot.allotments[subject=params.subject]"
+            },
+            {
+              "label": "Models",
+              "value": "{data.allot.allotments[subject=params.subject].models|'All models'}",
+              "when": "data.allot.allotments[subject=params.subject]"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "data.allot && (data.allot.canEdit.billing || data.allot.canEdit.collaborators)",
+          "items": [
+            {
+              "id": "set",
+              "label": "Set the allotment",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "credits",
+                  "label": "Credits a month",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{data.allot.allotments[subject=params.subject].credits}",
+                  "help": "A whole number, 1 or more."
+                },
+                {
+                  "key": "mode",
+                  "label": "When it runs out",
+                  "kind": "select",
+                  "initial": "{data.allot.allotments[subject=params.subject].mode|'hard'}",
+                  "options": [
+                    {
+                      "value": "hard",
+                      "label": "Stop AI for this person"
+                    },
+                    {
+                      "value": "soft",
+                      "label": "Keep going and flag it"
+                    }
+                  ]
+                }
+              ],
+              "url": "/api/ai/allotments",
+              "body": {
+                "orgId": "{org.id}",
+                "set": [
+                  {
+                    "subject": "{params.subject}",
+                    "credits": "{form.credits}",
+                    "mode": "{form.mode}",
+                    "models": "{data.allot.allotments[subject=params.subject].models}"
+                  }
+                ]
+              },
+              "success": "Allotment saved",
+              "reload": true
+            },
+            {
+              "id": "remove",
+              "label": "Remove the allotment",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "data.allot.allotments[subject=params.subject]",
+              "confirm": "Remove this allotment?",
+              "url": "/api/ai/allotments",
+              "body": {
+                "orgId": "{org.id}",
+                "remove": [
+                  "{params.subject}"
+                ]
+              },
+              "success": "Allotment removed",
+              "reload": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }

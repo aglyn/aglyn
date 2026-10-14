@@ -89,6 +89,54 @@ final class FunctionCasesTests: XCTestCase {
     }
   }
 
+  func testAnOfflineSaleIsPricedAndTaxedAsTheConsoleDoes() {
+    for item in cases("posOfflineSaleTotals") {
+      let input = item.args[0] as? [String: Any] ?? [:]
+      let lines = (input["lines"] as? [[String: Any]] ?? []).map {
+        PosOfflineTotalsLine(
+          unitAmountCents: ($0["unitAmountCents"] as? NSNumber)?.doubleValue ?? 0, quantity: ($0["quantity"] as? NSNumber)?.doubleValue ?? 1)
+      }
+      let tax = input["tax"] as? [String: Any] ?? [:]
+      let totals = posOfflineSaleTotals(
+        lines: lines, discountPct: (input["discountPct"] as? NSNumber)?.doubleValue ?? 0,
+        taxPct: (tax["pct"] as? NSNumber)?.doubleValue, pricesIncludeTax: tax["pricesIncludeTax"] as? Bool ?? false)
+      let expected = item.result as? [String: Any] ?? [:]
+      XCTAssertEqual(totals.itemsCents, (expected["itemsCents"] as? NSNumber)?.doubleValue, item.label)
+      XCTAssertEqual(totals.discountCents, (expected["discountCents"] as? NSNumber)?.doubleValue, item.label)
+      XCTAssertEqual(totals.taxCents, (expected["taxCents"] as? NSNumber)?.doubleValue, item.label)
+      XCTAssertEqual(totals.totalCents, (expected["totalCents"] as? NSNumber)?.doubleValue, item.label)
+      XCTAssertEqual(totals.shippingCents, (expected["shippingCents"] as? NSNumber)?.doubleValue, item.label)
+      XCTAssertEqual(totals.feeCents, (expected["feeCents"] as? NSNumber)?.doubleValue, item.label)
+    }
+  }
+
+  func testChangeIsNeverNegative() {
+    for item in cases("posOfflineChangeCents") {
+      let total = (item.args[0] as? NSNumber)?.doubleValue ?? 0
+      let tendered = (item.args[1] as? NSNumber)?.doubleValue ?? 0
+      XCTAssertEqual(posOfflineChangeCents(total: total, tendered: tendered), int(item.result), item.label)
+    }
+  }
+
+  func testASaleKeyIsAnIdTheOrderCanTake() {
+    for item in cases("posOfflineSaleKeyIsValid") {
+      XCTAssertEqual(posOfflineSaleKeyIsValid(string(item.args[0])), item.result as? Bool, item.label)
+    }
+  }
+
+  func testWhatACustomerTypesOnTheDisplayIsCheckedAsTheConsoleChecksIt() {
+    for item in cases("posDisplayEmail") { XCTAssertEqual(posDisplayEmail(string(item.args[0])), item.result as? String, item.label) }
+    for item in cases("posDisplayPhone") { XCTAssertEqual(posDisplayPhone(string(item.args[0])), item.result as? String, item.label) }
+  }
+
+  func testATipIsWholeCentsAndNoMoreThanThePayment() {
+    for item in cases("posTipProblem") {
+      let tip = (item.args[0] as? NSNumber)?.doubleValue ?? 0
+      let amount = (item.args[1] as? NSNumber)?.doubleValue ?? 0
+      XCTAssertEqual(posTipProblem(tipCents: tip, amountCents: amount), item.result as? String, item.label)
+    }
+  }
+
   func testOrderNumbersReadAsTheConsoleWritesThem() throws {
     for item in cases("formatOrderNumber") {
       let docId = item.args.count > 1 ? string(item.args[1]) : nil

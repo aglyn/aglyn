@@ -16,8 +16,11 @@ import Foundation
  *   server and opens a PENDING sale with an empty tender ledger;
  * - `commerce/pos-payment` takes each tender against it (`card-present` for
  *   a smart reader, `card-present-sdk` for this device's reader, `cash`,
- *   `gift-card`), re-reads a card payment (`status`), stops one (`cancel`),
- *   voids an unpaid sale (`void`) and sends the receipt (`receipt`).
+ *   `gift-card`, `credit` for store credit another plugin keeps, `folio` for
+ *   a room charge, `card-link` for the QR payment page), re-reads a card
+ *   payment (`status`), stops one (`cancel`), retries a declined reader
+ *   payment (`retry`), taps a test card (`simulate`), voids an unpaid sale
+ *   (`void`) and sends the receipt (`receipt`).
  *
  * Every money-moving call carries an Idempotency-Key the caller keeps for
  * that one press, so a retry after a lost answer finds the payment the first
@@ -33,6 +36,8 @@ struct PosRegisterSettings: Equatable {
   var tippingEnabled = false
   var tipPercentages: [Double] = []
   var receiptDefault = ReceiptDefault.ask
+  /// Offer the store's marketing opt-in under the email field a customer types on the display.
+  var displayMarketingOptIn = true
 }
 
 struct PosSmartReader: Equatable, Identifiable {
@@ -42,6 +47,25 @@ struct PosSmartReader: Equatable, Identifiable {
   let status: String
   let livemode: Bool
   var online: Bool { status == "online" }
+}
+
+/// A kind of store credit another plugin keeps (a rewards balance, a referral credit) that this site takes at the register.
+struct PosCreditProvider: Equatable, Identifiable {
+  let providerID: String
+  let label: String
+  /// Staff can look an account up by the customer's email or code, not only apply a code.
+  let lookup: Bool
+  var id: String { providerID }
+}
+
+/// A store-credit account a staff lookup found.
+struct PosCreditAccount: Equatable, Identifiable {
+  let reference: String
+  let label: String
+  let last4: String
+  let availableCents: Int
+  let detail: String?
+  var id: String { reference }
 }
 
 struct PosContext: Equatable {
@@ -54,6 +78,8 @@ struct PosContext: Equatable {
   let smsReceipts: Bool
   /// The site's register rules: shifts, the idle lock, the refund limit.
   var ops = PosOpsSettings()
+  /// Store credit other plugins keep, taken as a tender.
+  var credits: [PosCreditProvider] = []
 }
 
 struct PosSalePayment: Equatable, Identifiable {
@@ -67,6 +93,12 @@ struct PosSalePayment: Equatable, Identifiable {
   let changeCents: Int
   let readerID: String?
   let failureMessage: String?
+  /// The QR payment page of a pending `card_link` payment.
+  var checkoutURL: String? = nil
+  /// What a store-credit payment's provider calls it.
+  var creditLabel: String? = nil
+  /// False for a test-mode payment (a smart reader's simulated tap is offered only then).
+  var livemode: Bool? = nil
 }
 
 struct PosSale: Equatable {
@@ -152,7 +184,7 @@ func readPosContext(_ body: JSONValue?) -> PosContext {
     settings: PosRegisterSettings(
       tippingEnabled: settings["tippingEnabled"].flag,
       tipPercentages: Array(settings["tipPercentages"].array.compactMap(\.numberValue).filter { $0 > 0 }.prefix(4)),
-      receiptDefault: receipt),
+      receiptDefault: receipt, displayMarketingOptIn: settings["displayMarketingOptIn"] != .some(.bool(false))),
     terminalAvailable: terminal["available"].flag,
     testMode: terminal["testMode"].flag,
     readers: record["readers"].array.compactMap { entry in
@@ -163,7 +195,12 @@ func readPosContext(_ body: JSONValue?) -> PosContext {
         status: reader["status"].text ?? "offline", livemode: reader["livemode"].flag)
     },
     smsReceipts: record["smsReceipts"].flag,
-    ops: readPosOpsSettings(record["ops"]))
+    ops: readPosOpsSettings(record["ops"]),
+    credits: record["credits"].array.compactMap { entry in
+      let credit = entry.objectValue
+      guard let id = credit["providerId"].text else { return nil }
+      return PosCreditProvider(providerID: id, label: credit["label"].text ?? "Store credit", lookup: credit["lookup"].flag)
+    })
 }
 
 func readSalePayment(_ element: JSONValue) -> PosSalePayment? {
@@ -173,7 +210,9 @@ func readSalePayment(_ element: JSONValue) -> PosSalePayment? {
     id: id, method: payment["method"].text ?? "", amountCents: payment["amountCents"].cents,
     tipCents: payment["tipCents"].cents, status: payment["status"].text ?? "", cardBrand: payment["cardBrand"].text,
     last4: payment["last4"].text, changeCents: payment["changeCents"].cents, readerID: payment["readerId"].text,
-    failureMessage: payment["failureMessage"].text)
+    failureMessage: payment["failureMessage"].text, checkoutURL: payment["checkoutUrl"].text,
+    creditLabel: payment["creditLabel"].text,
+    livemode: payment["livemode"] == nil ? nil : payment["livemode"].flag)
 }
 
 func readPaymentAnswer(_ body: JSONValue?) -> PosPaymentAnswer {
@@ -215,11 +254,21 @@ enum SaleStep: Equatable {
   case cardPresent(readerID: String, amountCents: Int, tipCents: Int)
   case cash(tenderedCents: Int, tipCents: Int, amountCents: Int?)
   case giftCard(code: String, amountCents: Int?)
+  /// Store credit by the customer's code, or by the account a lookup found (provider and reference).
+  case credit(code: String?, providerID: String?, reference: String?, amountCents: Int?)
+  /// Charged to a checked-in stay's folio.
+  case folio(reservationID: String, amountCents: Int?)
+  /// The QR payment page: the customer pays on their phone.
+  case cardLink(amountCents: Int, tipCents: Int)
   case status(paymentID: String)
   case cancel(paymentID: String)
+  /// Tries a declined reader payment again on the same reader.
+  case retry(paymentID: String)
+  /// Test mode: taps a test card on the smart reader.
+  case simulate(paymentID: String)
   case sale
   case void
-  case receipt(channel: String, to: String?)
+  case receipt(channel: String, to: String?, marketingOptIn: Bool = false)
 
   var action: String {
     switch self {
@@ -227,8 +276,13 @@ enum SaleStep: Equatable {
     case .cardPresent: "card-present"
     case .cash: "cash"
     case .giftCard: "gift-card"
+    case .credit: "credit"
+    case .folio: "folio"
+    case .cardLink: "card-link"
     case .status: "status"
     case .cancel: "cancel"
+    case .retry: "retry"
+    case .simulate: "simulate"
     case .sale: "sale"
     case .void: "void"
     case .receipt: "receipt"
@@ -237,7 +291,7 @@ enum SaleStep: Equatable {
 
   var startsPayment: Bool {
     switch self {
-    case .cardPresentSDK, .cardPresent, .cash, .giftCard: true
+    case .cardPresentSDK, .cardPresent, .cash, .giftCard, .credit, .folio, .cardLink: true
     default: false
     }
   }
@@ -262,10 +316,22 @@ enum SaleStep: Equatable {
     case .giftCard(let code, let amount):
       record["code"] = .string(code)
       if let amount, amount > 0 { put("amountCents", amount) }
-    case .status(let id), .cancel(let id): record["paymentId"] = .string(id)
-    case .receipt(let channel, let to):
+    case .credit(let code, let providerID, let reference, let amount):
+      if let code { record["code"] = .string(code) }
+      if let providerID { record["providerId"] = .string(providerID) }
+      if let reference { record["reference"] = .string(reference) }
+      if let amount, amount > 0 { put("amountCents", amount) }
+    case .folio(let reservationID, let amount):
+      record["reservationId"] = .string(reservationID)
+      if let amount, amount > 0 { put("amountCents", amount) }
+    case .cardLink(let amount, let tip):
+      put("amountCents", amount)
+      put("tipCents", tip)
+    case .status(let id), .cancel(let id), .retry(let id), .simulate(let id): record["paymentId"] = .string(id)
+    case .receipt(let channel, let to, let marketingOptIn):
       record["channel"] = .string(channel)
       if let to { record["to"] = .string(to) }
+      if marketingOptIn { record["marketingOptIn"] = .bool(true) }
     case .sale, .void: break
     }
     return .object(record)
@@ -282,6 +348,8 @@ protocol PosSaleAPI: Sendable {
   func payment(orderID: String, step: SaleStep, attemptKey: String?) async throws -> PosPaymentAnswer
   /// A gift card's spendable balance, to read to the customer.
   func giftCardBalance(code: String) async throws -> GiftCardBalance
+  /// The store-credit accounts one provider finds for a customer's email or code.
+  func creditLookup(providerID: String, query: String) async throws -> [PosCreditAccount]
 }
 
 extension PosSaleAPI {
@@ -318,6 +386,7 @@ struct ConsolePosSaleAPI: PosSaleAPI {
     if let locationID { body["locationId"] = .string(locationID) }
     if cart.discountPct > 0 { body["discountPct"] = .number(Double(cart.discountPct)) }
     if !cart.customerEmail.isEmpty { body["customerEmail"] = .string(cart.customerEmail) }
+    if let customer = cart.customer { body["customer"] = customer.json }
     if let assertion = cashier.assertion { body["cashierAssertion"] = .string(assertion) }
     return readOpenedSale(
       try await api.request(posOrderRoute, method: .post, body: .object(body), idempotencyKey: attemptKey))
@@ -345,6 +414,22 @@ struct ConsolePosSaleAPI: PosSaleAPI {
     return GiftCardBalance(
       availableCents: body["availableCents"].cents, frozen: body["frozen"].flag, voided: body["voided"].flag,
       last4: body["last4"].text ?? "")
+  }
+}
+
+extension ConsolePosSaleAPI {
+  func creditLookup(providerID: String, query: String) async throws -> [PosCreditAccount] {
+    let body = try await api.request(
+      posPaymentRoute, method: .post,
+      body: ["hostId": .string(hostID), "action": "credit-lookup", "providerId": .string(providerID), "query": .string(query)]
+    ).object
+    return body["accounts"].array.compactMap { entry in
+      let account = entry.objectValue
+      guard let reference = account["reference"].text else { return nil }
+      return PosCreditAccount(
+        reference: reference, label: account["label"].text ?? "Store credit", last4: account["last4"].text ?? "",
+        availableCents: account["availableCents"].cents, detail: account["detail"].text)
+    }
   }
 }
 

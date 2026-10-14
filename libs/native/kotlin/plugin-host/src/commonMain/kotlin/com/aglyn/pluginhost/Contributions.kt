@@ -16,7 +16,18 @@ typealias NativeParams = Map<String, String>
 enum class NativeApp { AGLYN, POS }
 
 /** Where a POS contribution sits in the register. */
-enum class PosPlacement { REGISTER, TENDER, PERIPHERAL, MENU }
+enum class PosPlacement {
+  REGISTER,
+  TENDER,
+  PERIPHERAL,
+  MENU,
+
+  /**
+   * A whole-screen mode a tablet can be set up as, with nobody signed in: the customer display and the
+   * self-service kiosk (AGL-3608, AGL-3623). The shell offers these at sign-in and hands them a context with no member.
+   */
+  DEVICE,
+}
 
 enum class WidgetSize { HALF, FULL }
 
@@ -79,6 +90,13 @@ interface NativePluginContext {
 
   /** Makes [hostId] the picked site, as the site switcher does. */
   fun selectSite(hostId: String) {}
+
+  /**
+   * The widgets other plugins put in a core page's named slot (`commerceSettings`,
+   * `hostAnalytics`), in order. A screen that hosts a slot draws these; core
+   * and the host never name the plugins that contribute.
+   */
+  fun slotWidgets(slot: String): List<NativeWidget> = emptyList()
 
   /** Opens a registered screen by id. */
   fun navigate(screenId: String, params: NativeParams = emptyMap())
