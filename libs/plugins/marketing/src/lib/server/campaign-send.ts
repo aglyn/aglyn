@@ -65,6 +65,7 @@ import {
   resolveHostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
+import { withContactConsentForRuleMembers } from '@aglyn/tenant-data-admin/server/contact-consent'
 import { MARKETING_REPUTATION_BREAKER } from '../constants/operator-alerts'
 // The person behind an address, through the plugin that keeps people
 // (AGL-3080): the sender never opens the record system's collections.
@@ -1414,12 +1415,27 @@ export async function performCampaignSend(
     listName = String((await listRef.get()).get('name') ?? '')
     const members = await sweepAudience(listRef.collection('members'))
     audienceTruncated = members.truncated
+    const ruleMembers = new Set<string>()
     recipients = members.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
       collectName(email, doc.get('name'))
       collectConsent(email, doc.data())
+      if (doc.get('via') === 'rule') ruleMembers.add(email.trim().toLowerCase())
       return email
     })
+    /*
+     * A row a list RULE enrolled carries no basis of its own — matching a
+     * rule is not an opt-in, so the materializer never writes one — and the
+     * person's real basis is on their contact. Read there, for those rows
+     * only, or a live list fed by a sign-up form is an audience of nobody
+     * under the strict policy, opt-ins and all.
+     */
+    await withContactConsentForRuleMembers(
+      orgDataCollectionForHost(hostId, 'contacts'),
+      consentGroup,
+      consent,
+      ruleMembers,
+    )
   } else {
     recipients = Array.isArray(options.emails)
       ? options.emails.map((value: unknown) => String(value))

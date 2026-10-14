@@ -85,17 +85,25 @@ import {
   ASSIGNMENT_REFUSAL_MESSAGES,
   assignmentBasis,
   dynamicListRuleIsEmpty,
+  normalizeContactEmail,
   normalizeDynamicListRule,
   readMarketingBasis,
+  type MarketingConsentRecord,
   registerPluginApiRoute,
   type AssignmentRefusal,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import {
   collectDynamicListCandidates,
+  consentGroupForSite,
   enrollListMember,
   firebaseAdmin,
+  orgDataCollectionForHost,
 } from '@aglyn/tenant-data-admin'
+import {
+  CONTACT_LOOKUP_CHUNK,
+  withContactConsentForRuleMembers,
+} from '@aglyn/tenant-data-admin/server/contact-consent'
 import { registerSubscriptionTopicIndex } from './server-topic-index'
 
 /** `source` stamped on every membership these routes write. */
@@ -174,6 +182,105 @@ export const emailListMembersPreviewHandler: PluginApiHandler = async (
   } catch (error) {
     console.error('[email] list member preview failed', error)
     return res.status(500).json({ error: 'The addresses could not be checked.' })
+  }
+}
+
+/** The most member rows one consent read may name — one table page and then some. */
+export const LIST_MEMBER_CONSENT_MAX = 100
+
+/**
+ * `POST email/list-member-consent` — the basis a send will act on, for the
+ * rows of a list a RULE enrolled.
+ *
+ * Body: `{ hostId, listId, emails[] }`. Answers `{ consent: { [email]:
+ * { basis, assertedBy, basisAtMs, otherGrant } } }` for each named address
+ * that is a `via: 'rule'` member of the list with no basis on its own row;
+ * every other address is left out, and the table keeps reading those rows
+ * itself.
+ *
+ * A rule-enrolled row never holds a basis — matching a rule is not an opt-in
+ * — so `performCampaignSend` reads those people's contacts instead, through
+ * `withContactConsentForRuleMembers`. The column calls this so it shows the
+ * same answer; the browser cannot make the read itself, because the rules
+ * put the org's contacts behind org-wide membership and a `visibleTo` scope
+ * that an address lookup cannot be combined with.
+ *
+ * The member rows are re-read here rather than taken from the request, so a
+ * caller cannot get a contact's consent read for an address that is not a
+ * rule member of this list. Reads only, behind the same gate as the preview.
+ */
+export const emailListMemberConsentHandler: PluginApiHandler = async (
+  req,
+  res,
+) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  const raw: unknown[] = Array.isArray(req.body?.emails) ? req.body.emails : []
+  const emails = [
+    ...new Set(
+      raw
+        .map((value) => normalizeContactEmail(value))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ]
+  if (emails.length > LIST_MEMBER_CONSENT_MAX) {
+    return res.status(400).json({
+      error: `At most ${LIST_MEMBER_CONSENT_MAX} addresses per request.`,
+    })
+  }
+  try {
+    const context = await resolveListContext(req)
+    if (context.ok === false) {
+      return res.status(context.status).json(context.body)
+    }
+    if (!emails.length) return res.status(200).json({ consent: {} })
+    const group = await consentGroupForSite(context.hostId)
+    const records = new Map<string, MarketingConsentRecord>()
+    const ruleMembers = new Set<string>()
+    const members = context.listRef.collection('members')
+    for (let at = 0; at < emails.length; at += CONTACT_LOOKUP_CHUNK) {
+      const chunk = emails.slice(at, at + CONTACT_LOOKUP_CHUNK)
+      const snapshot = await members.where('email', 'in', chunk).get()
+      for (const doc of snapshot.docs) {
+        const email = normalizeContactEmail(doc.get('email'))
+        if (!email || doc.get('via') !== 'rule') continue
+        ruleMembers.add(email)
+        records.set(
+          email,
+          readMarketingBasis(doc.data() as Record<string, unknown>, group),
+        )
+      }
+    }
+    // Only the rows the overlay will fill are answered.
+    const unrecorded = new Set(
+      [...ruleMembers].filter(
+        (email) => records.get(email)?.basis === 'unrecorded',
+      ),
+    )
+    await withContactConsentForRuleMembers(
+      orgDataCollectionForHost(context.hostId, 'contacts'),
+      group,
+      records,
+      unrecorded,
+    )
+    const consent: Record<string, Record<string, unknown>> = {}
+    for (const email of unrecorded) {
+      const record = records.get(email)
+      if (!record) continue
+      // Named fields: the record also carries provenance that is not the
+      // browser's (see the preview route above).
+      consent[email] = {
+        basis: record.basis,
+        assertedBy: record.assertedBy,
+        basisAtMs: record.basisAtMs,
+        otherGrant: record.otherGrant,
+      }
+    }
+    return res.status(200).json({ consent })
+  } catch (error) {
+    console.error('[email] list member consent read failed', error)
+    return res.status(500).json({ error: 'Consent could not be read.' })
   }
 }
 
@@ -463,6 +570,10 @@ export function registerEmailConsoleApi(): void {
     emailListMembersPreviewHandler,
   )
   registerPluginApiRoute('email/list-members-add', emailListMembersAddHandler)
+  registerPluginApiRoute(
+    'email/list-member-consent',
+    emailListMemberConsentHandler,
+  )
   // The importer runs on the transfer framework (its resource registers from
   // the console declarations), and its permission step reads what the dry
   // run found through this one route — behind `resolveListContext`, the gate
