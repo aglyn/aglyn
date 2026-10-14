@@ -168,6 +168,9 @@ public final class AuthSession {
   @ObservationIgnored private var impersonated: IdentityToolkitAuth?
   /// The staff member's own sign-in, set aside while a support session is on.
   @ObservationIgnored private var staffAside: AglynUser?
+  /// Whether someone signed in or out (or a support session began) since launch: the stored session read at launch then
+  /// does not land over it.
+  @ObservationIgnored private var signedInOrOutSinceLaunch = false
 
   /// `rest` is the REST client to sign in with; nil signs in with the Firebase SDK.
   public init(rest: IdentityToolkitAuth? = nil, impersonationAuth: (@Sendable () -> IdentityToolkitAuth)? = nil) {
@@ -176,7 +179,8 @@ public final class AuthSession {
     transport = rest == nil ? .sdk : .rest
     if let rest {
       Task { @MainActor in
-        self.user = await rest.restore()
+        let restored = await rest.restore()
+        if !self.signedInOrOutSinceLaunch { self.user = restored }
         self.ready = true
         await self.refreshStanding()
       }
@@ -218,6 +222,7 @@ public final class AuthSession {
   public func signIn(email: String, password: String) async throws {
     let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
     if let rest {
+      signedInOrOutSinceLaunch = true
       user = try await rest.signIn(email: trimmed, password: password)
       await refreshStanding()
       return
@@ -228,6 +233,7 @@ public final class AuthSession {
   /// Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner).
   public func signIn(customToken: String) async throws {
     if let rest {
+      signedInOrOutSinceLaunch = true
       user = try await rest.signIn(customToken: customToken)
       await refreshStanding()
       return
@@ -324,6 +330,7 @@ public final class AuthSession {
     await endImpersonation()
     for task in beforeSignOut { await task() }
     staff = nil
+    signedInOrOutSinceLaunch = true
     if let rest {
       await rest.signOut()
       user = nil
