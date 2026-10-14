@@ -184,7 +184,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'review-platforms',
     apiPrefixes: ["review-platforms"],
     register: {"console":"registerReviewPlatformsConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    contributes: {"console":{"slots":["commercePromotions","orderDetail"]}},
     load: () => import('@aglyn/plugins-review-platforms'),
   },
   {
@@ -233,7 +233,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'couriers',
     apiPrefixes: ["couriers"],
     register: {"console":"registerCouriersConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail","localDeliveryRow"]}},
+    contributes: {"console":{"slots":["commerceSettingsShipping","orderDetail","localDeliveryRow"]}},
     load: () => import('@aglyn/plugins-couriers'),
   },
   {

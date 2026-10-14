@@ -44,7 +44,7 @@ export function registerCouriersConsole(): void {
     featureFlag: COURIERS_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsShipping',
         widgetId: COURIERS_SETTINGS_WIDGET_ID,
         title: 'Couriers',
         Component: CouriersCard,

@@ -120,7 +120,7 @@ export function registerCommerceStoreZones(): void {
       label: 'Store promotions',
       surface: 'console',
       description:
-        'At the foot of the store’s Promotions, beside its discounts and gift cards. A widget here keeps its own programs and balances through its own routes; it writes none of the store’s.',
+        'At the foot of the store’s Promotions, beside its discounts, gift cards and reviews. A widget here keeps its own programs, balances and connections through its own routes; it writes none of the store’s.',
     },
     owner,
   )

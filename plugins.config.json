@@ -3046,7 +3046,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commercePromotions",
             "orderDetail"
           ]
         }
@@ -3354,7 +3354,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commerceSettingsShipping",
             "orderDetail",
             "localDeliveryRow"
           ]

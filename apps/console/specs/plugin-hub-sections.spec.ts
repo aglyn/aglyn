@@ -435,3 +435,85 @@ describe('a hub URL carrying a return marker (AGL-3080)', () => {
     ).toBe('/acme/marketplace/browse')
   })
 })
+
+/*
+ * Rail groups and zone-only sections (AGL-3713). A section's `group` reaches
+ * the rail unchanged, and a section that is nothing but plugin zones is
+ * offered only while one of its zones has a widget — the Products hub's
+ * Sales channels and Integrations pages, which would otherwise be empty.
+ */
+describe('rail groups and zone-only sections (AGL-3713)', () => {
+  const GROUPED: readonly ConsoleNavSection[] = [
+    { id: 'catalog', label: 'Catalog' },
+    { id: 'payments', label: 'Payments', group: 'Settings' },
+    {
+      id: 'channels',
+      label: 'Sales channels',
+      group: 'Settings',
+      onlyWithZones: ['commerceSettingsChannels'],
+    },
+    {
+      id: 'integrations',
+      label: 'Integrations',
+      group: 'Settings',
+      onlyWithZones: ['commerceSettings'],
+    },
+  ]
+  const base = { flags: flags(), isStaff: false, org: CRM_ORG, orgReady: true }
+  const visibleIds = (filledZones?: ReadonlySet<string>) =>
+    resolveHubSections(GROUPED, '/acme/hosts/shop/products', {
+      ...base,
+      filledZones,
+    })
+      ?.filter((section) => section.visible)
+      .map((section) => section.id)
+
+  it('carries each section’s group through, and none where none is named', () => {
+    const rail = resolveHubSections(GROUPED, '/acme/hosts/shop/products', base)
+    expect(rail?.map((section) => section.group)).toEqual([
+      undefined,
+      'Settings',
+      'Settings',
+      'Settings',
+    ])
+    expect(rail?.[0] && 'group' in rail[0]).toBe(false)
+  })
+
+  it('hides a zone-only section while none of its zones is filled', () => {
+    expect(visibleIds(new Set())).toEqual(['catalog', 'payments'])
+  })
+
+  it('hides it, too, while the zones are unanswered', () => {
+    expect(visibleIds(undefined)).toEqual(['catalog', 'payments'])
+  })
+
+  it('offers each zone-only section once its own zone has a widget', () => {
+    expect(visibleIds(new Set(['commerceSettingsChannels']))).toEqual([
+      'catalog',
+      'payments',
+      'channels',
+    ])
+    expect(
+      visibleIds(new Set(['commerceSettingsChannels', 'commerceSettings'])),
+    ).toEqual(['catalog', 'payments', 'channels', 'integrations'])
+  })
+
+  it('hides a zone-only section without locking it: there is nothing to buy', () => {
+    const rail = resolveHubSections(GROUPED, '/acme/hosts/shop/products', {
+      ...base,
+      filledZones: new Set(),
+    })
+    const channels = rail?.find((section) => section.id === 'channels')
+    expect(channels?.visible).toBe(false)
+    expect(channels?.locked).toBe(false)
+  })
+
+  it('never lands a bare hub on a hidden zone-only section', () => {
+    const rail = resolveHubSections(
+      [GROUPED[2], GROUPED[1]],
+      '/acme/hosts/shop/products',
+      { ...base, filledZones: new Set() },
+    )
+    expect(hubLandingHref(rail)).toBe('/acme/hosts/shop/products/payments')
+  })
+})
