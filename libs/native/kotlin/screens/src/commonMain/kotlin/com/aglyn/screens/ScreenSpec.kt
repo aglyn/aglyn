@@ -76,6 +76,12 @@ class LoadSpec(val key: String, json: JsonElement) {
   val switchboard: String? = json.str("switchboard")
   /** Runs once the other loads have answered, with their answers under `data`: a read keyed by something another read found. */
   val late: Boolean = json.isTrue("late")
+  /**
+   * The query parameter a staff list route orders by (`sort=<path>:<dir>`), and the order it answers when none was asked. A list's
+   * `route` columns ask for the others.
+   */
+  val sortParam: String? = json.str("sortParam")
+  val sortDefault: String? = json.str("sortDefault")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {

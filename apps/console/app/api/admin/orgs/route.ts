@@ -35,8 +35,10 @@ import {
   isEnterpriseOrg,
   PLAN_LABELS,
   planCompLabel,
+  resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { ORG_LIST_QUERY } from '../../../../utils/org-list-query'
+import { overrideCount } from '../../../../utils/org-override-count'
 import {
   LAPSED_SUSPENSIONS_NOTICE,
   asksAboutSuspension,
@@ -164,11 +166,26 @@ async function handler(request: Request): Promise<Response> {
       const planState = describeOrgPlan(planInputs as never)
       const enterprise = isEnterpriseOrg(planInputs as never)
       const storedPlan = String(data['plan'] ?? 'no plan')
+      // The Site limit column the page derives from the row (an UNLIMITED quota is infinite, which JSON cannot carry),
+      // and the chip beside it that counts the overrides.
+      const hostLimit = resolveOrgEntitlements({
+        plan: data['plan'] ?? null,
+        entitlements: data['entitlements'] ?? null,
+        billingStatus: data['billingStatus'] ?? null,
+        enterprise: data['enterprise'] === true,
+        subscription: planInputs.subscription,
+      } as never).hostLimit
+      const overrides = overrideCount({ entitlements: data['entitlements'] ?? null })
       return {
         $id: docSnap.id,
         name: data['name'] ?? null,
         slug: data['slug'] ?? null,
         readsAs: enterprise ? PLAN_LABELS.enterprise : planState.effectivePlan,
+        siteLimit: Number.isFinite(hostLimit) ? hostLimit : null,
+        siteLimitText: Number.isFinite(hostLimit) ? String(hostLimit) : '\u221e',
+        // What the column sorts by: the grid sorts an unlimited quota as the largest, which a null would put last.
+        siteLimitRank: Number.isFinite(hostLimit) ? hostLimit : Number.MAX_SAFE_INTEGER,
+        overridesNote: overrides ? `${overrides} override${overrides === 1 ? '' : 's'}` : null,
         storedNote: !enterprise && storedPlan !== planState.effectivePlan ? `stored: ${storedPlan}` : null,
         compNote: planState.comp
           ? `comp: ${planCompLabel(planState.comp, planState.compInForce, planState.comp.plan)}`

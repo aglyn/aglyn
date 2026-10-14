@@ -647,12 +647,30 @@ private fun ListBlock(
   trigger: (ActionSpec, JsonElement) -> Unit,
 ) {
   val scope = rememberCoroutineScope()
+  val key = ListColumns.key(block)
+  val columns = ListColumns.columns(block)
+  val asked = model.order[key]
+  val chosen = asked?.let { order -> columns.firstOrNull { it.id == order.column } }
   val found = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
   val unsorted = (block.string("flatten")?.let { ScreenValues.flatten(found, it) } ?: found)
     .filter { ScreenValues.condition(block.string("filter"), ScreenContext.withItem(context, it)) }
-  val rows = block.string("sort")?.let { ScreenValues.sorted(unsorted, it) } ?: unsorted
+  val fixed = block.string("sort")?.let { ScreenValues.sorted(unsorted, it) } ?: unsorted
+  // A `page` column orders the rows on the screen; a `route` column already came back from the route in its order.
+  val rows = if (chosen?.page != null && asked != null) ListColumns.sorted(fixed, chosen, asked.descending, context) else fixed
+  val shown = model.shownColumns(key, columns)
   val loadKey = block.string("load")
-  SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {
+  val sortable = columns.filter { it.sortable }
+  val pickable = columns.filter { !it.always }
+  val heading = title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }
+  SectionCard(
+    heading ?: if (sortable.isNotEmpty() || pickable.isNotEmpty()) "" else null,
+    action = if (sortable.isEmpty() && pickable.isEmpty()) null else ({
+      Row {
+        if (sortable.isNotEmpty()) SortMenu(key, sortable, asked, chosen) { next, routed -> scope.launch { model.ask(next, key, routed) } }
+        if (pickable.isNotEmpty()) ColumnsMenu(key, pickable, shown) { model.shown[key] = it }
+      }
+    }),
+  ) {
     Column(Modifier.fillMaxWidth()) {
       if (rows.isEmpty()) {
         Text(
@@ -664,7 +682,8 @@ private fun ListBlock(
       }
       rows.forEachIndexed { index, row ->
         if (index > 0) HorizontalDivider()
-        ListRow(block, ScreenContext.withItem(context, row), selection, open, trigger)
+        val rowScope = ScreenContext.withItem(context, row)
+        ListRow(block, rowScope, selection, open, trigger, columnsLine = ListColumns.line(columns, shown, rowScope))
       }
       if (loadKey != null && model.cursors[loadKey] != null) {
         HorizontalDivider()
@@ -677,6 +696,57 @@ private fun ListBlock(
   }
 }
 
+/** The header sort: a tap on a column asks for its first order, a second for the other, a third for the default again. */
+@Composable
+private fun SortMenu(key: String, columns: List<ListColumn>, asked: ListOrder?, chosen: ListColumn?, ask: (ListOrder?, Boolean) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  Box {
+    IconButton(onClick = { open = true }, modifier = Modifier.testTag("sort-$key")) {
+      Icon(
+        AglynIcons.named("filter_list"),
+        contentDescription = "Sort",
+        tint = if (asked == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+      )
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      DropdownMenuItem(
+        text = { Text(if (asked == null) "\u2713 Default order" else "Default order") },
+        onClick = { open = false; ask(null, chosen?.route != null) },
+        modifier = Modifier.testTag("sort-default"),
+      )
+      for (column in columns) {
+        val active = asked?.takeIf { it.column == column.id }
+        DropdownMenuItem(
+          text = { Text(if (active != null) "\u2713 ${column.label} ${if (active.descending) "\u2193" else "\u2191"}" else column.label) },
+          onClick = { open = false; ask(ListColumns.next(asked, column), column.route != null || chosen?.route != null) },
+          modifier = Modifier.testTag("sort-${column.id}"),
+        )
+      }
+    }
+  }
+}
+
+/** The column picker: which facts each row shows. */
+@Composable
+private fun ColumnsMenu(key: String, columns: List<ListColumn>, shown: Set<String>, pick: (Set<String>) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  Box {
+    IconButton(onClick = { open = true }, modifier = Modifier.testTag("columns-$key")) {
+      Icon(AglynIcons.named("tune"), contentDescription = "Columns", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      for (column in columns) {
+        val on = column.id in shown
+        DropdownMenuItem(
+          text = { Text(if (on) "\u2713 ${column.label}" else column.label) },
+          onClick = { pick(if (on) shown - column.id else shown + column.id) },
+          modifier = Modifier.testTag("column-${column.id}"),
+        )
+      }
+    }
+  }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ListRow(
@@ -685,6 +755,8 @@ private fun ListRow(
   selection: Selection?,
   open: (String, NativeParams) -> Unit,
   trigger: (ActionSpec, JsonElement) -> Unit,
+  /** The row's picked columns as one line (`columns`), empty for a list without them. */
+  columnsLine: String = "",
 ) {
   val actions = block.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.filter { ScreenValues.condition(it.whenCondition, scope) }
   val target = block["open"]?.takeIf { ScreenValues.condition(it.str("when"), scope) }?.let { openSpec ->
@@ -710,7 +782,7 @@ private fun ListRow(
     (if (toggleOn) toggleOffAction != null else toggleOnAction != null)
   val toggleLabel = toggle?.let { ScreenValues.render(it.str("label") ?: "Turn $primary on or off", scope) }
   var menu by remember { mutableStateOf(false) }
-  val supporting = listOfNotNull(secondary, tertiary).joinToString("\n").ifEmpty { null }
+  val supporting = listOfNotNull(secondary, columnsLine.ifEmpty { null }, tertiary).joinToString("\n").ifEmpty { null }
   Column {
     AglynListItem(
       title = primary,

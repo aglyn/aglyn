@@ -128,6 +128,10 @@ class ScreenModel(
   val cursors = mutableStateMapOf<String, String>()
   val loadingMore = mutableStateMapOf<String, Boolean>()
   val search = mutableStateMapOf<String, String>()
+  /** The order each list was asked for (by its load, else its items); absent is the route's own default. */
+  val order = mutableStateMapOf<String, ListOrder>()
+  /** The columns each list shows, where the person has picked; absent is the list's own defaults. */
+  val shown = mutableStateMapOf<String, Set<String>>()
   /** The `{attempt}` key of each action's last request, by action, path and body: a retry reuses it. */
   private val attempts = mutableMapOf<String, String>()
 
@@ -146,8 +150,60 @@ class ScreenModel(
       url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
     }
     filtersParameter(load.filters, context)?.let { url += (if ('?' in url) "&" else "?") + it }
+    load.sortParam?.let { param ->
+      // A list's `route` columns order the route over every row; nothing asked is the route's own default.
+      val columns = spec.blocks.filter { it.type == "list" && ListColumns.key(it) == load.key }.flatMap { ListColumns.columns(it) }
+      (ListColumns.routeValue(order[load.key], columns) ?: load.sortDefault)?.let { value ->
+        url += (if ('?' in url) "&" else "?") + param + "=" + ScreenValues.encodeComponent(value)
+      }
+    }
     if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     return url
+  }
+
+  /** Asks a list for an order. A `route` column reads the route again in that order, from the first page; a `page` column reorders what is on the screen. */
+  suspend fun ask(asked: ListOrder?, key: String, routed: Boolean) {
+    if (asked == null) order.remove(key) else order[key] = asked
+    if (routed) load()
+  }
+
+  /** A list's columns with the picks made, or its defaults. */
+  internal fun shownColumns(key: String, columns: List<ListColumn>): Set<String> = shown[key] ?: columns.filter { it.show }.map { it.id }.toSet()
+
+  /**
+   * The columns plugins contribute to a list read: one request per plugin column for the rows on the screen (in batches of `max`, as
+   * the route allows), answered under `column.<id>`. A column that cannot be read leaves its cells blank; it never fails the screen.
+   */
+  internal suspend fun loadPluginColumns() {
+    val client = api ?: return
+    val answers = mutableMapOf<String, JsonElement>()
+    for (block in spec.blocks.filter { it.type == "list" }) {
+      val zone = block.string("columnsZone") ?: continue
+      val rows = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
+      for (contribution in ScreenCatalog.zone(zone).filter { ScreenValues.condition(it.requires, context) }) {
+        val column = contribution.raw.obj("column") ?: continue
+        val id = column.str("id") ?: continue
+        val load = column.obj("load") ?: continue
+        val template = load.str("url") ?: continue
+        val idTemplate = load.str("ids") ?: "{item.\$id}"
+        val ids = rows.map { ScreenValues.render(idTemplate, ScreenContext.withItem(context, it)) }.filter { it.isNotEmpty() }
+        val batch = ((load.obj("max") as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 100).coerceAtLeast(1)
+        var answer: JsonElement = JsonObject(emptyMap())
+        for (chunk in ids.chunked(batch)) {
+          val path = ScreenValues.renderUrl(template, ScreenContext.with(context, "ids", JsonPrimitive(chunk.joinToString(","))))
+          val part = try {
+            client.request(path)
+          } catch (error: CancellationException) {
+            throw error
+          } catch (_: Throwable) {
+            null
+          }
+          if (part != null) answer = merged(answer, part)
+        }
+        answers[id] = answer
+      }
+    }
+    if (answers.isNotEmpty()) context = ScreenContext.with(context, "column", JsonObject(answers))
   }
 
   /** A staff list route's `filters=` parameter from `{ field, op, value }` clauses, each kept when its value template is not empty. */
@@ -201,6 +257,7 @@ class ScreenModel(
     cursors.clear()
     for ((key, _, cursor) in results) if (!cursor.isNullOrEmpty()) cursors[key] = cursor
     phase = Phase.Ready
+    loadPluginColumns()
   }
 
   private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec, context: JsonElement): Triple<String, JsonElement, String?> {
@@ -248,6 +305,7 @@ class ScreenModel(
     } finally {
       loadingMore.remove(key)
     }
+    loadPluginColumns()
   }
 
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
@@ -401,6 +459,14 @@ class ScreenModel(
   companion object {
     /** The most lines the session log keeps, as the console's does. */
     const val JOURNAL_LIMIT = 25
+
+    /** [b] laid over [a]: maps join (by key, down through maps), anything else takes [b]. */
+    internal fun merged(a: JsonElement, b: JsonElement): JsonElement {
+      if (a !is JsonObject || b !is JsonObject) return b
+      val out = a.toMutableMap()
+      for ((key, value) in b) out[key] = out[key]?.let { merged(it, value) } ?: value
+      return JsonObject(out)
+    }
 
     /** The session the templates read: the log, and what is armed. */
     internal fun sessionValue(journal: List<JsonElement>, armed: Set<String>): JsonElement = JsonObject(

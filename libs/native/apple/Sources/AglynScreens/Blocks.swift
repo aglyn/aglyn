@@ -121,10 +121,17 @@ struct ListBlock: View {
   let trigger: (ActionSpec, JSONValue) -> Void
 
   var body: some View {
+    let key = ListColumns.key(of: block)
+    let columns = ListColumns.columns(of: block)
+    let asked = model.order[key]
+    let chosen = asked.flatMap { order in columns.first { $0.id == order.column } }
     let found = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
     let unsorted = (block["flatten"]?.stringValue.map { ScreenValues.flatten(found, through: $0) } ?? found)
       .filter { ScreenValues.condition(block["filter"]?.stringValue, in: ScreenContext.with(context, item: $0)) }
-    let rows = block["sort"]?.stringValue.map { ScreenValues.sorted(unsorted, by: $0) } ?? unsorted
+    let fixed = block["sort"]?.stringValue.map { ScreenValues.sorted(unsorted, by: $0) } ?? unsorted
+    // A `page` column orders the rows on the screen; a `route` column already came back from the route in its order.
+    let rows = Self.ordered(fixed, by: chosen, asked: asked, in: context)
+    let shown = model.shownColumns(of: key, in: columns)
     let loadKey = block["load"]?.stringValue
     Section {
       if rows.isEmpty {
@@ -134,7 +141,10 @@ struct ListBlock: View {
           .padding(.vertical, AglynSpace.one)
       }
       ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-        ListRow(block: block, scope: ScreenContext.with(context, item: row), selection: selection, open: open, trigger: trigger)
+        let scope = ScreenContext.with(context, item: row)
+        ListRow(
+          block: block, scope: scope, columnsLine: ListColumns.line(columns, shown: shown, in: scope), selection: selection, open: open,
+          trigger: trigger)
       }
       if let loadKey, model.cursors[loadKey] != nil {
         Button {
@@ -149,22 +159,81 @@ struct ListBlock: View {
         .accessibilityIdentifier("load-more-\(loadKey)")
       }
     } header: {
-      if let title, !title.isEmpty {
+      let sortable = columns.filter(\.sortable)
+      let pickable = columns.filter { !$0.always }
+      if !(title ?? "").isEmpty || !sortable.isEmpty || !pickable.isEmpty {
         HStack {
-          Text(title)
+          Text(title ?? "")
           Spacer()
-          if block["count"] != .bool(false), !rows.isEmpty { Text("\(rows.count)").monospacedDigit() }
+          if block["count"] != .bool(false), !rows.isEmpty, title != nil { Text("\(rows.count)").monospacedDigit() }
+          if !sortable.isEmpty { sortMenu(key: key, columns: sortable, asked: asked, chosen: chosen) }
+          if !pickable.isEmpty { columnsMenu(key: key, columns: pickable, shown: shown) }
         }
       }
     } footer: {
       if let footer, !footer.isEmpty { Text(footer) }
     }
   }
+
+  private static func ordered(_ rows: [JSONValue], by column: ListColumn?, asked: ListOrder?, in context: JSONValue) -> [JSONValue] {
+    guard let column, column.page != nil, let asked else { return rows }
+    return ListColumns.sorted(rows, by: column, descending: asked.descending, in: context)
+  }
+
+  /// The header sort: a tap on a column asks for its first order, a second for the other, a third for the default again.
+  private func sortMenu(key: String, columns: [ListColumn], asked: ListOrder?, chosen: ListColumn?) -> some View {
+    Menu {
+      Button {
+        Task { await model.ask(nil, of: key, routed: chosen?.route != nil) }
+      } label: {
+        if asked == nil { Label("Default order", systemImage: "checkmark") } else { Text("Default order") }
+      }
+      ForEach(columns) { column in
+        let active = asked?.column == column.id ? asked : nil
+        Button {
+          Task { await model.ask(ListColumns.next(after: asked, tapping: column), of: key, routed: column.route != nil || chosen?.route != nil) }
+        } label: {
+          if let active {
+            Label("\(column.label) \(active.descending ? "\u{2193}" : "\u{2191}")", systemImage: "checkmark")
+          } else {
+            Text(column.label)
+          }
+        }
+      }
+    } label: {
+      Image(systemName: "arrow.up.arrow.down").foregroundStyle(asked == nil ? Color.secondary : AglynColor.tint)
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Sort")
+    .accessibilityIdentifier("sort-\(key)")
+  }
+
+  /// The column picker: which facts each row shows.
+  private func columnsMenu(key: String, columns: [ListColumn], shown: Set<String>) -> some View {
+    Menu {
+      ForEach(columns) { column in
+        Toggle(
+          column.label,
+          isOn: Binding(
+            get: { shown.contains(column.id) },
+            set: { on in model.shown[key] = on ? shown.union([column.id]) : shown.subtracting([column.id]) }))
+      }
+    } label: {
+      Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Columns")
+    .accessibilityIdentifier("columns-\(key)")
+  }
 }
 
 struct ListRow: View {
   let block: BlockSpec
   let scope: JSONValue
+  /// The row's picked columns as one line (`columns`), empty for a list without them.
+  var columnsLine: String = ""
   let selection: Binding<ListSelection?>?
   let open: (String, NativeParams) -> Void
   let trigger: (ActionSpec, JSONValue) -> Void
@@ -199,6 +268,9 @@ struct ListRow: View {
         Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(2)
         if let secondary, !secondary.isEmpty {
           Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
+        }
+        if !columnsLine.isEmpty {
+          Text(columnsLine).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(3)
         }
         if let tertiary, !tertiary.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)

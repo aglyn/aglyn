@@ -86,6 +86,10 @@ public struct LoadSpec: Sendable, Hashable {
   /// Runs once the other loads have answered, with their answers under `data`: a read keyed by
   /// something another read found (a site's workspace id).
   public let late: Bool
+  /// The query parameter a staff list route orders by (`sort=<path>:<dir>`), and the order it answers when none was asked.
+  /// A list's `route` columns ask for the others.
+  public let sortParam: String?
+  public let sortDefault: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -104,6 +108,8 @@ public struct LoadSpec: Sendable, Hashable {
       self.accept = []
       self.filters = []
       self.late = false
+      self.sortParam = nil
+      self.sortDefault = nil
     } else {
       self.url = json["url"]?.stringValue ?? ""
       self.when = json["when"]?.stringValue
@@ -119,6 +125,8 @@ public struct LoadSpec: Sendable, Hashable {
       self.accept = json["accept"].array.compactMap { value in value.numberValue.map { Int($0) } }
       self.filters = json["filters"].array
       self.late = json["late"] == .bool(true)
+      self.sortParam = json["sortParam"]?.stringValue
+      self.sortDefault = json["sortDefault"]?.stringValue
     }
   }
 }

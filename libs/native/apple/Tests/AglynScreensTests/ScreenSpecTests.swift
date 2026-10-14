@@ -293,6 +293,142 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertTrue(field.choices(in: [:]).contains { $0.value == "US" })
   }
 
+  private func orgsListSpec() throws -> ScreenSpec {
+    try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": ["orgs": ["url": "/api/admin/orgs?pageSize=50", "sortParam": "sort", "sortDefault": "createdAt:desc"]],
+        "blocks": [
+          [
+            "type": "list", "load": "orgs", "items": "data.orgs.orgs", "columnsZone": "testOrgsListColumn",
+            "columns": [
+              ["id": "name", "label": "Organization", "always": true, "sort": ["route": "nameLower"]],
+              ["id": "plan", "label": "Plan", "value": "{item.plan:title}", "sort": ["page": "item.plan"]],
+              ["id": "limit", "label": "Site limit", "value": "{item.limit}", "sort": ["page": "item.rank", "type": "number", "first": "desc"]],
+              ["id": "created", "label": "Created", "value": "{item.created}", "sort": ["route": "createdAt", "first": "desc"]],
+              ["id": "owner", "label": "Owner", "value": "{item.owner}", "show": false],
+            ],
+          ]
+        ],
+      ]))
+  }
+
+  /// A list's route columns ask the route in their order over every row, and the route's own default order goes
+  /// when nothing was asked (the Workspaces list's header sorts).
+  @MainActor
+  func testARouteColumnAsksTheRouteAgainInThatOrder() async throws {
+    let transport = RecordingTransport(responses: [(200, #"{"orgs":[]}"#), (200, #"{"orgs":[]}"#), (200, #"{"orgs":[]}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try orgsListSpec(), context: [:], api: api)
+    await model.load()
+    XCTAssertEqual(transport.requests.last?.url?.query, "pageSize=50&sort=createdAt%3Adesc")
+    await model.ask(ListOrder(column: "name", descending: true), of: "orgs", routed: true)
+    XCTAssertEqual(transport.requests.last?.url?.query, "pageSize=50&sort=nameLower%3Adesc")
+    // A page column asks nothing of the route.
+    let before = transport.requests.count
+    await model.ask(ListOrder(column: "plan", descending: false), of: "orgs", routed: false)
+    XCTAssertEqual(transport.requests.count, before)
+    // The default order comes back with no choice.
+    await model.ask(nil, of: "orgs", routed: true)
+    XCTAssertEqual(transport.requests.last?.url?.query, "pageSize=50&sort=createdAt%3Adesc")
+  }
+
+  /// A tap on a header asks for the column's first order, the second for the other, the third for the default again.
+  @MainActor
+  func testTappingAColumnCyclesItsOrder() throws {
+    let block = try XCTUnwrap(try orgsListSpec().blocks.first)
+    let columns = ListColumns.columns(of: block)
+    let created = try XCTUnwrap(columns.first { $0.id == "created" })
+    let plan = try XCTUnwrap(columns.first { $0.id == "plan" })
+    var order = ListColumns.next(after: nil, tapping: created)
+    XCTAssertEqual(order, ListOrder(column: "created", descending: true))
+    order = ListColumns.next(after: order, tapping: created)
+    XCTAssertEqual(order, ListOrder(column: "created", descending: false))
+    XCTAssertNil(ListColumns.next(after: order, tapping: created))
+    // Another column starts from its own first order.
+    XCTAssertEqual(ListColumns.next(after: order, tapping: plan), ListOrder(column: "plan", descending: false))
+    XCTAssertEqual(ListColumns.routeValue(ListOrder(column: "created", descending: true), columns: columns), "createdAt:desc")
+    XCTAssertNil(ListColumns.routeValue(ListOrder(column: "plan", descending: false), columns: columns))
+  }
+
+  /// A page column orders the rows on the screen: numbers as numbers, text without regard to case, dates as moments; a row
+  /// without the value goes last whichever way it is read, and equal rows keep the order they came in.
+  @MainActor
+  func testPageColumnsOrderRowsAndPutMissingLast() throws {
+    let block = try XCTUnwrap(try orgsListSpec().blocks.first)
+    let columns = ListColumns.columns(of: block)
+    let rows: [JSONValue] = [
+      ["id": "a", "plan": "pro", "rank": 10], ["id": "b", "plan": "Free", "rank": 9], ["id": "c", "plan": nil, "rank": nil],
+      ["id": "d", "plan": "business", "rank": 100], ["id": "e", "plan": "pro", "rank": 10],
+    ]
+    func ids(_ column: String, descending: Bool) -> [String] {
+      let chosen = columns.first { $0.id == column }!
+      return ListColumns.sorted(rows, by: chosen, descending: descending, in: [:]).map { ScreenValues.text($0["id"] ?? .null) }
+    }
+    XCTAssertEqual(ids("plan", descending: false), ["d", "b", "a", "e", "c"])
+    XCTAssertEqual(ids("plan", descending: true), ["a", "e", "b", "d", "c"])
+    // 100 is more than 9: a number, not text.
+    XCTAssertEqual(ids("limit", descending: false), ["b", "a", "e", "d", "c"])
+    XCTAssertEqual(ids("limit", descending: true), ["d", "a", "e", "b", "c"])
+  }
+
+  /// A row shows the columns the person picked as one line, without the ones it has nothing for.
+  @MainActor
+  func testAListLineHoldsThePickedColumnsWithValues() throws {
+    let block = try XCTUnwrap(try orgsListSpec().blocks.first)
+    let columns = ListColumns.columns(of: block)
+    let model = ScreenModel(spec: try orgsListSpec(), context: [:], api: nil)
+    let defaults = model.shownColumns(of: "orgs", in: columns)
+    // The shared catalog may hold a plugin column from another test, so this names what must be there, not all of it.
+    XCTAssertTrue(defaults.isSuperset(of: ["name", "plan", "limit", "created"]))
+    XCTAssertFalse(defaults.contains("owner"))
+    let scope: JSONValue = ["item": ["plan": "pro", "limit": "5", "created": "", "owner": "u1"]]
+    // The owner column is off by default, the empty Created is skipped, and the row's own name is not repeated.
+    XCTAssertEqual(ListColumns.line(columns, shown: ["name", "plan", "limit", "created"], in: scope), "Plan Pro \u{00b7} Site limit 5")
+    model.shown["orgs"] = ["plan", "limit", "created", "owner"]
+    XCTAssertEqual(ListColumns.line(columns, shown: model.shownColumns(of: "orgs", in: columns), in: scope), "Plan Pro \u{00b7} Site limit 5 \u{00b7} Owner u1")
+  }
+
+  /// A column a plugin contributes to a list is read for the rows on the screen, in batches, and its answers join under
+  /// `column.<id>` for its cells and its sort (the AI plugin's spend on the Workspaces list).
+  @MainActor
+  func testAPluginColumnIsReadForTheRowsOnScreenInBatches() async throws {
+    ScreenCatalog.shared.add([
+      try XCTUnwrap(
+        ScreenSpec([
+          "id": "test.spendColumn", "title": "Spend", "scope": "staff", "zones": ["testOrgsListColumn"],
+          "column": [
+            "id": "spend", "label": "Spend", "value": "{column.spend.cells[@item.id]|'\u{2014}'}",
+            "sort": ["page": "column.spend.sort[@item.id]", "type": "number", "first": "desc"],
+            "load": ["url": "/api/x/spend?orgIds={ids}", "ids": "{item.id}", "max": 2],
+          ],
+        ]))
+    ])
+    let transport = RecordingTransport(responses: [
+      (200, #"{"orgs":[{"id":"o1"},{"id":"o2"},{"id":"o3"}]}"#),
+      (200, #"{"cells":{"o1":"$1.0000","o2":"$0.5000"},"sort":{"o1":1,"o2":0.5}}"#),
+      (200, #"{"cells":{"o3":"\u2014"},"sort":{"o3":null}}"#),
+    ])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try orgsListSpec(), context: [:], api: api)
+    await model.load()
+    // One read of the list, then the column's two batches of two ids and one.
+    XCTAssertEqual(transport.requests.compactMap { $0.url?.query }.suffix(2), ["orgIds=o1%2Co2", "orgIds=o3"])
+    XCTAssertEqual(ScreenValues.lookup("column.spend.cells.o2", in: model.context), "$0.5000")
+    XCTAssertEqual(ScreenValues.lookup("column.spend.sort.o1", in: model.context), 1)
+    let block = try XCTUnwrap(model.spec.blocks.first)
+    let columns = ListColumns.columns(of: block)
+    XCTAssertEqual(columns.last?.id, "spend")
+    let spend = try XCTUnwrap(columns.last)
+    let rows = ScreenValues.rows(ScreenValues.lookup("data.orgs.orgs", in: model.context))
+    // Dearest first, the unmeasured last in both directions.
+    let down = ListColumns.sorted(rows, by: spend, descending: true, in: model.context).map { ScreenValues.text($0["id"] ?? .null) }
+    let up = ListColumns.sorted(rows, by: spend, descending: false, in: model.context).map { ScreenValues.text($0["id"] ?? .null) }
+    XCTAssertEqual(down, ["o1", "o2", "o3"])
+    XCTAssertEqual(up, ["o2", "o1", "o3"])
+    XCTAssertEqual(ListColumns.line(columns, shown: ["spend"], in: ScreenContext.with(model.context, item: rows[0])), "Spend $1.0000")
+  }
+
   /// A probe that answers 503 is reporting: its body is the answer.
   @MainActor
   func testLoadAcceptsTheStatusAProbeReportsWith() async throws {

@@ -337,6 +337,125 @@ class ScreenSpecTest {
     assertTrue(field.choices(JsonObject(emptyMap())).any { it.first == "US" })
   }
 
+  private fun orgsListSpec(): ScreenSpec = ScreenSpec.parse(
+    Json.parseToJsonElement(
+      """{"id":"core.x","title":"X",
+          "load":{"orgs":{"url":"/api/admin/orgs?pageSize=50","sortParam":"sort","sortDefault":"createdAt:desc"}},
+          "blocks":[{"type":"list","load":"orgs","items":"data.orgs.orgs","columnsZone":"testOrgsListColumn",
+            "columns":[
+              {"id":"name","label":"Organization","always":true,"sort":{"route":"nameLower"}},
+              {"id":"plan","label":"Plan","value":"{item.plan:title}","sort":{"page":"item.plan"}},
+              {"id":"limit","label":"Site limit","value":"{item.limit}","sort":{"page":"item.rank","type":"number","first":"desc"}},
+              {"id":"created","label":"Created","value":"{item.created}","sort":{"route":"createdAt","first":"desc"}},
+              {"id":"owner","label":"Owner","value":"{item.owner}","show":false}]}]}""",
+    ),
+  )!!
+
+  /** A list's route columns ask the route in their order over every row, and the route's own default order goes when nothing was asked. */
+  @Test
+  fun aRouteColumnAsksTheRouteAgainInThatOrder() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"orgs":[]}""", 200 to """{"orgs":[]}""", 200 to """{"orgs":[]}""", sent = sent)
+    val model = ScreenModel(orgsListSpec(), JsonObject(emptyMap()), api)
+    model.load()
+    assertEquals("pageSize=50&sort=createdAt%3Adesc", sent.last().url.encodedQuery)
+    model.ask(ListOrder("name", true), "orgs", routed = true)
+    assertEquals("pageSize=50&sort=nameLower%3Adesc", sent.last().url.encodedQuery)
+    // A page column asks nothing of the route.
+    val before = sent.size
+    model.ask(ListOrder("plan", false), "orgs", routed = false)
+    assertEquals(before, sent.size)
+    // The default order comes back with no choice.
+    model.ask(null, "orgs", routed = true)
+    assertEquals("pageSize=50&sort=createdAt%3Adesc", sent.last().url.encodedQuery)
+  }
+
+  /** A tap on a header asks for the column's first order, the second for the other, the third for the default again. */
+  @Test
+  fun tappingAColumnCyclesItsOrder() {
+    val columns = ListColumns.columns(orgsListSpec().blocks.first())
+    val created = columns.first { it.id == "created" }
+    val plan = columns.first { it.id == "plan" }
+    var order = ListColumns.next(null, created)
+    assertEquals(ListOrder("created", true), order)
+    order = ListColumns.next(order, created)
+    assertEquals(ListOrder("created", false), order)
+    assertNull(ListColumns.next(order, created))
+    assertEquals(ListOrder("plan", false), ListColumns.next(order, plan))
+    assertEquals("createdAt:desc", ListColumns.routeValue(ListOrder("created", true), columns))
+    assertNull(ListColumns.routeValue(ListOrder("plan", false), columns))
+  }
+
+  /** A page column orders the rows on the screen: numbers as numbers, text without regard to case; a row without the value goes last either way, and ties keep their order. */
+  @Test
+  fun pageColumnsOrderRowsAndPutMissingLast() {
+    val columns = ListColumns.columns(orgsListSpec().blocks.first())
+    val rows = Json.parseToJsonElement(
+      """[{"id":"a","plan":"pro","rank":10},{"id":"b","plan":"Free","rank":9},{"id":"c"},{"id":"d","plan":"business","rank":100},{"id":"e","plan":"pro","rank":10}]""",
+    ) as JsonArray
+    fun ids(column: String, descending: Boolean) =
+      ListColumns.sorted(rows, columns.first { it.id == column }, descending, JsonObject(emptyMap())).map { it.str("id") }
+    assertEquals(listOf("d", "b", "a", "e", "c"), ids("plan", false))
+    assertEquals(listOf("a", "e", "b", "d", "c"), ids("plan", true))
+    // 100 is more than 9: a number, not text.
+    assertEquals(listOf("b", "a", "e", "d", "c"), ids("limit", false))
+    assertEquals(listOf("d", "a", "e", "b", "c"), ids("limit", true))
+  }
+
+  /** A row shows the columns the person picked as one line, without the ones it has nothing for. */
+  @Test
+  fun aListLineHoldsThePickedColumnsWithValues() {
+    val columns = ListColumns.columns(orgsListSpec().blocks.first())
+    val model = ScreenModel(orgsListSpec(), JsonObject(emptyMap()), null)
+    val defaults = model.shownColumns("orgs", columns)
+    // The shared catalog may hold a plugin column from another test, so this names what must be there, not all of it.
+    assertTrue(defaults.containsAll(setOf("name", "plan", "limit", "created")))
+    assertFalse("owner" in defaults)
+    val scope = Json.parseToJsonElement("""{"item":{"plan":"pro","limit":"5","created":"","owner":"u1"}}""")
+    // The owner column is off by default, the empty Created is skipped, and the row's own name is not repeated.
+    assertEquals("Plan Pro \u00b7 Site limit 5", ListColumns.line(columns, setOf("name", "plan", "limit", "created"), scope))
+    model.shown["orgs"] = setOf("plan", "limit", "created", "owner")
+    assertEquals("Plan Pro \u00b7 Site limit 5 \u00b7 Owner u1", ListColumns.line(columns, model.shownColumns("orgs", columns), scope))
+  }
+
+  /** A column a plugin contributes to a list is read for the rows on the screen, in batches, and its answers join under `column.<id>`. */
+  @Test
+  fun aPluginColumnIsReadForTheRowsOnScreenInBatches() = runTest {
+    ScreenCatalog.add(
+      listOf(
+        ScreenSpec.parse(
+          Json.parseToJsonElement(
+            """{"id":"test.spendColumn","title":"Spend","scope":"staff","zones":["testOrgsListColumn"],
+                "column":{"id":"spend","label":"Spend","value":"{column.spend.cells[@item.id]|'\u2014'}",
+                  "sort":{"page":"column.spend.sort[@item.id]","type":"number","first":"desc"},
+                  "load":{"url":"/api/x/spend?orgIds={ids}","ids":"{item.id}","max":2}}}""",
+          ),
+        )!!,
+      ),
+    )
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(
+      200 to """{"orgs":[{"id":"o1"},{"id":"o2"},{"id":"o3"}]}""",
+      200 to """{"cells":{"o1":"${'$'}1.0000","o2":"${'$'}0.5000"},"sort":{"o1":1,"o2":0.5}}""",
+      200 to """{"cells":{"o3":"\u2014"},"sort":{"o3":null}}""",
+      sent = sent,
+    )
+    val model = ScreenModel(orgsListSpec(), JsonObject(emptyMap()), api)
+    model.load()
+    // One read of the list, then the column's two batches of two ids and one.
+    assertEquals(listOf("orgIds=o1%2Co2", "orgIds=o3"), sent.takeLast(2).map { it.url.encodedQuery })
+    assertEquals(JsonPrimitive("${'$'}0.5000"), ScreenValues.lookup("column.spend.cells.o2", model.context))
+    val block = model.spec.blocks.first()
+    val columns = ListColumns.columns(block)
+    val spend = columns.last()
+    assertEquals("spend", spend.id)
+    val rows = ScreenValues.rows(ScreenValues.lookup("data.orgs.orgs", model.context))
+    // Dearest first, the unmeasured last in both directions.
+    assertEquals(listOf("o1", "o2", "o3"), ListColumns.sorted(rows, spend, true, model.context).map { it.str("id") })
+    assertEquals(listOf("o2", "o1", "o3"), ListColumns.sorted(rows, spend, false, model.context).map { it.str("id") })
+    assertEquals("Spend ${'$'}1.0000", ListColumns.line(columns, setOf("spend"), ScreenContext.withItem(model.context, rows[0])))
+  }
+
   /** A probe that answers 503 is reporting: its body is the answer. */
   @Test
   fun loadAcceptsTheStatusAProbeReportsWith() = runTest {

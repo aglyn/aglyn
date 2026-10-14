@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { overrideCount } from '../utils/org-override-count'
 import {
   describeOrgPlan,
   isLockdownReasonCode,
@@ -120,17 +121,7 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
 ]
 
 
-/**
- * Count of explicit overrides on an org doc, for the row chip. A staff plan
- * comp rides the same map (AGL-3034) and is not counted: it is a plan, shown
- * beside the plan, not one more quota.
- */
-export const overrideCount = (org: any): number =>
-  Object.keys(org?.entitlements ?? {}).filter(
-    (key) => key !== 'features' && key !== 'planComp',
-  ).length +
-  Object.keys(org?.entitlements?.features ?? {}).length +
-  Object.keys(org?.releaseFlags ?? {}).length
+export { overrideCount }
 
 /**
  * Every plan a comp may grant (AGL-3034): each plan but Free, which grants

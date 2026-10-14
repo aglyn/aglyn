@@ -2756,7 +2756,8 @@
             "ai.signals",
             "ai.staffRequests",
             "ai.requests",
-            "ai.request"
+            "ai.request",
+            "ai.orgsSpendColumn"
           ],
           "quickActions": [
             "ai.open"

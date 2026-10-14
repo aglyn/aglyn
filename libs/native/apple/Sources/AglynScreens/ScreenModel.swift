@@ -133,6 +133,10 @@ public final class ScreenModel {
   public private(set) var journal: [JSONValue] = []
   /// Keys an action armed (`arm`) and none has spent (`disarm`): `session.armed.<key>`.
   public private(set) var armed: Set<String> = []
+  /// The order each list was asked for (by its load, else its items); absent is the route's own default.
+  public var order: [String: ListOrder] = [:]
+  /// The columns each list shows, where the person has picked; absent is the list's own defaults.
+  public var shown: [String: Set<String>] = [:]
   /// The `{attempt}` key of each action's last request, by action, path and body: a retry of the
   /// same request reuses it, and a different request gets its own.
   @ObservationIgnored private var attempts: [String: String] = [:]
@@ -171,10 +175,64 @@ public final class ScreenModel {
     if let filters = Self.filtersParameter(load.filters, in: context) {
       url += (url.contains("?") ? "&" : "?") + filters
     }
+    if let param = load.sortParam {
+      // A list's `route` columns order the route over every row; nothing asked is the route's own default.
+      let columns = spec.blocks.filter { $0.type == "list" && ListColumns.key(of: $0) == load.key }.flatMap { ListColumns.columns(of: $0) }
+      if let value = ListColumns.routeValue(order[load.key], columns: columns) ?? load.sortDefault {
+        url += (url.contains("?") ? "&" : "?") + param + "=" + ScreenValues.encodeComponent(value)
+      }
+    }
     if let cursor {
       url += (url.contains("?") ? "&" : "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     }
     return url
+  }
+
+  /// Asks a list for an order. A `route` column reads the route again in that order, from the first page; a `page`
+  /// column reorders what is on the screen.
+  public func ask(_ order: ListOrder?, of key: String, routed: Bool) async {
+    self.order[key] = order
+    if routed { await load() }
+  }
+
+  /// A list's columns with the picks made, or its defaults.
+  func shownColumns(of key: String, in columns: [ListColumn]) -> Set<String> {
+    shown[key] ?? Set(columns.filter(\.show).map(\.id))
+  }
+
+  /// What the person's picks for the columns a plugin contributes to a list read: one request per plugin column for the rows on
+  /// the screen (in batches of `max`, as the route allows), answered under `column.<id>`. A column that cannot be read leaves its
+  /// cells blank; it never fails the screen.
+  func loadPluginColumns() async {
+    guard let api else { return }
+    var answers: [String: JSONValue] = [:]
+    for block in spec.blocks where block.type == "list" {
+      guard let zone = block["columnsZone"]?.stringValue else { continue }
+      let rows = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
+      for contribution in ScreenCatalog.shared.zone(zone) where ScreenValues.condition(contribution.requires, in: context) {
+        guard let column = contribution.raw["column"], let id = column["id"]?.stringValue, let template = column["load"]?["url"]?.stringValue
+        else { continue }
+        let idTemplate = column["load"]?["ids"]?.stringValue ?? "{item.$id}"
+        let ids = rows.map { ScreenValues.render(idTemplate, in: ScreenContext.with(context, item: $0)) }.filter { !$0.isEmpty }
+        let batch = max(1, Int(column["load"]?["max"]?.numberValue ?? 100))
+        var answer: JSONValue = .object([:])
+        for start in stride(from: 0, to: ids.count, by: batch) {
+          let chunk = ids[start..<min(start + batch, ids.count)].joined(separator: ",")
+          let path = ScreenValues.renderURL(template, in: ScreenContext.with(context, "ids", .string(chunk)))
+          if let part = try? await api.request(path) { answer = Self.merged(answer, part) }
+        }
+        answers[id] = answer
+      }
+    }
+    guard !answers.isEmpty else { return }
+    context = ScreenContext.with(context, "column", .object(answers))
+  }
+
+  /// `b` laid over `a`: maps join (by key, down through maps), anything else takes `b`.
+  static func merged(_ a: JSONValue, _ b: JSONValue) -> JSONValue {
+    guard case .object(var left) = a, case .object(let right) = b else { return b }
+    for (key, value) in right { left[key] = left[key].map { merged($0, value) } ?? value }
+    return .object(left)
   }
 
   /// A staff list route's `filters=` parameter from `{ field, op, value }` clauses, each kept when its value template is not empty.
@@ -231,6 +289,7 @@ public final class ScreenModel {
     context = ScreenContext.with(context, "data", .object(results))
     cursors = nextCursors
     phase = .ready
+    await loadPluginColumns()
   }
 
   /// One load: a Firestore document or query, or a route.
@@ -281,7 +340,10 @@ public final class ScreenModel {
       context = ScreenContext.with(context, "data", .object(record))
       cursors[key] = load.cursor.flatMap { ScreenValues.lookup($0, in: page)?.stringValue }
       if cursors[key]?.isEmpty ?? true { cursors[key] = nil }
-    } catch {}
+    } catch {
+      return
+    }
+    await loadPluginColumns()
   }
 
   static func appending(_ rows: [JSONValue], at path: String, in value: JSONValue) -> JSONValue {

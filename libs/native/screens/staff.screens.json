@@ -318,7 +318,9 @@
       ],
       "load": {
         "orgs": {
-          "url": "/api/admin/orgs?pageSize=50&sort=createdAt:desc",
+          "url": "/api/admin/orgs?pageSize=50",
+          "sortParam": "sort",
+          "sortDefault": "createdAt:desc",
           "cursor": "nextCursor",
           "items": "orgs",
           "filters": [
@@ -348,9 +350,69 @@
           "split": true,
           "items": "data.orgs.orgs",
           "primary": "{item.name|item.$id}",
-          "secondary": "{item.slug} · {item.readsAs:title}",
-          "tertiary": "Created {item.createdAt:date} · last activity {item.lastActivityAt:date}",
+          "secondary": "{item.slug}",
           "icon": "building.2|business",
+          "columns": [
+            {
+              "id": "name",
+              "label": "Organization",
+              "always": true,
+              "sort": {
+                "route": "nameLower"
+              }
+            },
+            {
+              "id": "plan",
+              "label": "Plan",
+              "value": "{item.readsAs:title}",
+              "sort": {
+                "page": "item.readsAs"
+              }
+            },
+            {
+              "id": "subscription",
+              "label": "Subscription",
+              "value": "{item.subscription.status:title}",
+              "sort": {
+                "page": "item.subscription.status"
+              }
+            },
+            {
+              "id": "siteLimit",
+              "label": "Site limit",
+              "value": "{item.siteLimitText}",
+              "sort": {
+                "page": "item.siteLimitRank",
+                "type": "number",
+                "first": "desc"
+              }
+            },
+            {
+              "id": "created",
+              "label": "Created",
+              "value": "{item.createdAt:date}",
+              "sort": {
+                "route": "createdAt",
+                "first": "desc"
+              }
+            },
+            {
+              "id": "lastActivity",
+              "label": "Last activity",
+              "value": "{item.lastActivityAt:date}",
+              "sort": {
+                "route": "lastActivityAt",
+                "first": "desc"
+              }
+            },
+            {
+              "id": "owner",
+              "label": "Owner UID",
+              "value": "{item.ownerUid}",
+              "show": false
+            }
+          ],
+          "columnsZone": "staffOrgsListColumn",
           "badges": [
             {
               "text": "{item.storedNote}",
@@ -361,6 +423,11 @@
               "text": "{item.compNote}",
               "when": "item.compNote",
               "tone": "info"
+            },
+            {
+              "text": "{item.overridesNote}",
+              "when": "item.overridesNote",
+              "tone": "neutral"
             },
             {
               "text": "Suspended",
@@ -1934,7 +2001,9 @@
       ],
       "load": {
         "sites": {
-          "url": "/api/admin/sites?pageSize=50&sort=createdAt:desc",
+          "url": "/api/admin/sites?pageSize=50",
+          "sortParam": "sort",
+          "sortDefault": "createdAt:desc",
           "cursor": "nextCursor",
           "items": "sites",
           "filters": [
@@ -1965,8 +2034,69 @@
           "items": "data.sites.sites",
           "primary": "{item.displayName|item.subdomain|item.$id}",
           "secondary": "{item.cname|item.subdomain}",
-          "tertiary": "{item.org.name|item.orgId} · {item.publishedPages|'0'} published pages",
           "icon": "globe|public",
+          "columns": [
+            {
+              "id": "site",
+              "label": "Site",
+              "always": true,
+              "sort": {
+                "route": "nameLower"
+              }
+            },
+            {
+              "id": "organization",
+              "label": "Organization",
+              "value": "{item.org.name|item.orgId}",
+              "sort": {
+                "page": "item.org.name"
+              }
+            },
+            {
+              "id": "owner",
+              "label": "Owner",
+              "value": "{item.owner.email|item.owner.uid}",
+              "sort": {
+                "page": "item.owner.email"
+              }
+            },
+            {
+              "id": "customDomain",
+              "label": "Custom domain",
+              "value": "{item.cname}",
+              "sort": {
+                "page": "item.cname"
+              }
+            },
+            {
+              "id": "pages",
+              "label": "Published pages",
+              "value": "{item.publishedPages|'0'}",
+              "sort": {
+                "page": "item.publishedPages",
+                "type": "number",
+                "first": "desc"
+              }
+            },
+            {
+              "id": "created",
+              "label": "Created",
+              "value": "{item.createdAt:date}",
+              "sort": {
+                "route": "createdAt",
+                "first": "desc"
+              }
+            },
+            {
+              "id": "updated",
+              "label": "Last updated",
+              "value": "{item.updatedAt:date}",
+              "sort": {
+                "route": "updatedAt",
+                "first": "desc"
+              }
+            }
+          ],
           "badges": [
             {
               "text": "Suspended",
@@ -3232,6 +3362,8 @@
       "load": {
         "users": {
           "url": "/api/admin/users?pageSize=50",
+          "sortParam": "sort",
+          "sortDefault": "createdAt:desc",
           "cursor": "nextPageToken",
           "cursorParam": "nextPageToken",
           "items": "users",
@@ -3263,8 +3395,52 @@
           "items": "data.users.users",
           "primary": "{item.displayName|item.email|item.uid}",
           "secondary": "{item.email}",
-          "tertiary": "Last signed in {item.lastSignInAt|'never':date}",
           "icon": "person.crop.circle|account_circle",
+          "columns": [
+            {
+              "id": "user",
+              "label": "User",
+              "always": true,
+              "sort": {
+                "route": "email"
+              }
+            },
+            {
+              "id": "status",
+              "label": "Staff role",
+              "value": "{item.staffRole}",
+              "sort": {
+                "route": "staffRole"
+              }
+            },
+            {
+              "id": "created",
+              "label": "Created",
+              "value": "{item.createdAt:date}",
+              "sort": {
+                "route": "createdAt",
+                "first": "desc"
+              }
+            },
+            {
+              "id": "lastSignIn",
+              "label": "Last sign-in",
+              "value": "{item.lastSignInAt:date}",
+              "sort": {
+                "route": "lastSignInAt",
+                "first": "desc"
+              }
+            },
+            {
+              "id": "lastActive",
+              "label": "Last activity",
+              "value": "{item.lastActiveAt:date}",
+              "sort": {
+                "route": "lastActiveAt",
+                "first": "desc"
+              }
+            }
+          ],
           "badges": [
             {
               "text": "Staff · {item.staffRole|'support'}",

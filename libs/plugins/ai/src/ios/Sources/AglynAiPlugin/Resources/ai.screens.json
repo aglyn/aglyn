@@ -1,5 +1,5 @@
 {
-  "$comment": "The AI plugin's native screens, kept in its Apple package (Resources, so Xcode reads it through the plugin manifest symlink) and linked from its Kotlin module (src/android/screens): AI jobs and their status, credits, the hard cap and overage cap, per-member usage, and the staff zones staffOrg and staffUser, and the staff AI requests. Routes: /api/ai/jobs, /api/ai/jobs/{id}/cancel and /resume, /api/ai/billing/credits, /api/ai/billing/overage, /api/ai/allotments, /api/ai/usage, /api/ai/admin/org, /api/ai/admin/user (both with view=prepared), /api/ai/admin/credits, /api/ai/admin/conversations and /api/ai/admin/signals. Grammar: docs/mobile/native-architecture.md §13.",
+  "$comment": "The AI plugin's native screens, kept in its Apple package (Resources, so Xcode reads it through the plugin manifest symlink) and linked from its Kotlin module (src/android/screens): AI jobs and their status, credits, the hard cap and overage cap, per-member usage, and the staff zones staffOrg and staffUser, the staff AI requests, and the AI spend column the Workspaces list draws (zone staffOrgsListColumn). Routes: /api/ai/jobs, /api/ai/jobs/{id}/cancel and /resume, /api/ai/billing/credits, /api/ai/billing/overage, /api/ai/allotments, /api/ai/usage, /api/ai/admin/org, /api/ai/admin/user (both with view=prepared), /api/ai/admin/credits, /api/ai/admin/conversations and /api/ai/admin/signals. Grammar: docs/mobile/native-architecture.md §13.",
   "screens": [
     {
       "id": "ai.jobs",
@@ -1299,6 +1299,33 @@
           ]
         }
       ]
+    },
+    {
+      "id": "ai.orgsSpendColumn",
+      "title": "AI spend (month)",
+      "label": "AI spend (month)",
+      "subtitle": "A column on the Workspaces list: what each workspace has spent on AI this month",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffOrgsListColumn"
+      ],
+      "order": 10,
+      "column": {
+        "id": "aiSpend",
+        "label": "AI spend (month)",
+        "value": "{column.aiSpend.cells[@item.$id]}",
+        "sort": {
+          "page": "column.aiSpend.sort[@item.$id]",
+          "type": "number",
+          "first": "desc"
+        },
+        "load": {
+          "url": "/api/ai/admin/orgs-spend?view=prepared&orgIds={ids}",
+          "ids": "{item.$id}",
+          "max": 100
+        }
+      }
     }
   ]
 }

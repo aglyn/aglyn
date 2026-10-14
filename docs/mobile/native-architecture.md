@@ -934,6 +934,20 @@ shared cases both apps replay are `libs/native/screens/email-html-cases.json`, g
 (`generate:native-email-html-cases`). A prompt field of kind `country` is a picker over the platform's region list,
 named in the person's language and sorted by name, storing the two-letter code.
 
+A `list` block's `columns` are the facts a row can show and the orders it can take, as the console's grid has a column
+picker and sortable headers: `{ id, label, value, show, always, sort: { route | page, type, first } }`. `value` is the cell's
+template over the row; the picked columns read as one line under the row (`Plan Pro · Site limit 5`), and a `Columns` menu on
+the list turns each on and off (`show: false` starts it off; `always` is the row's own name, shown and not offered). A `Sort` menu
+lists every column with a `sort`: a tap asks for its first order (`first`, `asc` unless `desc`), a second tap for the other, a third
+for the default again, as a header click cycles. A `route` sort is the staff route's own order over every row (`sort=<path>:<dir>`;
+the list's load names the parameter with `sortParam` and the order it answers with none asked as `sortDefault`), so choosing it reads
+the route again from the first page; a `page` sort orders the rows already loaded by a path over the row, as the console does for the
+columns no query can order by (`type` is `text`, `number` or `date`; a row without the value goes last in both directions). A list with
+`columnsZone: "<zone>"` also takes the columns plugins contribute: a plugin spec with `zones: ["<zone>"]` and a `column` of the same
+shape plus `load: { url, ids, max }` (`{ids}` in the url is the ids of the rows on the screen, `ids` the template for each, `max` the
+most a request may name) is read for the rows on the screen in batches and answers under `column.<id>`, which its `value` and `sort`
+read. A column that cannot be read leaves its cells blank.
+
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row

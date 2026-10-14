@@ -385,3 +385,28 @@ describe('the staff organization list names the plan each row reads as (AGL-3667
     expect(byId['org-comp'].compNote).toMatch(/^comp: /)
   })
 })
+
+describe('the staff organization list carries the Site limit column (AGL-3667)', () => {
+  it('says the limit the row resolves to, the unlimited one as an infinity sign, and counts the overrides beside it', async () => {
+    orgs = [
+      { id: 'org-pro', data: { name: 'Pro Co', plan: 'pro', subscription: { status: 'active' }, entitlements: { hostLimit: 7, features: { abTesting: true } } } },
+      { id: 'org-bare', data: { name: 'Bare Co' } },
+      { id: 'org-unlimited', data: { name: 'Unlimited Co', plan: 'pro', entitlements: { hostLimit: -1 } } },
+    ]
+    const payload = await (await get()).json()
+    const byId = Object.fromEntries(payload.orgs.map((org: any) => [org.$id, org]))
+    expect(byId['org-pro']).toMatchObject({ siteLimit: 7, siteLimitText: '7', overridesNote: '2 overrides' })
+    expect(byId['org-bare']).toMatchObject({ overridesNote: null })
+    expect(typeof byId['org-bare'].siteLimitText).toBe('string')
+    // JSON cannot carry an infinite number, so an unlimited quota is null with the sign in the text.
+    for (const row of payload.orgs) {
+      if (row.siteLimit === null) {
+        expect(row.siteLimitText).toBe('∞')
+        expect(row.siteLimitRank).toBe(Number.MAX_SAFE_INTEGER)
+      } else {
+        expect(row.siteLimitText).toBe(String(row.siteLimit))
+        expect(row.siteLimitRank).toBe(row.siteLimit)
+      }
+    }
+  })
+})
