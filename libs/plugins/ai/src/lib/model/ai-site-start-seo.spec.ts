@@ -345,3 +345,33 @@ describe('a listing reads as one sentence, not pasted answers (AGL-3660)', () =>
     expect(aiSiteSeoEmbedded('Austin dog owners', ['Austin'])).toBe('Austin dog owners')
   })
 })
+
+describe('every word of an answer whole, in any script (AGL-3791)', () => {
+  it('never cuts a phrase inside a word that starts like an English joiner', () => {
+    // Read with `\b`, "forêt", "força" and "soñar" began with "for" and "so".
+    expect(aiSiteSeoTitle({ subject: 'Pâtisserie de la forêt enchantée' })).toBe('Pâtisserie de la forêt enchantée')
+    expect(aiSiteSeoTitle({ name: 'Studio Força', subject: 'Academia de força funcional' })).toBe(
+      'Studio Força — Academia de força funcional',
+    )
+    expect(aiSiteSeoTitle({ subject: 'Sala para soñar despiertos con café y libros' })).toBe(
+      'Sala para soñar despiertos con café y libros',
+    )
+    // An English joiner is still a boundary.
+    expect(aiSiteSeoTitle({ name: 'Waggle', subject: 'Dog groomer for nervous dogs, senior dogs and puppies meeting the clippers' })).toBe(
+      'Waggle — Dog groomer',
+    )
+  })
+
+  it('takes an article off the front only where it is a word of its own', () => {
+    expect(values({ about: 'Año Nuevo bakery' })?.['seo.title']).toBe('Año Nuevo bakery')
+    expect(values({ about: 'a crêperie' })?.['seo.title']).toBe('Crêperie')
+  })
+
+  it('writes "an" before an accented vowel and lowers an accented capital that began an answer', () => {
+    expect(values({ siteName: 'Maison Blanche', about: 'éclair bakery' })?.['seo.description']).toBe(
+      'Maison Blanche is an éclair bakery.',
+    )
+    expect(aiSiteSeoEmbedded('Éclair lovers in Austin')).toBe('éclair lovers in Austin')
+    expect(aiSiteSeoEmbedded('Ángel Café regulars')).toBe('Ángel Café regulars')
+  })
+})

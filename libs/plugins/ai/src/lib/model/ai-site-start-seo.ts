@@ -121,7 +121,7 @@ function clip(value: string, max: number): string {
  * keeps the subject.
  */
 const CLAUSE_BOUNDARY =
-  /\s+(?:that|which|who|whose|where|offering|providing|specializing|serving|helping|so|because|with|for|to|by|and|but)\b|[,;:(—–]|\s-\s/i
+  /\s+(?:that|which|who|whose|where|offering|providing|specializing|serving|helping|so|because|with|for|to|by|and|but)(?![\p{L}\p{M}\p{N}])|[,;:(—–]|\s-\s/iu
 
 /**
  * A short search title (AGL-3596): the business's name, what it is and where,
@@ -157,7 +157,7 @@ export function aiSiteSeoTitle(input: { name?: string; subject: string; city?: s
  * dash. A bare comma is not one — "a calm, gentle groom" cut at its comma
  * ends on an adjective — and neither is "and", which joins a list.
  */
-const PHRASE_BOUNDARY = /\s+(?:that|which|who|whose|where|while|because|with|for|offering|providing|serving)\b|[;(—–]|\s-\s/gi
+const PHRASE_BOUNDARY = /\s+(?:that|which|who|whose|where|while|because|with|for|offering|providing|serving)(?![\p{L}\p{M}\p{N}])|[;(—–]|\s-\s/giu
 
 /** A phrase and its shorter forms, longest first: itself, then cut before each boundary, back to front. */
 function phraseForms(text: string): string[] {
@@ -219,7 +219,7 @@ export function aiSiteSeoDescription(input: {
 }
 
 /** {@link PHRASE_BOUNDARY} without the global flag, for a one-off search. */
-const PHRASE_BOUNDARY_ONE = new RegExp(PHRASE_BOUNDARY.source, 'i')
+const PHRASE_BOUNDARY_ONE = new RegExp(PHRASE_BOUNDARY.source, 'iu')
 
 /**
  * What kind of site it is, as a short noun phrase (AGL-3660): the answer up
@@ -261,16 +261,16 @@ const LOWERED_LEADS = new Set([
 export function aiSiteSeoEmbedded(phrase: string, keep: readonly string[] = []): string {
   const text = phrase.replace(/\s+/g, ' ').trim()
   const [first = '', second = ''] = text.split(' ')
-  if (!/^[A-Z][a-z'’]*$/.test(first)) return text
+  if (!/^\p{Lu}[\p{Ll}\p{M}'’]*$/u.test(first)) return text
   if (keep.some((word) => word && text.toLowerCase().startsWith(word.toLowerCase()))) return text
   const listed = LOWERED_LEADS.has(first.toLowerCase())
-  const sentenceCase = !second || /^[a-z0-9]/.test(second)
+  const sentenceCase = !second || /^[\p{Ll}\p{N}]/u.test(second)
   if (!listed && !sentenceCase) return text
   return first.toLowerCase() + text.slice(first.length)
 }
 
 /** Determiners an embedded noun phrase may already open with. */
-const DETERMINERS = /^(?:a|an|the|our|my|your|their|this|one|any|every|each)\b/i
+const DETERMINERS = /^(?:a|an|the|our|my|your|their|this|one|any|every|each)(?![\p{L}\p{M}\p{N}])/iu
 
 /**
  * A noun phrase behind "is" (AGL-3660): "is a neighborhood book club", never
@@ -283,7 +283,8 @@ function withArticle(phrase: string): string {
   const boundary = phrase.search(PHRASE_BOUNDARY_ONE)
   const head = (boundary > 0 ? phrase.slice(0, boundary) : phrase).split(/[\s,]+/).filter(Boolean).pop() ?? ''
   if (/[^su]s$/i.test(head) && !/ics$/i.test(head)) return phrase
-  return `${/^(?:[aeio]|u(?!ni|s[eu]))/i.test(phrase) ? 'an' : 'a'} ${phrase}`
+  // Read unaccented, so "éclair" takes "an" as "eclair" would.
+  return `${/^(?:[aeio]|u(?!ni|s[eu]))/i.test(phrase.normalize('NFD')) ? 'an' : 'a'} ${phrase}`
 }
 
 /**
@@ -293,10 +294,12 @@ function withArticle(phrase: string): string {
  * typed as the site type survives.
  */
 function asSubject(about: string): string {
-  // `\b` rather than `\s+`, so an answer that is ONLY an article leaves
-  // nothing behind and the caller proposes nothing: a one-letter title is a
-  // worse thing to stage into a required field than no proposal at all.
-  const text = about.replace(/\s+/g, ' ').trim().replace(/^(?:an?|the)\b\s*/i, '')
+  // The article's end rather than `\s+`, so an answer that is ONLY an article
+  // leaves nothing behind and the caller proposes nothing: a one-letter title
+  // is a worse thing to stage into a required field than no proposal at all.
+  // A letter in any script continues the word (AGL-3791), so "Año Nuevo" keeps
+  // its "A", as `\b`, which reads "ñ" as no letter, did not.
+  const text = about.replace(/\s+/g, ' ').trim().replace(/^(?:an?|the)(?![\p{L}\p{M}\p{N}])\s*/iu, '')
   if (!text) return ''
   return text[0].toUpperCase() + text.slice(1)
 }

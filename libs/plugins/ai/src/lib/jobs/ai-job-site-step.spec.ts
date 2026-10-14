@@ -458,6 +458,16 @@ describe('a site start that writes its posts links its blog (AGL-3660)', () => {
     expect(outcome.item).toEqual({ slot, status: 'skipped', note: AI_SITE_BLOG_MERGED_NOTE })
   })
 
+  it('names the blog in a link’s words whatever the merged page’s language, and only where a whole word names it (AGL-3791)', () => {
+    const merged = (standsInFor: string) => ({ kind: 'path', href: '/blog', standsInFor, label: 'Blog' }) as const
+    expect(aiLayoutRenamedLabel('Ver noticias', merged('Noticias'))).toBe('Ver blog')
+    expect(aiLayoutRenamedLabel('Ver el menú', merged('Menú'))).toBe('Ver el blog')
+    expect(aiLayoutRenamedLabel('Événements à venir', merged('Événements'))).toBe('Blog à venir')
+    // A name is matched as a whole word, never as the start of a longer one.
+    expect(aiLayoutRenamedLabel('Lee los artículos', merged('Art'))).toBe('Lee los artículos')
+    expect(aiLayoutRenamedLabel('Read the articles', merged('Art'))).toBe('Read the articles')
+  })
+
   it('links no blog where the posts are not owed, or the part was skipped', () => {
     expect(sitePagesOf(siteJob({ plan })).some((page) => page['id'] === AI_SITE_BLOG_NAV_ID)).toBe(false)
     expect(aiSiteWritesPosts(siteJob({ plan, items: ledger('skipped') as never }))).toBe(false)
