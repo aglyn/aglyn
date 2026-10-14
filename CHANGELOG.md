@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.250 — 2026-10-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.249...v1.0.0-beta.250)
+
+### Added
+
+- **billing:** automatic security hold when stripe flags a workspace's own payment ([AGL-3767](https://linear.app/aglyn/issue/AGL-3767), [AGL-1954](https://linear.app/aglyn/issue/AGL-1954))
+
+### Fixed
+
+- **tenant:** a site's 404 and error screen speak its language ([AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
+- **ai:** a page's last answer drops an empty section instead of the page ([AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
+- **ai:** a site in another language with no photo words searches by its kind ([AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
+- **ai:** a site start lists the workspace datasets its plan reuses ([AGL-3771](https://linear.app/aglyn/issue/AGL-3771), [AGL-3747](https://linear.app/aglyn/issue/AGL-3747))
+- **json-editor:** the Raw JSON warning is a dismissible banner, never under Monaco ([AGL-3770](https://linear.app/aglyn/issue/AGL-3770))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **release:** v1.0.0-beta.250 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.249 — 2026-10-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.248...v1.0.0-beta.249)
