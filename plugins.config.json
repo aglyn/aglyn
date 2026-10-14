@@ -2102,7 +2102,8 @@
         "consoleServerDeclarations": "registerLogicConsoleServerDeclarations"
       },
       "mobile": {
-        "$comment": "AGL-3668: a site's Functions & Variables in the Aglyn app: variables (type, value, the workflow that fills one) and no-code functions (parameters with what a visitor sees, variables, if/then/otherwise operations, the return value), where each is used (the console's scan, a page's Besigner from it), create through the resources route, edit and delete with the site's cache drop.",
+        "$comment": "AGL-3668: a site's Functions & Variables in the Aglyn app: variables (type, value, the workflow that fills one; a dictionary or list as rows) and no-code functions (parameters with what a visitor sees and their choices as rows, variables, if/then/otherwise operations with an ƒx formula builder, the return value, a test run), where each is used (the console's scan, a page's Besigner from it), the reference health audit, create through the resources route, edit and delete with the site's cache drop.",
+        "ios": { "module": "AglynLogicPlugin", "register": "registerLogicNative" },
         "android": { "package": "com.aglyn.plugins.logic", "register": "registerLogicNative" },
         "contributes": {
           "screens": ["logic.function", "logic.page"],
