@@ -53,6 +53,9 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **auth:** verify-email link waits for a press before redeeming ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
+- **billing:** every staff refund carries a Stripe reason derived from ours ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
+- **billing:** a fraud refund tells Stripe it is fraudulent ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
 - **console:** the Sites list asks the server before believing a site is gone ([AGL-3789](https://linear.app/aglyn/issue/AGL-3789), [AGL-3788](https://linear.app/aglyn/issue/AGL-3788), [AGL-1190](https://linear.app/aglyn/issue/AGL-1190))
 - **console:** the tab handoff never takes a live Firestore lease ([AGL-3788](https://linear.app/aglyn/issue/AGL-3788))
 - **notifications:** link notification emails sent from the site app ([AGL-3787](https://linear.app/aglyn/issue/AGL-3787))

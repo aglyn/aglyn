@@ -75,6 +75,36 @@ export const REFUND_REASON_LABELS: Record<RefundReasonCode, string> = {
   other: 'Other — say what, below',
 }
 
+/**
+ * The reason Stripe itself is told, derived from ours so every refund carries
+ * one (AGL-3786).
+ *
+ * Stripe takes only three codes. `fraudulent` is the one that matters: Stripe
+ * adds the card and email of a refund marked fraudulent to the account's Radar
+ * block lists. A fraud refund that carried the code only in our metadata
+ * taught Stripe nothing, so the same stolen card could pay again. Every code
+ * that is neither fraud nor a duplicate is a refund Aglyn chose to give, which
+ * Stripe's vocabulary files under `requested_by_customer`.
+ */
+export type StripeRefundReason =
+  | 'fraudulent'
+  | 'duplicate'
+  | 'requested_by_customer'
+
+const STRIPE_REFUND_REASONS: Record<RefundReasonCode, StripeRefundReason> = {
+  duplicate: 'duplicate',
+  'billing-error': 'requested_by_customer',
+  'service-failure': 'requested_by_customer',
+  goodwill: 'requested_by_customer',
+  cancellation: 'requested_by_customer',
+  fraud: 'fraudulent',
+  other: 'requested_by_customer',
+}
+
+export function stripeRefundReason(code: RefundReasonCode): StripeRefundReason {
+  return STRIPE_REFUND_REASONS[code]
+}
+
 /** Internal staff rationale — never shown to the customer. */
 export const REFUND_NOTE_MAX = 1000
 
