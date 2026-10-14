@@ -262,6 +262,30 @@
       "expect": "2 of 20"
     },
     {
+      "template": "{'(512) 555-0123':phone}",
+      "expect": "+15125550123"
+    },
+    {
+      "template": "{'+44 20 7946 0958':phone}",
+      "expect": "+442079460958"
+    },
+    {
+      "template": "{'1 512 555 0123':phone}",
+      "expect": "+15125550123"
+    },
+    {
+      "template": "{'555':phone}",
+      "expect": "555"
+    },
+    {
+      "template": "{data.flag:present}",
+      "expect": "true"
+    },
+    {
+      "template": "{data.nothing:present}",
+      "expect": ""
+    },
+    {
       "template": "{data.missing + 1}",
       "expect": ""
     },
@@ -404,22 +428,6 @@
     {
       "template": "{data.listResource:instance}|{data.wholeResource:instance}|",
       "expect": "abc123||"
-    },
-    {
-      "template": "{'(512) 555-0123':phone}",
-      "expect": "+15125550123"
-    },
-    {
-      "template": "{'+44 20 7946 0958':phone}",
-      "expect": "+442079460958"
-    },
-    {
-      "template": "{'1 512 555 0123':phone}",
-      "expect": "+15125550123"
-    },
-    {
-      "template": "{'555':phone}",
-      "expect": "555"
     },
     {
       "template": "{data.missing ?? 'not recorded':cents}",
@@ -605,6 +613,30 @@
       },
       "expect": {
         "clear": null
+      }
+    },
+    {
+      "body": {
+        "on": {
+          "$if": "data.perms[org.settings]",
+          "then": "{params.uid}",
+          "else": {
+            "$delete": true
+          }
+        },
+        "off": {
+          "$if": "data.flag",
+          "then": "{params.uid}",
+          "else": {
+            "$delete": true
+          }
+        }
+      },
+      "expect": {
+        "on": "u2",
+        "off": {
+          "$delete": true
+        }
       }
     },
     {

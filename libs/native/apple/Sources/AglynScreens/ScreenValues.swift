@@ -305,6 +305,10 @@ public enum ScreenValues {
     switch body {
     case .string(let template): return resolve(template, in: context)
     case .array(let items): return .array(items.map { resolveBody($0, in: context) })
+    case .object(let record) where record["$if"] != nil && record.keys.allSatisfy({ ["$if", "then", "else"].contains($0) }):
+      // `{"$if": "form.override", "then": "{form.x}", "else": {"$delete": true}}`: one of two values by a condition.
+      let chosen = condition(record["$if"]?.stringValue, in: context) ? record["then"] : record["else"]
+      return resolveBody(chosen ?? .null, in: context)
     case .object(let record) where record.count == 1 && record["$pick"] != nil:
       // `{"$pick": {"a": "{form.x}", "b": "{form.y}"}}`: the keys whose values are truthy, as a list.
       guard case .object(let options)? = record["$pick"] else { return .array([]) }
@@ -852,6 +856,9 @@ public enum ScreenValues {
       }
     case "yesno":
       return truthy(value) ? "Yes" : "No"
+    case "present":
+      // "true" where the value exists at all (a stored false or 0 counts), else empty: an override switch's start.
+      return value != nil && value != .null ? "true" : ""
     case "title":
       let raw = text(value).replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
       return raw.prefix(1).uppercased() + raw.dropFirst()
