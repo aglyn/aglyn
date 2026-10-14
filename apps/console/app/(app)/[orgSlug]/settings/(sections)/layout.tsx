@@ -27,7 +27,7 @@ import {
 import { Box, CircularProgress } from '@mui/material'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
+import { useSlotHasWidgets } from '../../../../../components/plugin-widget-slot.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -55,6 +55,14 @@ export default function SettingsSectionsLayout({
   const canManage = canManageOrg(currentOrg?.role)
   const isOwner = currentOrg?.role === 'owner'
   const transferHubVisible = useTransferHubVisible()
+  /*
+   * The `orgSettings` zone is a section of its own (AGL-3711), offered only
+   * while it has a card for this reader. Drawn below the rail, a card ran full
+   * width under every section.
+   */
+  const { hasWidgets: integrations } = useSlotHasWidgets(
+    CONSOLE_WIDGET_SLOTS.orgSettings,
+  )
   const section = (route: Route, label: string, visible?: boolean) => ({
     href: buildRoute(route as never, { orgSlug } as never),
     label,
@@ -89,6 +97,7 @@ export default function SettingsSectionsLayout({
     // its records on a plan that moves them; the page offers each button
     // only where its route takes it.
     section(Route.ORG_SETTINGS_DATA, 'Import & export', transferHubVisible),
+    section(Route.ORG_SETTINGS_INTEGRATIONS, 'Integrations', integrations),
     section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
     section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
   ]
@@ -131,15 +140,6 @@ export default function SettingsSectionsLayout({
         ) : (
           <HubSections sections={sections}>{children}</HubSections>
         )}
-        {/* The organization's settings zone (AGL-2943): the catalog key,
-            with the props the zone documents. `org.settings` is the
-            permission that gates this page, not a zone, and a widget
-            registered for the documented key never appeared here. */}
-        <PluginWidgetSlot
-          slot={CONSOLE_WIDGET_SLOTS.orgSettings}
-          orgId={currentOrg?.$id}
-          org={currentOrg}
-        />
       </Container>
     </DashboardLayout>
   )

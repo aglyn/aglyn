@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -25,21 +26,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.FunctionComparator
 import com.aglyn.contracts.FunctionConditionalOperation
 import com.aglyn.contracts.FunctionConditionalOperationIf
 import com.aglyn.contracts.FunctionSetOperation
 import com.aglyn.contracts.FunctionValueType
+import com.aglyn.contracts.FunctionRunResult
 import com.aglyn.contracts.HostFunction
 import com.aglyn.contracts.HostFunctionParameter
 import com.aglyn.contracts.HostFunctionVariable
+import com.aglyn.contracts.evaluateHostFunction
+import com.aglyn.contracts.hostFunctionOf
+import com.aglyn.core.FirestoreOrder
+import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.jsString
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.EmptyState
@@ -95,9 +104,41 @@ private fun FunctionEditor(context: NativePluginContext, hostId: String, functio
   val taken = ((others as? Live.Ready)?.value).orEmpty().filter { it.id != functionId && it.data["deletedAt"] == null }.mapNotNull { it.string("name")?.lowercase() }
   val nameTaken = draft.name.orEmpty().trim().lowercase() in taken
   val names = draft.assignableNames().map { InputChoice(it, it) }
+  // The site's variables, for the formula builder's value picker: read the first time a builder opens, so
+  // an author who never builds a formula costs nothing.
+  var siteVariables by remember { mutableStateOf<List<SiteVariableName>?>(null) }
+  fun loadSiteVariables() {
+    if (siteVariables != null) return
+    siteVariables = emptyList()
+    scope.launch {
+      runCatching { context.firestore.page(FirestoreQuery(variablesPath(hostId), orderBy = listOf(FirestoreOrder("__name__")), limit = LOGIC_CEILING)) }
+        .onSuccess { page -> siteVariables = page.docs.filter { it.data["deletedAt"] == null && !it.string("name").isNullOrEmpty() }.map { SiteVariableName(it.string("name"), it.string("type"), it.string("value")) } }
+    }
+  }
   val parameters = draft.parameters.orEmpty()
   val variables = draft.variables.orEmpty()
   val operations = draft.operations.orEmpty()
+  var testArgs by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+  var testResult by remember { mutableStateOf<String?>(null) }
+  // A test run sees what a published page sees: the site variables the draft names, read on the click and
+  // only when the draft names something outside itself.
+  fun runTest() {
+    scope.launch {
+      var globals: Map<String, Any> = emptyMap()
+      if (functionReferencedNames(draft).isNotEmpty()) {
+        runCatching { context.firestore.page(FirestoreQuery(variablesPath(hostId), orderBy = listOf(FirestoreOrder("__name__")), limit = LOGIC_CEILING)) }.onSuccess { page ->
+          val rows = page.docs.filter { it.data["deletedAt"] == null && !it.string("name").isNullOrEmpty() }.map { SiteVariableName(it.string("name"), it.string("type"), it.string("value")) }
+          globals = functionGlobals(draft, rows)
+        }
+      }
+      val args = parameters.associate { it.name.orEmpty() to (testArgs[it.name.orEmpty()] ?: "") }
+      testResult = when (val run = evaluateHostFunction(hostFunctionOf(functionSaveFields(draft)), args, globals)) {
+        is FunctionRunResult.Failed -> "Error: ${run.error}"
+        is FunctionRunResult.Ok -> "Result: ${jsString(run.value)}"
+      }
+    }
+  }
+  val formulaNameOptions = formulaNames(parameters.mapNotNull { it.name }, variables.mapNotNull { it.name }, siteVariables.orEmpty())
 
   Column(
     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).widthIn(max = 960.dp).testTag("function-editor"),
@@ -134,11 +175,7 @@ private fun FunctionEditor(context: NativePluginContext, hostId: String, functio
         }
         SwitchRow("Required", parameter.required == true, { put(parameter.copy(required = it)) })
         // What a visitor sees for this parameter: empty fields are left off the definition.
-        Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-          OutlinedTextField(parameter.label.orEmpty(), { put(parameter.copy(label = it.take(80).ifEmpty { null })) }, label = { Text("Label") }, placeholder = { Text(parameter.name.orEmpty()) }, singleLine = true, modifier = Modifier.weight(2f))
-          OutlinedTextField(parameter.defaultValue.orEmpty(), { put(parameter.copy(defaultValue = it.take(120).ifEmpty { null })) }, label = { Text("Starts as") }, singleLine = true, modifier = Modifier.weight(1f))
-        }
-        ParameterChoices(parameter) { put(it) }
+        ParameterAudience(parameter) { put(it) }
       }
     }
 
@@ -161,13 +198,23 @@ private fun FunctionEditor(context: NativePluginContext, hostId: String, functio
     SectionCard("Operations", action = { TextButton(onClick = { draft = draft.copy(operations = operations + newOperation()) }) { Text("Add operation") } }) {
       operations.forEachIndexed { index, operation ->
         if (index > 0) HorizontalDivider()
-        OperationEditor(index, operation, names, onRemove = { draft = draft.copy(operations = operations.filterIndexed { at, _ -> at != index }) }) { next ->
+        OperationEditor(index, operation, names, formulaNameOptions, ::loadSiteVariables, onRemove = { draft = draft.copy(operations = operations.filterIndexed { at, _ -> at != index }) }) { next ->
           draft = draft.copy(operations = operations.toMutableList().also { it[index] = next })
         }
       }
     }
 
     ChoiceField("Return value", draft.returnValue.orEmpty(), names, { draft = draft.copy(returnValue = it) }, supporting = "The parameter or variable whose final value the function returns", emptyLabel = "Nothing")
+
+    SectionCard("Test run") {
+      if (parameters.isEmpty()) Text("This function takes nothing in.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      parameters.forEach { parameter ->
+        val name = parameter.name.orEmpty()
+        OutlinedTextField(testArgs[name].orEmpty(), { testArgs = testArgs + (name to it) }, label = { Text(name) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("test-arg-$name"))
+      }
+      OutlinedButton(onClick = ::runTest, modifier = Modifier.testTag("test-run")) { Text("Run") }
+      testResult?.let { NoticeBanner(it, if (it.startsWith("Error")) StatusTone.WARNING else StatusTone.SUCCESS, Modifier.testTag("test-result")) }
+    }
 
     Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       OutlinedButton(onClick = { context.back() }) { Text("Cancel") }
@@ -182,23 +229,50 @@ private fun FunctionEditor(context: NativePluginContext, hostId: String, functio
   }
 }
 
-/** A parameter's choices as one line of text, kept as typed and parsed into options on every change. */
+/**
+ * What a VISITOR meets for one parameter: the label above the input, what it starts with, and, for a question
+ * with fixed answers, the choices, one row each (AGL-3768). Empty fields are dropped from the definition
+ * rather than stored as empty strings. "Starts as" is picked wherever there is a list to pick from: the
+ * choices when there are any, On or Off for a true/false.
+ */
 @Composable
-private fun ParameterChoices(parameter: HostFunctionParameter, onChange: (HostFunctionParameter) -> Unit) {
-  var text by remember(parameter.name) { mutableStateOf(formatFunctionParameterOptions(parameter.options)) }
-  OutlinedTextField(
-    text,
-    { typed ->
-      text = typed
-      val options = parseFunctionParameterOptions(typed)
-      onChange(parameter.copy(options = options.ifEmpty { null }))
-    },
-    label = { Text("Choices") },
-    placeholder = { Text("value: Label, value: Label") },
-    supportingText = { Text("A visitor picks one of these instead of typing") },
-    singleLine = true,
-    modifier = Modifier.fillMaxWidth(),
-  )
+private fun ParameterAudience(parameter: HostFunctionParameter, onChange: (HostFunctionParameter) -> Unit) {
+  val options = parameter.options.orEmpty()
+  val startsAs: List<InputChoice>? = when {
+    parameter.type == FunctionValueType.BOOLEAN -> listOf(InputChoice("true", "On"), InputChoice("false", "Off"))
+    options.isNotEmpty() -> options.map { InputChoice(it.value, it.label ?: it.value) }
+    else -> null
+  }
+  Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    OutlinedTextField(parameter.label.orEmpty(), { onChange(parameter.copy(label = it.take(80).ifEmpty { null })) }, label = { Text("Label") }, placeholder = { Text(parameter.name.orEmpty()) }, singleLine = true, modifier = Modifier.weight(2f))
+    if (startsAs != null) {
+      ChoiceField(
+        "Starts as",
+        parameter.defaultValue?.takeIf { start -> startsAs.any { it.value == start } }.orEmpty(),
+        startsAs,
+        { onChange(parameter.copy(defaultValue = it.ifEmpty { null })) },
+        Modifier.weight(1f),
+        emptyLabel = "Nothing chosen",
+      )
+    } else {
+      OutlinedTextField(
+        parameter.defaultValue.orEmpty(),
+        { typed -> onChange(parameter.copy(defaultValue = (if (parameter.type == FunctionValueType.NUMBER) typed.filter { ch -> ch.isDigit() || ch in ".-" } else typed.take(120)).ifEmpty { null })) },
+        label = { Text("Starts as") },
+        singleLine = true,
+        keyboardOptions = if (parameter.type == FunctionValueType.NUMBER) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default,
+        modifier = Modifier.weight(1f),
+      )
+    }
+  }
+  if (parameter.type != FunctionValueType.BOOLEAN) {
+    ParameterChoicesEditor(parameter.name.orEmpty(), parameter.type ?: FunctionValueType.NUMBER, parameter.options, onChange = { next ->
+      var updated = parameter.copy(options = next.ifEmpty { null })
+      // A start that is no longer a choice would preselect nothing.
+      if (next.isNotEmpty() && updated.defaultValue != null && next.none { it.value == updated.defaultValue }) updated = updated.copy(defaultValue = null)
+      onChange(updated)
+    })
+  }
 }
 
 @Composable
@@ -206,6 +280,8 @@ private fun OperationEditor(
   index: Int,
   operation: FunctionConditionalOperation,
   names: List<InputChoice>,
+  formulaNames: List<FormulaName>,
+  loadSiteVariables: () -> Unit,
   onRemove: () -> Unit,
   onChange: (FunctionConditionalOperation) -> Unit,
 ) {
@@ -217,6 +293,7 @@ private fun OperationEditor(
     }
     Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
       OutlinedTextField(condition.left, { onChange(operation.copy(`if` = condition.copy(left = it))) }, placeholder = { Text("P1") }, singleLine = true, modifier = Modifier.weight(2f))
+      FormulaBuilderButton(condition.left, formulaNames, { onChange(operation.copy(`if` = condition.copy(left = it))) }, onOpen = loadSiteVariables)
       ChoiceField(
         "Is",
         condition.comparator.raw,
@@ -226,15 +303,16 @@ private fun OperationEditor(
         allowEmpty = false,
       )
       OutlinedTextField(condition.right, { onChange(operation.copy(`if` = condition.copy(right = it))) }, placeholder = { Text("P2") }, singleLine = true, modifier = Modifier.weight(2f))
+      FormulaBuilderButton(condition.right, formulaNames, { onChange(operation.copy(`if` = condition.copy(right = it))) }, onOpen = loadSiteVariables)
     }
-    SetRows("Then do this", operation.then.orEmpty(), names) { onChange(operation.copy(then = it)) }
-    SetRows("Otherwise do this", operation.otherwise.orEmpty(), names) { onChange(operation.copy(otherwise = it)) }
+    SetRows("Then do this", operation.then.orEmpty(), names, formulaNames, loadSiteVariables) { onChange(operation.copy(then = it)) }
+    SetRows("Otherwise do this", operation.otherwise.orEmpty(), names, formulaNames, loadSiteVariables) { onChange(operation.copy(otherwise = it)) }
   }
 }
 
 /** A branch's SET rows: SET [name] equal to [expression]. */
 @Composable
-private fun SetRows(title: String, rows: List<FunctionSetOperation>, names: List<InputChoice>, onChange: (List<FunctionSetOperation>) -> Unit) {
+private fun SetRows(title: String, rows: List<FunctionSetOperation>, names: List<InputChoice>, formulaNames: List<FormulaName>, loadSiteVariables: () -> Unit, onChange: (List<FunctionSetOperation>) -> Unit) {
   Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
   rows.forEachIndexed { index, row ->
     fun put(next: FunctionSetOperation) = onChange(rows.toMutableList().also { it[index] = next })
@@ -243,6 +321,7 @@ private fun SetRows(title: String, rows: List<FunctionSetOperation>, names: List
       ChoiceField("Name", row.set.orEmpty(), names, { put(row.copy(set = it)) }, Modifier.weight(1f))
       Text("=", style = MaterialTheme.typography.labelLarge)
       OutlinedTextField(row.expression.orEmpty(), { put(row.copy(expression = it)) }, placeholder = { Text("P1 + P2") }, singleLine = true, modifier = Modifier.weight(2f))
+      FormulaBuilderButton(row.expression.orEmpty(), formulaNames, { put(row.copy(expression = it)) }, onOpen = loadSiteVariables)
       IconButton(onClick = { onChange(rows.filterIndexed { at, _ -> at != index }) }) { Icon(AglynIcons.named("close"), contentDescription = "Remove this row") }
     }
   }
