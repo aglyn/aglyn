@@ -477,15 +477,7 @@ private fun Block(
             SectionCard(title) {
               Column(Modifier.fillMaxWidth()) {
                 contributions.forEachIndexed { index, spec ->
-                  if (index > 0) HorizontalDivider()
-                  AglynListItem(
-                    title = spec.label,
-                    supporting = spec.subtitle,
-                    icon = AglynIcons.named(spec.icon),
-                    trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
-                    onClick = { open(spec.id, renderParams(block["params"], context)) },
-                    modifier = Modifier.testTag("zone-${spec.id}"),
-                  )
+                  ZoneRow(spec, plugin, renderParams(block["params"], context), divider = index > 0) { open(spec.id, it) }
                 }
               }
             }
@@ -936,4 +928,30 @@ private fun HoursInput(field: FieldSpec, text: String, onChange: (String) -> Uni
       )
     }
   }
+}
+
+/**
+ * One screen's row in a zone. A screen with a `showWhen` reads its own loads first and is listed only while the condition holds,
+ * so a widget with nothing to say to this store leaves no row; one without is listed at once.
+ */
+@Composable
+private fun ZoneRow(spec: ScreenSpec, plugin: NativePluginContext, params: NativeParams, divider: Boolean, open: (NativeParams) -> Unit) {
+  val session = LocalScreenSession.current
+  val shown = if (spec.showWhen == null) {
+    true
+  } else {
+    val model = remember(spec.id, params) { ScreenModel(spec, session.context(plugin, params), plugin.api, plugin.firestore, null, session.account) }
+    LaunchedEffect(model) { model.load() }
+    model.phase == ScreenModel.Phase.Ready && ScreenValues.condition(spec.showWhen, model.context)
+  }
+  if (!shown) return
+  if (divider) HorizontalDivider()
+  AglynListItem(
+    title = spec.label,
+    supporting = spec.subtitle,
+    icon = AglynIcons.named(spec.icon),
+    trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+    onClick = { open(params) },
+    modifier = Modifier.testTag("zone-${spec.id}"),
+  )
 }

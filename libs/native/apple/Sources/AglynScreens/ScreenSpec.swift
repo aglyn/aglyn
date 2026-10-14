@@ -24,6 +24,9 @@ public struct ScreenSpec: Identifiable, Sendable {
   public let label: String
   /// A `when` condition the session must meet to open the screen.
   public let requires: String?
+  /// For a screen that sits in a zone: a condition over the screen's own loads. The zone reads those loads and lists the row only
+  /// while the condition holds, as a console widget that draws nothing for a store it has nothing to say to.
+  public let showWhen: String?
   public let links: [String]
   /// Core screens' zones this plugin screen contributes to (`orgMember`, `staffOrg`, …).
   public let zones: [String]
@@ -44,6 +47,7 @@ public struct ScreenSpec: Identifiable, Sendable {
     self.subtitle = json["subtitle"]?.stringValue
     self.label = json["label"]?.stringValue ?? (title.contains("{") ? "Details" : title)
     self.requires = json["requires"]?.stringValue
+    self.showWhen = json["showWhen"]?.stringValue
     self.links = json["links"].arrayOfStrings
     self.zones = json["zones"].arrayOfStrings
     self.loads = json["load"].objectEntries.map { LoadSpec(key: $0.key, $0.value) }

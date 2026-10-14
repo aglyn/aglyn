@@ -36,6 +36,11 @@ class ScreenSpec private constructor(val raw: JsonElement) {
   /** The plain name a sidebar or app bar shows: `label`, else a title without templates. */
   val label: String = raw.str("label") ?: title.takeIf { '{' !in it } ?: "Details"
   val requires: String? = raw.str("requires")
+  /**
+   * For a screen that sits in a zone: a condition over the screen's own loads. The zone reads those loads and lists the row only
+   * while the condition holds, as a console widget that draws nothing for a store it has nothing to say to.
+   */
+  val showWhen: String? = raw.str("showWhen")
   val links: List<String> = raw.arr("links").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
   /** Core screens' zones this plugin screen contributes to (`orgMember`, `staffOrg`, …). */
   val zones: List<String> = raw.arr("zones").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }

@@ -987,10 +987,14 @@ epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": 
 More formats: `amount` (whole cents as `12.50`, what a money field starts with), `code`
 (a coupon code as stored; `code/40` cuts it at 40), `token` (the search token of typed
 words), `sum` and `sumcents` (a list of numbers added up), `ahead` (how many of a list of
-times are still to come). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
+times are still to come), `percentof/other.path` (this as a percentage of the number at the path, to one decimal, `0` where
+there is nothing to divide by). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
 first value that is present at all (`false` and `0` count). A path `rows.*.field` also
 reads an object's values in key order, and a comparison against a list holds when any of
-its values does (`item.holds.*.expiresAtMs > @now.ms`). A number field takes `min` and
+its values does (`item.holds.*.expiresAtMs > @now.ms`). `rows[?item.rate && !item.own]` keeps the rows its condition holds for
+(`item` is the row), so a count, a sum or a list can be taken over just those. A screen that sits in a zone may name a `showWhen`
+condition over its own loads: the zone reads those loads and lists the row only while it holds, as a console widget that draws
+nothing for a store it has nothing to say to. A number field takes `min` and
 `max`, and a field a screen hid by its `when` is not sent.
 
 A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with

@@ -11,6 +11,7 @@
         "orderDetail"
       ],
       "order": 60,
+      "showWhen": "data.view.order.earnedPoints || data.view.order.spentCents || data.view.order.entries.0",
       "load": {
         "view": {
           "url": "/api/loyalty/order?hostId={site.id}&orderId={params.orderId}",
@@ -23,7 +24,7 @@
           "id": "unavailable",
           "tone": "info",
           "when": "!data.view.order",
-          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+          "text": "Rewards are not available for this site"
         },
         {
           "type": "notice",

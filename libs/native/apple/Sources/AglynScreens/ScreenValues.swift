@@ -42,7 +42,11 @@ public enum ScreenValues {
         let inner = raw[raw.index(after: open)..<raw.index(before: raw.endIndex)]
         segment = String(raw[..<open])
         if !segment.isEmpty { current = step(current, segment) }
-        if let tilde = inner.range(of: "~=") {
+        if inner.hasPrefix("?") {
+          // `rows[?item.rate && !item.own]`: every row the condition holds for (`item` is the row), as a list.
+          let keep = String(inner.dropFirst())
+          current = .array(current.array.filter { ScreenValues.condition(keep, in: ScreenContext.with(context, item: $0)) })
+        } else if let tilde = inner.range(of: "~=") {
           // `rows[badges~=path]`: the first row whose list field holds the text at path.
           containing = (String(inner[..<tilde.lowerBound]), String(inner[tilde.upperBound...]))
         } else if let equals = inner.firstIndex(of: "=") {
@@ -679,6 +683,10 @@ public enum ScreenValues {
       guard let amount = number(value) else { return text(value) }
       let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
       return numberText(max(0, amount - other))
+    case "percentof":
+      // `percentof/other.path`: this as a percentage of the number at the path, to one decimal (`5`, `2.5`); `0` when there is nothing to divide by.
+      guard let top = number(value), parts.count > 1, let bottom = number(lookup(parts[1], in: context)), bottom != 0 else { return "0" }
+      return numberText(((top / bottom) * 1000 + 0.5).rounded(.down) / 10)
     case "lesscents":
       // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
       let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
