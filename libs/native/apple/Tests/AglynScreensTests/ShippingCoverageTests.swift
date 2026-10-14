@@ -13,10 +13,10 @@ final class ShippingCoverageTests: XCTestCase {
   private func cases(_ name: String) throws -> [JSONValue] {
     let file = ScreenSpecTests.screensDir.appendingPathComponent("../contracts/function-cases.generated.json").standardizedFileURL
     let all = try XCTUnwrap(JSONValue.decode(Data(contentsOf: file)))
-    return try XCTUnwrap(all["functions"]?[name]?["cases"]).array
+    return try XCTUnwrap(all["functions"]?[name]?["cases"]?.arrayValue)
   }
 
-  private func settings(_ args: JSONValue) -> JSONValue? { args.array.first.flatMap { $0 == .null ? nil : $0 } }
+  private func settings(_ args: JSONValue) -> JSONValue? { args.arrayValue?.first.flatMap { $0 == .null ? nil : $0 } }
 
   private func options(_ list: [ShippingCoverage.Option]) -> JSONValue {
     .array(
@@ -45,7 +45,7 @@ final class ShippingCoverageTests: XCTestCase {
     let all = try cases("describeShippingCoverage")
     XCTAssertGreaterThan(all.count, 6)
     for item in all {
-      let said = ShippingCoverage.words(coverage(item["args"]?.array.first))
+      let said = ShippingCoverage.words(coverage(item["args"]?.arrayValue?.first))
       let expected = item["result"]
       XCTAssertEqual(said.headline, expected?["headline"]?.stringValue)
       XCTAssertEqual(said.detail, expected?["detail"]?.stringValue)
@@ -58,11 +58,11 @@ final class ShippingCoverageTests: XCTestCase {
     let all = try cases("resolveCheckoutShippingOptions")
     XCTAssertGreaterThan(all.count, 300)
     for item in all {
-      let args = try XCTUnwrap(item["args"]).array
+      let args = try XCTUnwrap(item["args"]?.arrayValue)
       let cart = (
         subtotalCents: ScreenValues.number(args[2]["subtotalCents"]) ?? 0, totalGrams: ScreenValues.number(args[2]["totalGrams"]) ?? 0
       )
-      let destinations = args[1].array.compactMap(\.stringValue)
+      let destinations = (args[1].arrayValue ?? []).compactMap(\.stringValue)
       XCTAssertEqual(
         options(ShippingCoverage.checkoutOptions(args[0] == .null ? nil : args[0], destinations, cart)), item["result"], "\(args)")
     }
