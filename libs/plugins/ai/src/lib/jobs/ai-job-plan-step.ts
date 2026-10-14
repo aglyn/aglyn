@@ -67,6 +67,7 @@ import {
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
 import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
+import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import { aiStorefrontPlanScreens } from '../layout-language/ai-layout-storefront'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
@@ -503,6 +504,45 @@ export function aiSiteBlogStandInCheck(): (plan: AiBuildPlan) => AiDoctrineViola
   }
 }
 
+/** The code a site plan in another language with no English photo words is re-asked under. */
+export const AI_SITE_PHOTO_WORDS_CODE = 'plan-photo-words'
+
+/**
+ * A site plan in another language that gave no English photo words
+ * (AGL-3779): its stock photos have nothing in English to be searched by, and
+ * two Spanish bakeries' heroes, searched by their kind of site, took a coffee
+ * mug. Missing covers null, left out, and words the plan's reader dropped as
+ * not plain English ("panadería pasteles"). An English plan, and one whose
+ * language is unknown, owes none.
+ */
+export function aiSitePhotoWordsViolations(plan: Pick<AiBuildPlan, 'language' | 'photoWords'>): AiDoctrineViolation[] {
+  if (!aiLayoutSpeaksOtherThanEnglish(plan.language) || plan.photoWords) return []
+  return [
+    {
+      rule: null,
+      code: AI_SITE_PHOTO_WORDS_CODE,
+      message: `This plan's language is ${plan.language}, so photoWords is required: 2-4 plain English words naming what the business is or sells, most specific first (e.g. bakery pastries), never a place or the business name.`,
+      paths: ['photoWords'],
+    },
+  ]
+}
+
+/**
+ * A site plan's missing English photo words, asked about on the FIRST answer
+ * only, like a thin home: an answer that still gives none is kept, and its
+ * photos fall back to its business type in English, else its kind of site
+ * (`aiStockSourceTerms`), since a start stopped over its photo words would be
+ * no site at all.
+ */
+export function aiSitePhotoWordsCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  let answers = 0
+  return (plan) => {
+    answers += 1
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
+    return aiSitePhotoWordsViolations(plan)
+  }
+}
+
 /**
  * What a TEMPLATE job's plan is told its creation's `fields` are (AGL-3143
  * §11): the subject's binding tokens, listed so the planner promises only
@@ -587,6 +627,7 @@ function planViolations(
   const storeShop = store ? aiSiteStoreShopCheck() : null
   const blogStandIn = blog ? aiSiteBlogStandInCheck() : null
   const emptyGallery = site ? aiSiteEmptyGalleryCheck() : null
+  const photoWords = site ? aiSitePhotoWordsCheck() : null
   return (plan) => {
     // A build's plan is held to the operations this site has (AGL-3616):
     // an unknown op, arguments its schema refuses, a cycle or a reference
@@ -601,6 +642,7 @@ function planViolations(
       ...(blogStandIn ? blogStandIn(plan) : []),
       ...(emptyGallery ? emptyGallery(plan) : []),
       ...(storeShop ? storeShop(plan) : []),
+      ...(photoWords ? photoWords(plan) : []),
     ]
   }
 }

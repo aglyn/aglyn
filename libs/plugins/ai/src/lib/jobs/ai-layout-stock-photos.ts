@@ -40,6 +40,7 @@ import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import type { AiBuildPlan } from '../model/ai-build-plan'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { aiStockBusinessNoun } from './ai-stock-business-nouns'
 
 /**
  * STOCK PHOTOS FOR A LANGUAGE PAGE'S PICTURE SLOTS (AGL-3660).
@@ -1883,8 +1884,10 @@ export interface AiLayoutStockPhotoSourceInput {
   photoWords?: string
   /**
    * The English name of the kind of site the person picked (AGL-3771): what a
-   * site in another language whose plan gave no photo words is searched by,
-   * rather than its business type in its own language.
+   * site in another language is searched by when its plan gave no photo words
+   * and its business type names no business listed in English
+   * (`aiStockBusinessNoun`, AGL-3779), rather than its business type in its
+   * own language.
    */
   kindWords?: string
   /** The page's section names, by plan index. */
@@ -1969,14 +1972,23 @@ export function aiStockSourceTerms(
 
 /**
  * What a site in another language is searched by ({@link aiStockSourceTerms}):
- * its photo words' subject, else, where its plan gave none, the English name
- * of its kind of site (AGL-3771) — Panaderia El Trigal's plan gave no photo
- * words, and its pages searched "con pan dulce" again and placed the Río
- * Dulce beside its story. Empty for every other site.
+ * its photo words' subject; where its plan gave none, the English name of the
+ * business its type names (AGL-3779, {@link aiStockBusinessNoun}); and only
+ * then the English name of its kind of site (AGL-3771). Panaderia El Trigal's
+ * plan gave no photo words, and its pages searched "con pan dulce" and placed
+ * the Río Dulce beside its story; searched by its kind instead, a bakery's
+ * hero searched "restaurant cafe" and took a coffee mug, where "panadería"
+ * says bakery. Empty for every other site.
  */
-function aiStockSourceSubject(input: Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords'>): string {
+function aiStockSourceSubject(
+  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords'>,
+): string {
   if (!aiLayoutSpeaksOtherThanEnglish(input.language)) return ''
-  return aiStockPhotoWordsSubject(input.photoWords ?? '') || (input.kindWords ?? '').trim()
+  return (
+    aiStockPhotoWordsSubject(input.photoWords ?? '') ||
+    aiStockBusinessNoun(input.business) ||
+    (input.kindWords ?? '').trim()
+  )
 }
 
 /**

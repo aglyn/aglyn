@@ -294,9 +294,12 @@ export interface AiBuildPlan {
    * is in (AGL-3760): two to four words a stock photo library is searched by,
    * the business's subject first — "bakery bread pastries" for "una panadería
    * … con pan dulce, conchas". The libraries are tagged in English, so a site
-   * in another language searches by these rather than its own words. Absent
-   * on every other kind's plan, on one that said null, and on one whose words
-   * were not plain English letters.
+   * in another language searches by these rather than its own words, and its
+   * plan is asked for them again once when it gave none (AGL-3779). Absent
+   * on every other kind's plan, on one that said null, on one whose words
+   * were not plain English letters, and on a plan in another language whose
+   * re-ask still gave none, whose photos then fall back to its business type
+   * in English (`aiStockBusinessNoun`), else its kind of site.
    */
   photoWords?: string
 }
@@ -645,8 +648,16 @@ export function aiPlanPhotoWords(value: unknown): string | null {
   return words.length ? words.slice(0, AI_PLAN_PHOTO_WORDS_MAX).join(' ') : null
 }
 
+/**
+ * Required whenever the plan's language is not English (AGL-3779), the field
+ * beside it. Asked "for a brief not in English", two Spanish bakeries' plans
+ * said `es` and gave none (jobs ih6kVvCGP1, iGmqrEgyW4): a guided start's
+ * brief is English sentences around the person's own words. A strict schema
+ * has no conditional keyword, so the condition is said here and held by the
+ * plan step (`aiSitePhotoWordsCheck`), which re-asks once.
+ */
 const PHOTO_WORDS_SCHEMA = nullableString(
-  "For a brief not in English: 2-4 English words for its stock photos, subject first, e.g. bakery bread pastries; no place. Else null.",
+  'Required when language is not en: 2-4 English words naming what the business is or sells, most specific first, e.g. bakery pastries; never a place or the business name. Null when language is en.',
 )
 
 /**
