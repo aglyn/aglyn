@@ -9,6 +9,7 @@ import com.aglyn.contracts.ListQueryFilter
 import com.aglyn.contracts.ListQueryOp
 import com.aglyn.contracts.ListQueryPlan
 import com.aglyn.contracts.ListQueryRequest
+import com.aglyn.contracts.libraryVideoSeconds
 import com.aglyn.contracts.MediaSort
 import com.aglyn.contracts.mediaQueryRequest
 import com.aglyn.core.ApiMethod
@@ -133,6 +134,8 @@ data class MediaItem(
   val updatedAt: FirestoreTimestamp?,
   val uploadedBy: String?,
   val visibleTo: List<String>,
+  /** A film's measured length in whole seconds (`videoMediaProps`); null for anything else or a film that records none. */
+  val videoSeconds: Long? = null,
 ) {
   /** Where the file is served from: its CDN path on the console origin, else its stored URL. */
   fun src(origin: String): String? = cdnPath?.let { origin.trimEnd('/') + it } ?: url
@@ -168,6 +171,7 @@ data class MediaItem(
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
         uploadedBy = doc.string("uploadedBy"),
         visibleTo = (doc.data["visibleTo"] as? List<*>)?.filterIsInstance<String>().orEmpty(),
+        videoSeconds = libraryVideoSeconds(doc.data["video"]),
       )
     }
   }

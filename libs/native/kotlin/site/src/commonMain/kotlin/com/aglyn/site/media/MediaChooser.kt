@@ -37,24 +37,39 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.aglyn.contracts.hostQualifiedCdnPath
+import com.aglyn.contracts.mediaNodeSrc
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.LoadContent
+import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SkeletonGrid
 import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.StatusTone
 import com.aglyn.ui.space
 
 /**
  * What a person picked in the chooser: the file and the library it came from.
- * [reference] is the stored form the console's `formatMediaRef` mints
- * (`media:{scope}/{mediaId}`), the asset by identity, so replacing or moving
- * the file never breaks what names it.
+ * [reference] is what the console's picker stores (`mediaNodeSrc`): the asset
+ * by identity (`media:{scope}/{mediaId}`), so replacing or moving the file
+ * never breaks what names it, and for a workspace file shared with only some
+ * sites, the form that names this site (`hostQualifiedCdnPath`).
  */
 data class ChosenMedia(val item: MediaItem, val scope: MediaScope) {
-  val reference: String get() = "media:${scope.cdnScope}/${item.id}"
+  private val hostId: String? get() = when (scope) {
+    is MediaScope.Site -> scope.hostId
+    is MediaScope.Org -> scope.forHostId
+  }
+
+  val reference: String
+    get() = mediaNodeSrc(item.url, hostQualifiedCdnPath(item.cdnPath, item.visibleTo, hostId), item.private)
+      ?: "media:${scope.cdnScope}/${item.id}"
 }
+
+/** Why a private file cannot be placed, as the console's picker says it. */
+const val PRIVATE_FILE_REFUSAL = "That file is private, so it cannot be placed on a page. Turn off Private in the media library to use it here."
 
 /**
  * The media library as a chooser, the native side of the console's media
@@ -104,8 +119,10 @@ private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, sc
   val coroutines = rememberCoroutineScope()
   val model = remember(scope, context.firestore) { MediaListModel(scope, context.firestore, coroutines, initialType = kind) }
   LaunchedEffect(model, scopeTokens) { model.start(scopeTokens) }
+  var refusal by remember { mutableStateOf<String?>(null) }
   Column(Modifier.fillMaxSize()) {
     SearchField(model.search, model::type, placeholder = "Search files", modifier = Modifier.padding(space(2f)))
+    refusal?.let { NoticeBanner(it, StatusTone.WARNING, Modifier.padding(horizontal = space(2f)).testTag("chooser-private-refusal")) }
     LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load the library", skeleton = { SkeletonGrid(tiles = 12) }) { rows ->
       if (rows.isEmpty()) {
         EmptyState(
@@ -127,7 +144,7 @@ private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, sc
           horizontalArrangement = Arrangement.spacedBy(space(1f)),
           verticalArrangement = Arrangement.spacedBy(space(1f)),
         ) {
-          items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, selected = false) { onChoose(ChosenMedia(item, scope)) } }
+          items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, selected = false) { if (item.private) refusal = PRIVATE_FILE_REFUSAL else onChoose(ChosenMedia(item, scope)) } }
           if (model.hasMore) item(span = { GridItemSpan(maxLineSpan) }) { SkeletonList(rows = 1) }
         }
       }

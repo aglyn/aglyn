@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -58,6 +57,7 @@ import com.aglyn.core.Live
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -75,7 +75,6 @@ import com.aglyn.ui.LoadContent
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
-import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
@@ -210,14 +209,11 @@ private fun DetailsSection(context: NativePluginContext, hostId: String, host: M
     listOf("logoUrl", "logoDarkUrl"),
     api,
     canEdit,
-    description = "The brand mark your navigation and error pages show. Paste the address of an image from your media library.",
+    description = "The brand mark your navigation and error pages show. Choose an image from your media library; dark mode falls back to the light logo.",
     clearable = setOf("logoUrl", "logoDarkUrl"),
   ) { fields ->
     for ((path, label) in listOf("logoUrl" to "Light mode logo", "logoDarkUrl" to "Dark mode logo")) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
-        RemoteImage(fields[path]?.takeIf { it.startsWith("http") }, null, Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), icon = "image")
-        CountedTextField(label, fields[path].orEmpty(), { fields[path] = it }, Modifier.weight(1f), enabled = canEdit, keyboardType = KeyboardType.Uri, placeholder = "https://…")
-      }
+      MediaImageField(context, label, fields[path].orEmpty(), { fields[path] = it }, enabled = canEdit)
     }
   }
   BusinessDetailsCard(host, api, canEdit)
@@ -361,13 +357,10 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     listOf("seo.favicon", "seo.appIcon", "seo.image", "seo.imageAlt"),
     api,
     canEdit,
-    description = "Paste the address of each image from your media library.",
+    description = "Choose each image from your media library.",
   ) { f ->
     for ((path, label) in listOf("seo.favicon" to "Favicon", "seo.appIcon" to "App icon", "seo.image" to "Social image")) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
-        RemoteImage(f[path]?.takeIf { it.startsWith("http") }, null, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)), icon = "image")
-        CountedTextField(label, f[path].orEmpty(), { f[path] = it }, Modifier.weight(1f), enabled = canEdit, keyboardType = KeyboardType.Uri, placeholder = "https://…")
-      }
+      MediaImageField(context, label, f[path].orEmpty(), { f[path] = it }, enabled = canEdit)
     }
     CountedTextField("Image description", f["seo.imageAlt"].orEmpty(), { f["seo.imageAlt"] = it }, max = SeoLimits.IMAGE_ALT, enabled = canEdit, supporting = "What the social image shows, for screen readers")
   }
@@ -380,7 +373,7 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     CountedTextField("Email", f["seo.entity.email"].orEmpty(), { f["seo.entity.email"] = it }, enabled = canEdit, keyboardType = KeyboardType.Email)
     CountedTextField("Telephone", f["seo.entity.telephone"].orEmpty(), { f["seo.entity.telephone"] = it }, enabled = canEdit, keyboardType = KeyboardType.Phone)
     CountedTextField("Contact type", f["seo.entity.contactType"].orEmpty(), { f["seo.entity.contactType"] = it }, enabled = canEdit, placeholder = "customer service")
-    CountedTextField("Logo", f["seo.entity.logo"].orEmpty(), { f["seo.entity.logo"] = it }, enabled = canEdit, keyboardType = KeyboardType.Uri, placeholder = "https://…")
+    MediaImageField(context, "Logo", f["seo.entity.logo"].orEmpty(), { f["seo.entity.logo"] = it }, enabled = canEdit)
   }
   val addressPaths = listOf("streetAddress" to "Street", "addressLocality" to "City", "addressRegion" to "Region", "postalCode" to "Postal code", "addressCountry" to "Country")
   HostTextCard("Business address", host, addressPaths.map { "seo.entity.address.${it.first}" }, api, canEdit) { f ->

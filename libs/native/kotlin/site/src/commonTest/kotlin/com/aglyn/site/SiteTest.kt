@@ -23,6 +23,7 @@ import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.pluginhost.DeepLinks
 import com.aglyn.pluginhost.NativeLinkTarget
 import com.aglyn.pluginhost.NativePluginRegistry
+import com.aglyn.site.media.ChosenMedia
 import com.aglyn.site.media.FolderPick
 import com.aglyn.site.media.MediaFilters
 import com.aglyn.site.media.MediaItem
@@ -30,6 +31,7 @@ import com.aglyn.site.media.MediaScope
 import com.aglyn.site.media.formatBytes
 import com.aglyn.site.media.mediaPlan
 import com.aglyn.site.media.mediaPlanNotices
+import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.site.media.mediaQuery
 import com.aglyn.site.media.megabytesInput
 import com.aglyn.site.pages.PageNode
@@ -190,6 +192,32 @@ class SiteTest {
     // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
     val notices = mediaPlanNotices(mediaPlan(FolderPick.All, null, null, MediaSort.NEWEST, "hero", MediaFilters(tag = "sunset")))
     assertTrue(notices.isNotEmpty(), notices.toString())
+  }
+
+  @Test
+  fun choosesAFileTheWayTheConsolesPickerStoresIt() {
+    fun file(id: String, vararg fields: Pair<String, Any?>) = MediaItem.from(FirestoreDoc(id, "hosts/h/media/$id", mapOf("fileName" to "$id.jpg", "contentType" to "image/jpeg") + fields))!!
+    // A site's own file: its reference.
+    assertEquals("media:h/m1", ChosenMedia(file("m1", "cdnPath" to "/api/media/cdn/h/m1"), MediaScope.Site("h")).reference)
+    // A workspace file shared with only some sites is requested through the form that names this site; an org-wide one is not.
+    assertEquals("media:org:o1:h/m2", ChosenMedia(file("m2", "cdnPath" to "/api/media/cdn/org:o1/m2", "visibleTo" to listOf("host:h")), MediaScope.Org("o1", "h")).reference)
+    assertEquals("media:org:o1/m3", ChosenMedia(file("m3", "cdnPath" to "/api/media/cdn/org:o1/m3", "visibleTo" to listOf("org")), MediaScope.Org("o1", "h")).reference)
+    // No CDN path: the Storage address names the asset; any other address is kept.
+    val storage = "https://firebasestorage.googleapis.com/v0/b/bucket/o/hosts%2Fh%2Fmedia%2Fm4?alt=media"
+    assertEquals("media:h/m4", ChosenMedia(file("m4", "url" to storage), MediaScope.Site("h")).reference)
+    assertEquals("https://elsewhere.test/p.png", ChosenMedia(file("m5", "url" to "https://elsewhere.test/p.png"), MediaScope.Site("h")).reference)
+    // A film's measured length, in whole seconds.
+    assertEquals(63L, file("m6", "video" to mapOf("durationMs" to 63_400L, "width" to 1920L, "height" to 1080L)).videoSeconds)
+    assertNull(file("m7").videoSeconds)
+  }
+
+  @Test
+  fun showsAStoredPictureFromTheCdnForTheSiteBeingEdited() {
+    assertEquals("https://console.test/api/media/cdn/h/m1?w=320", mediaPreviewUrl("media:h/m1", "https://console.test/", "h"))
+    assertEquals("https://console.test/api/media/cdn/org:o1:h9/m2?w=320", mediaPreviewUrl("media:org:o1/m2", "https://console.test", "h9"))
+    assertEquals("https://example.com/a.png", mediaPreviewUrl("https://example.com/a.png", "https://console.test", "h"))
+    assertEquals("https://console.test/img/a.png", mediaPreviewUrl("/img/a.png", "https://console.test", "h"))
+    assertNull(mediaPreviewUrl("  ", "https://console.test", "h"))
   }
 
   @Test
