@@ -265,6 +265,13 @@ export function lockdownFeatureStaffBypass(key: LockdownFeatureKey): boolean {
  * writer stores `mode` only for read-only locks, which keeps every existing
  * carrier document byte-identical and needs no migration.
  */
+/**
+ * The phrase a platform-scope lock must carry, typed by the operator and
+ * checked again by the route. One value for the console page, the route and
+ * the native staff screens (generated from here).
+ */
+export const PLATFORM_LOCK_CONFIRM_PHRASE = 'LOCK PLATFORM'
+
 export type LockdownMode = 'full' | 'read-only'
 
 const LOCKDOWN_MODE_KEYS: Record<LockdownMode, true> = {

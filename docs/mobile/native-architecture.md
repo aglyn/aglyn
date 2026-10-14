@@ -916,7 +916,8 @@ whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
 `cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
 `count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
-in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
+in place; `{"$if": {when, then, else}}` is one of two values (or nothing, which leaves the member out) and
+`{"$afterHours": "{form.hours}"}` is that many hours from `now.ms` in epoch milliseconds (nothing when blank); `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
 
 ### The plugin switchboard

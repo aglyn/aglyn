@@ -80,6 +80,14 @@
           "label": "Viewer"
         }
       }
+    },
+    "now": {
+      "ms": 1790000000000
+    },
+    "form": {
+      "scope": "org",
+      "hours": "2",
+      "blank": ""
     }
   },
   "render": [
@@ -367,6 +375,46 @@
       },
       "expect": {
         "clear": null
+      }
+    },
+    {
+      "body": {
+        "a": {
+          "$if": {
+            "when": "form.scope == org",
+            "then": "{form.scope}"
+          }
+        },
+        "b": {
+          "$if": {
+            "when": "form.scope == user",
+            "then": true
+          }
+        },
+        "c": {
+          "$if": {
+            "when": "form.scope == org",
+            "then": {
+              "$if": {
+                "when": "form.scope == org,host",
+                "then": true,
+                "else": false
+              }
+            },
+            "else": false
+          }
+        },
+        "until": {
+          "$afterHours": "{form.hours}"
+        },
+        "none": {
+          "$afterHours": "{form.blank}"
+        }
+      },
+      "expect": {
+        "a": "org",
+        "c": true,
+        "until": 1790007200000
       }
     }
   ],

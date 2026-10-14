@@ -70,6 +70,7 @@ import {
   isLockableDomain,
   isLockdownEnforcement,
   isLockdownFeatureKey,
+  PLATFORM_LOCK_CONFIRM_PHRASE,
   isLockdownMode,
   isLockdownReasonCode,
   LOCKDOWN_ENFORCEMENTS,
@@ -172,7 +173,7 @@ function featureTargetIds(body: any): string[] {
  * mishap or replayed request can take the whole platform down with a
  * one-field body.
  */
-const PLATFORM_CONFIRM_PHRASE = 'LOCK PLATFORM'
+const PLATFORM_CONFIRM_PHRASE = PLATFORM_LOCK_CONFIRM_PHRASE
 
 /**
  * The lock's shape as the audit trail has to remember it (AGL-1572).

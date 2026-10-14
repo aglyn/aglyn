@@ -225,6 +225,16 @@ public enum ScreenValues {
         if truthy(value) { map[key] = value } else { map[key] = nil }
       }
       return .object(map)
+    case .object(let record) where record.count == 1 && record["$if"] != nil:
+      // `{"$if": {"when": "form.scope == org", "then": X, "else": Y}}`: X or Y resolved, or nothing (the member is left out).
+      let spec = record["$if"] ?? .null
+      let branch = condition(spec["when"]?.stringValue, in: context) ? spec["then"] : spec["else"]
+      return branch.map { resolveBody($0, in: context) } ?? .null
+    case .object(let record) where record.count == 1 && record["$afterHours"] != nil:
+      // `{"$afterHours": "{form.hours}"}`: the moment that many hours from now, in epoch milliseconds; nothing when blank or not positive.
+      guard let hours = number(resolveBody(record["$afterHours"] ?? .null, in: context)), hours > 0, hours.isFinite else { return .null }
+      let now = number(lookup("now.ms", in: context)) ?? (Date().timeIntervalSince1970 * 1000).rounded()
+      return .number((now + hours * 3_600_000).rounded())
     case .object(let record) where record.count == 1 && record["$split"] != nil:
       // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
       let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))

@@ -2615,6 +2615,7 @@
     {
       "id": "core.staff.lockdown",
       "title": "Locks",
+      "subtitle": "The panic page: platform, features, workspaces, sites, domains and accounts",
       "icon": "lock|lock",
       "scope": "staff",
       "group": "staff",
@@ -2623,128 +2624,1208 @@
       "links": [
         "/admin/lockdown"
       ],
+      "constants": {
+        "platformId": "platform",
+        "platformPhrase": "LOCK PLATFORM",
+        "reasons": [
+          {
+            "value": "security",
+            "label": "Security — investigating a concern"
+          },
+          {
+            "value": "abuse",
+            "label": "Abuse — phishing, fraud or malicious content (permanent ban)"
+          },
+          {
+            "value": "billing",
+            "label": "Billing — unresolved payment"
+          },
+          {
+            "value": "maintenance",
+            "label": "Maintenance"
+          },
+          {
+            "value": "manual",
+            "label": "Manual"
+          }
+        ],
+        "enforcements": [
+          {
+            "value": "standard",
+            "label": "Standard — releases if Aglyn cannot reach the database"
+          },
+          {
+            "value": "takedown",
+            "label": "Takedown — keeps holding if Aglyn cannot reach the database"
+          }
+        ],
+        "features": [
+          {
+            "key": "signups",
+            "label": "New signups",
+            "staffBypass": false,
+            "lockId": "feature--signups"
+          },
+          {
+            "key": "uploads",
+            "label": "Media uploads",
+            "staffBypass": true,
+            "lockId": "feature--uploads"
+          },
+          {
+            "key": "checkout",
+            "label": "Checkout (new subscriptions)",
+            "staffBypass": false,
+            "lockId": "feature--checkout"
+          },
+          {
+            "key": "marketplace-installs",
+            "label": "Marketplace installs",
+            "staffBypass": true,
+            "lockId": "feature--marketplace-installs"
+          },
+          {
+            "key": "ai-assist",
+            "label": "AI assist",
+            "staffBypass": true,
+            "lockId": "feature--ai-assist"
+          },
+          {
+            "key": "ai-generate",
+            "label": "AI generation",
+            "staffBypass": true,
+            "lockId": "feature--ai-generate"
+          }
+        ]
+      },
       "load": {
         "locks": "/api/admin/lockdown"
       },
-      "actions": [
-        {
-          "id": "lock",
-          "label": "Place a lock",
-          "icon": "lock|lock",
-          "when": "staff.super",
-          "url": "/api/admin/lockdown",
-          "prompt": [
-            {
-              "key": "scope",
-              "label": "Scope",
-              "kind": "select",
-              "initial": "org",
-              "options": [
-                {
-                  "value": "org",
-                  "label": "Workspace"
-                },
-                {
-                  "value": "host",
-                  "label": "Site"
-                },
-                {
-                  "value": "user",
-                  "label": "Person"
-                },
-                {
-                  "value": "domain",
-                  "label": "Domain"
-                },
-                {
-                  "value": "feature",
-                  "label": "Feature"
-                },
-                {
-                  "value": "platform",
-                  "label": "Whole platform"
-                }
-              ]
-            },
-            {
-              "key": "targetId",
-              "label": "Target ID",
-              "kind": "text",
-              "help": "Workspace, site or account ID, domain or feature key. Empty for the platform."
-            },
-            {
-              "key": "mode",
-              "label": "Mode",
-              "kind": "select",
-              "initial": "full",
-              "options": [
-                {
-                  "value": "full",
-                  "label": "Full lock"
-                },
-                {
-                  "value": "read-only",
-                  "label": "Read only"
-                }
-              ]
-            },
-            {
-              "key": "message",
-              "label": "Message shown",
-              "kind": "multiline"
-            }
-          ],
-          "reason": true,
-          "confirm": "Locks take effect at once.",
-          "body": {
-            "action": "lock",
-            "scope": "{form.scope}",
-            "targetId": "{form.targetId}",
-            "mode": "{form.mode}",
-            "message": "{form.message}",
-            "reason": "{form.reason}",
-            "confirm": true
-          },
-          "success": "Locked"
-        }
-      ],
       "blocks": [
         {
-          "type": "fields",
-          "title": "Sign-ups",
-          "rows": [
+          "type": "notice",
+          "tone": "error",
+          "title": "The whole platform is locked",
+          "text": "{data.locks.records[id=const.platformId].mode:title} · {data.locks.records[id=const.platformId].reason} · since {data.locks.records[id=const.platformId].atMs:datetime}. {data.locks.records[id=const.platformId].message}",
+          "when": "data.locks.records[id=const.platformId]"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Account creation",
+          "text": "Account creation is REFUSED too: Identity Platform has a beforeCreate blocking function registered {data.locks.signupsCreationTrigger.functionUri}.",
+          "when": "data.locks.signupsCreationTrigger.status == armed"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Account creation",
+          "text": "Account creation is NOT refused: no beforeCreate blocking function is registered in Identity Platform. Locking signups turns away the session and the signup pages; the Auth records are still created. Deploy cloud/functions and confirm the trigger in Identity Platform.",
+          "when": "data.locks.signupsCreationTrigger.status == absent"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Account creation",
+          "text": "Account creation: UNKNOWN. {data.locks.signupsCreationTrigger.reason} Treat as sessions-only until this reads as registered.",
+          "when": "data.locks.signupsCreationTrigger.status == unknown"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Account creation: not reported by this server. Treat as sessions-only.",
+          "when": "!data.locks.signupsCreationTrigger"
+        },
+        {
+          "type": "list",
+          "title": "Features",
+          "footer": "Kill one capability platform-wide while everything else keeps serving: signups off during a bot wave, uploads off on a malware report, checkout off over a billing bug. A platform lock implies every feature; a feature lock touches nothing else. Staff bypass: levers marked below stay usable to staff for verification; checkout does not (a staff checkout is a real charge); signups is decided by account age, not claims.",
+          "items": "const.features",
+          "primary": "{item.label}",
+          "secondary": "{item.key}",
+          "tertiary": "{data.locks.records[id=item.lockId].reason} {data.locks.records[id=item.lockId].untilMs:date} set by {data.locks.records[id=item.lockId].actorUid}",
+          "icon": "switch.2|toggle_on",
+          "badges": [
             {
-              "label": "Account creation trigger",
-              "value": "{data.locks.signupsCreationTrigger.status:title}",
-              "chip": true,
-              "tones": {
-                "Ok": "success",
-                "Unknown": "warning",
-                "*": "neutral"
-              }
+              "text": "LOCKED",
+              "when": "data.locks.records[id=item.lockId]",
+              "tone": "error"
+            },
+            {
+              "text": "On",
+              "when": "!data.locks.records[id=item.lockId]",
+              "tone": "success"
+            },
+            {
+              "text": "Staff bypass",
+              "when": "item.staffBypass",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "disable",
+              "label": "Disable",
+              "icon": "lock|lock",
+              "destructive": true,
+              "when": "staff.super && !data.locks.records[id=item.lockId]",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "initial": "security",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.reasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "message",
+                  "label": "Customer-facing message (optional)",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "hours",
+                  "label": "Lift itself after this many hours (optional)",
+                  "kind": "number"
+                }
+              ],
+              "confirm": "Disable {item.label} for everyone now?",
+              "body": {
+                "action": "lock",
+                "scope": "feature",
+                "targetId": "{item.key}",
+                "reason": "{form.reason}",
+                "message": "{form.message}",
+                "untilMs": {
+                  "$afterHours": "{form.hours}"
+                }
+              },
+              "reload": true,
+              "success": "{item.label} disabled",
+              "report": [
+                {
+                  "text": "The lock could not be confirmed. Read the active locks below before you leave.",
+                  "when": "response.confirmed == false"
+                },
+                {
+                  "text": "Billing cancelled for {response.subscriptionCancel.orgId}: {response.subscriptionCancel.changed|'0'} subscription(s) changed, no refund",
+                  "when": "response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Billing cancel NOT confirmed. The lock stands.",
+                  "when": "response.subscriptionCancel && !response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Membership renewals paused. Nothing canceled or refunded, customers not told.",
+                  "when": "response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewal pause NOT confirmed. The lock stands.",
+                  "when": "response.renewalsPause && !response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewals resumed.",
+                  "when": "response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Membership renewal resume NOT confirmed. Some stay paused.",
+                  "when": "response.renewalsResume && !response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Payouts for {response.payoutsPause.accountId|'no account'}: {response.payoutsPause.outcome:title}. {response.payoutsPause.error}",
+                  "when": "response.payoutsPause"
+                },
+                {
+                  "each": "response.payoutsPauseOthers",
+                  "text": "Payouts for {item.accountId|'no account'}: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "text": "Payouts for {response.payoutsRestore.accountId|'the account'} restored: {response.payoutsRestore.outcome:title}. {response.payoutsRestore.error}",
+                  "when": "response.payoutsRestore"
+                },
+                {
+                  "each": "response.payoutsRestoreOthers",
+                  "text": "Payouts for {item.accountId|'the account'} restored: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "each": "response.orgLockParticipants",
+                  "text": "{item.pluginId|'Plugins'}: {item.summary}"
+                },
+                {
+                  "text": "Emailed the owners the {response.ownerNotice.kind|'lock'} notice: {response.ownerNotice.emailed} of {response.ownerNotice.recipients}, {response.ownerNotice.emailFailed|'0'} failed",
+                  "when": "response.ownerNotice.emailed"
+                },
+                {
+                  "text": "Owner email NOT sent: {response.ownerNotice.skipped|response.ownerNotice.error|'nobody was emailed'}",
+                  "when": "response.ownerNotice && !response.ownerNotice.emailed"
+                },
+                {
+                  "text": "{response.ownedWorkspaces.error}",
+                  "when": "response.ownedWorkspaces.error"
+                },
+                {
+                  "each": "response.ownedWorkspaces.workspaces",
+                  "text": "Owned workspace {item.slug|item.orgId}: {item.lockError|item.alreadyLocked|'locked'}"
+                },
+                {
+                  "text": "This account owns more workspaces than one lock handles. Lock the rest by workspace id.",
+                  "when": "response.ownedWorkspaces.truncated"
+                }
+              ]
+            },
+            {
+              "id": "restore",
+              "label": "Restore",
+              "icon": "lock.open|lock_open",
+              "when": "staff.super && data.locks.records[id=item.lockId]",
+              "url": "/api/admin/lockdown",
+              "body": {
+                "action": "unlock",
+                "scope": "feature",
+                "targetId": "{item.key}"
+              },
+              "reload": true,
+              "success": "{item.label} restored"
+            }
+          ],
+          "count": false
+        },
+        {
+          "type": "actions",
+          "title": "Whole platform",
+          "footer": "Type {const.platformPhrase} to arm. A platform lock takes everything down (or freezes every write in read-only mode).",
+          "items": [
+            {
+              "id": "platformLock",
+              "label": "Lock the platform",
+              "icon": "exclamationmark.octagon|report",
+              "destructive": true,
+              "when": "staff.super && !data.locks.records[id=const.platformId]",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "kind": "select",
+                  "initial": "full",
+                  "options": [
+                    {
+                      "value": "full",
+                      "label": "Full: take it down"
+                    },
+                    {
+                      "value": "read-only",
+                      "label": "Read-only: freeze writes"
+                    }
+                  ],
+                  "help": "Read-only keeps sites serving and refuses writes. It has no meaning for a person, domain or feature lock."
+                },
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "initial": "maintenance",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.reasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "message",
+                  "label": "Customer-facing message (optional)",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "hours",
+                  "label": "Lift itself after this many hours (optional)",
+                  "kind": "number"
+                },
+                {
+                  "key": "confirm",
+                  "label": "Confirmation phrase",
+                  "kind": "text",
+                  "required": true,
+                  "mustMatch": "{const.platformPhrase}",
+                  "help": "Type LOCK PLATFORM exactly. The route requires it too."
+                }
+              ],
+              "confirm": "Every site and the console go down for everyone (or every write is refused in read-only mode).",
+              "body": {
+                "action": "lock",
+                "scope": "platform",
+                "mode": "{form.mode}",
+                "reason": "{form.reason}",
+                "message": "{form.message}",
+                "untilMs": {
+                  "$afterHours": "{form.hours}"
+                },
+                "confirm": "{form.confirm}"
+              },
+              "reload": true,
+              "success": "Platform locked",
+              "report": [
+                {
+                  "text": "The lock could not be confirmed. Read the active locks below before you leave.",
+                  "when": "response.confirmed == false"
+                },
+                {
+                  "text": "Billing cancelled for {response.subscriptionCancel.orgId}: {response.subscriptionCancel.changed|'0'} subscription(s) changed, no refund",
+                  "when": "response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Billing cancel NOT confirmed. The lock stands.",
+                  "when": "response.subscriptionCancel && !response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Membership renewals paused. Nothing canceled or refunded, customers not told.",
+                  "when": "response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewal pause NOT confirmed. The lock stands.",
+                  "when": "response.renewalsPause && !response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewals resumed.",
+                  "when": "response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Membership renewal resume NOT confirmed. Some stay paused.",
+                  "when": "response.renewalsResume && !response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Payouts for {response.payoutsPause.accountId|'no account'}: {response.payoutsPause.outcome:title}. {response.payoutsPause.error}",
+                  "when": "response.payoutsPause"
+                },
+                {
+                  "each": "response.payoutsPauseOthers",
+                  "text": "Payouts for {item.accountId|'no account'}: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "text": "Payouts for {response.payoutsRestore.accountId|'the account'} restored: {response.payoutsRestore.outcome:title}. {response.payoutsRestore.error}",
+                  "when": "response.payoutsRestore"
+                },
+                {
+                  "each": "response.payoutsRestoreOthers",
+                  "text": "Payouts for {item.accountId|'the account'} restored: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "each": "response.orgLockParticipants",
+                  "text": "{item.pluginId|'Plugins'}: {item.summary}"
+                },
+                {
+                  "text": "Emailed the owners the {response.ownerNotice.kind|'lock'} notice: {response.ownerNotice.emailed} of {response.ownerNotice.recipients}, {response.ownerNotice.emailFailed|'0'} failed",
+                  "when": "response.ownerNotice.emailed"
+                },
+                {
+                  "text": "Owner email NOT sent: {response.ownerNotice.skipped|response.ownerNotice.error|'nobody was emailed'}",
+                  "when": "response.ownerNotice && !response.ownerNotice.emailed"
+                },
+                {
+                  "text": "{response.ownedWorkspaces.error}",
+                  "when": "response.ownedWorkspaces.error"
+                },
+                {
+                  "each": "response.ownedWorkspaces.workspaces",
+                  "text": "Owned workspace {item.slug|item.orgId}: {item.lockError|item.alreadyLocked|'locked'}"
+                },
+                {
+                  "text": "This account owns more workspaces than one lock handles. Lock the rest by workspace id.",
+                  "when": "response.ownedWorkspaces.truncated"
+                }
+              ]
+            },
+            {
+              "id": "platformUnlock",
+              "label": "Lift the platform lock",
+              "icon": "lock.open|lock_open",
+              "when": "staff.super && data.locks.records[id=const.platformId]",
+              "url": "/api/admin/lockdown",
+              "body": {
+                "action": "unlock",
+                "scope": "platform"
+              },
+              "reload": true,
+              "success": "Platform unlocked"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Workspace, site, account or domain",
+          "footer": "Security and abuse locks usually also cancel billing and pause site money, so that variant starts with those on. The route applies no default of its own. An abuse lock on an account is a permanent ban: after the lock notice it is sent nothing, by any sender.",
+          "items": [
+            {
+              "id": "lockSecurity",
+              "label": "Lock (security or abuse)",
+              "icon": "lock|lock",
+              "destructive": true,
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "scope",
+                  "label": "Scope",
+                  "kind": "select",
+                  "initial": "org",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "org",
+                      "label": "Workspace"
+                    },
+                    {
+                      "value": "host",
+                      "label": "Site"
+                    },
+                    {
+                      "value": "user",
+                      "label": "Account"
+                    },
+                    {
+                      "value": "domain",
+                      "label": "Domain"
+                    }
+                  ]
+                },
+                {
+                  "key": "targetId",
+                  "label": "Workspace ID, site ID, account ID or domain",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "initial": "security",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.reasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "kind": "select",
+                  "initial": "full",
+                  "options": [
+                    {
+                      "value": "full",
+                      "label": "Full: take it down"
+                    },
+                    {
+                      "value": "read-only",
+                      "label": "Read-only: freeze writes"
+                    }
+                  ],
+                  "help": "Read-only keeps sites serving and refuses writes. It has no meaning for a person, domain or feature lock.",
+                  "when": "form.scope == org,host"
+                },
+                {
+                  "key": "enforcement",
+                  "label": "If Aglyn cannot reach the database",
+                  "kind": "select",
+                  "initial": "standard",
+                  "optionsFrom": {
+                    "items": "const.enforcements",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  },
+                  "help": "Takedown keeps holding through an outage. Legal and abuse orders only. Ignored for read-only.",
+                  "when": "form.mode != read-only"
+                },
+                {
+                  "key": "message",
+                  "label": "Customer-facing message (optional)",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "hours",
+                  "label": "Lift itself after this many hours (optional)",
+                  "kind": "number"
+                },
+                {
+                  "key": "cancelBilling",
+                  "label": "Also cancel the workspace's subscriptions now (no refund)",
+                  "kind": "toggle",
+                  "initial": "true",
+                  "help": "Workspace scope only. The route never infers a cancellation from a reason.",
+                  "when": "form.scope == org"
+                },
+                {
+                  "key": "lockOwned",
+                  "label": "Also lock and cancel workspaces this account solely owns",
+                  "kind": "toggle",
+                  "initial": "true",
+                  "help": "Account scope only. Unlocking the account does not unlock those workspaces and never recreates a subscription.",
+                  "when": "form.scope == user"
+                },
+                {
+                  "key": "pauseMoney",
+                  "label": "Pause membership renewals and the seller's payouts",
+                  "kind": "toggle",
+                  "initial": "true",
+                  "help": "Workspace and site scope only. Nothing is canceled or refunded.",
+                  "when": "form.scope == org,host"
+                },
+                {
+                  "key": "emailOwners",
+                  "label": "Email the owners",
+                  "kind": "toggle",
+                  "initial": "true",
+                  "help": "Emails the workspace's owners and admins (a site or domain lock: its workspace's, and the site's managers; an account lock: the person) from the platform sender. It carries the message, what the lock affects and how to appeal; never why. Untick it only for a legal hold. Unlock sends the restored notice the same way."
+                }
+              ],
+              "confirm": "Security and manual suspensions also log members out, and a security suspension in full mode permanently rotates every raw file download link the workspace has published. It stops new delivery and is not a recall.",
+              "body": {
+                "action": "lock",
+                "scope": "{form.scope}",
+                "targetId": "{form.targetId}",
+                "mode": {
+                  "$if": {
+                    "when": "form.scope == org,host",
+                    "then": "{form.mode}",
+                    "else": "full"
+                  }
+                },
+                "enforcement": {
+                  "$if": {
+                    "when": "form.mode == read-only",
+                    "then": "standard",
+                    "else": "{form.enforcement}"
+                  }
+                },
+                "reason": "{form.reason}",
+                "message": "{form.message}",
+                "untilMs": {
+                  "$afterHours": "{form.hours}"
+                },
+                "cancelSubscription": {
+                  "$if": {
+                    "when": "form.scope == org",
+                    "then": "{form.cancelBilling}"
+                  }
+                },
+                "lockOwnedWorkspaces": {
+                  "$if": {
+                    "when": "form.scope == user",
+                    "then": "{form.lockOwned}"
+                  }
+                },
+                "pauseRenewals": {
+                  "$if": {
+                    "when": "form.scope == org,host",
+                    "then": "{form.pauseMoney}"
+                  }
+                },
+                "pausePayouts": {
+                  "$if": {
+                    "when": "form.scope == org,host",
+                    "then": "{form.pauseMoney}"
+                  }
+                },
+                "emailOwners": "{form.emailOwners}"
+              },
+              "reload": true,
+              "success": "Lock placed",
+              "report": [
+                {
+                  "text": "The lock could not be confirmed. Read the active locks below before you leave.",
+                  "when": "response.confirmed == false"
+                },
+                {
+                  "text": "Billing cancelled for {response.subscriptionCancel.orgId}: {response.subscriptionCancel.changed|'0'} subscription(s) changed, no refund",
+                  "when": "response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Billing cancel NOT confirmed. The lock stands.",
+                  "when": "response.subscriptionCancel && !response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Membership renewals paused. Nothing canceled or refunded, customers not told.",
+                  "when": "response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewal pause NOT confirmed. The lock stands.",
+                  "when": "response.renewalsPause && !response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewals resumed.",
+                  "when": "response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Membership renewal resume NOT confirmed. Some stay paused.",
+                  "when": "response.renewalsResume && !response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Payouts for {response.payoutsPause.accountId|'no account'}: {response.payoutsPause.outcome:title}. {response.payoutsPause.error}",
+                  "when": "response.payoutsPause"
+                },
+                {
+                  "each": "response.payoutsPauseOthers",
+                  "text": "Payouts for {item.accountId|'no account'}: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "text": "Payouts for {response.payoutsRestore.accountId|'the account'} restored: {response.payoutsRestore.outcome:title}. {response.payoutsRestore.error}",
+                  "when": "response.payoutsRestore"
+                },
+                {
+                  "each": "response.payoutsRestoreOthers",
+                  "text": "Payouts for {item.accountId|'the account'} restored: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "each": "response.orgLockParticipants",
+                  "text": "{item.pluginId|'Plugins'}: {item.summary}"
+                },
+                {
+                  "text": "Emailed the owners the {response.ownerNotice.kind|'lock'} notice: {response.ownerNotice.emailed} of {response.ownerNotice.recipients}, {response.ownerNotice.emailFailed|'0'} failed",
+                  "when": "response.ownerNotice.emailed"
+                },
+                {
+                  "text": "Owner email NOT sent: {response.ownerNotice.skipped|response.ownerNotice.error|'nobody was emailed'}",
+                  "when": "response.ownerNotice && !response.ownerNotice.emailed"
+                },
+                {
+                  "text": "{response.ownedWorkspaces.error}",
+                  "when": "response.ownedWorkspaces.error"
+                },
+                {
+                  "each": "response.ownedWorkspaces.workspaces",
+                  "text": "Owned workspace {item.slug|item.orgId}: {item.lockError|item.alreadyLocked|'locked'}"
+                },
+                {
+                  "text": "This account owns more workspaces than one lock handles. Lock the rest by workspace id.",
+                  "when": "response.ownedWorkspaces.truncated"
+                }
+              ]
+            },
+            {
+              "id": "lockOther",
+              "label": "Lock (billing, maintenance or manual)",
+              "icon": "lock|lock",
+              "destructive": true,
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "scope",
+                  "label": "Scope",
+                  "kind": "select",
+                  "initial": "org",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "org",
+                      "label": "Workspace"
+                    },
+                    {
+                      "value": "host",
+                      "label": "Site"
+                    },
+                    {
+                      "value": "user",
+                      "label": "Account"
+                    },
+                    {
+                      "value": "domain",
+                      "label": "Domain"
+                    }
+                  ]
+                },
+                {
+                  "key": "targetId",
+                  "label": "Workspace ID, site ID, account ID or domain",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "initial": "manual",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.reasons",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "kind": "select",
+                  "initial": "full",
+                  "options": [
+                    {
+                      "value": "full",
+                      "label": "Full: take it down"
+                    },
+                    {
+                      "value": "read-only",
+                      "label": "Read-only: freeze writes"
+                    }
+                  ],
+                  "help": "Read-only keeps sites serving and refuses writes. It has no meaning for a person, domain or feature lock.",
+                  "when": "form.scope == org,host"
+                },
+                {
+                  "key": "enforcement",
+                  "label": "If Aglyn cannot reach the database",
+                  "kind": "select",
+                  "initial": "standard",
+                  "optionsFrom": {
+                    "items": "const.enforcements",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  },
+                  "help": "Takedown keeps holding through an outage. Legal and abuse orders only. Ignored for read-only.",
+                  "when": "form.mode != read-only"
+                },
+                {
+                  "key": "message",
+                  "label": "Customer-facing message (optional)",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "hours",
+                  "label": "Lift itself after this many hours (optional)",
+                  "kind": "number"
+                },
+                {
+                  "key": "cancelBilling",
+                  "label": "Also cancel the workspace's subscriptions now (no refund)",
+                  "kind": "toggle",
+                  "help": "Workspace scope only. The route never infers a cancellation from a reason.",
+                  "when": "form.scope == org"
+                },
+                {
+                  "key": "lockOwned",
+                  "label": "Also lock and cancel workspaces this account solely owns",
+                  "kind": "toggle",
+                  "help": "Account scope only. Unlocking the account does not unlock those workspaces and never recreates a subscription.",
+                  "when": "form.scope == user"
+                },
+                {
+                  "key": "pauseMoney",
+                  "label": "Pause membership renewals and the seller's payouts",
+                  "kind": "toggle",
+                  "help": "Workspace and site scope only. Nothing is canceled or refunded.",
+                  "when": "form.scope == org,host"
+                },
+                {
+                  "key": "emailOwners",
+                  "label": "Email the owners",
+                  "kind": "toggle",
+                  "initial": "true",
+                  "help": "Emails the workspace's owners and admins (a site or domain lock: its workspace's, and the site's managers; an account lock: the person) from the platform sender. It carries the message, what the lock affects and how to appeal; never why. Untick it only for a legal hold. Unlock sends the restored notice the same way."
+                }
+              ],
+              "confirm": "The target stops serving or refuses writes now. Nothing is deleted, and the lock is reversible.",
+              "body": {
+                "action": "lock",
+                "scope": "{form.scope}",
+                "targetId": "{form.targetId}",
+                "mode": {
+                  "$if": {
+                    "when": "form.scope == org,host",
+                    "then": "{form.mode}",
+                    "else": "full"
+                  }
+                },
+                "enforcement": {
+                  "$if": {
+                    "when": "form.mode == read-only",
+                    "then": "standard",
+                    "else": "{form.enforcement}"
+                  }
+                },
+                "reason": "{form.reason}",
+                "message": "{form.message}",
+                "untilMs": {
+                  "$afterHours": "{form.hours}"
+                },
+                "cancelSubscription": {
+                  "$if": {
+                    "when": "form.scope == org",
+                    "then": "{form.cancelBilling}"
+                  }
+                },
+                "lockOwnedWorkspaces": {
+                  "$if": {
+                    "when": "form.scope == user",
+                    "then": "{form.lockOwned}"
+                  }
+                },
+                "pauseRenewals": {
+                  "$if": {
+                    "when": "form.scope == org,host",
+                    "then": "{form.pauseMoney}"
+                  }
+                },
+                "pausePayouts": {
+                  "$if": {
+                    "when": "form.scope == org,host",
+                    "then": "{form.pauseMoney}"
+                  }
+                },
+                "emailOwners": "{form.emailOwners}"
+              },
+              "reload": true,
+              "success": "Lock placed",
+              "report": [
+                {
+                  "text": "The lock could not be confirmed. Read the active locks below before you leave.",
+                  "when": "response.confirmed == false"
+                },
+                {
+                  "text": "Billing cancelled for {response.subscriptionCancel.orgId}: {response.subscriptionCancel.changed|'0'} subscription(s) changed, no refund",
+                  "when": "response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Billing cancel NOT confirmed. The lock stands.",
+                  "when": "response.subscriptionCancel && !response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Membership renewals paused. Nothing canceled or refunded, customers not told.",
+                  "when": "response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewal pause NOT confirmed. The lock stands.",
+                  "when": "response.renewalsPause && !response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewals resumed.",
+                  "when": "response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Membership renewal resume NOT confirmed. Some stay paused.",
+                  "when": "response.renewalsResume && !response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Payouts for {response.payoutsPause.accountId|'no account'}: {response.payoutsPause.outcome:title}. {response.payoutsPause.error}",
+                  "when": "response.payoutsPause"
+                },
+                {
+                  "each": "response.payoutsPauseOthers",
+                  "text": "Payouts for {item.accountId|'no account'}: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "text": "Payouts for {response.payoutsRestore.accountId|'the account'} restored: {response.payoutsRestore.outcome:title}. {response.payoutsRestore.error}",
+                  "when": "response.payoutsRestore"
+                },
+                {
+                  "each": "response.payoutsRestoreOthers",
+                  "text": "Payouts for {item.accountId|'the account'} restored: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "each": "response.orgLockParticipants",
+                  "text": "{item.pluginId|'Plugins'}: {item.summary}"
+                },
+                {
+                  "text": "Emailed the owners the {response.ownerNotice.kind|'lock'} notice: {response.ownerNotice.emailed} of {response.ownerNotice.recipients}, {response.ownerNotice.emailFailed|'0'} failed",
+                  "when": "response.ownerNotice.emailed"
+                },
+                {
+                  "text": "Owner email NOT sent: {response.ownerNotice.skipped|response.ownerNotice.error|'nobody was emailed'}",
+                  "when": "response.ownerNotice && !response.ownerNotice.emailed"
+                },
+                {
+                  "text": "{response.ownedWorkspaces.error}",
+                  "when": "response.ownedWorkspaces.error"
+                },
+                {
+                  "each": "response.ownedWorkspaces.workspaces",
+                  "text": "Owned workspace {item.slug|item.orgId}: {item.lockError|item.alreadyLocked|'locked'}"
+                },
+                {
+                  "text": "This account owns more workspaces than one lock handles. Lock the rest by workspace id.",
+                  "when": "response.ownedWorkspaces.truncated"
+                }
+              ]
+            },
+            {
+              "id": "unlockScoped",
+              "label": "Unlock",
+              "icon": "lock.open|lock_open",
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "scope",
+                  "label": "Scope",
+                  "kind": "select",
+                  "initial": "org",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "org",
+                      "label": "Workspace"
+                    },
+                    {
+                      "value": "host",
+                      "label": "Site"
+                    },
+                    {
+                      "value": "user",
+                      "label": "Account"
+                    },
+                    {
+                      "value": "domain",
+                      "label": "Domain"
+                    }
+                  ]
+                },
+                {
+                  "key": "targetId",
+                  "label": "Workspace ID, site ID, account ID or domain",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "emailOwners",
+                  "label": "Email the owners",
+                  "kind": "toggle",
+                  "initial": "true",
+                  "help": "Emails the workspace's owners and admins (a site or domain lock: its workspace's, and the site's managers; an account lock: the person) from the platform sender. It carries the message, what the lock affects and how to appeal; never why. Untick it only for a legal hold. Unlock sends the restored notice the same way."
+                }
+              ],
+              "confirm": "Lift this lock? The restored notice is sent the same way.",
+              "body": {
+                "action": "unlock",
+                "scope": "{form.scope}",
+                "targetId": "{form.targetId}",
+                "emailOwners": "{form.emailOwners}"
+              },
+              "reload": true,
+              "success": "Unlocked",
+              "report": [
+                {
+                  "text": "The lock could not be confirmed. Read the active locks below before you leave.",
+                  "when": "response.confirmed == false"
+                },
+                {
+                  "text": "Billing cancelled for {response.subscriptionCancel.orgId}: {response.subscriptionCancel.changed|'0'} subscription(s) changed, no refund",
+                  "when": "response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Billing cancel NOT confirmed. The lock stands.",
+                  "when": "response.subscriptionCancel && !response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Membership renewals paused. Nothing canceled or refunded, customers not told.",
+                  "when": "response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewal pause NOT confirmed. The lock stands.",
+                  "when": "response.renewalsPause && !response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewals resumed.",
+                  "when": "response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Membership renewal resume NOT confirmed. Some stay paused.",
+                  "when": "response.renewalsResume && !response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Payouts for {response.payoutsPause.accountId|'no account'}: {response.payoutsPause.outcome:title}. {response.payoutsPause.error}",
+                  "when": "response.payoutsPause"
+                },
+                {
+                  "each": "response.payoutsPauseOthers",
+                  "text": "Payouts for {item.accountId|'no account'}: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "text": "Payouts for {response.payoutsRestore.accountId|'the account'} restored: {response.payoutsRestore.outcome:title}. {response.payoutsRestore.error}",
+                  "when": "response.payoutsRestore"
+                },
+                {
+                  "each": "response.payoutsRestoreOthers",
+                  "text": "Payouts for {item.accountId|'the account'} restored: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "each": "response.orgLockParticipants",
+                  "text": "{item.pluginId|'Plugins'}: {item.summary}"
+                },
+                {
+                  "text": "Emailed the owners the {response.ownerNotice.kind|'lock'} notice: {response.ownerNotice.emailed} of {response.ownerNotice.recipients}, {response.ownerNotice.emailFailed|'0'} failed",
+                  "when": "response.ownerNotice.emailed"
+                },
+                {
+                  "text": "Owner email NOT sent: {response.ownerNotice.skipped|response.ownerNotice.error|'nobody was emailed'}",
+                  "when": "response.ownerNotice && !response.ownerNotice.emailed"
+                },
+                {
+                  "text": "{response.ownedWorkspaces.error}",
+                  "when": "response.ownedWorkspaces.error"
+                },
+                {
+                  "each": "response.ownedWorkspaces.workspaces",
+                  "text": "Owned workspace {item.slug|item.orgId}: {item.lockError|item.alreadyLocked|'locked'}"
+                },
+                {
+                  "text": "This account owns more workspaces than one lock handles. Lock the rest by workspace id.",
+                  "when": "response.ownedWorkspaces.truncated"
+                }
+              ]
+            },
+            {
+              "id": "checkState",
+              "label": "Check state",
+              "icon": "magnifyingglass|search",
+              "method": "GET",
+              "url": "/api/admin/lockdown?scope={form.scope}&targetId={form.targetId}",
+              "prompt": [
+                {
+                  "key": "scope",
+                  "label": "Scope",
+                  "kind": "select",
+                  "initial": "org",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "org",
+                      "label": "Workspace"
+                    },
+                    {
+                      "value": "host",
+                      "label": "Site"
+                    },
+                    {
+                      "value": "user",
+                      "label": "Account"
+                    },
+                    {
+                      "value": "domain",
+                      "label": "Domain"
+                    }
+                  ]
+                },
+                {
+                  "key": "targetId",
+                  "label": "Workspace ID, site ID, account ID or domain",
+                  "kind": "text",
+                  "required": true
+                }
+              ],
+              "reload": false,
+              "success": "{response.state.scope} {response.state.targetId}",
+              "report": [
+                {
+                  "text": "NO SUCH TARGET",
+                  "when": "response.state.exists == false"
+                },
+                {
+                  "text": "LOCKED ({response.state.mode}, {response.state.enforcement|'standard'}): {response.state.reason} since {response.state.atMs:datetime}",
+                  "when": "response.state.locked"
+                },
+                {
+                  "text": "NOT LOCKED",
+                  "when": "response.state.exists && !response.state.locked"
+                },
+                {
+                  "text": "Message: {response.state.message}",
+                  "when": "response.state.message"
+                },
+                {
+                  "text": "Lifts itself {response.state.untilMs:datetime}",
+                  "when": "response.state.untilMs"
+                }
+              ]
+            },
+            {
+              "id": "verdict",
+              "label": "What would this caller be told?",
+              "icon": "questionmark.circle|help_outline",
+              "method": "GET",
+              "url": "/api/admin/lockdown?verdict=1&uid={form.uid}&orgId={form.orgId}&hostId={form.hostId}",
+              "prompt": [
+                {
+                  "key": "uid",
+                  "label": "Account ID",
+                  "kind": "text"
+                },
+                {
+                  "key": "orgId",
+                  "label": "Workspace ID",
+                  "kind": "text"
+                },
+                {
+                  "key": "hostId",
+                  "label": "Site ID",
+                  "kind": "text"
+                }
+              ],
+              "reload": false,
+              "success": "Computed, not observed",
+              "report": [
+                {
+                  "text": "{response.note}"
+                },
+                {
+                  "text": "Evaluated: {response.evaluated}"
+                },
+                {
+                  "text": "This caller is staff: locks are bypassed where a lever allows it.",
+                  "when": "response.staffBypass"
+                },
+                {
+                  "text": "Locked: {response.locked:yesno}"
+                },
+                {
+                  "text": "Verdict: {response.verdict.scope}, {response.verdict.reason}. {response.verdict.message}",
+                  "when": "response.verdict"
+                },
+                {
+                  "text": "Refused with status {response.refusal.status}",
+                  "when": "response.refusal"
+                },
+                {
+                  "text": "Reads refuse: {response.reads.locked:yesno}. Writes refuse: {response.writes.locked:yesno}.",
+                  "when": "response.reads"
+                },
+                {
+                  "each": "response.features",
+                  "text": "{item.feature}: {item.locked:yesno}"
+                }
+              ]
             }
           ]
         },
         {
           "type": "list",
-          "title": "Standing locks",
+          "title": "Active locks",
           "items": "data.locks.records",
           "primary": "{item.scope:title} · {item.targetId|item.id}",
-          "secondary": "{item.reason}",
-          "tertiary": "{item.actorEmail} · {item.atMs:datetime}",
+          "secondary": "{item.reason} · {item.message}",
+          "tertiary": "{item.atMs:datetime} · set by {item.actorUid}",
           "icon": "lock|lock",
           "badges": [
             {
               "text": "{item.mode:title}",
               "tones": {
                 "Full": "error",
-                "Read only": "warning"
+                "Read-only": "warning"
               }
             },
             {
               "text": "Until {item.untilMs:date}",
               "when": "item.untilMs",
               "tone": "info"
+            },
+            {
+              "text": "Takedown",
+              "when": "item.enforcement == takedown",
+              "tone": "error"
             }
           ],
           "actions": [
@@ -2754,14 +3835,85 @@
               "icon": "lock.open|lock_open",
               "when": "staff.super",
               "url": "/api/admin/lockdown",
-              "reason": true,
+              "confirm": "Lift this lock?",
               "body": {
                 "action": "unlock",
                 "scope": "{item.scope}",
                 "targetId": "{item.targetId}",
-                "reason": "{form.reason}"
+                "orgId": "{item.orgId}"
               },
-              "success": "Lifted"
+              "reload": true,
+              "success": "Lifted",
+              "report": [
+                {
+                  "text": "The lock could not be confirmed. Read the active locks below before you leave.",
+                  "when": "response.confirmed == false"
+                },
+                {
+                  "text": "Billing cancelled for {response.subscriptionCancel.orgId}: {response.subscriptionCancel.changed|'0'} subscription(s) changed, no refund",
+                  "when": "response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Billing cancel NOT confirmed. The lock stands.",
+                  "when": "response.subscriptionCancel && !response.subscriptionCancel.confirmed"
+                },
+                {
+                  "text": "Membership renewals paused. Nothing canceled or refunded, customers not told.",
+                  "when": "response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewal pause NOT confirmed. The lock stands.",
+                  "when": "response.renewalsPause && !response.renewalsPause.confirmed"
+                },
+                {
+                  "text": "Membership renewals resumed.",
+                  "when": "response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Membership renewal resume NOT confirmed. Some stay paused.",
+                  "when": "response.renewalsResume && !response.renewalsResume.confirmed"
+                },
+                {
+                  "text": "Payouts for {response.payoutsPause.accountId|'no account'}: {response.payoutsPause.outcome:title}. {response.payoutsPause.error}",
+                  "when": "response.payoutsPause"
+                },
+                {
+                  "each": "response.payoutsPauseOthers",
+                  "text": "Payouts for {item.accountId|'no account'}: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "text": "Payouts for {response.payoutsRestore.accountId|'the account'} restored: {response.payoutsRestore.outcome:title}. {response.payoutsRestore.error}",
+                  "when": "response.payoutsRestore"
+                },
+                {
+                  "each": "response.payoutsRestoreOthers",
+                  "text": "Payouts for {item.accountId|'the account'} restored: {item.outcome:title}. {item.error}"
+                },
+                {
+                  "each": "response.orgLockParticipants",
+                  "text": "{item.pluginId|'Plugins'}: {item.summary}"
+                },
+                {
+                  "text": "Emailed the owners the {response.ownerNotice.kind|'lock'} notice: {response.ownerNotice.emailed} of {response.ownerNotice.recipients}, {response.ownerNotice.emailFailed|'0'} failed",
+                  "when": "response.ownerNotice.emailed"
+                },
+                {
+                  "text": "Owner email NOT sent: {response.ownerNotice.skipped|response.ownerNotice.error|'nobody was emailed'}",
+                  "when": "response.ownerNotice && !response.ownerNotice.emailed"
+                },
+                {
+                  "text": "{response.ownedWorkspaces.error}",
+                  "when": "response.ownedWorkspaces.error"
+                },
+                {
+                  "each": "response.ownedWorkspaces.workspaces",
+                  "text": "Owned workspace {item.slug|item.orgId}: {item.lockError|item.alreadyLocked|'locked'}"
+                },
+                {
+                  "text": "This account owns more workspaces than one lock handles. Lock the rest by workspace id.",
+                  "when": "response.ownedWorkspaces.truncated"
+                }
+              ]
             },
             {
               "id": "resend",
@@ -2769,8 +3921,16 @@
               "icon": "paperplane|send",
               "when": "staff.super",
               "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "sendAgain",
+                  "label": "Send it again to owners already told",
+                  "kind": "toggle"
+                }
+              ],
               "body": {
                 "action": "resend-notice",
+                "sendAgain": "{form.sendAgain}",
                 "targets": [
                   {
                     "scope": "{item.scope}",
@@ -2778,9 +3938,22 @@
                   }
                 ]
               },
-              "success": "Notice sent"
+              "reload": false,
+              "success": "Notice resend requested",
+              "report": [
+                {
+                  "each": "response.targets",
+                  "text": "{item.scope} {item.targetId}: {item.error}",
+                  "when": "response.targets"
+                },
+                {
+                  "each": "response.recipients",
+                  "text": "{item.email}: {item.outcome:title}"
+                }
+              ]
             }
           ],
+          "count": true,
           "empty": "Nothing is locked."
         }
       ]

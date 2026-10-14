@@ -22,6 +22,7 @@ import {
   LOCKDOWN_REASON_CODES,
   LOCKDOWN_REASON_LABELS,
   PLATFORM_BRAND_NAME,
+  PLATFORM_LOCK_CONFIRM_PHRASE,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -57,7 +58,7 @@ import {
 } from '../../../../constants/subscription-cancel'
 
 /** Mirrors the route's server-side type-to-confirm — both must be typed. */
-const PLATFORM_CONFIRM_PHRASE = 'LOCK PLATFORM'
+const PLATFORM_CONFIRM_PHRASE = PLATFORM_LOCK_CONFIRM_PHRASE
 
 interface LockdownRecord {
   id: string

@@ -208,6 +208,16 @@ object ScreenValues {
       val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
       if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
       JsonObject(map)
+    } else if (body.size == 1 && body["\$if"] is JsonObject) {
+      // `{"$if": {"when": "form.scope == org", "then": X, "else": Y}}`: X or Y resolved, or nothing (the member is left out).
+      val spec = body["\$if"] as JsonObject
+      val branch = if (condition(spec.str("when"), context)) spec["then"] else spec["else"]
+      branch?.let { resolveBody(it, context) } ?: JsonNull
+    } else if (body.size == 1 && body["\$afterHours"] != null) {
+      // `{"$afterHours": "{form.hours}"}`: the moment that many hours from now, in epoch milliseconds; nothing when blank or not positive.
+      val hours = number(resolveBody(body.getValue("\$afterHours"), context))
+      if (hours == null || !hours.isFinite() || hours <= 0) JsonNull
+      else JsonPrimitive(round((number(lookup("now.ms", context)) ?: nowMillis().toDouble()) + hours * 3_600_000).toLong())
     } else if (body.size == 1 && body["\$split"] != null) {
       // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
       val parts = text(resolveBody(body.getValue("\$split"), context)).split(',').map { it.trim() }.filter { it.isNotEmpty() }
