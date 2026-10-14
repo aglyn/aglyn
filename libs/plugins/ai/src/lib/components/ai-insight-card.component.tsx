@@ -50,7 +50,7 @@ function InsightTile(props: {
   text: string
   onAsk: () => void
 }) {
-  const help = pluginDocsHelp('aiInsights')
+  const help = pluginDocsHelp('aiInsights', { anchor: '#asking-a-question' })
   return (
     <CardDisplay header={AI_INSIGHT_CARD_COPY.title} help={help} contentGutterX contentGutterY>
       <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>

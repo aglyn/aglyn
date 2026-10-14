@@ -606,7 +606,13 @@ describe('membership reset handler (AGL-552)', () => {
     // legacy copy leaves the profile in the same transaction.
     expect(credentialSetCalls[0]['passwordResetAt']).toBe('server-time')
     expect(memberUpdateCalls).toEqual([
-      { passwordScrypt: 'field-deleted', passwordResetAt: 'field-deleted' },
+      {
+        passwordScrypt: 'field-deleted',
+        passwordResetAt: 'field-deleted',
+        // Following the mailed link proves the member owns the address, which
+        // is what lets their purchases verify their reviews (AGL-3736).
+        emailVerifiedAtMs: expect.any(Number),
+      },
     ])
     expect(mockMemberFields).not.toHaveProperty('passwordScrypt')
   })

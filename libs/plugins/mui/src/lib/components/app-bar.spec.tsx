@@ -21,7 +21,8 @@
 import AppBar from '@mui/material/AppBar'
 import { act, fireEvent, render } from '@testing-library/react'
 import { FIELD_COLOR_ALT1 } from '../constants/field-presets'
-import AglynAppBar, { schema } from './app-bar'
+import { createTheme } from '@mui/material/styles'
+import AglynAppBar, { overHeroSx, schema } from './app-bar'
 
 /**
  * AGL-1191: picking "Theme color → Default" on an App Bar silently reverted
@@ -140,5 +141,24 @@ describe('App Bar scroll reactions: shrink and hide', () => {
     expect(bar.hasAttribute('data-scrolled')).toBe(false)
     expect(bar.hasAttribute('shrinkonscroll')).toBe(false)
     expect(bar.hasAttribute('data-scroll-hidden')).toBe(false)
+  })
+})
+
+/**
+ * AGL-3660: the header over a photo hero is `position: absolute` against the
+ * page top, which the owner's admin bar margin on `<html>` never moves — so
+ * the bar covered it. It reads the bar's published height instead, falling
+ * back to the very top for every visitor without one.
+ */
+describe('App Bar over a photo hero sits below the admin bar (AGL-3660)', () => {
+  it('offsets its top by --aglyn-admin-bar-height, 0 when absent', () => {
+    const rules = overHeroSx(createTheme()) as Record<
+      string,
+      Record<string, unknown>
+    >
+    expect(rules['body:has([data-aglyn-under-header]) &']).toMatchObject({
+      position: 'absolute',
+      top: 'var(--aglyn-admin-bar-height, 0px)',
+    })
   })
 })

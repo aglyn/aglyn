@@ -331,9 +331,13 @@ export const TOOLBAR_HEIGHT_FIELDS = {
   sm: { label: 'Nav height, desktop (px)', min: 40, max: 160, step: 1 },
 } as const
 
-/** The raw-JSON component overrides, limited to the sanitizer's whitelist. */
+/**
+ * The site-wide look of components: the click-only fields in
+ * {@link THEME_COMPONENT_LOOK_FIELDS}, with the full override set behind
+ * them limited to the sanitizer's whitelist.
+ */
 export const COMPONENT_OVERRIDES_FIELD = {
-  label: 'Component overrides',
+  label: 'Style components',
   components: HOST_THEME_COMPONENT_WHITELIST,
 } as const
 
@@ -365,12 +369,12 @@ export interface ThemeEditorControl {
   id: ThemeEditorControlId
   /** The label the editor shows. */
   label: string
-  kind: 'color' | 'select' | 'number' | 'json'
+  kind: 'color' | 'select' | 'number' | 'components'
   /** Edited once per scheme, under the Light and Dark tabs. */
   perScheme: boolean
   /** A color control's token. */
   token?: ThemeColorToken
-  /** A select's values, or the components a JSON control accepts. */
+  /** A select's values, or the components a components control may style. */
   options?: readonly string[]
   /** A number control's inclusive bounds and its step. */
   min?: number
@@ -446,7 +450,7 @@ export const THEME_EDITOR_CONTROLS: readonly ThemeEditorControl[] = [
   {
     id: 'components',
     label: COMPONENT_OVERRIDES_FIELD.label,
-    kind: 'json',
+    kind: 'components',
     perScheme: false,
     options: COMPONENT_OVERRIDES_FIELD.components,
   },
@@ -490,8 +494,12 @@ export function readThemeColor(
 
 /**
  * Sets one color for one scheme, or clears it with `undefined` so the slot
- * inherits again. A palette color writes `main` and keeps whatever else its
- * record carries, and clearing it drops the record; a group member that
+ * inherits again. A palette color writes a record of `main` alone: its
+ * `light`, `dark` and `contrastText` were derived from (or authored for) the
+ * old `main`, and the editor offers no control for them, so a kept shade
+ * would go on painting the old color (an outlined button reads `dark`) with
+ * no way for the owner to see or change it. Dropped, the theme derives them
+ * from the new `main`. Clearing it drops the record; a group member that
  * leaves its group empty drops the group.
  */
 export function writeThemeColor(
@@ -510,8 +518,17 @@ export function writeThemeColor(
     const [group, key] = token.split('.')
     if (!key) {
       const paletteKey = group as PaletteColorKey
-      if (hex) next[paletteKey] = { ...next[paletteKey], main: hex }
+      if (hex) next[paletteKey] = { main: hex }
       else delete next[paletteKey]
+      // An accent's tint is a wash of its old `main` for the same reason, so
+      // it goes too and the theme washes one from the new color.
+      const tint = next.tint as Record<string, string> | undefined
+      if (tint && paletteKey in tint) {
+        const rest = { ...tint }
+        delete rest[paletteKey]
+        if (Object.keys(rest).length) next.tint = rest as HostThemeSchemeColors['tint']
+        else delete next.tint
+      }
       return next
     }
     const groupKey = group as 'background' | 'text' | 'tint'
@@ -893,4 +910,404 @@ export function writeComponentOverride(
   }
   components[leaf.component] = entry
   return { ...theme, components }
+}
+
+/** Where one leaf lives, without the value it holds. */
+export type ThemeComponentOverrideTarget = Omit<ThemeComponentOverrideLeaf, 'value'>
+
+/**
+ * Removes one leaf from the site's component overrides, and every slot,
+ * branch and component it leaves empty, so a field set back to "Theme
+ * default" stores nothing and the site inherits that property again.
+ */
+export function clearComponentOverride(
+  theme: HostTheme,
+  target: ThemeComponentOverrideTarget,
+): HostTheme {
+  const existing = theme.components?.[target.component]
+  if (!existing) return theme
+  const entry: HostThemeComponentOverride = { ...existing }
+  if (target.target === 'defaultProps') {
+    const props = { ...entry.defaultProps }
+    delete props[target.property]
+    if (Object.keys(props).length) entry.defaultProps = props
+    else delete entry.defaultProps
+  } else {
+    const branch = target.target === 'sx' ? 'sx' : 'styleOverrides'
+    const styles: Record<string, unknown> = { ...entry[branch] }
+    const slot = target.slot ?? 'root'
+    const slotStyles = { ...(styles[slot] as Record<string, unknown> | undefined) }
+    if (target.media) {
+      const query = THEME_EDITOR_MEDIA_QUERIES[target.media]
+      const scoped = { ...(slotStyles[query] as Record<string, unknown> | undefined) }
+      delete scoped[target.property]
+      if (Object.keys(scoped).length) slotStyles[query] = scoped
+      else delete slotStyles[query]
+    } else {
+      delete slotStyles[target.property]
+    }
+    if (Object.keys(slotStyles).length) styles[slot] = slotStyles
+    else delete styles[slot]
+    if (Object.keys(styles).length) {
+      if (branch === 'sx') entry.sx = styles as HostThemeComponentOverride['sx']
+      else entry.styleOverrides = styles
+    } else {
+      delete entry[branch]
+    }
+  }
+  const components = { ...theme.components }
+  if (Object.keys(entry).length) components[target.component] = entry
+  else delete components[target.component]
+  const next: HostTheme = { ...theme }
+  if (Object.keys(components).length) next.components = components
+  else delete next.components
+  return next
+}
+
+/** The value one override leaf holds; `undefined` when the site does not set it. */
+export function readComponentOverride(
+  theme: HostTheme | undefined,
+  target: ThemeComponentOverrideTarget,
+): unknown {
+  const entry = theme?.components?.[target.component]
+  if (!entry) return undefined
+  if (target.target === 'defaultProps') return entry.defaultProps?.[target.property]
+  const styles = (target.target === 'sx' ? entry.sx : entry.styleOverrides) as
+    | Record<string, unknown>
+    | undefined
+  const slotStyles = styles?.[target.slot ?? 'root'] as Record<string, unknown> | undefined
+  if (!target.media) return slotStyles?.[target.property]
+  const query = THEME_EDITOR_MEDIA_QUERIES[target.media]
+  return (slotStyles?.[query] as Record<string, unknown> | undefined)?.[target.property]
+}
+
+/* ------------------------------------------------------------------------ *
+ * The look of components, as click-only fields
+ * ------------------------------------------------------------------------ */
+
+/** The components the Style components card sets a site-wide look for. */
+export type ThemeComponentLookGroup = 'button' | 'input' | 'card'
+
+export const THEME_COMPONENT_LOOK_GROUPS: ReadonlyArray<{
+  group: ThemeComponentLookGroup
+  label: string
+}> = [
+  { group: 'button', label: 'Buttons' },
+  { group: 'input', label: 'Form inputs' },
+  { group: 'card', label: 'Cards' },
+]
+
+export type ThemeComponentLookId =
+  | 'button.variant'
+  | 'button.corners'
+  | 'button.textCase'
+  | 'button.weight'
+  | 'button.padding'
+  | 'input.variant'
+  | 'input.corners'
+  | 'input.background'
+  | 'input.border'
+  | 'card.variant'
+  | 'card.elevation'
+  | 'card.corners'
+
+/** One choice a look field offers. */
+export interface ThemeComponentLookOption {
+  /** What the select holds. */
+  value: string
+  label: string
+  /**
+   * What each of the field's targets stores, in target order; one value
+   * stands for every target.
+   */
+  stored: string | number | ReadonlyArray<string | number>
+  /** A theme color this choice draws in, for its swatch. */
+  token?: ThemeColorToken
+}
+
+/**
+ * A click-only field over the site's component overrides. Each choice writes
+ * the same leaves the Advanced overrides hold, so the two are one setting
+ * seen two ways, and anything that writes override leaves can set it.
+ */
+export interface ThemeComponentLookField {
+  id: ThemeComponentLookId
+  group: ThemeComponentLookGroup
+  label: string
+  /** `color` choices are theme colors, shown as swatches of the scheme in view. */
+  kind: 'select' | 'color'
+  /** The leaves a choice sets, read back from the first. */
+  targets: readonly ThemeComponentOverrideTarget[]
+  /** Leaves set alongside any choice and cleared with it: what makes the choice draw right. */
+  companions?: readonly ThemeComponentOverrideLeaf[]
+  options: readonly ThemeComponentLookOption[]
+}
+
+/** The select's value for a field the site does not set: the theme's own look. */
+export const THEME_LOOK_DEFAULT = ''
+/** The select's value for a leaf set to something no choice names, by hand or by AI. */
+export const THEME_LOOK_CUSTOM = '__custom__'
+
+function lookTarget(
+  component: HostThemeComponentKey,
+  target: ThemeComponentOverrideLeaf['target'],
+  property: string,
+  slot: string | null = target === 'defaultProps' ? null : 'root',
+): ThemeComponentOverrideTarget {
+  return { component, target, slot, property, media: null }
+}
+
+/**
+ * Corner choices, as multiples of the site's Border radius (an `sx`
+ * `borderRadius` number is one), so a component follows the Shape & spacing
+ * slider instead of freezing a pixel value.
+ */
+const CORNER_OPTIONS: readonly ThemeComponentLookOption[] = [
+  { value: 'square', label: 'Square', stored: 0 },
+  { value: 'subtle', label: 'Half the site radius', stored: 0.5 },
+  { value: 'site', label: 'The site radius', stored: 1 },
+  { value: 'rounded', label: 'Twice the site radius', stored: 2 },
+  { value: 'extra', label: 'Three times the site radius', stored: 3 },
+]
+const PILL_OPTION: ThemeComponentLookOption = { value: 'pill', label: 'Pill', stored: '999px' }
+
+/**
+ * Every component look field, in the order the card shows them.
+ *
+ * Inputs style both of MUI's boxes: `MuiOutlinedInput` and `MuiFilledInput`,
+ * because the Input style choice picks between them and the other choices
+ * have to hold whichever is in use. A border color sets the outlined box's
+ * own border, which the Besigner's Input element draws, and the notched
+ * outline a stock text field draws.
+ */
+export const THEME_COMPONENT_LOOK_FIELDS: readonly ThemeComponentLookField[] = [
+  {
+    id: 'button.variant',
+    group: 'button',
+    label: 'Button style',
+    kind: 'select',
+    targets: [lookTarget('MuiButton', 'defaultProps', 'variant')],
+    options: [
+      { value: 'contained', label: 'Filled', stored: 'contained' },
+      { value: 'outlined', label: 'Outlined', stored: 'outlined' },
+      { value: 'text', label: 'Text only', stored: 'text' },
+    ],
+  },
+  {
+    id: 'button.corners',
+    group: 'button',
+    label: 'Button corners',
+    kind: 'select',
+    targets: [lookTarget('MuiButton', 'sx', 'borderRadius')],
+    options: [...CORNER_OPTIONS, PILL_OPTION],
+  },
+  {
+    id: 'button.textCase',
+    group: 'button',
+    label: 'Button text case',
+    kind: 'select',
+    targets: [lookTarget('MuiButton', 'styleOverrides', 'textTransform')],
+    options: [
+      { value: 'none', label: 'As typed', stored: 'none' },
+      { value: 'uppercase', label: 'UPPERCASE', stored: 'uppercase' },
+      { value: 'capitalize', label: 'Capitalize Each Word', stored: 'capitalize' },
+    ],
+  },
+  {
+    id: 'button.weight',
+    group: 'button',
+    label: 'Button text weight',
+    kind: 'select',
+    targets: [lookTarget('MuiButton', 'styleOverrides', 'fontWeight')],
+    options: [
+      { value: '400', label: 'Regular', stored: 400 },
+      { value: '500', label: 'Medium', stored: 500 },
+      { value: '600', label: 'Semibold', stored: 600 },
+      { value: '700', label: 'Bold', stored: 700 },
+    ],
+  },
+  {
+    id: 'button.padding',
+    group: 'button',
+    label: 'Button padding',
+    kind: 'select',
+    // Spacing units, so padding follows the site's Spacing unit.
+    targets: [lookTarget('MuiButton', 'sx', 'px'), lookTarget('MuiButton', 'sx', 'py')],
+    options: [
+      { value: 'compact', label: 'Compact', stored: [1.5, 0.5] },
+      { value: 'comfortable', label: 'Comfortable', stored: [2, 0.75] },
+      { value: 'roomy', label: 'Roomy', stored: [3, 1] },
+      { value: 'wide', label: 'Wide', stored: [4, 1.25] },
+    ],
+  },
+  {
+    id: 'input.variant',
+    group: 'input',
+    label: 'Input style',
+    kind: 'select',
+    targets: [lookTarget('MuiTextField', 'defaultProps', 'variant')],
+    options: [
+      { value: 'outlined', label: 'Outlined', stored: 'outlined' },
+      { value: 'filled', label: 'Filled', stored: 'filled' },
+    ],
+  },
+  {
+    id: 'input.corners',
+    group: 'input',
+    label: 'Input corners',
+    kind: 'select',
+    targets: [
+      lookTarget('MuiOutlinedInput', 'sx', 'borderRadius'),
+      lookTarget('MuiFilledInput', 'sx', 'borderRadius'),
+    ],
+    // A filled box's underline runs edge to edge; clipping it to the corners
+    // keeps it inside a rounded box.
+    companions: [{ ...lookTarget('MuiFilledInput', 'styleOverrides', 'overflow'), value: 'hidden' }],
+    options: [...CORNER_OPTIONS, PILL_OPTION],
+  },
+  {
+    id: 'input.background',
+    group: 'input',
+    label: 'Input background',
+    kind: 'color',
+    targets: [
+      lookTarget('MuiOutlinedInput', 'sx', 'bgcolor'),
+      lookTarget('MuiFilledInput', 'sx', 'bgcolor'),
+    ],
+    options: [
+      { value: 'transparent', label: 'None', stored: 'transparent' },
+      { value: 'paper', label: 'Paper', stored: 'background.paper', token: 'background.paper' },
+      {
+        value: 'background',
+        label: 'Background',
+        stored: 'background.default',
+        token: 'background.default',
+      },
+      { value: 'tintPrimary', label: 'Primary tint', stored: 'tint.primary', token: 'tint.primary' },
+      {
+        value: 'tintSecondary',
+        label: 'Secondary tint',
+        stored: 'tint.secondary',
+        token: 'tint.secondary',
+      },
+      {
+        value: 'tintTertiary',
+        label: 'Tertiary tint',
+        stored: 'tint.tertiary',
+        token: 'tint.tertiary',
+      },
+    ],
+  },
+  {
+    id: 'input.border',
+    group: 'input',
+    label: 'Input border color',
+    kind: 'color',
+    targets: [
+      lookTarget('MuiOutlinedInput', 'sx', 'borderColor'),
+      lookTarget('MuiOutlinedInput', 'sx', 'borderColor', 'notchedOutline'),
+    ],
+    options: [
+      { value: 'divider', label: 'Divider', stored: 'divider', token: 'divider' },
+      {
+        value: 'textSecondary',
+        label: 'Secondary text',
+        stored: 'text.secondary',
+        token: 'text.secondary',
+      },
+      { value: 'text', label: 'Text', stored: 'text.primary', token: 'text.primary' },
+      { value: 'primary', label: 'Primary', stored: 'primary.main', token: 'primary' },
+      { value: 'secondary', label: 'Secondary', stored: 'secondary.main', token: 'secondary' },
+      { value: 'tertiary', label: 'Tertiary', stored: 'tertiary.main', token: 'tertiary' },
+    ],
+  },
+  {
+    id: 'card.variant',
+    group: 'card',
+    label: 'Card style',
+    kind: 'select',
+    targets: [lookTarget('MuiCard', 'defaultProps', 'variant')],
+    options: [
+      { value: 'elevation', label: 'Shadow', stored: 'elevation' },
+      { value: 'outlined', label: 'Outline', stored: 'outlined' },
+    ],
+  },
+  {
+    id: 'card.elevation',
+    group: 'card',
+    label: 'Card shadow depth',
+    kind: 'select',
+    targets: [lookTarget('MuiCard', 'defaultProps', 'elevation')],
+    options: [
+      { value: '0', label: 'Flat', stored: 0 },
+      { value: '1', label: 'Soft', stored: 1 },
+      { value: '3', label: 'Medium', stored: 3 },
+      { value: '8', label: 'Strong', stored: 8 },
+    ],
+  },
+  {
+    id: 'card.corners',
+    group: 'card',
+    label: 'Card corners',
+    kind: 'select',
+    targets: [lookTarget('MuiCard', 'sx', 'borderRadius')],
+    options: CORNER_OPTIONS,
+  },
+]
+
+/** The catalog entry for a look field id. */
+export function themeComponentLookField(id: ThemeComponentLookId): ThemeComponentLookField {
+  const field = THEME_COMPONENT_LOOK_FIELDS.find((entry) => entry.id === id)
+  if (!field) throw new Error(`unknown component look field ${id}`)
+  return field
+}
+
+function storedFor(option: ThemeComponentLookOption, index: number) {
+  return Array.isArray(option.stored)
+    ? (option.stored as ReadonlyArray<string | number>)[index]
+    : (option.stored as string | number)
+}
+
+/**
+ * A look field as its select shows it: the choice the site's overrides hold,
+ * {@link THEME_LOOK_DEFAULT} when they set nothing, or
+ * {@link THEME_LOOK_CUSTOM} when they set a value no choice names.
+ */
+export function readComponentLook(
+  theme: HostTheme | undefined,
+  field: ThemeComponentLookField,
+): string {
+  const values = field.targets.map((target) => readComponentOverride(theme, target))
+  if (values.every((value) => value === undefined)) return THEME_LOOK_DEFAULT
+  const match = field.options.find((option) =>
+    values.every((value, index) => value === storedFor(option, index)),
+  )
+  return match ? match.value : THEME_LOOK_CUSTOM
+}
+
+/**
+ * Sets a look field to one of its choices, or back to the theme's own look
+ * with {@link THEME_LOOK_DEFAULT}, which clears every leaf it sets. Any other
+ * value changes nothing.
+ */
+export function writeComponentLook(
+  theme: HostTheme,
+  field: ThemeComponentLookField,
+  value: string,
+): HostTheme {
+  if (value === THEME_LOOK_DEFAULT) {
+    let next = theme
+    for (const target of [...field.targets, ...(field.companions ?? [])]) {
+      next = clearComponentOverride(next, target)
+    }
+    return next
+  }
+  const option = field.options.find((entry) => entry.value === value)
+  if (!option) return theme
+  let next = theme
+  field.targets.forEach((target, index) => {
+    next = writeComponentOverride(next, { ...target, value: storedFor(option, index) })
+  })
+  for (const companion of field.companions ?? []) next = writeComponentOverride(next, companion)
+  return next
 }

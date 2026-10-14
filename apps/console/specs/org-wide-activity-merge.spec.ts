@@ -33,6 +33,8 @@ interface FakeDoc {
   id: string
   parent: string
   seconds: number
+  /** An act both logs hold (AGL-3660); each row is its own act otherwise. */
+  act?: { action: string; actorId: string; target: Record<string, unknown> }
 }
 
 let mockCorpus: FakeDoc[] = []
@@ -71,8 +73,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         docs: docs.map((entry) => ({
           id: entry.id,
           data: () => ({
-            action: `did ${entry.id}`,
-            target: { type: 'screen' },
+            action: entry.act?.action ?? `did ${entry.id}`,
+            target: entry.act?.target ?? { type: 'screen' },
+            ...(entry.act ? { actorId: entry.act.actorId } : {}),
             actorEmail: 'someone@example.test',
             createdAt: { seconds: entry.seconds },
           }),
@@ -195,6 +198,74 @@ describe('readOrgWideActivity paging', () => {
     }
     expect(seen.slice().sort()).toEqual(['a', 'b', 'c', 'd'])
     expect(new Set(seen).size).toBe(4)
+  })
+
+  describe('a site event filed in both logs (AGL-3660)', () => {
+    const generated = (name: string) => ({
+      action: 'ai.job.output',
+      actorId: 'u1',
+      target: { type: 'screen', id: `s-${name}`, name },
+    })
+    const twin = (
+      id: string,
+      parent: string,
+      seconds: number,
+      name: string,
+    ): FakeDoc => ({ ...entry(id, parent, seconds), act: generated(name) })
+
+    it('is one row, the site one, beside the org events only the org log holds', async () => {
+      // Prod, admin/orgs/mQUESZn6O5: "AI generated — Home" twice, Where =
+      // Organization and Where = the site, the same second.
+      mockHostsInOrg = ['h1']
+      mockCorpus = [
+        twin('home-org', 'orgs/org-1', 500, 'Home'),
+        twin('home-site', 'hosts/h1', 500, 'Home'),
+        twin('services-org', 'orgs/org-1', 499, 'Services'),
+        twin('services-site', 'hosts/h1', 500, 'Services'),
+        entry('invite', 'orgs/org-1', 400),
+      ]
+      const page = await readOrgWideActivity({ orgId: 'org-1', limit: 10 })
+      expect(page.entries.map((e) => `${e.scopePath}:${e.$id}`).sort()).toEqual([
+        'hosts/h1:home-site',
+        'hosts/h1:services-site',
+        'orgs/org-1:invite',
+      ])
+    })
+
+    it('keeps the org row when its site has no twin — a job nobody was present for', async () => {
+      mockHostsInOrg = ['h1']
+      mockCorpus = [twin('home-org', 'orgs/org-1', 500, 'Home')]
+      const page = await readOrgWideActivity({ orgId: 'org-1', limit: 10 })
+      expect(page.entries.map((e) => e.$id)).toEqual(['home-org'])
+    })
+
+    it('keeps two separate acts that match, minutes apart', async () => {
+      mockHostsInOrg = ['h1']
+      mockCorpus = [
+        twin('later-site', 'hosts/h1', 900, 'Home'),
+        twin('earlier-org', 'orgs/org-1', 500, 'Home'),
+      ]
+      const page = await readOrgWideActivity({ orgId: 'org-1', limit: 10 })
+      expect(page.entries.map((e) => e.$id)).toEqual(['later-site', 'earlier-org'])
+    })
+
+    it('never shows a copy across a page boundary', async () => {
+      mockHostsInOrg = ['h1']
+      mockCorpus = ['A', 'B', 'C', 'D', 'E'].flatMap((name, index) => [
+        twin(`${name}-site`, 'hosts/h1', 500 - index, name),
+        twin(`${name}-org`, 'orgs/org-1', 500 - index, name),
+      ])
+      const seen: string[] = []
+      let cursor: string | null = null
+      for (let guard = 0; guard < 10; guard += 1) {
+        const page: Awaited<ReturnType<typeof readOrgWideActivity>> =
+          await readOrgWideActivity({ orgId: 'org-1', limit: 2, cursor })
+        seen.push(...page.entries.map((item) => item.$id))
+        cursor = page.nextCursor
+        if (!cursor) break
+      }
+      expect(seen).toEqual(['A-site', 'B-site', 'C-site', 'D-site', 'E-site'])
+    })
   })
 
   it('an unreadable cursor restarts at the top rather than throwing', async () => {

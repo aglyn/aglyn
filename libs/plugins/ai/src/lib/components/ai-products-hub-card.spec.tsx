@@ -149,6 +149,8 @@ const CANDLE = {
   seoTitle: 'Wild mint soy candle',
   seoDescription: 'A hand-poured soy candle scented with wild mint.',
   photo: 'The candle lit on a wooden table.',
+  // A suggested price by what it is (Zach, 2026-10-12, AGL-3733).
+  price: 24,
 }
 
 const catalogJob = summary({
@@ -156,7 +158,8 @@ const catalogJob = summary({
   outputs: [
     output('catalog', {
       kind: 'catalog',
-      products: [CANDLE, { ...CANDLE, name: 'Desk lamp', photo: 'The lamp on a desk.' }],
+      // The lamp is a proposal from before suggested prices: it carries none, so the default stands in.
+      products: [CANDLE, { ...CANDLE, name: 'Desk lamp', photo: 'The lamp on a desk.', price: undefined }],
       notes: [],
     }),
   ],
@@ -312,7 +315,9 @@ describe('a first catalog from a brief', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
     expect(await screen.findByText('In your catalog')).toBeTruthy()
-    expect(screen.getAllByText('Set a price')).toHaveLength(2)
+    // A suggested price is shown where the proposal has one in range, the default otherwise (AGL-3733).
+    expect(screen.getByText('$24.00 suggested')).toBeTruthy()
+    expect(screen.getByText('Default price')).toBeTruthy()
     expect(screen.getAllByText('Needs a photo')).toHaveLength(2)
     expect(screen.getByText('The candle lit on a wooden table.')).toBeTruthy()
     expect((screen.getByLabelText('Select Desk lamp') as HTMLInputElement).checked).toBe(false)
@@ -329,10 +334,11 @@ describe('a first catalog from a brief', () => {
         options: [{ name: 'Size', values: ['8 oz', '16 oz'] }],
         seoTitle: 'Wild mint soy candle',
         seoDescription: 'A hand-poured soy candle scented with wild mint.',
+        priceUsd: 24,
       },
     ])
     expect(
-      await screen.findByText('Created 1 draft product. Each needs a price and a photo before you activate it.'),
+      await screen.findByText('Created 1 draft product. Review each price and add a photo before you activate it.'),
     ).toBeTruthy()
   })
 })

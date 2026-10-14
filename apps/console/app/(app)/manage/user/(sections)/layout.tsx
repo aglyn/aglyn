@@ -83,7 +83,7 @@ export default function AccountSectionsLayout({
         // every level except theirs — the one that says where they are.
         ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
-      help="account"
+      help={{ topic: 'manageAccount', anchor: '#account-tabs' }}
       header={{
         children: 'Manage Account',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },

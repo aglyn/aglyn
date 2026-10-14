@@ -86,6 +86,7 @@ alerts.
 |---|---|---|
 | Security | Urgent abuse, fraud or risk alert: phishing, card testing, a flagged payment, a held phishing email | Must |
 | Security | An automatic security hold on a new workspace that published a phishing page | Must |
+| Security | An automatic security hold for payment fraud on a workspace's own billing, or a flagged workspace that was not locked and needs a decision | Must |
 | Billing | Card dispute with no owner; billing webhook half applied | Must |
 | Billing | Subscription dispute lost; Stripe billing a workspace that does not exist; a closed month's metered usage not reported to Stripe | Must |
 | Billing | Billing webhook failing its signature check; a delivery that moved nothing | Must |

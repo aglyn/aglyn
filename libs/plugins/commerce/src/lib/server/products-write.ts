@@ -54,7 +54,7 @@ import { planRefusal, roomRefusal } from './product-drafts'
 
 type Firestore = FirebaseFirestore.Firestore
 
-const ROLE_REFUSAL = 'Editing requires the editor role'
+export const ROLE_REFUSAL = 'Editing requires the editor role'
 const MAX_BODY_BYTES = 256_000
 
 /** The reasons the Adjust stock dialog offers. */
@@ -71,7 +71,7 @@ export interface ProductsWriteDeps {
 
 type Reply = Parameters<PluginApiHandler>[1]
 
-function bodyOf(req: Parameters<PluginApiHandler>[0]): Record<string, unknown> {
+export function bodyOf(req: Parameters<PluginApiHandler>[0]): Record<string, unknown> {
   const raw = req.body
   if (typeof raw === 'string') {
     if (raw.length > MAX_BODY_BYTES) return {}
@@ -84,10 +84,10 @@ function bodyOf(req: Parameters<PluginApiHandler>[0]): Record<string, unknown> {
   return (raw ?? {}) as Record<string, unknown>
 }
 
-const validId = (value: unknown): value is string =>
+export const validId = (value: unknown): value is string =>
   typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
 
-interface Gate {
+export interface Gate {
   uid: string
   staff: boolean
   host: FirebaseFirestore.DocumentSnapshot
@@ -98,7 +98,7 @@ interface Gate {
  * Who may write this site's products, as the rules decide it. Answers the
  * caller's reply on a refusal and returns null.
  */
-async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hostId: string, deps: Required<ProductsWriteDeps>): Promise<Gate | null> {
+export async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hostId: string, deps: Required<ProductsWriteDeps>): Promise<Gate | null> {
   const authorization = String(req.headers.authorization ?? '')
   const token = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : ''
   if (!token) return void res.status(401).json({ error: 'Unauthenticated' }), null
@@ -126,19 +126,19 @@ async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hostId: st
 }
 
 /** The site-wide cache drop a product change is owed (AGL-3386): an outbox entry in the write, then the drop. */
-function outboxEntry(firestore: Firestore, hostId: string) {
+export function outboxEntry(firestore: Firestore, hostId: string) {
   return {
     ref: firestore.collection('publishOutbox').doc(createResourceUid()),
     data: { hostId, paths: ['/'], createdAt: FieldValue.serverTimestamp(), attempts: 0, entireHost: true },
   }
 }
 
-async function settleCache(deps: Required<ProductsWriteDeps>, hostId: string, entry: FirebaseFirestore.DocumentReference, reason: string) {
+export async function settleCache(deps: Required<ProductsWriteDeps>, hostId: string, entry: FirebaseFirestore.DocumentReference, reason: string) {
   const dropped = await deps.dropCache({ hostIds: [hostId], reason }).catch(() => ({ complete: false }))
   if (dropped.complete) await entry.delete().catch(() => undefined)
 }
 
-function resolved(deps: ProductsWriteDeps): Required<ProductsWriteDeps> {
+export function resolved(deps: ProductsWriteDeps): Required<ProductsWriteDeps> {
   return {
     firestore: deps.firestore ?? (() => firebaseAdmin.app().firestore() as unknown as Firestore),
     verifyIdToken: deps.verifyIdToken ?? ((token) => firebaseAdmin.app().auth().verifyIdToken(token) as never),

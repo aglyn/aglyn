@@ -12,6 +12,12 @@ staff claim; locking or lifting anything requires the **super** staff role. Ever
 action — lock and unlock — writes an audit row.
 :::
 
+## The lockdown page {#lockdown-page}
+
+**Staff → Lockdown** locks and lifts the platform, one feature, a workspace, a site,
+a custom domain or one account: pick the scope and target, give a reason, then read
+back the verdict the page shows before you walk away.
+
 Lockdown is the control you reach for when something has gone wrong: a compromised
 site, an account being abused, a billing suspension that has run its course, or a
 maintenance window that needs the doors closed. One mechanism, five scopes:
@@ -76,6 +82,23 @@ from a workspace less than 14 days old locks that workspace, its site (as a
 actor `system:page-screen`. Confirm it by re-placing the workspace and account locks
 as `abuse` here, or lift all three if it is a false positive. See
 [the automatic security hold](./abuse-reports.md#security-hold).
+
+### The payment-fraud hold {#payment-fraud-hold}
+
+The other lock the platform places by itself is for **payment fraud on a
+workspace's own billing**. When Stripe blocks a workspace's charge at highest
+risk, reports it as fraudulent, sees three or more different cards fail on it
+within 30 minutes, or sends an early fraud warning or a Radar review on it, the
+billing webhook locks the workspace and each of its sites as `security`, `full`,
+`takedown`, with **Email the owners** off and **Cancel subscriptions** on. An
+actionable early fraud warning is also refunded first, so it cannot become a
+dispute. Its audit rows name the actor `system:payment-fraud`.
+
+A workspace 14 or more days old, or one that has paid another invoice, is never
+locked this way; staff get the alert and decide. Confirm a hold by re-placing it
+as `abuse` here, or lift it if it is a false positive. Lifting does not recreate
+the canceled subscriptions. See
+[the payment-fraud hold](./abuse-reports.md#payment-fraud-hold).
 
 ## Modes: full, or read-only {#read-only-mode}
 
@@ -851,6 +874,23 @@ Two things it does that the curl cannot, and they are the reason to prefer it:
   lift that failed. The page reports `NOT CONFIRMED` unless *no* key can still
   refuse the file, and logs every action that reached the server.
 
+#### Disable or release {#disable-or-release}
+
+Once a file is looked up, the **Disable or release** card sets or lifts its
+quarantine: pick the **Reason**, an optional **Until** time, an optional
+customer-facing message and an optional internal note, then **Disable this file** —
+or press **Release** to lift every key that is refusing it.
+
+Setting and lifting needs the **super** staff role. The internal note is never part
+of the notice the owning workspace sees.
+
+#### Actions taken in this session {#quarantine-session-log}
+
+The **Actions taken in this session** card lists every disable and release that
+reached the server since the page loaded, with the time: if you clicked and no line
+appeared, the click did not register. It starts empty on every page load; the audit
+log keeps the permanent record.
+
 **Disable only this copy** is the same deliberate narrowing as `by: "asset"`:
 use it when the same bytes are legitimate elsewhere and only this workspace's
 copy is the subject of the report. The key that is about to be written, and
@@ -1479,6 +1519,26 @@ So the page never claims a state it has not read back:
 - A write that returns but whose re-read disagrees is reported as
   `NOT CONFIRMED`, loudly. Treat it as an unresolved incident, not a success.
 
+### Actions taken in this session {#lockdown-session-log}
+
+The **Actions taken in this session** card lists every lock and lift that reached the
+server since the page loaded, with the time it landed and a **verified** or **NOT
+CONFIRMED** chip: read it back before you leave the page.
+
+If you clicked and no line appeared, the click did not register. The list lives in the
+page, so reloading it starts a new, empty session; the audit log keeps the permanent
+record.
+
+### Active lockdowns {#active-lockdowns}
+
+The **Active platform, feature & account lockdowns** card lists every platform,
+feature and account lock in force, with its reason: check it before you tell a customer
+why they are refused.
+
+It is a snapshot taken when the page read it — the time is shown, and **Refresh** reads
+it again. Workspace and site locks are not on it, because they live on the workspace's
+and site's own records: check one with **Check state**, or open its staff page.
+
 ### What a caller is told
 
 You cannot check a lockdown by trying it yourself. Staff bypass every scope —
@@ -1634,11 +1694,13 @@ says whether a time-boxed lock was released early or a forgotten one was
 cleaned up. A `null` in any of those three means the lock genuinely carried no
 reason, no message, or no expiry.
 
-Two locks are placed by the platform rather than a person, and their rows say so
+Three locks are placed by the platform rather than a person, and their rows say so
 with a `system:` actor and `after.automated: true`: the billing sweep below
-(`system:billing-auto-lock`), and the page screen's automatic security hold
+(`system:billing-auto-lock`), the page screen's automatic security hold
 (`system:page-screen`), whose note names the page, the version, the signal and the
-abuse row.
+abuse row, and the [payment-fraud hold](#payment-fraud-hold)
+(`system:payment-fraud`), whose note names the trigger, the charges and the abuse
+row.
 
 Billing locks for lapsed subscriptions are **manual by default**. The automated
 30-days-past-due sweep exists but ships disabled; it is enabled by setting the

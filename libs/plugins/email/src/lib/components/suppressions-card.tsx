@@ -571,7 +571,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   return (
     <CardDisplay
       header="Suppressions"
-      help={pluginDocsHelp('emailCampaigns', { anchor: '#compliance' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#suppressions' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

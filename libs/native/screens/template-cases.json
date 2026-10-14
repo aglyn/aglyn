@@ -48,7 +48,12 @@
         "x",
         "y"
       ],
-      "big": 1234567.891
+      "big": 1234567.891,
+      "access": {
+        "h1": "editor",
+        "h2": "viewer"
+      },
+      "hostKey": "h2"
     }
   },
   "render": [
@@ -143,6 +148,10 @@
     {
       "template": "{{literal}}",
       "expect": "{literal}}"
+    },
+    {
+      "template": "{data.access[@data.hostKey]}",
+      "expect": "viewer"
     }
   ],
   "url": [
@@ -167,6 +176,18 @@
     {
       "template": "id {org.id}",
       "expect": "id org1"
+    },
+    {
+      "template": "{data.flag ?? 'x'}",
+      "expect": false
+    },
+    {
+      "template": "{data.missing ?? data.flag}",
+      "expect": false
+    },
+    {
+      "template": "{data.missing ?? 'fallback'}",
+      "expect": "fallback"
     }
   ],
   "body": [
@@ -248,6 +269,56 @@
         ],
         "d": [
           "q"
+        ]
+      }
+    },
+    {
+      "body": {
+        "set": {
+          "$put": {
+            "map": "{data.access}",
+            "key": "{params.uid}",
+            "value": "viewer"
+          }
+        },
+        "removed": {
+          "$put": {
+            "map": "{data.access}",
+            "key": "h1",
+            "value": ""
+          }
+        }
+      },
+      "expect": {
+        "set": {
+          "h1": "editor",
+          "h2": "viewer",
+          "u2": "viewer"
+        },
+        "removed": {
+          "h2": "viewer"
+        }
+      }
+    },
+    {
+      "body": {
+        "pcts": {
+          "$split": "{'50, 80.5, x'}"
+        },
+        "words": {
+          "$split": "{'a, b,,c'}"
+        }
+      },
+      "expect": {
+        "pcts": [
+          50,
+          80.5,
+          "x"
+        ],
+        "words": [
+          "a",
+          "b",
+          "c"
         ]
       }
     },

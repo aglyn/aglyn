@@ -163,6 +163,7 @@ export * from './lib/hocs/with-hoc'
 
 export * from './lib/utils/make-link-elements'
 export * from './lib/utils/make-meta-elements'
+export * from './lib/utils/new-tab'
 // `./lib/utils/vendor` is NOT re-exported (AGL-2682). It wraps eleven `react-is`
 // predicates and NOTHING reads any of them from this index — the two real
 // consumers, `aglyn-node-renderer`'s `leaf.tsx` and the besigner's

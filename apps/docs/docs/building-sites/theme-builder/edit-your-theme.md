@@ -58,6 +58,17 @@ stored as your edits *on top of* the theme you picked, so:
 Your **Dark scheme** setting belongs to the site, not the theme, so it stays as you set it
 whichever theme you pick.
 
+### What you have changed {#what-you-have-changed}
+
+The **What you have changed** card lists every value your site sets differently from the
+theme it runs, so you can see your edits at a glance and undo any one of them. Each row
+names the setting and shows the **Theme** value beside **Yours**; **Reset** on a row puts
+that one value back, and **Reset everything** drops all of them.
+
+When nothing differs, the card says the site is running the theme exactly as it ships.
+Edits made while a different theme was picked are flagged as such: they still apply, but
+were chosen against another theme's values.
+
 ## Set colors and fonts
 
 - Choose your **palette** and **typography**.
@@ -78,6 +89,34 @@ whichever theme you pick.
   dark design of its own.
 - **Dark scheme** — set it to **Off** when your content only reads well in light: every
   visitor stays on light and the theme mode switcher is hidden on published pages.
+
+### Color scheme {#color-scheme}
+
+The **Color scheme** card sets your site's colors, once for **Light** and once for
+**Dark** — switch between the two tabs and pick each color; the preview updates as you go.
+
+- **Dark scheme** at the top decides whether visitors can get a dark site at all:
+  **Follows the visitor**, or **Off — always light**.
+- **Palette** — your brand colors: **Primary**, **Secondary** and **Tertiary**, plus the
+  status colors **Error**, **Warning**, **Info** and **Success**.
+- **Background & text** — the page **Background**, the **Paper** cards sit on, and the
+  **Text**, **Secondary text** and **Disabled text** colors.
+- **Tints** — pale washes of your accents, used to fill tiles and panels.
+- **Divider** — the color of separating lines.
+
+**Copy from dark** (or **Copy from light**) fills the tab you are on from the other scheme,
+a quick start when the two should mostly match.
+
+## Shape & spacing {#shape-and-spacing}
+
+The **Shape & spacing** card sets the proportions every component follows, so buttons,
+cards and inputs stay consistent without restyling each one.
+
+- **Border radius** — how rounded corners are, from 0 (square) to 24px.
+- **Spacing unit (px)** — the step every gap and padding is a multiple of, from 2 to
+  16px. Raise it for a roomier site, lower it for a denser one.
+- **Nav height, mobile (px)** and **Nav height, desktop (px)** — the height of the top
+  navigation bar on small screens, and from 600px wide up.
 
 ## Fonts
 
@@ -160,33 +199,53 @@ What happens to the file:
 
 Nothing is sent to anyone else: the check and the conversion run on Aglyn's own servers.
 
-## Style components
+## Style components {#style-components}
 
-**Component overrides** restyle MUI components site-wide beyond the palette and type. The
-editor takes MUI's component theme API as JSON, keyed by component (`MuiButton`,
-`MuiOutlinedInput`, `MuiCard`, `MuiAlert`…):
+The **Style components** card sets how buttons, form inputs and cards look across the whole
+site. Pick each from a list; the preview updates as you go, and nothing changes on your site
+until you press **Save**.
 
-- `defaultProps` — a prop's default, e.g. `{ "variant": "outlined" }`.
-- `styleOverrides` — literal CSS per slot. `"padding": 8` is 8px.
-- `sx` — the same per-slot styles in **theme terms**, resolved separately for light and
-  dark: palette paths (`"borderColor": "divider"`, `"bgcolor": "primary.main"`), spacing
-  units (`"px": 2` is 16px), radius multiples (`"borderRadius": 2`), shadow levels
-  (`"boxShadow": 3`) and whole text styles (`"typography": "button"`). Use it for anything
-  that should follow the scheme.
-- `variants` — styles that apply only when props match, e.g.
-  `{ "props": { "variant": "outlined" }, "sx": { "borderWidth": 2 } }`.
+![The Style components card](/img/theme-builder/style-components.png)
 
-```json
-{
-  "MuiCard": {
-    "defaultProps": { "variant": "outlined" },
-    "sx": { "root": { "borderColor": "divider", "borderRadius": 2 } }
-  }
-}
-```
+**Buttons**
 
-Your overrides are added to the platform's own component styles rather than replacing them,
-so the contrast fixes the platform applies to buttons and links stay in place.
+- **Button style** — **Filled**, **Outlined** or **Text only**, for every button that does not
+  pick a style of its own.
+- **Button corners** — from **Square** through multiples of your site's **Border radius** to a
+  **Pill**.
+- **Button text case** — **As typed**, **UPPERCASE** or **Capitalize Each Word**.
+- **Button text weight** — **Regular**, **Medium**, **Semibold** or **Bold**.
+- **Button padding** — **Compact**, **Comfortable**, **Roomy** or **Wide**, in steps of your
+  site's **Spacing unit**.
+
+**Form inputs**
+
+- **Input style** — **Outlined** (a box with a border) or **Filled** (a shaded box with a line
+  underneath).
+- **Input corners** — the same corner choices as buttons.
+- **Input background** — **None**, or one of your theme's colors: **Paper**, **Background** or a
+  **tint**.
+- **Input border color** — **Divider**, **Secondary text**, **Text**, or one of your brand
+  colors.
+
+**Cards**
+
+- **Card style** — **Shadow** or **Outline**, for every card that does not pick its own.
+- **Card shadow depth** — **Flat**, **Soft**, **Medium** or **Strong**.
+- **Card corners** — the same corner choices, without the pill.
+
+Colors are your **theme's colors**, not fixed values, so they follow the visitor's light or
+dark scheme and change when you change the palette. Corners and padding follow the **Shape &
+spacing** card the same way. **Theme default** on any of these keeps the look your theme
+ships with.
+
+A single button, input or card you style in the Besigner keeps its own settings; these choices
+set the look of everything you have not styled one by one.
+
+**Advanced**, at the bottom of the card, lists everything styled on your site beyond the
+choices above, such as a change the [Theme assistant](../../ai/theme-assist.md) proposed for
+another component. **Reset to theme defaults** there removes all of it, including the choices
+above, so every component looks the way your theme ships it.
 
 ## It follows you into the Besigner
 

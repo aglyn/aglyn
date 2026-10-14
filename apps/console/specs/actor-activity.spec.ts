@@ -42,6 +42,8 @@ const snapshotFor = (docs: FakeDoc[]) => ({
 /** One fake query's shape so far. */
 interface MockQueryState {
   after?: string | null
+  /** `startAt`: the cursor row itself is the first one read. */
+  at?: string | null
   limit: number
   /** Every predicate, as the query was handed it. */
   wheres?: Array<[string, string, unknown]>
@@ -63,6 +65,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     orderBy: () => build(state),
     startAfter: (doc: { ref: { path: string } }) =>
       build({ ...state, after: doc.ref.path }),
+    startAt: (doc: { ref: { path: string } }) =>
+      build({ ...state, at: doc.ref.path }),
     limit: (value: number) => build({ ...state, limit: value }),
     get: async () => {
       mockWheres.push(
@@ -71,11 +75,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       const matching = mockCorpus.filter((entry) =>
         (state.wheres ?? []).every((where) => holds(entry.data, where)),
       )
+      const position = (path: string) =>
+        matching.findIndex((entry) => `${entry.parent}/activity/${entry.id}` === path)
       const index = state.after
-        ? matching.findIndex(
-            (entry) => `${entry.parent}/activity/${entry.id}` === state.after,
-          ) + 1
-        : 0
+        ? position(state.after) + 1
+        : state.at
+          ? position(state.at)
+          : 0
       return snapshotFor(matching.slice(index, index + state.limit))
     },
   })
@@ -267,5 +273,85 @@ describe('orgActivityScopePaths', () => {
   it('is never empty', async () => {
     mockHostsInOrg = []
     expect([...(await orgActivityScopePaths('o1'))]).toEqual(['orgs/o1'])
+  })
+})
+
+/**
+ * Prod, admin/users/<uid> (AGL-3660): every AI guided-start output twice, one
+ * row Where = the site, one Where = "Organization", the same second.
+ * `logAiJobOutput` files a site output in both logs on purpose, and this
+ * view reads both; the account's view shows the event once, as the site row.
+ */
+describe('readActorActivity: a site event filed in both logs', () => {
+  const generated = (id: string, parent: string, seconds: number, name: string): FakeDoc => {
+    const target = { type: 'screen', id: `s-${name}`, name }
+    return {
+      id,
+      parent,
+      data: {
+        actorId: 'u1',
+        actorEmail: 'ada@example.test',
+        action: 'ai.job.output',
+        target,
+        searchTokens: activitySearchTokens({ actorEmail: 'ada@example.test', target }),
+        createdAt: { seconds },
+      },
+    }
+  }
+  const pairs = (names: string[]) =>
+    names.flatMap((name, index) => [
+      generated(`${name}-site`, 'hosts/GWhK3xjtDE', 900 - index, name),
+      generated(`${name}-org`, 'orgs/o1', 900 - index, name),
+    ])
+
+  it('shows it once, as the site row, and keeps an org-only event', async () => {
+    mockCorpus = [
+      ...pairs(['Services', 'Home']),
+      generated('layout-org', 'orgs/o1', 800, 'Main Layout'),
+    ]
+    const page = await readActorActivity({ actorId: 'u1', pageSize: 25 })
+    expect(page.entries.map((e) => `${e.scopeType}:${e.$id}`)).toEqual([
+      'host:Services-site',
+      'host:Home-site',
+      'org:layout-org',
+    ])
+  })
+
+  it('still fills a page when every row has a copy', async () => {
+    mockCorpus = pairs(['A', 'B', 'C', 'D'])
+    const page = await readActorActivity({ actorId: 'u1', pageSize: 3 })
+    expect(page.entries.map((e) => e.$id)).toEqual(['A-site', 'B-site', 'C-site'])
+    expect(page.nextCursor).not.toBeNull()
+  })
+
+  it('never shows a copy whose site row ended the previous page', async () => {
+    mockCorpus = pairs(['A', 'B', 'C', 'D', 'E'])
+    const seen: string[] = []
+    let cursor: string | null = null
+    for (let guard = 0; guard < 10; guard += 1) {
+      const result: Awaited<ReturnType<typeof readActorActivity>> =
+        await readActorActivity({ actorId: 'u1', pageSize: 2, cursor })
+      seen.push(...result.entries.map((entry) => entry.$id))
+      cursor = result.nextCursor
+      if (!cursor) break
+    }
+    expect(seen).toEqual(['A-site', 'B-site', 'C-site', 'D-site', 'E-site'])
+  })
+
+  it('also when the org copy was written first and sorts first', async () => {
+    mockCorpus = ['A', 'B', 'C'].flatMap((name, index) => [
+      generated(`${name}-org`, 'orgs/o1', 900 - index, name),
+      generated(`${name}-site`, 'hosts/h1', 900 - index, name),
+    ])
+    const seen: string[] = []
+    let cursor: string | null = null
+    for (let guard = 0; guard < 10; guard += 1) {
+      const result: Awaited<ReturnType<typeof readActorActivity>> =
+        await readActorActivity({ actorId: 'u1', pageSize: 1, cursor })
+      seen.push(...result.entries.map((entry) => entry.$id))
+      cursor = result.nextCursor
+      if (!cursor) break
+    }
+    expect(seen).toEqual(['A-site', 'B-site', 'C-site'])
   })
 })

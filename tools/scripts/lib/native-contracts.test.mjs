@@ -53,6 +53,7 @@ const FIXTURE = {
       lines: readonly Line[]
       totals: Record<string, number>
       byStatus: Record<Status, string>
+      partlyByStatus: Partial<Record<Status, number>>
       meta: { source: 'pos' | 'web'; tags?: string[] }
       extra: unknown
       code: 301 | 302
@@ -107,6 +108,7 @@ test('the model: enums, structs, maps, inline shapes, nullability, ints, json an
   assert.deepEqual(fields.lines.type, { kind: 'array', of: { kind: 'named', name: 'Line' } })
   assert.deepEqual(fields.totals.type, { kind: 'map', of: { kind: 'double' } })
   assert.deepEqual(fields.byStatus.type, { kind: 'map', of: { kind: 'string' } })
+  assert.deepEqual(fields.partlyByStatus.type, { kind: 'map', of: { kind: 'double' } }, 'a Partial<Record> is the same map')
   assert.deepEqual(fields.meta.type, { kind: 'named', name: 'OrderMeta' })
   assert.deepEqual(fields.extra.type, { kind: 'json' })
   assert.deepEqual(fields.code.type, { kind: 'int' })

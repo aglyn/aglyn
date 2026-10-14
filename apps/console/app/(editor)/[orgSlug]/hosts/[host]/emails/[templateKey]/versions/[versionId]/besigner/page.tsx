@@ -18,6 +18,7 @@
 
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import { useBindingTokenLookups } from '../../../../../../../../../../hooks/use-host-binding-docs'
+import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import type * as Aglyn from '@aglyn/aglyn'
@@ -295,6 +296,8 @@ function HostEmailBesignerPage() {
   const clearCanvas = useClearCanvasCallback('email')
   const repairDocument = useRepairDocumentCallback('email')
   const {
+    discardChanges,
+    canDiscard,
     saveAvailable,
     remoteChanged,
     draft,
@@ -498,6 +501,18 @@ function HostEmailBesignerPage() {
     </Alert>
   ) : null
 
+  // File ▸ Discard changes… (AGL-3723): back to the stored document, drafts dropped.
+  const discardMenuItem = useDiscardChangesMenuItem({
+    noun: 'email',
+    live: editingLiveVersion,
+    canDiscard: canDiscard || draftPending,
+    discardChanges,
+    onDiscarded: useCallback(() => {
+      clearMirrorRef.current?.()
+      setDraftPending(false)
+    }, []),
+  })
+
   return (
     <EntityPickerProvider hostId={hostId}>
     {/* The site's reusable email blocks (AGL-3287), as the campaign email
@@ -535,6 +550,7 @@ function HostEmailBesignerPage() {
                 children: saveAvailable ? 'Save' : 'Up to Date',
                 onClick: handleSave,
               },
+              discardMenuItem,
               {
                 id: 'center-nav-file-close',
                 children: 'Close',

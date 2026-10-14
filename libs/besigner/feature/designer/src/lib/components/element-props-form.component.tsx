@@ -19,6 +19,7 @@ import PluginSettingsField, {
   PLUGIN_SETTINGS_FIELD_COMPONENT,
 } from './plugin-settings-field.component'
 import type * as Aglyn from '@aglyn/aglyn'
+import { isMediaPickerKind } from '@aglyn/aglyn/app-utils/media-picker-context'
 import {
   ANIMATION_DEFAULT_DELAY_MS,
   ANIMATION_DEFAULT_DURATION_MS,
@@ -1262,8 +1263,15 @@ export function browseMediaKind(options: {
   componentId?: unknown
   /** The attribute the Browse button was pressed for. */
   propName: string
+  /**
+   * The kind the attribute's own schema declares (`mediaKind`, AGL-3716), so
+   * a plugin's element narrows its picker without core naming its id: the
+   * Music player's `src` lists only audio.
+   */
+  attributeKind?: unknown
 }): Aglyn.MediaPickerKind | undefined {
-  const { componentId, propName } = options ?? ({} as never)
+  const { componentId, propName, attributeKind } = options ?? ({} as never)
+  if (isMediaPickerKind(attributeKind)) return attributeKind
   if (componentId !== VIDEO_COMPONENT_ID) return undefined
   if (propName === 'src') return 'video'
   if (propName === 'poster') return 'image'
@@ -2324,7 +2332,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           ...visibilityFields,
           ...animationFields,
           ...repeatFields,
-        ].map(withNumericValueParse),
+        ]
+          // `mediaKind` is read by the picker (AGL-3716), never by the field
+          // it would otherwise reach as an unknown DOM attribute.
+          .map(({ mediaKind: _mediaKind, ...field }: any) => field)
+          .map(withNumericValueParse),
       [
         attributes,
         instancePropFields,
@@ -2475,6 +2487,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         const kind = browseMediaKind({
           componentId: node?.componentId,
           propName,
+          attributeKind: (rawAttributes ?? []).find(
+            (field: any) => field?.name === propName,
+          )?.mediaKind,
         })
         // Written through verbatim: the host app decides the persisted form
         // (today a media reference — AGL-1215), the renderer resolves it.
@@ -2518,7 +2533,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           })
         }, { kind })
       },
-      [onPickMedia, node, declaresAlt],
+      [onPickMedia, node, declaresAlt, rawAttributes],
     )
 
     // The same picker for an instance's image-typed declared prop, writing

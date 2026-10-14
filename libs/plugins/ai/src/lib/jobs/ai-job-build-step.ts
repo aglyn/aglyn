@@ -15,23 +15,30 @@
  * limitations under the License.
  */
 
+import { aiJobCancelAsked } from './ai-job-cancel'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import type { PluginAiCapability } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   AI_BUILD_LIMITS,
+  AI_BUILD_MADE_INPUT,
   AI_BUILD_PUBLISH_INPUT,
   aiArticle,
-  aiBuildCreditEstimate,
+  aiBuildCreditRange,
   aiBuildDegradation,
   aiBuildInitialLedger,
   aiBuildItemDelivered,
   aiBuildItemOpen,
   aiBuildNextUnit,
   aiBuildOrder,
+  aiBuildItemOutputNote,
   aiBuildPlacedItemLines,
+  aiBuildPlanMissingInput,
   aiBuildPlanShapeRefusal,
+  aiBuildSmaller,
   aiBuildUnits,
+  type AiBuildMade,
   type AiBuildOps,
   type AiBuildUnit,
 } from '../model/ai-build-job'
@@ -45,7 +52,16 @@ import type {
   AiJobPlan,
 } from '../model/ai-jobs.types'
 import { AI_SITE_MAX_SECTIONS } from '../model/ai-site-job'
-import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import {
+  AI_CREDITS_CONFIRM_CODE,
+  aiCreditsPromptFor,
+  aiCreditsPromptText,
+  type AiCreditRange,
+  type AiCreditsPrompt,
+  type AiCreditsSmaller,
+} from '../model/ai-credit-estimate'
+import { aiFreeCreditsNoneLeftText, aiSiteWords } from '../model/ai-site-job'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import { aiModelForStep } from '../providers/routing'
 import {
   AI_BUILD_UNIT_EMPTY_COPY,
@@ -54,15 +70,13 @@ import {
   aiUnitFailure,
   aiUnitSpend,
 } from './ai-build-unit-outcome'
-import { assistCreditsFromUsd } from '../usage/assist-credits'
-import { ASSIST_RETURNED_USD_FIELD, assistSpendAfterReturnsUsd } from '../usage/assist-credit-returns'
-import { freeAccountUsageRef, freeAssistAccount, type AssistMeteredOrg } from '../usage/assist-free-taste'
 import { aiBuildOps, type AiBuildOpsContext } from './ai-build-capabilities'
 import {
   aiJobAdmissionRefusal,
   registerAiJobAdmission,
   type AiJobAdmission,
   type AiJobAdmissionContext,
+  type AiJobAdmissionRefusal,
 } from './ai-job-admission'
 import { aiOriginJobId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
@@ -75,14 +89,44 @@ import {
 } from './ai-job-plugin-drafts'
 import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
-import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiJobUsesLayoutLanguage, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import { aiDatasetListingsOf } from './ai-job-site-datasets'
+import { AI_SITE_EVENT_OP, aiEventsListings } from './ai-job-site-events'
+import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
+import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
+import {
+  AI_BUILD_STORE_OP,
+  AI_BUILD_STORE_PAGES_PRESENT_NOTE,
+  aiBuildStoreLayoutLinks,
+  aiBuildStoreLayoutOf,
+  aiBuildStorePagesOf,
+  aiBuildStorePagesStillMissing,
+  type AiBuildStoreLinksState,
+  type AiStoreSitePage,
+} from '../model/ai-build-store-pages'
+import type { AiStoreLayoutLinks } from '../model/ai-layout-store-links'
+import { writeAiStoreLinksLayoutDraft } from './ai-job-store-links-layout'
+import type { AiSitePublishStoreLinks } from './ai-site-publish'
+import {
+  AI_SITE_STORE_LINKS_INPUT,
+  AI_SITE_STORE_PAGES_NOTE,
+  aiStoreFrameLinks,
+  aiStorePagesToWrite,
+} from '../model/ai-site-store-pages'
+import {
+  AI_SITE_STORE_PAGES_INPUT,
+  aiSiteStorePageId,
+  aiSiteStorePagesRefusal,
+  runAiSiteStorePagesUnit,
+  type AiSiteStorePagesInput,
+} from './ai-job-site-store-pages'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
   type AiJobItemOutcome,
   type AiJobStepOutcome,
   type AiJobStepRunner,
 } from './ai-job-text-step'
-import { aiJobPublishesBuild, aiPublishGuidedSite } from './ai-site-publish'
+import { aiJobPublishesBuild, aiMergeSitePublish, aiPublishGuidedSite } from './ai-site-publish'
 import {
   AI_PLANNED_JOB_KINDS,
   aiJobStepRunMinimumMs,
@@ -140,7 +184,7 @@ export const AI_BUILD_PAGE_NOT_WRITTEN_COPY = 'The page was not written from its
  * sections and its listing — so a runner that never finishes is still
  * bounded while the largest plan is not. Try again starts the count over.
  */
-export const AI_BUILD_MAX_PASSES = AI_BUILD_LIMITS.units * (AI_SITE_MAX_SECTIONS + 1)
+export const AI_BUILD_MAX_PASSES = AI_BUILD_LIMITS.units * (AI_SITE_MAX_SECTIONS + 1) + 1
 
 /** The job kind a creation of the build is built by. */
 const CREATION_JOB_KINDS: Partial<Record<AiBuildPlanCreateKind, AiJobKind>> = {
@@ -157,6 +201,9 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
   const runnerKind = ops.get(unit.op)?.runnerKind
   return runnerKind ? (runnerKind as AiJobKind) : null
 }
+
+/** What the job drawer says under an item another plugin's writer made (`model/ai-build-job.ts`). */
+export { aiBuildItemOutputNote }
 
 /** The id a unit's job, and so its draft, is named by. */
 export function aiBuildUnitJobId(job: Pick<AiJob, '$id'>, unit: AiBuildUnit): string {
@@ -191,7 +238,15 @@ export function aiBuildUnitJob(
   const placedByScreens = new Set(plan.screens.flatMap((screen) => screen.sections.flatMap((section) => section.uses)))
   if (unit.creation) {
     unitPlan.reuse = plan.reuse.filter((entry) => !placedByScreens.has(entry.id))
-    unitPlan.create = [{ ...unit.creation, duplicateOf: aiSiteResolvedRef(unit.creation.duplicateOf, built) }]
+    unitPlan.create = [
+      {
+        ...unit.creation,
+        duplicateOf: aiSiteResolvedRef(unit.creation.duplicateOf, built),
+        // The dataset a form writes to, new or the site's own (AGL-3616); one
+        // this build failed to make leaves the form as it always was.
+        ...(unit.creation.writesTo ? { writesTo: aiSiteResolvedRef(unit.creation.writesTo, built) } : {}),
+      },
+    ]
     brief.push(`Build the ${unit.creation.kind} “${unit.creation.name}”: ${unit.creation.why}`)
   }
   if (unit.screen) {
@@ -221,7 +276,10 @@ export function aiBuildUnitJob(
       },
     ]
     brief.push(`Build the page “${screen.title}”, at ${screen.slug}.`)
-    brief.push(...aiBuildPlacedItemLines(unit, { units: context.units, ledger: context.ledger, ops: context.ops }))
+    // A build's events are listed by the platform (AGL-3755), never written by the page.
+    brief.push(
+      ...aiBuildPlacedItemLines(unit, { units: context.units, ledger: context.ledger, ops: context.ops, placedByCode: [AI_SITE_EVENT_OP] }),
+    )
   }
   const item = unit.item
   if (item) {
@@ -239,6 +297,22 @@ export function aiBuildUnitJob(
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
+  // An item is told the pages and layouts this build made before it, which
+  // its arguments may link as `new:<name>` (a menu item, AGL-3728).
+  if (item) {
+    const rows = new Map(context.ledger.map((row) => [row.slot, row]))
+    const made: AiBuildMade = {
+      pages: context.units.flatMap((one) => {
+        const row = rows.get(one.slot)
+        return one.screen?.id && row && aiBuildItemDelivered(row) ? [{ title: one.screen.title, id: one.screen.id }] : []
+      }),
+      layouts: [...built.entries()].filter(([, entry]) => entry.kind === 'layout').map(([name, entry]) => ({ name, id: entry.id })),
+    }
+    if (made.pages.length || made.layouts.length) inputs[AI_BUILD_MADE_INPUT] = made
+  }
+  // A dataset this build made for its form, which the form may bind (AGL-3616).
+  const madeFor = unit.creation?.kind === 'form' && isAiPlanNewRef(unit.creation.writesTo) ? unitPlan.create[0]?.writesTo : null
+  if (madeFor) inputs[AI_FORM_DATASET_MADE_INPUT] = madeFor
   // A build's pages and layouts are designed in the layout language and
   // compiled (AGL-3660), told the pages the build plans and where its form is.
   if (context.kind === 'page' || context.kind === 'layout') {
@@ -247,7 +321,38 @@ export function aiBuildUnitJob(
     if (pages.length) inputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) inputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
+    // The datasets this build made, repeated in the sections that name them (AGL-3616),
+    // and the site's own the plan reuses (AGL-3747): the page reads their fields,
+    // and the record pages the site already serves for them, off its inventory.
+    const datasets = [...built.entries()]
+      .filter(([, entry]) => entry.kind === 'dataset')
+      .map(([name, entry]) => ({ id: entry.id, name: context.units.find((one) => one.item?.name.toLowerCase() === name)?.label ?? entry.label }))
+    for (const entry of plan.reuse) {
+      if (entry.kind !== 'dataset' || datasets.some((one) => one.id === entry.id)) continue
+      datasets.push({ id: entry.id, name: plan.labels?.[entry.id] ?? entry.id })
+    }
+    const listings = aiDatasetListingsOf(datasets, plan.screens)
+    // The events this build wrote, in the sections that name them (AGL-3755).
+    const eventUnits = context.units.filter((one) => one.item?.op === AI_SITE_EVENT_OP)
+    const ledgerRows = new Map(context.ledger.map((row) => [row.slot, row]))
+    listings.push(
+      ...aiEventsListings({
+        written: eventUnits
+          .filter((one) => {
+            const row = ledgerRows.get(one.slot)
+            return Boolean(row && aiBuildItemDelivered(row) && row.outputs.length)
+          })
+          .map((one) => one.item?.name ?? one.label),
+        planned: eventUnits.map((one) => one.item?.name ?? one.label),
+        screens: plan.screens,
+      }),
+    )
+    if (listings.length) inputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
+  // A build that makes the site a store links its account and policies from
+  // the layout it makes (AGL-3676), by path: they are written after it.
+  const storePages = aiBuildStorePagesOf(plan)
+  if (context.kind === 'layout' && storePages) inputs[AI_SITE_STORE_LINKS_INPUT] = aiStoreFrameLinks(storePages.pages)
   return {
     ...job,
     $id: aiBuildUnitJobId(job, unit),
@@ -285,6 +390,144 @@ export interface AiJobBuildStepDeps {
   readNodes?: typeof readAiDraftNodes
   /** The publish a build asked for and confirmed. */
   publish?: typeof aiPublishGuidedSite
+  /** A store's own pages' pass and whether they may be added here (AGL-3676); specs hand in fakes. */
+  storePages?: AiJobStepRunner
+  storePagesRefusal?: typeof aiSiteStorePagesRefusal
+  /** The site's pages as they are now, which a store's own pages are checked against before they are written. */
+  readSitePages?: typeof readAiStoreSitePages
+  /** The draft version of the site's layout a store's links are written into. */
+  writeStoreLinks?: typeof writeAiStoreLinksLayoutDraft
+}
+
+/** The site's pages as a store's own pages are checked against them (AGL-3676): every page that is not deleted. */
+export async function readAiStoreSitePages(firestore: FirebaseFirestore.Firestore, hostId: string): Promise<AiStoreSitePage[]> {
+  const snapshot = await firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('screens')
+    .select('displayName', 'slug', 'kind', 'deletedAt', 'layoutId')
+    .get()
+  return snapshot.docs.flatMap((doc) => {
+    const kind = doc.get('kind')
+    if (doc.get('deletedAt') || (kind && kind !== 'template')) return []
+    const slug = String(doc.get('slug') ?? '')
+    const layoutId = doc.get('layoutId')
+    return slug
+      ? [{ id: doc.id, slug, title: String(doc.get('displayName') ?? ''), template: kind === 'template', layoutId: typeof layoutId === 'string' && layoutId ? layoutId : null }]
+      : []
+  })
+}
+
+/**
+ * What a build's store pages unit is told (AGL-3676): the pages its plan kept,
+ * less any the site has gained since — never counting the pages this unit
+ * wrote itself on an earlier pass, which it finds again by their ids — what
+ * their words link, and the layout they render inside: the plan's Shop
+ * page's, else the site's own (`aiBuildStoreLayoutOf`).
+ */
+export function aiBuildStorePagesInput(
+  job: AiJob,
+  context: { unitJobId: string; sitePages: readonly AiStoreSitePage[]; units: readonly AiBuildUnit[]; ledger: readonly AiJobItemLedger[] },
+): AiSiteStorePagesInput | null {
+  const plan = job.plan as AiJobPlan
+  const kept = aiBuildStorePagesOf(plan)
+  if (!kept) return null
+  const own = new Set(kept.pages.map((page) => aiSiteStorePageId(context.unitJobId, page.key)))
+  const pages = aiBuildStorePagesStillMissing(
+    kept.pages,
+    context.sitePages.filter((page) => !page.id || !own.has(page.id)),
+  )
+  const built = aiBuildBuiltRefs(context.units, context.ledger, job.outputs ?? [])
+  const shop = plan.screens.find((screen) => !screen.record && screen.slug.replace(/^\/+/, '').split('/')[0].toLowerCase() === kept.facts.shopPath.slice(1))
+  const layout = shop ? aiSiteResolvedRef(shop.layout, built) : null
+  return {
+    pages,
+    facts: kept.facts,
+    layoutId: aiBuildStoreLayoutOf(layout && !isAiPlanNewRef(layout) ? layout : null, context.sitePages),
+  }
+}
+
+/**
+ * Adds a store's links to the site's own layout (AGL-3676), as a draft
+ * version, where the build made no layout of its own for its store pages: the
+ * outputs that record it — the layout version written (`storeLinks: draft`),
+ * and on the first page `storeLinks: missing` where the layout had no header
+ * or footer list to add them to, or there is no layout at all.
+ */
+export async function aiBuildStoreLinksOutputs(
+  firestore: FirebaseFirestore.Firestore,
+  input: {
+    job: AiJob
+    unitJobId: string
+    store: AiSiteStorePagesInput
+    outputs: readonly AiJobOutput[]
+    sitePages: readonly AiStoreSitePage[]
+    builtLayouts: ReadonlySet<string>
+    now: Date
+  },
+  write: typeof writeAiStoreLinksLayoutDraft = writeAiStoreLinksLayoutDraft,
+): Promise<AiJobOutput[]> {
+  const outputs = input.outputs.map((output) => ({ ...output }))
+  const layoutId = input.store.layoutId
+  // A layout this build made was told the store's links as it was compiled.
+  if (layoutId && input.builtLayouts.has(layoutId)) return outputs
+  const written = new Set(outputs.map((output) => output.proposal?.['storePage']).filter((key): key is string => typeof key === 'string'))
+  const links = aiBuildStoreLayoutLinks(input.store.pages, written)
+  const missing = (): AiJobOutput[] => {
+    const [first, ...rest] = outputs
+    const state: AiBuildStoreLinksState = 'missing'
+    return first ? [{ ...first, proposal: { ...(first.proposal ?? {}), storeLinks: state } }, ...rest] : outputs
+  }
+  if (!layoutId || !input.job.hostId) return missing()
+  const hrefs = new Set([...links.header, ...(links.cart ? [links.cart] : []), ...links.footer].map((link) => link.href.slice(1)))
+  const screenPaths: Record<string, string> = {}
+  for (const page of input.sitePages) {
+    const slug = page.slug.replace(/^\/+/, '').split('/')[0].toLowerCase()
+    if (page.id && hrefs.has(slug)) screenPaths[page.id] = slug
+  }
+  const draft = await write(firestore, {
+    hostId: input.job.hostId,
+    layoutId,
+    versionId: `${input.unitJobId}-links`.slice(0, 64),
+    links,
+    screenPaths,
+    uid: input.job.createdBy,
+    aiJobId: aiOriginJobId(input.job),
+    now: input.now,
+  })
+  if (draft.status === 'present') return outputs
+  if (draft.status === 'gone') return missing()
+  const versionId = draft.versionId
+  const layout: AiJobOutput[] = versionId
+    ? [
+        {
+          resource: 'layout',
+          id: draft.layoutId,
+          versionId,
+          hostId: input.job.hostId,
+          hostSubdomain: outputs.find((output) => output.hostSubdomain)?.hostSubdomain,
+          label: draft.name,
+          note: 'A new draft version with Account and policy links. Visitors see it once it is published.',
+          proposal: { storeLinks: 'draft' satisfies AiBuildStoreLinksState, links, screenPaths },
+        },
+      ]
+    : []
+  return [...(draft.status === 'unrecognized' ? missing() : outputs), ...layout]
+}
+
+/** The store's links a build drafted into the site's layout (AGL-3676), as its publish puts them live; `null` where it drafted none. */
+export function aiBuildStoreLinksToPublish(outputs: readonly AiJobOutput[]): AiSitePublishStoreLinks | null {
+  // The newest: a retried store drafts its links again after the first attempt's (AGL-3739).
+  const draft = [...outputs]
+    .reverse()
+    .find((output) => output.resource === 'layout' && output.proposal?.['storeLinks'] === 'draft' && output.versionId)
+  if (!draft?.versionId) return null
+  return {
+    layoutId: draft.id,
+    versionId: draft.versionId,
+    links: draft.proposal?.['links'] as AiStoreLayoutLinks,
+    screenPaths: (draft.proposal?.['screenPaths'] ?? {}) as Record<string, string>,
+  }
 }
 
 /** Whether a build's workspace spends the Free taste. */
@@ -306,6 +549,10 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
   const pluginAdmission = deps.pluginAdmission ?? aiPluginDraftAdmissionRefusal
   const readNodes = deps.readNodes ?? readAiDraftNodes
   const publish = deps.publish ?? aiPublishGuidedSite
+  const storePagesRunner = deps.storePages ?? runAiSiteStorePagesUnit
+  const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
+  const readSitePages = deps.readSitePages ?? readAiStoreSitePages
+  const writeStoreLinks = deps.writeStoreLinks ?? writeAiStoreLinksLayoutDraft
 
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore } = context
@@ -333,24 +580,66 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     const othersOpen = (slot: string) =>
       ordered.some((one) => one.slot !== slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }))
 
-    /** The build's last pass puts its pages live, where it was asked and confirmed. */
-    const finish = async (outcome: AiJobStepOutcome, extraPages: readonly AiJobOutput[] = []): Promise<AiJobStepOutcome> => {
-      if (!aiJobPublishesBuild(job) || job.sitePublish || !job.hostId) return outcome
+    /**
+     * The build's last pass puts its pages live, where it was asked and
+     * confirmed. Once it has, Try again's last pass puts only the pages the
+     * retry built live (AGL-3739, AGL-3730's fix for a site start),
+     * merged into the record of the first.
+     */
+    const finish = async (
+      outcome: AiJobStepOutcome,
+      extraPages: readonly AiJobOutput[] = [],
+      extraOutputs: readonly AiJobOutput[] = [],
+    ): Promise<AiJobStepOutcome> => {
+      if (!aiJobPublishesBuild(job) || !job.hostId) return outcome
+      const previous = job.sitePublish ?? null
+      const retry = Boolean(previous?.published.length)
+      const already = new Set((previous?.published ?? []).map((page) => page.id))
+      // A record template renders once per record only once its binding is
+      // saved, so it is never published at its own address (AGL-3616).
+      // A store's own pages (AGL-3676) go live with the pages the build planned.
       const pageIds = new Set(
         units
-          .filter((one) => one.screen && aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }))
+          .filter(
+            (one) =>
+              ((one.screen && !one.screen.record) || one.op === AI_BUILD_STORE_OP) &&
+              aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }),
+          )
           .flatMap((one) => rows.get(one.slot)?.outputs ?? []),
       )
-      const pages = [
+      const built = [
         ...(job.outputs ?? []).filter((output) => output.resource === 'screen' && pageIds.has(output.id)),
         ...extraPages,
       ]
+      const pages = built.filter((page) => !already.has(page.id))
       if (!pages.length) return outcome
-      const sitePublish = await publish(firestore, { job, outputs: pages, now: context.now }).catch((error: unknown) => {
+      // A canceled build never puts anything live (AGL-3616): its pages stay drafts.
+      if (await aiJobCancelAsked(firestore, job, context.signal)) return outcome
+      // The store pages a layout this build made links and that were not written come out of it.
+      const storePages = aiBuildStorePagesOf(plan)
+      const live = new Set(built.map((page) => page.proposal?.['storePage']).filter(Boolean))
+      const unwrittenHrefs = storePages
+        ? aiStorePagesToWrite(storePages.pages).filter((page) => !live.has(page.key)).map((page) => page.href)
+        : []
+      // A retry puts the store's links live only with store pages it built:
+      // the first publish's links draft is live already, and a person may have edited it since.
+      const storeLinks =
+        !retry || pages.some((page) => page.proposal?.['storePage'])
+          ? aiBuildStoreLinksToPublish([...(job.outputs ?? []), ...extraOutputs])
+          : null
+      const sitePublish = await publish(firestore, {
+        job,
+        outputs: pages,
+        now: context.now,
+        ...(unwrittenHrefs.length ? { unwrittenHrefs } : {}),
+        ...(storeLinks ? { storeLinks } : {}),
+        ...(retry ? { retry: true } : {}),
+      }).catch((error: unknown) => {
         console.error('ai build publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
       })
-      return sitePublish ? { ...outcome, sitePublish } : outcome
+      if (!sitePublish) return outcome
+      return { ...outcome, sitePublish: previous ? aiMergeSitePublish(previous, sitePublish) : sitePublish }
     }
 
     if (!unit) return finish({ ...aiUnspentOutcome(model), ...init })
@@ -367,6 +656,67 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     if (degradation.skip) {
       return settle({ slot: unit.slot, status: 'skipped', note: degradation.skip, degradedBy: degradation.degradedBy })
     }
+    // A store's own pages (AGL-3676): written by code, behind the site start's gate.
+    if (unit.op === AI_BUILD_STORE_OP) {
+      if (!job.hostId) return settle({ slot: unit.slot, status: 'skipped', note: 'Not built: open the site first.' })
+      if (rows.get(unit.slot)?.status !== 'running') {
+        const refusal = await storePagesRefusal({ ...context, job }).catch((error: unknown) => {
+          console.error('ai build store pages admission failed', { orgId: job.orgId, jobId: job.$id, error })
+          return AI_BUILD_UNIT_EMPTY_COPY
+        })
+        if (refusal) return settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` })
+      }
+      const unitJobId = aiBuildUnitJobId(job, unit)
+      const sitePages = await readSitePages(firestore, job.hostId)
+      const input = aiBuildStorePagesInput(job, { unitJobId, sitePages, units, ledger })
+      if (!input) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy('store page') })
+      if (!aiStorePagesToWrite(input.pages).length) {
+        return settle({ slot: unit.slot, status: 'skipped', note: AI_BUILD_STORE_PAGES_PRESENT_NOTE })
+      }
+      const derived: AiJob = {
+        ...job,
+        $id: unitJobId,
+        kind: 'text',
+        steps: [],
+        outputs: [],
+        items: null,
+        plan: null,
+        inputs: { ...job.inputs, originJobId: aiOriginJobId(job), [AI_SITE_STORE_PAGES_INPUT]: input },
+      }
+      let outcome: AiJobStepOutcome
+      try {
+        outcome = await storePagesRunner({ ...context, job: derived })
+      } catch (error) {
+        if (aiUnitErrorRetryable(error)) throw error
+        console.error('ai build store pages threw', { orgId: job.orgId, jobId: job.$id, error })
+        return settle(failed(unit.slot, { ours: true, reason: 'step-failure', message: AI_BUILD_UNIT_EMPTY_COPY }))
+      }
+      const stopped = aiUnitFailure(unit.slot, outcome)
+      if (stopped) return settle(stopped, aiUnitSpend(outcome))
+      // The site's own header and footer link them (AGL-3676), in a draft
+      // version of its layout; a layout this build made already does.
+      const builtLayouts = new Set(
+        [...aiBuildBuiltRefs(units, ledger, job.outputs ?? []).values()].filter((entry) => entry.kind === 'layout').map((entry) => entry.id),
+      )
+      const outputs = await aiBuildStoreLinksOutputs(
+        firestore,
+        { job, unitJobId, store: input, outputs: outcome.outputs, sitePages, builtLayouts, now: context.now },
+        writeStoreLinks,
+      ).catch((error: unknown) => {
+        console.error('ai build store links not written', { orgId: job.orgId, jobId: job.$id, error })
+        return outcome.outputs
+      })
+      const ids = outputs.map((output) => output.id)
+      const done = settle({ slot: unit.slot, status: 'succeeded', outputs: ids, note: AI_SITE_STORE_PAGES_NOTE }, { ...aiUnitSpend(outcome), outputs })
+      if (done.continue) return done
+      rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: 'succeeded', outputs: ids })
+      return finish(
+        done,
+        outputs.filter((output) => output.resource === 'screen'),
+        outputs,
+      )
+    }
+
     const capability = ops.get(unit.op)
     const noun = capability?.noun ?? unit.op
     if (!capability) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy(noun) })
@@ -415,6 +765,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         uid: job.createdBy,
         org,
         now: context.now,
+        // Drafts of one build share what must not repeat (a cover photo) and read its business (AGL-3755).
+        act: { id: aiOriginJobId(job), business: aiSiteWords(job.inputs).about || job.brief || '' },
         id,
         name: item.name,
         content,
@@ -429,7 +781,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         hostId: job.hostId,
         label: written.name,
         draftResource: capability.draftResource,
-        note: `A draft, in ${capability.where}.`,
+        // A resource with no draft state is live once written (AGL-3745, AGL-3746).
+        note: aiBuildItemOutputNote(capability, written),
       }
       return settle(
         {
@@ -486,7 +839,13 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         page !== undefined &&
         (await aiSitePageWritten(
           firestore,
-          { hostId: job.hostId, unitJobId: derived.$id, screen: unit.screen, draftId: page.id },
+          {
+            hostId: job.hostId,
+            unitJobId: derived.$id,
+            screen: unit.screen,
+            draftId: page.id,
+            layoutLanguage: aiJobUsesLayoutLanguage(derived),
+          },
           readNodes,
         ))
       if (!written) {
@@ -544,41 +903,51 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   workflow: 'workflow',
   function: 'logic',
   edit: 'edit',
+  navigation: 'navigation',
+  duplicate: 'duplicate',
+  settings: 'settings',
+  media: 'media',
+  tracking: 'tracking',
 }
 
 /**
- * Why a Free build cannot be confirmed: its estimate is more than the owner's
- * Free allowance has left this month. Read off the account month the meter
- * writes, net of give-backs; a read that fails admits, since the reservation
- * still refuses at the wall.
+ * What a Free build's credits say before it runs (AGL-3722), on its measured
+ * p90 rather than its ceiling: `null` when what is left this month covers the
+ * p90 — or when nothing is known about what is left, since each pass's
+ * reservation still decides — and `null` too for a build the person chose
+ * to build as far as it goes (`confirmed`), whose prompt `onConfirmed` is
+ * told so the door records it. Otherwise a 409 carrying the prompt: the
+ * range, what is left, and the smaller first build. Nothing left at all is a
+ * 429. Read off the same two walls the reservation refuses at
+ * (`readFreeAiCreditsLeft`), net of give-backs.
  */
-export async function aiBuildFreeBalanceRefusal(input: {
+export async function aiBuildFreeCreditsRefusal(input: {
   firestore: FirebaseFirestore.Firestore
+  orgId: string
   org: object | null
-  estimate: number
+  range: AiCreditRange
+  smaller?: AiCreditsSmaller | null
+  confirmed?: boolean
+  onConfirmed?: (prompt: AiCreditsPrompt) => void
   now: Date
-}): Promise<string | null> {
-  const account = freeAssistAccount(input.org as AssistMeteredOrg | null)
-  if (!account?.accountUid) return null
-  try {
-    const month = input.now.toISOString().slice(0, 7)
-    const snapshot = await freeAccountUsageRef(input.firestore, account.accountUid, month).get()
-    const spent = assistCreditsFromUsd(
-      assistSpendAfterReturnsUsd(snapshot.get('estCostUsd'), snapshot.get(ASSIST_RETURNED_USD_FIELD)),
-    )
-    const left = Math.max(0, FREE_AI_TASTE_CREDITS_PER_MONTH - spent)
-    return input.estimate > left
-      ? `This plan is estimated at ${input.estimate} credits, and your Free AI credits have ${left} left this month. Ask for less, or upgrade for more.`
-      : null
-  } catch (error) {
-    console.error('ai build free balance read failed', { error })
-    return null
+  freeCreditsLeft?: typeof readFreeAiCreditsLeft
+}): Promise<AiJobAdmissionRefusal | null> {
+  const read = input.freeCreditsLeft ?? readFreeAiCreditsLeft
+  const credits = await read(input.firestore, { orgId: input.orgId, org: input.org, now: input.now })
+  if (!credits) return null
+  if (credits.left <= 0) return { status: 429, error: aiFreeCreditsNoneLeftText(credits.resetsOn) }
+  const prompt = aiCreditsPromptFor(input.range, credits, input.smaller ?? null)
+  if (!prompt) return null
+  if (!input.confirmed) {
+    return { status: 409, error: aiCreditsPromptText(prompt, 'build'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }
   }
+  input.onConfirmed?.(prompt)
+  return null
 }
 
 export interface AiBuildAdmissionDeps {
   opsFor?: (context: AiBuildOpsContext) => Promise<AiBuildOps>
-  freeBalanceRefusal?: typeof aiBuildFreeBalanceRefusal
+  freeCreditsLeft?: typeof readFreeAiCreditsLeft
   ownerOf?: typeof resolveOrgIdForHost
   now?: () => Date
 }
@@ -586,12 +955,12 @@ export interface AiBuildAdmissionDeps {
 /**
  * A build is admitted for a site of the job's own org where a page can be
  * built; and confirmed only for a plan it can build here — its shape, its
- * operations as this site has them, and on the Free taste an estimate the
- * month's Free credits still cover.
+ * operations as this site has them, and on the Free taste a measured p90
+ * the month's Free credits still cover — or the person's go-ahead to build
+ * what fits (AGL-3722).
  */
 export function createAiBuildJobAdmission(deps: AiBuildAdmissionDeps = {}): AiJobAdmission {
   const opsFor = deps.opsFor ?? ((context) => aiBuildOps(context))
-  const freeBalanceRefusal = deps.freeBalanceRefusal ?? aiBuildFreeBalanceRefusal
   const ownerOf = deps.ownerOf ?? resolveOrgIdForHost
   return async (context) => {
     if (!context.hostId) return { status: 400, error: 'Open the site to build on before asking Assist to build' }
@@ -606,14 +975,22 @@ export function createAiBuildJobAdmission(deps: AiBuildAdmissionDeps = {}): AiJo
     const ops = await opsFor({ orgId: context.orgId, hostId: context.hostId, org, host, freeTaste })
     const shape = aiBuildPlanShapeRefusal(plan, { freeTaste, ops })
     if (shape) return { status: 400, error: shape }
+    // Something only the person can give (AGL-3751): asked, never built without.
+    const missing = aiBuildPlanMissingInput(plan, ops)
+    if (missing) return { status: 400, error: missing }
     if (freeTaste) {
-      const refusal = await freeBalanceRefusal({
+      const refusal = await aiBuildFreeCreditsRefusal({
         firestore: context.firestore,
+        orgId: context.orgId,
         org,
-        estimate: aiBuildCreditEstimate(plan, { ops }),
+        range: aiBuildCreditRange(plan, { ops }),
+        smaller: aiBuildSmaller(plan, ops),
+        confirmed: context.creditsConfirmed === true,
+        onConfirmed: context.onCreditsConfirmed,
         now: deps.now?.() ?? new Date(),
+        freeCreditsLeft: deps.freeCreditsLeft,
       })
-      if (refusal) return { status: 403, error: refusal }
+      if (refusal) return refusal
     }
     return null
   }

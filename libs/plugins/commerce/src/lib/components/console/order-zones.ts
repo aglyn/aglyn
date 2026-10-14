@@ -23,7 +23,9 @@ import { BUNDLE_ID } from '../../constants/bundle-common'
 
 /**
  * The zones the order dialog hosts (AGL-3611): `orderDetail`, beside the
- * order's actions, and `orderFulfillment`, inside the Fulfill items panel.
+ * order's actions, and `orderFulfillment`, inside the Fulfill items panel;
+ * and `localDeliveryRow`, in a delivery's row of the Pickup & delivery queue
+ * (AGL-3695).
  *
  * Declared here because zones are declared by the plugin that hosts them (the
  * product zones are the precedent). A widget from another plugin — a shipping
@@ -99,6 +101,49 @@ export interface ConsoleOrderZoneOrder {
   }
   /** Whether the order was paid in Stripe test mode. */
   testMode: boolean
+  /**
+   * How the buyer receives it (AGL-3624): `shipping`, `pickup` or
+   * `local_delivery`. Optional, so a widget written before reads it as shipped.
+   */
+  fulfillmentMethod?: string
+  /** The store's own delivery, on a `local_delivery` order (AGL-3695); `null` otherwise. */
+  localDelivery?: ConsoleOrderZoneLocalDelivery | null
+}
+
+/**
+ * A local delivery as a widget reads it (AGL-3695): where it stands, the
+ * window the buyer booked, and the outside courier on it, if one was sent.
+ */
+export interface ConsoleOrderZoneLocalDelivery {
+  /** `scheduled`, `out_for_delivery`, `delivered` or `failed`. */
+  status: string
+  windowStartMs: number | null
+  windowEndMs: number | null
+  windowLabel: string | null
+  courier: {
+    provider: string
+    providerLabel: string
+    deliveryRef: string
+    state: string
+    trackingUrl: string | null
+    etaMs: number | null
+    reason: string | null
+    testMode: boolean
+    updatedAtMs: number
+  } | null
+}
+
+/**
+ * What the `localDeliveryRow` zone hands each widget (AGL-3695): one local
+ * delivery in the Pickup & delivery queue, beside the row's own step
+ * buttons. A widget there is a compact control — a courier's "Send a
+ * courier" — and moves nothing itself: the courier's progress comes back
+ * through core's `core.local-delivery-records`.
+ */
+export interface ConsoleLocalDeliveryRowZoneProps {
+  hostId: string
+  orgId: string | undefined
+  order: ConsoleOrderZoneOrder
 }
 
 /** A shipment a widget asks the dialog to record. */
@@ -162,6 +207,9 @@ export const ORDER_DETAIL_ZONE =
 export const ORDER_FULFILLMENT_ZONE =
   definePluginZone<ConsoleOrderFulfillmentZoneProps>('orderFulfillment')
 
+export const LOCAL_DELIVERY_ROW_ZONE =
+  definePluginZone<ConsoleLocalDeliveryRowZoneProps>('localDeliveryRow')
+
 /** Declares the two order zones, from the console registrar. */
 export function registerCommerceOrderZones(): void {
   const owner = { pluginId: BUNDLE_ID }
@@ -184,6 +232,17 @@ export function registerCommerceOrderZones(): void {
       layout: 'bare',
       description:
         'Inside the order dialog’s Fulfill items panel. A widget here reads the units picked and fills the carrier and tracking through `applyTracking` (a bought label’s), for the merchant to confirm with Fulfill.',
+    },
+    owner,
+  )
+  registerPluginZone(
+    {
+      zone: LOCAL_DELIVERY_ROW_ZONE,
+      label: 'Local delivery row',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'In a local delivery’s row of the Pickup & delivery queue, beside its step buttons. A widget here is a compact control that reads the order and its delivery — the window, the status and any courier on it — such as sending an outside courier.',
     },
     owner,
   )

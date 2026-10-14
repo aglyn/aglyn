@@ -61,6 +61,7 @@ import {
   useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../hooks/use-host'
+import useDiscardChangesMenuItem from '../../../../../../../../hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -275,6 +276,8 @@ function TemplateBesignerPage(props) {
   const clearCanvas = useClearCanvasCallback('template')
   const repairDocument = useRepairDocumentCallback('template')
   const {
+    discardChanges,
+    canDiscard,
     saveAvailable,
     remoteChanged,
     draft,
@@ -402,6 +405,17 @@ function TemplateBesignerPage(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
+  // File ▸ Discard changes… (AGL-3723): back to the stored document, drafts dropped.
+  const discardMenuItem = useDiscardChangesMenuItem({
+    noun: 'template',
+    live: false,
+    canDiscard,
+    discardChanges,
+    onDiscarded: useCallback(() => {
+      clearMirrorRef.current?.()
+    }, []),
+  })
+
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
     <ScreenLinkContext.Provider value={screenLinks}>
@@ -470,6 +484,7 @@ function TemplateBesignerPage(props) {
                 children: saveAvailable ? 'Save' : 'Up to Date',
                 onClick: handleSave,
               },
+              discardMenuItem,
               {
                 id: 'center-nav-file-close',
                 children: 'Close',

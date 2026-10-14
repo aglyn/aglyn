@@ -17,10 +17,12 @@
 
 import {
   getSystemEmailTemplate,
+  retentionDocsMergeValues,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { AuthActionKind } from '../../app/api/_lib/auth-action-url'
+import { DOCS_BASE_URL } from '../../constants/docs-links'
 
 /**
  * WHAT STAFF MAY SEND ONE ACCOUNT BY HAND (AGL-3691).
@@ -147,6 +149,8 @@ export function autoMergeValues(
     billingUrl: slug ? `${origin}/${slug}/billing` : '',
     settingsUrl: `${origin}/manage/notifications/settings`,
     preferencesUrl: `${origin}/manage/user/emails`,
+    // The getting-started emails' docs links (AGL-3692), as the sweep fills them.
+    ...retentionDocsMergeValues(DOCS_BASE_URL),
   }
   const action = ACTION_LINK_SYSTEM_EMAILS[definition.key]
   if (action) known[action.token] = ACTION_LINK_PREVIEW_PLACEHOLDER

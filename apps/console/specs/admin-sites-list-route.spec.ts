@@ -140,11 +140,40 @@ describe('the staff Sites list', () => {
     expect((await get({ filters: '{not json' })).status).toBe(400)
   })
 
-  it('walks every site in document-id order, and searches on the query', async () => {
+  /*
+   * Newest created first is the QUERY's order, so page two continues it —
+   * never the document id, which reads in no order a person can see, and
+   * never a sort of the page already read.
+   */
+  it('reads newest created first by default', async () => {
+    expect((await get()).status).toBe(200)
+    expect(ordering).toEqual([['createdAt', 'desc']])
+  })
+
+  it('keeps newest created first under the search, which it pages on the query', async () => {
     const response = await get({ search: 'Bakery' })
     expect(response.status).toBe(200)
-    expect(ordering).toEqual([['__name__', 'asc']])
+    expect(ordering).toEqual([['createdAt', 'desc']])
     expect(wheres).toEqual([['searchTokens', 'array-contains', 'bakery']])
+  })
+
+  it('orders by Last updated on the query when that header is asked', async () => {
+    expect((await get({ sort: 'updatedAt:desc' })).status).toBe(200)
+    expect(ordering).toEqual([['updatedAt', 'desc']])
+    ordering = []
+    expect((await get({ sort: 'updatedAt:asc' })).status).toBe(200)
+    expect(ordering).toEqual([['updatedAt', 'asc']])
+  })
+
+  it('ships each site’s created and last-updated times', async () => {
+    hosts[0].data['createdAt'] = { seconds: 1_760_000_000 }
+    hosts[0].data['updatedAt'] = { seconds: 1_760_050_000 }
+    const { sites } = await (await get()).json()
+    expect(sites[0]).toMatchObject({
+      createdAt: { seconds: 1_760_000_000 },
+      updatedAt: { seconds: 1_760_050_000 },
+    })
+    expect(sites[1]).toMatchObject({ createdAt: null, updatedAt: null })
   })
 
   it('puts an organization filter on the query', async () => {

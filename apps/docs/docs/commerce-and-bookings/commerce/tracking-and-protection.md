@@ -28,7 +28,7 @@ every plan that includes selling, at no extra cost.
 
 ## Connect a service
 
-1. Go to **Commerce → Settings** and find the card for the service:
+1. Open the store's settings and find the card for the service:
    **AfterShip**, **Route** or **Narvar**. Only the services your deployment
    offers are shown.
 2. Paste the credentials from your account:

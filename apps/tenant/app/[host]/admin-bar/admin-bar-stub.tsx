@@ -25,11 +25,26 @@ import {
   isEditOptedOut,
   readStoredEditToken,
 } from './admin-bar-shared'
+import { ELEMENT_PICK_PARAM } from '@aglyn/aglyn/app-utils/element-pick-protocol'
 
 // The bar proper is a SEPARATE chunk, requested only after something below
 // arms it. An anonymous visitor pays for this stub alone: two listeners and
 // an idle callback, no fetch, no UI, no bar code.
 const AdminBar = dynamic(() => import('./admin-bar'), { ssr: false })
+
+// The console's element picker (AGL-3758), likewise its own chunk, fetched
+// only by a page the Actions card opened in its picker frame.
+const ElementPickMode = dynamic(() => import('./element-pick-mode'), {
+  ssr: false,
+})
+
+/** Whether this page is the Actions card's picker frame. */
+function isPickFrame(): boolean {
+  return (
+    window.parent !== window &&
+    new URLSearchParams(window.location.search).has(ELEMENT_PICK_PARAM)
+  )
+}
 
 export interface AdminBarStubProps {
   hostId: string
@@ -67,9 +82,16 @@ export type AdminBarArmMode = 'manual' | 'auto'
  */
 export default function AdminBarStub({ hostId, consoleOrigin }: AdminBarStubProps) {
   const [armed, setArmed] = useState<AdminBarArmMode | null>(null)
+  const [picking, setPicking] = useState(false)
 
   useEffect(() => {
     if (armed) return undefined
+    // The picker frame gets pick mode and never the bar: a click there
+    // chooses an element, and the bar would cover the page being picked from.
+    if (isPickFrame()) {
+      setPicking(true)
+      return undefined
+    }
     const arm = (mode: AdminBarArmMode) => setArmed(mode)
 
     // Off the critical path: don't even touch storage until idle.
@@ -107,6 +129,7 @@ export default function AdminBarStub({ hostId, consoleOrigin }: AdminBarStubProp
     }
   }, [armed, hostId])
 
+  if (picking) return <ElementPickMode consoleOrigin={consoleOrigin} />
   if (!armed) return null
   return (
     <AdminBar

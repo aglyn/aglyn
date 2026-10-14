@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { listFilterOperators } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
+  defaultHeaderSort,
   listQueryIndexes,
   missingListQueryIndexes,
   planListQuery,
@@ -33,6 +34,7 @@ import {
 import {
   STAFF_SITE_LIST_FILTER_FIELDS,
   STAFF_SITE_LIST_QUERY,
+  STAFF_SITE_LIST_SORT,
 } from '../utils/staff-site-list-query'
 
 const INDEX_FILE = JSON.parse(
@@ -77,7 +79,7 @@ describe('the staff Sites list has the composites its query shapes need', () => 
 })
 
 describe('every clause and the search word land on one query', () => {
-  it('organization, custom domain and the search, in document-id order', () => {
+  it('organization, custom domain and the search, newest created first', () => {
     const answer = plan(
       [
         { field: 'orgId', op: 'equals', value: 'org-1' },
@@ -92,7 +94,7 @@ describe('every clause and the search word land on one query', () => {
       'orgId ==',
       'hasCustomDomain ==',
     ])
-    expect(answer.orderBy).toEqual({ path: '__name__', direction: 'asc' })
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 
   it('Created leads the order while it is ranged over, beside every equality', () => {
@@ -140,6 +142,29 @@ describe('every clause and the search word land on one query', () => {
   })
 })
 
+describe('the list reads newest created first by default', () => {
+  it('orders the unfiltered query by Created, newest first, on its header', () => {
+    const answer = plan([])
+    expect(answer.orderBy).toEqual(STAFF_SITE_LIST_SORT)
+    expect(answer.orderBy).toMatchObject({
+      path: 'createdAt',
+      direction: 'desc',
+      column: 'createdAt',
+    })
+    expect(answer.notices).toEqual([])
+  })
+
+  it('never falls back to the document id, which no header names', () => {
+    expect(STAFF_SITE_LIST_QUERY.sorts[0]).toBe(STAFF_SITE_LIST_SORT)
+    expect(STAFF_SITE_LIST_QUERY.sorts.every((sort) => sort.path !== '__name__')).toBe(true)
+    expect(STAFF_SITE_LIST_QUERY.sorts.every((sort) => sort.column)).toBe(true)
+  })
+
+  it('is the order every alone sort falls back to', () => {
+    expect(defaultHeaderSort(STAFF_SITE_LIST_QUERY)).toBe(STAFF_SITE_LIST_SORT)
+  })
+})
+
 describe('every header sorts, at no new composite (AGL-3680)', () => {
   const sorted = (
     sort: { path: string; direction: 'asc' | 'desc' },
@@ -161,6 +186,22 @@ describe('every header sorts, at no new composite (AGL-3680)', () => {
     expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
     expect(answer.notices).toEqual(['Sorted by Created: Site sorts only with no filter or search on.'])
     expect(sorted({ path: 'createdAt', direction: 'asc' }, [], ['acme']).orderBy.direction).toBe('desc')
+  })
+
+  it('orders by Last updated both ways with nothing narrowing the list', () => {
+    for (const direction of ['desc', 'asc'] as const) {
+      const answer = sorted({ path: 'updatedAt', direction })
+      expect(answer.orderBy).toMatchObject({ path: 'updatedAt', direction, column: 'updatedAt' })
+      expect(answer.notices).toEqual([])
+    }
+  })
+
+  it('falls Last updated back to Created newest first under a filter, and says so', () => {
+    const answer = sorted({ path: 'updatedAt', direction: 'desc' }, [], ['bakery'])
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
+    expect(answer.notices).toEqual([
+      'Sorted by Created: Last updated sorts only with no filter or search on.',
+    ])
   })
 
   it("keeps Created newest first under every filter: its composites are the range's", () => {

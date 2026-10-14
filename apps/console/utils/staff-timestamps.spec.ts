@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { formatStaffTimestamp } from './staff-timestamps'
+import {
+  formatStaffActivity,
+  formatStaffAgo,
+  formatStaffTimestamp,
+} from './staff-timestamps'
 
 describe('formatStaffTimestamp', () => {
   const moment = '2026-08-26T04:48:13.000Z'
@@ -54,5 +58,36 @@ describe('formatStaffTimestamp', () => {
    */
   it('passes an unparseable value through rather than hiding it', () => {
     expect(formatStaffTimestamp('not a date')).toBe('not a date')
+  })
+})
+
+describe('formatStaffAgo and formatStaffActivity (last activity)', () => {
+  const now = Date.parse('2026-10-09T20:00:00.000Z')
+  const before = (ms: number) => new Date(now - ms).toISOString()
+  const MIN = 60_000
+
+  it('says how long ago in the one unit worth reading', () => {
+    expect(formatStaffAgo(before(20_000), now)).toBe('just now')
+    expect(formatStaffAgo(before(12 * MIN), now)).toBe('12 min ago')
+    expect(formatStaffAgo(before(3 * 60 * MIN), now)).toBe('3 h ago')
+    expect(formatStaffAgo(before(5 * 24 * 60 * MIN), now)).toBe('5 d ago')
+    expect(formatStaffAgo(before(100 * 24 * 60 * MIN), now)).toBe('3 mo ago')
+    expect(formatStaffAgo(before(800 * 24 * 60 * MIN), now)).toBe('2 y ago')
+  })
+
+  it('reads a moment ahead of the reader clock as just now, never negative', () => {
+    expect(formatStaffAgo(new Date(now + 5 * MIN).toISOString(), now)).toBe('just now')
+  })
+
+  it('is null for nothing and for what does not parse', () => {
+    for (const empty of [null, undefined, '', 'not a date']) {
+      expect(formatStaffAgo(empty, now)).toBeNull()
+    }
+  })
+
+  it('pairs the local date and time with the age', () => {
+    const at = before(2 * 60 * MIN)
+    expect(formatStaffActivity(at, now)).toBe(`${new Date(at).toLocaleString()} · 2 h ago`)
+    expect(formatStaffActivity(null, now)).toBe('—')
   })
 })

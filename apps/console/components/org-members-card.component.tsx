@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 import {
   canManageOrg,
   CONSOLE_USER_TYPE_HINTS,
@@ -262,12 +263,24 @@ export function OrgMembersCard() {
   const listedMembers = filtering ? matched?.members : members
   const memberRows = useMemo<MemberRow[]>(
     () =>
-      (listedMembers ?? []).map((member) => ({
-        ...member,
-        name: member.displayName || member.email || member.$id,
-        roleKey: member.role ?? 'viewer',
-        accessKey: consoleUserType(member),
-      })),
+      (listedMembers ?? []).map((member) => {
+        // The roster row is the only identity a member surface may read
+        // (AGL-1122); it goes through the same account-identity resolver as
+        // the staff surfaces (AGL-3721), so a name and a photo are trimmed
+        // and vetted the same way everywhere.
+        const identity = resolveAccountIdentity({
+          idp: { displayName: member.displayName, photoURL: member.photoURL },
+          email: member.email,
+        })
+        return {
+          ...member,
+          displayName: identity.displayName ?? undefined,
+          photoURL: identity.photoUrl ?? undefined,
+          name: identity.label || member.$id,
+          roleKey: member.role ?? 'viewer',
+          accessKey: consoleUserType(member),
+        }
+      }),
     [listedMembers],
   )
   /*

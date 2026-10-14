@@ -71,7 +71,9 @@ export function formDatasetBindingOf(
     >
     const datasetFieldId = text(fieldProps['datasetFieldId'], 64)
     if (!datasetFieldId) continue
-    const submittedKey = text(fieldProps['fieldName'], 64) || 'field'
+    // `fieldName` on the all-in-one Form Field, `name` on MUI's inputs.
+    const submittedKey =
+      text(fieldProps['fieldName'] ?? fieldProps['name'], 64) || 'field'
     if (
       !(submittedKey in fieldMap) &&
       Object.keys(fieldMap).length >= FORM_DATASET_BINDING_MAX_FIELDS

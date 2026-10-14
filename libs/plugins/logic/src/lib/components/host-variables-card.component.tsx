@@ -60,7 +60,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getCountFromServer } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -77,6 +77,12 @@ import {
   summarizeDependents,
   type WhereUsedResult,
 } from '@aglyn/aglyn/app-utils/where-used'
+
+// The entry/item editor is its own chunk, loaded when a dictionary or list
+// variable is opened (AGL-3757).
+const StructuredValueEditor = lazy(
+  () => import('./structured-value-editor.component'),
+)
 
 /**
  * How many variables the card reads.
@@ -158,18 +164,17 @@ function VariableValueField(props: {
       )
     case 'dictionary':
     case 'collection':
+      // Rows, never typed JSON (AGL-3757). Keyed by the draft and type so
+      // opening another variable, or switching type, reads its value afresh.
       return (
-        <TextField
-          label="Value (JSON)"
-          placeholder={
-            draft.type === 'dictionary' ? '{"key": "value"}' : '["a", "b"]'
-          }
-          value={draft.value}
-          onChange={(event) => onChange(event.target.value)}
-          size="small"
-          multiline
-          minRows={3}
-        />
+        <Suspense fallback={null}>
+          <StructuredValueEditor
+            key={`${draft.id ?? 'new'}:${draft.type}`}
+            shape={draft.type}
+            value={draft.value}
+            onChange={onChange}
+          />
+        </Suspense>
       )
     default:
       return (

@@ -41,6 +41,8 @@ import { registerCommerceMediaPublishGuard } from './server/media-publish-guard'
 import { registerCommerceRecurringCharges } from './server/recurring-charges'
 import { registerProductCardReader } from './server/product-card'
 import { registerProductAiCapability } from './server/product-ai-capability'
+import { registerStoreSetupAiCapabilities } from './server/store-setup-ai-capability'
+import { registerStoreSetupAiWriter } from './server/store-setup-ai-writer.console'
 import { registerProductDraftWriter } from './server/product-drafts'
 import { registerCommerceTaxProfile } from './server/tax-profile'
 import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
@@ -169,6 +171,28 @@ registerPluginJob({
     if (!isEmailConfigured()) return
     const { sent } = await scanRestockAlerts(gate)
     if (sent) console.info(`commerce: sent ${sent} back-in-stock alerts`)
+  },
+})
+
+/**
+ * The review-request email (AGL-3736). HOURLY: a request is owed days after
+ * fulfilment, so an hour's lateness is invisible, and the scan is one
+ * collection-group range query over `reviewRequestDueAtMs` — a field only
+ * orders still owed a request carry, so an empty beat costs one read.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'review-request-emails',
+  intervalMinutes: 60,
+  description:
+    'Email each buyer one review request, with a single-use link per product, ' +
+    'days after their order is fulfilled (AGL-3736).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!isEmailConfigured()) return
+    const { scanReviewRequests } = await import('./server/review-requests')
+    const { sent } = await scanReviewRequests(gate)
+    if (sent) console.info(`commerce: sent ${sent} review requests`)
   },
 })
 
@@ -379,6 +403,11 @@ export function registerCommerceConsoleApi(): void {
   registerProductDraftWriter()
   // …and the operation an AI build plans for it, which that writer executes.
   registerProductAiCapability()
+  // …and the store's shipping, pickup, local delivery and tax settings an AI
+  // build sets up (AGL-3749), written live as the console's cards write them,
+  // with the four operations that writer executes.
+  registerStoreSetupAiWriter()
+  registerStoreSetupAiCapabilities()
   // …and why a file somebody is SELLING may not be made public (AGL-3080).
   // The media library asks before it hands an asset its permanent CDN URL
   // back; what a product is, and which of its fields hold paid media, is
@@ -433,6 +462,15 @@ export function registerCommerceConsoleApi(): void {
   )
   registerPluginApiRoute('commerce/products/stock', async (req, res) =>
     (await import('./server/products-write')).productStockHandler(req, res),
+  )
+  // The order dialog's note and restock answer for the native apps
+  // (AGL-3651, AGL-3652): the console's own timeline computation, in one
+  // transaction on the stored order. Loaded on first call.
+  registerPluginApiRoute('commerce/order-note', async (req, res) =>
+    (await import('./server/order-annotations')).orderNoteHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/order-restock-answer', async (req, res) =>
+    (await import('./server/order-annotations')).orderRestockAnswerHandler(req, res),
   )
   // Issue / void store credit (AGL-2226). Server-side because the host
   // catch-all in the Firestore rules would otherwise let a client write

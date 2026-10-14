@@ -20,9 +20,10 @@ import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
 /**
  * THE ONE RULE FOR WHAT AN EVENT STORES.
  *
- * `hosts/{hostId}/events/{id}` has two writers that must agree: the Events
- * page's editor and the events import. Both hand what they were given to
- * {@link eventWrite} and store exactly what it answers, so a title is cut,
+ * `hosts/{hostId}/events/{id}` has three writers that must agree: the Events
+ * page's editor, the events import, and the `event` draft writer another
+ * plugin asks for (AGL-3743). Each hands what it was given to
+ * {@link eventWrite} and stores exactly what it answers, so a title is cut,
  * an end time is repaired and a cover description is dropped the same way
  * whichever of them wrote the event.
  *

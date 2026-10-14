@@ -49,8 +49,10 @@ The element draws its **Content** attribute and nothing else, so it takes no chi
 there's no position in a parsed document an element could occupy. Dropping onto it places your
 element **next to** the Markdown block rather than inside it, the same way every other
 [leaf element](drag-drop-hierarchy.md#leaf-elements-dont--dropping-on-one-makes-a-sibling)
-behaves. To put a picture *in* the document, write it as markdown — `![alt](https://…)` — and to
-put one beside the document, drop an **Image** as a sibling.
+behaves. To put a picture *in* the document, place the cursor where it goes and select the toolbar's
+**Image** button: type its **Alt text**, then select **Choose from media** to pick it from the
+site's media library (or paste a **URL**). To put one beside the document, drop an **Image**
+as a sibling.
 
 ### What the markdown supports
 

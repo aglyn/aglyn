@@ -112,7 +112,7 @@ export default function BillingSectionsLayout({
         // every level except theirs.
         ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
-      help="billing"
+      help={{ topic: 'billing', anchor: '#billing-page' }}
       header={{
         children: 'Billing',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },

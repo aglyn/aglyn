@@ -148,8 +148,8 @@ Merge fields, the preview, and what shared and personal mean are on
 
 ## Email capture
 
-The **Email capture** card holds the workspace's one **capture address** —
-`crm+…@in.aglyn.com` — with **Copy** and **Rotate address**. A message
+The **Email capture** card holds the workspace's one **capture address**, with **Copy**
+and **Rotate address**. The address looks like `crm+…@in.aglyn.com`. A message
 forwarded to it, or sent with it in **BCC**, is filed on the timeline of the
 contact or lead it was with, so a reply that reached your own mailbox lands on
 the record too. How a message is matched, what is kept and what is dropped is

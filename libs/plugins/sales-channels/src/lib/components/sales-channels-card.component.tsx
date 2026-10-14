@@ -59,6 +59,10 @@ export interface SalesChannelsCardProps {
 const formatTime = (ms: number | null | undefined): string =>
   ms ? new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : ''
 
+const salesChannelsHelp = pluginDocsHelp('salesChannels', {
+  anchor: '#set-up-sales-channels',
+})
+
 /**
  * SALES CHANNELS, on the store's Settings (AGL-3637): one card per shopping
  * channel, each with its feed's switch, the address to paste into the
@@ -112,7 +116,7 @@ export function SalesChannelsCard(props: SalesChannelsCardProps) {
 
   if (error && !state) {
     return (
-      <CardDisplay header="Sales channels" help={pluginDocsHelp('salesChannels')} contentGutterX contentGutterY>
+      <CardDisplay header="Sales channels" help={salesChannelsHelp} contentGutterX contentGutterY>
         <Alert severity="error">{error}</Alert>
       </CardDisplay>
     )
@@ -122,7 +126,7 @@ export function SalesChannelsCard(props: SalesChannelsCardProps) {
   return (
     <CardDisplay
       header="Sales channels"
-      help={pluginDocsHelp('salesChannels', { anchor: '#turn-on-a-channel' })}
+      help={salesChannelsHelp}
       subheader="List your products on Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping. Each channel reads its own product feed on a schedule, so changes reach it without another upload."
       HeaderProps={{
         action: (

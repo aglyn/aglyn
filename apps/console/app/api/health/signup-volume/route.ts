@@ -93,11 +93,16 @@ import {
   ORG_CREATION_WINDOW_MINUTES,
   platformVersion,
   SIGNUP_DROUGHT_WINDOW_MINUTES,
+  SIGNUP_LANDING_GRACE_MINUTES,
+  SIGNUP_LANDING_WINDOW_HOURS,
   SIGNUP_REFUSAL_WINDOW_MINUTES,
   signupDroughtHealth,
+  signupLandingHealth,
   signupRefusalsHealth,
   signupsHealth,
   type SignupDroughtCheck,
+  type SignupLandingCheck,
+  type SignupLandingOrg,
   type SignupRefusalMarker,
   type SignupRefusalsCheck,
   type SignupAttemptMarker,
@@ -356,15 +361,68 @@ const attemptsProbe = memoizeWithTtl<{
   }
 })
 
+/**
+ * Orgs old enough to have a site, and whether they have one (AGL-3725).
+ *
+ * Both edges are on `createdAt`, so the automatic single-field index the
+ * volume count above already uses serves it and no composite index is
+ * needed. Only the size of each org's `hosts` map leaves this function.
+ *
+ * Bounded at 200. That is several weeks of sign-ups at today's rate packed
+ * into twelve hours; a wave that large is `signupVolume`'s alarm, not this.
+ */
+const LANDING_ORG_READ_LIMIT = 200
+
+const landingProbe = memoizeWithTtl<{
+  orgs: SignupLandingOrg[] | null
+  ms: number
+}>(PROBE_TTL_MS, async () => {
+  const startedAt = Date.now()
+  try {
+    void firebaseAdmin
+    const db = getFirestore(getApp())
+    const now = Date.now()
+    const snapshot = await db
+      .collection('orgs')
+      .where(
+        'createdAt',
+        '>',
+        Timestamp.fromMillis(now - SIGNUP_LANDING_WINDOW_HOURS * 3_600_000),
+      )
+      .where(
+        'createdAt',
+        '<=',
+        Timestamp.fromMillis(now - SIGNUP_LANDING_GRACE_MINUTES * 60_000),
+      )
+      .limit(LANDING_ORG_READ_LIMIT)
+      .get()
+    const orgs: SignupLandingOrg[] = snapshot.docs.map(
+      (doc: { get: (field: string) => unknown }) => {
+        const hosts = doc.get('hosts')
+        return {
+          hostCount:
+            hosts && typeof hosts === 'object' ? Object.keys(hosts).length : 0,
+        }
+      },
+    )
+    return { orgs, ms: Date.now() - startedAt }
+  } catch {
+    // Null is degraded by contract (`orgs-unavailable`), like every sibling.
+    return { orgs: null, ms: Date.now() - startedAt }
+  }
+})
+
 export async function GET(): Promise<Response> {
   // Every probe in parallel — each memoizes independently, so a warm one
   // costs nothing and the endpoint's worst case stays one round trip.
-  const [orgCreations, signupRefusals, served, attempts] = await Promise.all([
-    orgCreationsProbe(),
-    refusalsProbe(),
-    servedProbe(),
-    attemptsProbe(),
-  ])
+  const [orgCreations, signupRefusals, served, attempts, landing] =
+    await Promise.all([
+      orgCreationsProbe(),
+      refusalsProbe(),
+      servedProbe(),
+      attemptsProbe(),
+      landingProbe(),
+    ])
   const signupVolume: SignupsCheck = signupsHealth(
     orgCreations.count,
     orgCreations.ms,
@@ -379,7 +437,13 @@ export async function GET(): Promise<Response> {
     Math.max(served.ms, attempts.ms),
     configuredMinimumTraffic(),
   )
-  const checks = { signupVolume, signupRefusals, signupDrought }
+  // Did the sign-ups that got a workspace go on to a site (AGL-3725)? The
+  // three checks above count workspaces, and AGL-3724 made every one of them.
+  const signupLanding: SignupLandingCheck = signupLandingHealth(
+    landing.orgs,
+    landing.ms,
+  )
+  const checks = { signupVolume, signupRefusals, signupDrought, signupLanding }
   const status = healthStatus(checks)
   return recordHealthResponse(
     Response.json(

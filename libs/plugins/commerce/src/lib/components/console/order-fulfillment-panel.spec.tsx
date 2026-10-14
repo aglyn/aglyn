@@ -251,6 +251,28 @@ describe('the order zones', () => {
     expect(screen.getByRole('link', { name: 'Shipping label' })).toBeTruthy()
   })
 
+  it('asks no hand-entered shipping cost once a label is applied: the label keeps its own (AGL-3705)', () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Fulfill…' }))
+    expect(screen.getByLabelText('Shipping cost')).toBeTruthy()
+    act(() =>
+      mockZoneProps.orderFulfillment.applyTracking({ carrier: 'USPS', trackingNumber: '9405', labelUrl: 'https://labels.example/1.pdf' }),
+    )
+    expect(screen.queryByLabelText('Shipping cost')).toBeNull()
+  })
+
+  it('sends a per-shipment cost with a partial shipment, in US dollars by default (AGL-3705)', async () => {
+    fetchMock.mockResolvedValue(answer(200, { ok: true, status: 'partially_fulfilled', fulfillment: { id: 'f-1', lineItemIds: [0], atMs: 1 } }))
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Fulfill…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'One fewer Mug' }))
+    expect(screen.getByText('Optional. What sending this shipment cost you, in USD.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Shipping cost'), { target: { value: '$12.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Fulfill' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(lastBody()).toMatchObject({ lineItems: [{ lineItemId: 0, quantity: 2 }], shippingCostCents: 1250 })
+  })
+
   it("records a widget's shipment through the route and returns it", async () => {
     fetchMock.mockResolvedValue(
       answer(200, {

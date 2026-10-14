@@ -84,6 +84,33 @@ class RestFirestoreReader(
     return body.jsonArray.mapNotNull { (it.jsonObject["document"] as? JsonObject)?.let(::docOf) }
   }
 
+  /** `runAggregationQuery` with one `count`, as the SDKs' server count asks it. */
+  override suspend fun count(query: FirestoreQuery): Long? {
+    val bare = query.copy(limit = null, startAfter = null)
+    val parent = bare.collectionPath.substringBeforeLast('/', "")
+    val collectionId = bare.collectionPath.substringAfterLast('/')
+    val url = if (parent.isEmpty()) "$root:runAggregationQuery" else "$root/$parent:runAggregationQuery"
+    val response = http.post(url) {
+      header("Authorization", "Bearer ${bearer()}")
+      contentType(ContentType.Application.Json)
+      setBody(
+        buildJsonObject {
+          put(
+            "structuredAggregationQuery",
+            buildJsonObject {
+              put("structuredQuery", structuredQuery(collectionId, bare))
+              put("aggregations", kotlinx.serialization.json.JsonArray(listOf(buildJsonObject { put("alias", "count"); put("count", buildJsonObject {}) })))
+            },
+          )
+        }.toString(),
+      )
+    }
+    val body = Json.parseToJsonElement(response.bodyAsText())
+    if (response.status.value !in 200..299) throw IllegalStateException(errorOf(body))
+    val fields = body.jsonArray.firstNotNullOfOrNull { ((it.jsonObject["result"] as? JsonObject)?.get("aggregateFields") as? JsonObject) }
+    return ((fields?.get("count") as? JsonObject)?.get("integerValue") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
+  }
+
   /** A PATCH whose update mask names every leaf [data] holds: Firestore's own form of a merge. */
   override suspend fun merge(path: String, data: Map<String, Any?>) {
     val response = http.patch("$root/$path") {

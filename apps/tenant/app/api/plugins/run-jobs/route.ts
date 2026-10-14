@@ -166,8 +166,16 @@ export async function POST(request: Request): Promise<Response> {
     return now - last >= job.intervalMinutes * 60_000
   })
 
-  if (results.length) {
-    const keys = results.map((result) => result.key)
+  // A job on a one-minute interval is due on every beat whatever its last run
+  // says, so recording that run is a write a minute that decides nothing.
+  const everyBeat = new Set(
+    listPluginJobs()
+      .filter((job) => job.intervalMinutes <= 1)
+      .map(pluginJobKey),
+  )
+  const recorded = results.filter((result) => !everyBeat.has(result.key))
+  if (recorded.length) {
+    const keys = recorded.map((result) => result.key)
     // Firestore stays the source of truth across cold starts; the in-memory
     // copy is folded forward in the same breath so the next beat does not have
     // to go and read back what this one just wrote.

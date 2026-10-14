@@ -28,6 +28,7 @@ import type { ReactNode } from 'react'
 const mockSetDoc = jest.fn(async () => undefined)
 const mockUpdateDoc = jest.fn(async () => undefined)
 let mockStore: any = {}
+let mockPickupHours = 'Mo-Fr 09:00-17:00'
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
@@ -49,7 +50,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
         name: 'Main Street',
         isDefault: true,
         postalAddress: { line1: '1 Main St' },
-        pickup: { enabled: true, hours: 'Mo-Fr 09:00-17:00', instructions: 'Old note' },
+        pickup: { enabled: true, hours: mockPickupHours, instructions: 'Old note' },
       },
     ],
     status: 'success',
@@ -81,6 +82,7 @@ import LocalDeliverySettingsCard from './local-delivery-settings-card.component'
 beforeEach(() => {
   jest.clearAllMocks()
   mockStore = {}
+  mockPickupHours = 'Mo-Fr 09:00-17:00'
   ;(global as any).fetch = jest.fn(async () => ({ ok: true, json: async () => ({ radius: false }) }))
 })
 
@@ -99,13 +101,29 @@ describe('pickup at a location', () => {
     expect(mockSetDoc).not.toHaveBeenCalled()
   })
 
-  it('will not save hours that do not read', async () => {
+  it('picks hours by clicking and stores them as the same lines', async () => {
     render(<LocationsCard hostId="host-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Pickup' }))
     const dialog = await screen.findByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('Pickup hours'), { target: { value: 'weekdays' } })
-    expect(within(dialog).getByText(/Line 1 does not read/)).toBeTruthy()
+    expect((within(dialog).getByLabelText('Open on Friday') as HTMLInputElement).checked).toBe(true)
+    expect((within(dialog).getByLabelText('Open on Saturday') as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(within(dialog).getByLabelText('Open on Saturday'))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
+    expect(mockUpdateDoc).toHaveBeenCalledWith('hosts/host-1/locations/main', {
+      pickup: { enabled: true, hours: 'Mo-Sa 09:00-17:00', instructions: 'Old note' },
+    })
+  })
+
+  it('will not save saved hours that do not read until they are set again', async () => {
+    mockPickupHours = 'weekdays'
+    render(<LocationsCard hostId="host-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pickup' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/could not be read \(line 1\)/)).toBeTruthy()
     expect((within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(within(dialog).getByLabelText('Open on Monday'))
+    expect((within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })
 
@@ -119,7 +137,9 @@ describe('the Local delivery card', () => {
     fireEvent.change(screen.getByLabelText('Postal codes'), { target: { value: '627*, 62801-62899' } })
     fireEvent.change(screen.getByLabelText('Fee ($)'), { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Minimum order ($)'), { target: { value: '20' } })
-    fireEvent.change(screen.getByLabelText('Delivery windows'), { target: { value: 'Mo-Fr 09:00-12:00' } })
+    for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']) {
+      fireEvent.click(screen.getByLabelText(`Open on ${day}`))
+    }
     expect(screen.queryByText(/Checkout won’t offer delivery yet/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))

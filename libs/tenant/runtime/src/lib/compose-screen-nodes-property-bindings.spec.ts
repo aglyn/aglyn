@@ -487,6 +487,90 @@ describe('every property kind on the published page (AGL-2893)', () => {
   })
 })
 
+describe('a picture lightbox driven by component properties (AGL-3717)', () => {
+  const PHOTO = {
+    rootId: 'p-root',
+    nodes: {
+      'p-root': { $id: 'p-root', componentId: 'muiStack', nodes: ['p-image'] },
+      'p-image': {
+        $id: 'p-image',
+        componentId: 'image',
+        parentId: 'p-root',
+        props: {
+          src: 'https://cdn.example.com/work.jpg',
+          alt: 'Work',
+          lightbox: '{{prop.openLarge}}',
+          lightboxTransition: '{{prop.arrival}}',
+          lightboxRadius: '{{prop.corners}}',
+          lightboxCloseOnEscape: '{{prop.escapeCloses}}',
+        },
+      },
+    },
+    props: [
+      { name: 'openLarge', type: 'boolean' },
+      {
+        name: 'arrival',
+        type: 'choice',
+        options: [
+          { value: 'fade', label: 'Fade' },
+          { value: 'zoom', label: 'Zoom' },
+        ],
+      },
+      { name: 'corners', type: 'number' },
+      { name: 'escapeCloses', type: 'boolean', defaultValue: 'true' },
+    ],
+  }
+  const placing = (propValues?: Record<string, unknown>) => ({
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['photo'] },
+    photo: {
+      $id: 'photo',
+      componentId: 'reusableInstance',
+      parentId: ROOT,
+      props: { refId: 'photo', ...(propValues ? { propValues } : {}) },
+      nodes: [],
+    },
+  })
+  const image = (nodes: Record<string, any>) => nodes['cmp__photo__p-image']
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetPublishedLayoutVersion.mockResolvedValue({
+      version: { nodes: {} },
+      layout: {},
+    })
+    mockGetComponents.mockResolvedValue({ definitions: { photo: PHOTO } })
+    mockGetVariables.mockResolvedValue([])
+    mockGetFunctions.mockResolvedValue([])
+    mockReadRepeatRows.mockResolvedValue([])
+    mockGetPluginInstalls.mockResolvedValue([])
+    mockGetForms.mockResolvedValue({ forms: {} })
+  })
+
+  it('hands the Image a real yes/no, a choice and a number per placement', async () => {
+    const shipped = image(
+      await compose(
+        placing({
+          openLarge: 'true',
+          arrival: 'zoom',
+          corners: '12',
+          escapeCloses: false,
+        }),
+      ),
+    )
+    expect(shipped.props.lightbox).toBe(true)
+    expect(shipped.props.lightboxTransition).toBe('zoom')
+    expect(shipped.props.lightboxRadius).toBe(12)
+    expect(shipped.props.lightboxCloseOnEscape).toBe(false)
+  })
+
+  it('leaves the picture plain, and Escape closing, where the page chose nothing', async () => {
+    const shipped = image(await compose(placing()))
+    expect(shipped.props.lightbox).toBe(false)
+    expect(shipped.props.lightboxCloseOnEscape).toBe(true)
+    expect('lightboxTransition' in shipped.props).toBe(false)
+  })
+})
+
 /**
  * A LAYOUT'S PROPERTIES, SET BY THE SCREEN THAT RENDERS INSIDE IT (AGL-2893).
  *

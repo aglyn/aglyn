@@ -257,6 +257,9 @@ export function contactCustomFilterFields(
       const path = `custom.${definition.key}`
       switch (definition.type) {
         case 'number':
+        // An amount is typed in major units and asked as the minor units it
+        // is stored in — `ContactQueryReader.currencies` (AGL-3756).
+        case 'currency':
           return {
             column,
             kind: 'number',
@@ -446,6 +449,13 @@ export interface ContactQueryReader {
    * level, where there is no scope clause.
    */
   foldsScope: boolean
+  /**
+   * How each custom CURRENCY column reads a typed amount, by column
+   * (AGL-3756): its `=` is typed in major units and asked as the minor units
+   * the facet key holds, or `null` when it is not one amount. The web side
+   * builds it (`contactCustomAmountReaders`), so this module stays pure.
+   */
+  amounts?: Readonly<Record<string, (typed: string) => number | null>>
 }
 
 /** Why a reader whose access is some sites cannot filter by a holder's field. */
@@ -502,8 +512,15 @@ export function contactQueryClause(
     }
   }
   const keys: string[] = []
+  const amount = reader.amounts?.[clause.field]
   for (const value of crmClauseValues(clause)) {
-    const key = crmFacetKeyValue(clause.op === '=' ? Number(value) : value)
+    const asked =
+      clause.op !== '='
+        ? value
+        : amount
+          ? (amount(value) ?? Number.NaN)
+          : Number(value)
+    const key = crmFacetKeyValue(asked)
     if (key === null) return { refused: 'no value yet' }
     keys.push(crmFacetKey(group, facet, key))
   }

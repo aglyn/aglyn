@@ -321,7 +321,7 @@ fun evaluateExpression(text: String, scope: Map<String, Any>): Any {
 
 // ── Functions ─────────────────────────────────────────────────────────────
 
-data class HostFunctionParameter(
+data class FunctionRunParameter(
   val name: String,
   val type: String,
   val required: Boolean = false,
@@ -329,31 +329,31 @@ data class HostFunctionParameter(
   val defaultValue: Any? = null,
 )
 
-data class HostFunctionVariable(val name: String, val type: String)
+data class FunctionRunVariable(val name: String, val type: String)
 
-data class FunctionSetOperation(val set: String, val expression: String?, val workflow: String? = null)
+data class FunctionRunSet(val set: String, val expression: String?, val workflow: String? = null)
 
-data class FunctionConditionalOperation(
+data class FunctionRunConditional(
   val left: String,
   val comparator: String,
   val right: String,
-  val then: List<FunctionSetOperation>,
-  val otherwise: List<FunctionSetOperation>,
+  val then: List<FunctionRunSet>,
+  val otherwise: List<FunctionRunSet>,
 )
 
 /** `hosts/{hostId}/functions/{id}`. */
 data class HostFunctionDefinition(
   val name: String,
-  val parameters: List<HostFunctionParameter> = emptyList(),
-  val variables: List<HostFunctionVariable> = emptyList(),
-  val operations: List<FunctionConditionalOperation> = emptyList(),
+  val parameters: List<FunctionRunParameter> = emptyList(),
+  val variables: List<FunctionRunVariable> = emptyList(),
+  val operations: List<FunctionRunConditional> = emptyList(),
   val returnValue: String? = null,
 )
 
 private fun Map<*, *>.text(key: String): String? = this[key] as? String
 private fun Any?.maps(): List<Map<*, *>> = (this as? List<*>)?.filterIsInstance<Map<*, *>>() ?: emptyList()
 
-private fun setOperationOf(data: Map<*, *>) = FunctionSetOperation(
+private fun setOperationOf(data: Map<*, *>) = FunctionRunSet(
   set = data.text("set") ?: "",
   expression = data["expression"]?.let(::jsString),
   workflow = data.text("workflow"),
@@ -363,7 +363,7 @@ private fun setOperationOf(data: Map<*, *>) = FunctionSetOperation(
 fun hostFunctionOf(data: Map<*, *>): HostFunctionDefinition = HostFunctionDefinition(
   name = data.text("name") ?: "",
   parameters = data["parameters"].maps().map {
-    HostFunctionParameter(
+    FunctionRunParameter(
       name = it.text("name") ?: "",
       type = it.text("type") ?: "text",
       required = it["required"] == true,
@@ -371,10 +371,10 @@ fun hostFunctionOf(data: Map<*, *>): HostFunctionDefinition = HostFunctionDefini
       defaultValue = it["defaultValue"],
     )
   },
-  variables = data["variables"].maps().map { HostFunctionVariable(it.text("name") ?: "", it.text("type") ?: "text") },
+  variables = data["variables"].maps().map { FunctionRunVariable(it.text("name") ?: "", it.text("type") ?: "text") },
   operations = data["operations"].maps().map { operation ->
     val condition = operation["if"] as? Map<*, *> ?: emptyMap<String, Any?>()
-    FunctionConditionalOperation(
+    FunctionRunConditional(
       left = condition["left"]?.let(::jsString) ?: "",
       comparator = condition.text("comparator") ?: "",
       right = condition["right"]?.let(::jsString) ?: "",

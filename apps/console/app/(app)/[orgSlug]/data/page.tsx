@@ -22,6 +22,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
 import FeatureGate from '../../../../components/feature-gate.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
+import ConsoleMediaPickerProvider from '../../../../components/console-media-picker-provider.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -46,7 +47,7 @@ const OrgData: NextPageWithLayout<Record<string, never>> = () => {
       breadcrumbItems={[
         { children: 'Data', href: buildRoute(Route.ORG_DATA, { orgSlug }) },
       ]}
-      help="datasets"
+      help={{ topic: 'datasets', anchor: '#organization-data-page' }}
       header={{
         children: 'Organization Data',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },
@@ -124,11 +125,15 @@ const OrgData: NextPageWithLayout<Record<string, never>> = () => {
                     shared with (AGL-3662) — set apart from media's, which
                     is on the organization Media page. */}
                 <OrgDefaultSharingCard kind="data" />
-                <PluginWidgetSlot
-                  slot="orgData"
-                  orgId={currentOrg.$id}
-                  org={org}
-                />
+                {/* A record's photo is chosen from the organization's media
+                    library (AGL-3763), as on a site's Data page. */}
+                <ConsoleMediaPickerProvider orgId={currentOrg.$id}>
+                  <PluginWidgetSlot
+                    slot="orgData"
+                    orgId={currentOrg.$id}
+                    org={org}
+                  />
+                </ConsoleMediaPickerProvider>
               </>
             )}
           </FeatureGate>

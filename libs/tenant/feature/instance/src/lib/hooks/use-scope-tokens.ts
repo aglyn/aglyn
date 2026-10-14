@@ -23,9 +23,10 @@ import {
   ORG_SCOPE_TOKEN,
   type AglynOrgMember,
 } from '@aglyn/aglyn'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, type DocumentSnapshot } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from './firebase/firebase-services'
+import { getDocBounded } from './firebase/firestore-bounded-read'
 
 export interface ScopeTokensState {
   /** The caller's read set, for `array-contains-any` (AGL-1037). */
@@ -86,21 +87,34 @@ export function useScopeTokens(orgId: string | undefined): ScopeTokensState {
     }
     const key = `${uid}/${orgId}`
     let cancelled = false
-    getDoc(doc(firestore, 'orgs', orgId, 'members', uid))
-      .then((snapshot) => {
-        if (cancelled) return
-        const member = snapshot.exists()
-          ? ({ $id: uid, ...snapshot.data() } as Partial<AglynOrgMember>)
-          : undefined
-        // `memberScopeTokens` owns the "stored projection, else recompute"
-        // rule so the client and every Admin-SDK gate answer it the same
-        // way — a member doc the AGL-1040 backfill has not reached must
-        // still resolve to what `grantHostAccess` would have stamped.
-        setState({
-          tokens: memberScopeTokens(member),
-          orgWide: isOrgWideMember(member),
-          loaded: true,
-          for: key,
+    const settle = (snapshot: DocumentSnapshot) => {
+      if (cancelled) return
+      const member = snapshot.exists()
+        ? ({ $id: uid, ...snapshot.data() } as Partial<AglynOrgMember>)
+        : undefined
+      // `memberScopeTokens` owns the "stored projection, else recompute"
+      // rule so the client and every Admin-SDK gate answer it the same
+      // way — a member doc the AGL-1040 backfill has not reached must
+      // still resolve to what `grantHostAccess` would have stamped.
+      setState({
+        tokens: memberScopeTokens(member),
+        orgWide: isOrgWideMember(member),
+        loaded: true,
+        for: key,
+      })
+    }
+    // Bounded (AGL-3660). Every org-scoped list waits on `loaded`, and a bare
+    // `getDoc` never settles in a tab the multi-tab cache has stopped
+    // syncing — so the organization Media page held "Loading media…"
+    // forever behind this one read. A stalled read now asks the client to
+    // recover and answers from the cache (then the server's answer, when it
+    // lands); with nothing cached it fails into the branch below, which the
+    // rules still enforce.
+    getDocBounded(doc(firestore, 'orgs', orgId, 'members', uid))
+      .then((read) => {
+        settle(read.snapshot)
+        void read.fresh?.then((fresh) => {
+          if (fresh) settle(fresh)
         })
       })
       .catch(() => {

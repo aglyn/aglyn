@@ -45,6 +45,7 @@
  * module graph (AGL-52); every importer is already a client module.
  */
 
+import { browserFamily, type BrowserFamily } from './browser-family'
 import { isCrossPoolDesync } from './cross-pool-desync'
 import { isForeignScriptUrl, stackFrameUrls } from './foreign-script'
 import { isStaleBuildError, recoverStaleBuildRejection } from './stale-build-error'
@@ -67,6 +68,22 @@ export interface ErrorBeaconEvent {
   col?: number
   /** Page URL, scrubbed to origin + pathname. */
   url: string
+  /**
+   * On a `hydration` event from builds before AGL-3738 only: the page
+   * translator whose rewrite was visible in the document when React gave up
+   * — see {@link pageTranslationSignal}. Today's beacon drops a mismatch on a
+   * translated page instead of sending it, so the field stays only for what
+   * older tabs still report.
+   */
+  translated?: string
+  /** On a `hydration` event only: `navigator.language`, clamped. */
+  language?: string
+  /**
+   * On every event: the coarse browser family — one of seven, see
+   * {@link browserFamily} (AGL-3732). Never the user agent, never a version.
+   * Stamped by the queue, so a caller never sets it.
+   */
+  browser?: BrowserFamily
 }
 
 export interface ErrorBeaconOptions {
@@ -220,6 +237,70 @@ export function isBenignBrowserNotice(message: string): boolean {
 }
 
 /**
+ * Whether the document is a page a visitor navigated to over the web
+ * (AGL-3759).
+ *
+ * Only `http:` and `https:` qualify. A document at `about:blank` or
+ * `about:srcdoc` is a COPY of our page: a translator extension or a site that
+ * frames our markup renders it into a fresh document with no URL of its own,
+ * and our scripts run there too. Next.js's app router then throws
+ * `Failed to construct 'URL': Invalid URL` resolving its canonical URL against
+ * `window.location.href`, which no code of ours can prevent and no visitor on
+ * the real page ever sees. `file:` (a saved page) and an extension's own
+ * scheme are copies in the same sense.
+ *
+ * A missing or unreadable location is not a web document either: nothing
+ * from it can be traced to a page we serve.
+ */
+export function isWebDocument(
+  location: { protocol?: string } | null | undefined,
+): boolean {
+  try {
+    const protocol = location?.protocol
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * A rejection that says only "this was cancelled" (AGL-3734).
+ *
+ * `AbortError` is what a request rejects with when its `AbortSignal` fires —
+ * a deadline we set, a component that unmounted, a search the author typed
+ * past — and what the browser rejects every in-flight fetch with when the
+ * document goes away under it. On 2026-10-10 one arrived from
+ * `/edit-access`, the page a published site opens in a popup or a hidden
+ * iframe and then CLOSES itself the moment it has its answer. The report had
+ * no stack and no message past the name, so there was no call site to fix:
+ * the page's own mint was already caught, and whatever else the console shell
+ * had in flight was cut off by the site ending the page, which is the flow
+ * working.
+ *
+ * Why the classifier rather than each call site: every request on every
+ * console page can be the one in flight when a page is torn down, and the
+ * abort is the intended outcome in every case. There is nothing a fix of ours
+ * could change, and nothing in the report to locate it by.
+ *
+ * Narrow on purpose. Only `name === 'AbortError'`, and only for an UNHANDLED
+ * REJECTION — not `TimeoutError`, which is `AbortSignal.timeout` saying a
+ * deadline was MISSED (a real slowness), and not an uncaught `error` event or
+ * a `reportHandledError` call, where somebody chose to report it.
+ */
+export function isAbortRejection(reason: unknown): boolean {
+  try {
+    return (
+      typeof reason === 'object' &&
+      reason !== null &&
+      (reason as { name?: unknown }).name === 'AbortError'
+    )
+  } catch {
+    // A getter that throws leaves the rejection reported, never dropped.
+    return false
+  }
+}
+
+/**
  * `kind` for Firebase's `auth/tenant-id-mismatch` — a sibling tab signed in to
  * another account pool (AGL-3280). The console recovers the tab by reloading
  * it once it is hidden and deliberately leaves the rejection unhandled so it
@@ -293,6 +374,150 @@ const HYDRATION_TEXT =
 
 export function isHydrationMismatch(message: string): boolean {
   return HYDRATION_MINIFIED.test(message) || HYDRATION_TEXT.test(message)
+}
+
+/**
+ * WHICH TRANSLATOR rewrote this page's text, read off the document, or
+ * undefined when none visibly did.
+ *
+ * A hydration report on its own cannot say whether React disagreed with our
+ * server render or with a translator that rewrote the server's text before
+ * React reached it, and the two look identical in `client-errors`: the
+ * minified #418, a stack inside the react-dom chunk, the page URL, nothing
+ * else. aglyn.com/ carried eight of them between 2026-09-22 and 2026-10-10.
+ * The visitor at 2026-10-09 22:28Z went on to sign up two minutes later with
+ * Chrome Translate rewriting the console (the `<font>` crash #1342 fixed); the
+ * two on 2026-09-22/23 were desktop Chrome OS in Hyderabad, while every other
+ * Indian, Pakistani and Turkish home-page visit in GA that fortnight hydrated
+ * without a report — so neither the build nor the time zone was the variable,
+ * and the beacon had nothing to say which visitor it was.
+ *
+ * The signatures are the ones each translator leaves on the DOM it rewrote:
+ *
+ * - Chrome (and every Chromium that ships Google Translate) sets
+ *   `translated-ltr` / `translated-rtl` on `<html>` and wraps each rewritten
+ *   run in `<font style="vertical-align: inherit;">`.
+ * - Microsoft Translator (Edge) stamps `_msttexthash` / `_msthash` on every
+ *   element whose text it replaced.
+ * - Any translator that does the job properly rewrites `<html lang>`, which is
+ *   compared against the `servedLang` the beacon read at install, before
+ *   hydration began.
+ *
+ * Never throws: it runs inside the error handler.
+ */
+export function pageTranslationSignal(
+  doc: Document,
+  servedLang: string | null | undefined,
+): string | undefined {
+  try {
+    const root = doc.documentElement
+    if (!root) return undefined
+    if (
+      root.classList.contains('translated-ltr') ||
+      root.classList.contains('translated-rtl') ||
+      doc.querySelector('font[style*="vertical-align: inherit"]')
+    ) {
+      return 'chrome'
+    }
+    if (doc.querySelector('[_msttexthash], [_msthash]')) return 'microsoft'
+    const lang = root.getAttribute('lang')
+    if (servedLang && lang && lang.toLowerCase() !== servedLang.toLowerCase()) {
+      return `lang:${clamp(lang, 16)}`
+    }
+  } catch {
+    // An unreadable document leaves the event unlabeled, never unreported.
+  }
+  return undefined
+}
+
+/**
+ * A TRANSLATOR'S MARK, REMEMBERED FROM THE MOMENT IT APPEARS (AGL-3738).
+ *
+ * {@link pageTranslationSignal} read at the moment React reports a mismatch
+ * is reading a document the translator no longer owns. React reports a
+ * hydration mismatch only after it has client-rendered the root to recover,
+ * and that render resets `<html>`'s attributes to the ones it rendered —
+ * Chrome's `translated-ltr` class goes, `lang` returns to the served value —
+ * and replaces every `<font>` wrapper and hash-stamped element with fresh
+ * nodes. Measured 2026-10-12 by hydrating aglyn.com/ with a Chrome-style
+ * rewrite of one heading: the report fired with `<html lang="en">`, no class
+ * and no `<font>` left anywhere. Six es-US #418s arrived that day on
+ * aglyn.com/ and orbita-digital.aglyn.app/ (a Spanish site served as `en`);
+ * one carried `lang:en` — the beacon had been installed after the translator
+ * set `lang="es"`, so React's reset was the only rewrite left to see, and the
+ * same simulation reproduces exactly that label — and the other five carried
+ * nothing. The same two pages hydrated cleanly under es-US, en-GB and ru
+ * locales and time zones: nothing on them formats by the visitor's locale.
+ *
+ * So the mark is read when the translator LEAVES it: once at install, for a
+ * translator that ran first, and then from a `MutationObserver` until one is
+ * seen. A translator rewrites the page before React reaches it — that is what
+ * makes it a mismatch — so its mutations are delivered before the report.
+ *
+ * Cheap on purpose: one observer on `<html>`'s own `class`/`lang`, and one on
+ * the tree that looks only at added `<font>` elements and Microsoft's hash
+ * attributes, both disconnected as soon as a mark is found. Never throws, and
+ * a browser without `MutationObserver` gets the read-at-report behavior.
+ */
+export function watchPageTranslation(
+  doc: Document,
+  servedLang: string | null | undefined,
+): () => string | undefined {
+  let seen = pageTranslationSignal(doc, servedLang)
+  const observers: MutationObserver[] = []
+
+  const stop = () => {
+    for (const observer of observers.splice(0)) observer.disconnect()
+  }
+
+  const inspect = (records: MutationRecord[]) => {
+    if (seen) return
+    let relevant = false
+    for (const record of records) {
+      if (record.type === 'attributes') {
+        relevant = true
+        break
+      }
+      for (const node of Array.from(record.addedNodes)) {
+        if (node.nodeName === 'FONT') {
+          relevant = true
+          break
+        }
+      }
+      if (relevant) break
+    }
+    if (!relevant) return
+    seen = pageTranslationSignal(doc, servedLang)
+    if (seen) stop()
+  }
+
+  try {
+    const root = doc.documentElement
+    if (!seen && root && typeof MutationObserver === 'function') {
+      const onRoot = new MutationObserver(inspect)
+      onRoot.observe(root, { attributes: true, attributeFilter: ['class', 'lang'] })
+      const onTree = new MutationObserver(inspect)
+      onTree.observe(root, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['_msttexthash', '_msthash'],
+      })
+      observers.push(onRoot, onTree)
+    }
+  } catch {
+    // No observer: the report falls back to reading the document as it is.
+  }
+
+  return () => {
+    try {
+      // A rewrite in the same task as the report has not been delivered yet.
+      for (const observer of observers) inspect(observer.takeRecords())
+      return seen ?? pageTranslationSignal(doc, servedLang)
+    } catch {
+      return undefined
+    }
+  }
 }
 
 /**
@@ -449,7 +674,24 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   // (the rejection handler below), because a tab left on a dead deploy is a
   // visitor's problem whether or not its errors are counted.
   const sampled = Math.random() < sampleRate
-  if (sampled) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
+  // A copy of the page in a document that is not on the web reports nothing
+  // by either door, whatever it throws: see `isWebDocument`.
+  const reporting = sampled && isWebDocument(window.location)
+  // The document's language as SERVED, read before hydration and before any
+  // translator has had a chance to rewrite it (`pageTranslationSignal`).
+  const servedLang = document.documentElement?.getAttribute('lang') ?? null
+  // Watched from now, because React's recovery erases the translator's marks
+  // before a mismatch is reported (`watchPageTranslation`, AGL-3738).
+  const translation = watchPageTranslation(document, servedLang)
+  if (reporting) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
+  // Classified once, here, and only the family is kept: the user-agent
+  // string itself never reaches the queue (AGL-3732).
+  let browser: BrowserFamily = 'other'
+  try {
+    browser = browserFamily(navigator.userAgent)
+  } catch {
+    // An unreadable navigator is just `other`.
+  }
 
   const seen = new Set<string>()
   let queued: ErrorBeaconEvent[] = []
@@ -479,19 +721,19 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   }
 
   const enqueue = (event: ErrorBeaconEvent) => {
-    if (!sampled || sent >= maxPerPage) return
+    if (!reporting || sent >= maxPerPage) return
     // Message + first stack line: enough identity to collapse a render loop
     // without collapsing distinct errors that share a message.
     const key = `${event.message}\x00${(event.stack ?? '').split('\n', 2).join('\n')}`
     if (seen.has(key)) return
     seen.add(key)
     sent += 1
-    queued.push(event)
+    queued.push({ ...event, browser })
     if (!timer) timer = setTimeout(flush, FLUSH_DELAY_MS)
   }
-  // Null on an unsampled pageview, so it reports nothing by either door
-  // rather than one by one and none by the other.
-  publishEvent = sampled ? enqueue : null
+  // Null on a pageview that does not report, so it reports nothing by either
+  // door rather than one by one and none by the other.
+  publishEvent = reporting ? enqueue : null
 
   window.addEventListener('error', (event) => {
     try {
@@ -510,19 +752,32 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // clamp still makes the error ours.
       if (fullStack && isInjectedThirdPartyFrame(fullStack, pageUrl)) return
       const stack = fullStack ? clamp(fullStack, MAX_STACK) : undefined
+      // MARKED, not dropped: a translator causes a hydration mismatch and so
+      // does a real render divergence, and a recovered fault is still a
+      // fault. Only a rate tells either apart from noise — and the
+      // translator's own mark on the DOM, when it left one.
+      const kind =
+        recoveredErrorKind(error ?? { message }) ??
+        (isHydrationMismatch(message) ? 'hydration' : 'error')
+      const translated = kind === 'hydration' ? translation() : undefined
+      // A mismatch on a page a translator rewrote is the translator's, not
+      // ours (AGL-3738): React compared our render with text we did not
+      // write, recovered, and the visitor has a working page. Nothing we ship
+      // can change in response, so it goes the way of an injected stack. The
+      // mark is evidence on the document, not a guess about the visitor — an
+      // unmarked mismatch is still reported, and still the one to read.
+      if (translated) return
       enqueue({
-        // MARKED, not dropped: a translator causes a hydration mismatch and
-        // so does a real render divergence, and a recovered fault is still a
-        // fault. Only a rate tells either apart from noise.
-        kind:
-          recoveredErrorKind(error ?? { message }) ??
-          (isHydrationMismatch(message) ? 'hydration' : 'error'),
+        kind,
         message,
         stack,
         source: scrubUrl(event.filename) || undefined,
         line: typeof event.lineno === 'number' ? event.lineno : undefined,
         col: typeof event.colno === 'number' ? event.colno : undefined,
         url: pageUrl,
+        ...(kind === 'hydration' && navigator.language
+          ? { language: clamp(navigator.language, 16) }
+          : {}),
       })
     } catch {
       // Never rethrow from an error handler.
@@ -537,6 +792,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // `recoverStaleBuildRejection`. A tab whose recovery is spent still
       // reports it, as `chunk-load`.
       if (recoverStaleBuildRejection(event.reason)) return
+      // A cancelled request, ours or the browser's on teardown: see
+      // `isAbortRejection` for why this is dropped and how narrowly.
+      if (isAbortRejection(event.reason)) return
       const reason = event.reason as Error | undefined
       const message = clamp(describeRejectionReason(event.reason), MAX_MESSAGE)
       if (!message) return

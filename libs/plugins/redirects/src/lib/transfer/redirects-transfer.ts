@@ -175,7 +175,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 type StoredRule = Record<string, unknown>
 
 /** The rule's six writable fields, as written. */
-interface RuleFields {
+export interface RuleFields {
   source: string
   kind: string
   destination: string
@@ -265,7 +265,7 @@ function ruleKey(kind: string, source: string): string | null {
 }
 
 /** The address a rule answers at, for the site cache: a pattern names no one path, so `/`. */
-function announcedPath(rule: { kind?: string; source?: string }): string | null {
+export function announcedPath(rule: { kind?: string; source?: string }): string | null {
   const source = text(rule.source)
   if ((rule.kind ?? 'exact') === 'regex') return '/'
   return source.startsWith('/') ? source : null
@@ -285,7 +285,7 @@ function finalRule(
  * The six fields with the page's defaults where a value is missing:
  * exact, 302, priority 100, on.
  */
-function withDefaults(values: Readonly<Record<string, unknown>>): RuleFields {
+export function withDefaults(values: Readonly<Record<string, unknown>>): RuleFields {
   const priority = values['priority']
   const kind = canonicalRedirectKind(values['kind'])
   return {
@@ -317,7 +317,7 @@ function ownDomains(host: StoredRule): Array<string | null> {
  * wears another company's address, a status code it does not offer, or a
  * path redirected to itself.
  */
-function ruleProblem(rule: RuleFields, host: StoredRule): { detail: string; fieldId: string; value: string } | null {
+export function ruleProblem(rule: RuleFields, host: StoredRule): { detail: string; fieldId: string; value: string } | null {
   const problem = validateRedirectRule(
     { kind: rule.kind, source: rule.source, destination: rule.destination },
     { ownDomains: ownDomains(host) },
@@ -345,7 +345,7 @@ function ruleProblem(rule: RuleFields, host: StoredRule): { detail: string; fiel
 }
 
 /** The rule's fields as stored: the page's normalization, and only what the create route's allow-list names. */
-function storedFields(rule: RuleFields, allowed: readonly string[]): Record<string, unknown> {
+export function storedFields(rule: RuleFields, allowed: readonly string[]): Record<string, unknown> {
   const normalized: Record<string, unknown> = {
     source: rule.kind === 'regex' ? rule.source.trim() : (normalizeRedirectSource(rule.source) ?? rule.source),
     destination: normalizeRedirectDestination(rule.destination) ?? rule.destination,
@@ -386,7 +386,7 @@ function requireHost(ctx: TransferResourceContext): string {
 }
 
 /** The redirect kind's declaration, which the create route reads too. */
-function redirectDeclaration(): ResolvedPluginHostResource {
+export function redirectDeclaration(): ResolvedPluginHostResource {
   const declared = pluginHostResource(REDIRECT_HOST_RESOURCE_KIND)
   if (!declared) throw new Error(`The "${REDIRECT_HOST_RESOURCE_KIND}" kind is not declared.`)
   return declared

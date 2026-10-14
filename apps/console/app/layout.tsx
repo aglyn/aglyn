@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { APP_CONSOLE } from '@aglyn/shared-data-enums'
+import {
+  APP_CONSOLE,
+  FIREBASE_AUTH_EMULATOR_ENABLED,
+  FIREBASE_FIRESTORE_EMULATOR_ENABLED,
+} from '@aglyn/shared-data-enums'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { TITLE_TEMPLATE } from './page-title'
 // Deep import (not the barrel) so this Server Component doesn't pull the theme
@@ -29,7 +33,8 @@ import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import type { Metadata, Viewport } from 'next'
 import { headers } from 'next/headers'
 import type { ReactNode } from 'react'
-import { preload } from 'react-dom'
+import { preconnect, preload } from 'react-dom'
+import { bootPreconnects } from './boot-preconnect'
 import Providers from './providers'
 import '../public/_static/styles/styles.css'
 
@@ -191,6 +196,14 @@ export default async function RootLayout({
       crossOrigin: 'anonymous',
       fetchPriority: 'high',
     })
+  }
+  // The Firebase and reCAPTCHA origins a signed-in load waits on before its
+  // first page (AGL-3660): their handshakes now overlap the route's JavaScript
+  // instead of following it. See `boot-preconnect.ts` for the four and why.
+  for (const { href, crossOrigin } of bootPreconnects(
+    FIREBASE_AUTH_EMULATOR_ENABLED || FIREBASE_FIRESTORE_EMULATOR_ENABLED,
+  )) {
+    preconnect(href, crossOrigin ? { crossOrigin } : undefined)
   }
   return (
     <html lang="en">

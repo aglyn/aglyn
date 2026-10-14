@@ -95,7 +95,7 @@ export function LinkedDealsCard(props: LinkedDealsCardProps) {
     <>
       <CardDisplay
         header={'Deals'}
-        help={pluginDocsHelp('deals', { anchor: '#a-deals-page' })}
+        help={pluginDocsHelp('deals', { anchor: '#deals-on-a-record' })}
         HeaderProps={{
           action: (
             <Button

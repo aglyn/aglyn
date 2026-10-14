@@ -54,6 +54,27 @@ private fun usd(cents: Double): String {
   return if (cents < 0) "-$text" else text
 }
 
+/**
+ * What the order screen's restock card says about the open question: how many
+ * units may need restocking after which door, and how far to trust the
+ * number. The console's own sentence (`describeRestockCheck`).
+ */
+fun describeRestockCheck(restock: OrderRestockCheck, order: HostOrder): String {
+  val named = restock.lines.isNotEmpty() && restock.lines.all { line ->
+    line.lineIndex != null && order.refundedLineItemIds.orEmpty().contains(line.lineIndex)
+  }
+  val units = restock.units
+  val count = if (units == units.toLong().toDouble()) units.toLong().toString() else units.toString()
+  val door = if (restock.kind == OrderRestockCheckKind.CHARGEBACK) "chargeback" else "refund"
+  return "$count ${if (units == 1.0) "unit" else "units"} may need restocking after this $door." +
+    (if (restock.kind == OrderRestockCheckKind.CHARGEBACK) " The shopper kept the goods unless they actually came back." else "") +
+    when {
+      restock.fullyReversed -> ""
+      named -> " Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back."
+      else -> " Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+    }
+}
+
 fun orderRefundSummary(order: HostOrder): String {
   val state = orderRefundState(order)
   if (state == OrderRefundState.NONE) return ""

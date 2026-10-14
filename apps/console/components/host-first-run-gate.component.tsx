@@ -37,6 +37,12 @@ import PluginWidgetSlot from './plugin-widget-slot.component'
  */
 export const SITE_START_PARAM = 'start'
 export const SITE_START_VALUE = 'site'
+/**
+ * The same parameter's other value (AGL-3761): a site "Create site" just made
+ * with the starter lands with `?start=live`, which says "Your site is live",
+ * once, as choosing the starter on a created site always has.
+ */
+export const SITE_START_LIVE_VALUE = 'live'
 
 /**
  * The guided start, offered where a new site LANDS and nowhere else.
@@ -55,9 +61,44 @@ export const SITE_START_VALUE = 'site'
 export function HostFirstRunGate() {
   const hostId = useHostId()
   const searchParams = useSearchParams()
-  const asked = searchParams?.get(SITE_START_PARAM) === SITE_START_VALUE
-  if (!asked || !hostId) return null
+  const asked = searchParams?.get(SITE_START_PARAM)
+  if (!hostId) return null
+  if (asked === SITE_START_LIVE_VALUE) return <HostLiveLanding hostId={hostId} />
+  if (asked !== SITE_START_VALUE) return null
   return <HostFirstRunOffer hostId={hostId} />
+}
+
+/** "Your site is live", for a site born with the starter it was created for. */
+function HostLiveLanding({ hostId }: { hostId: string }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const [open, setOpen] = useState(true)
+  const close = useCallback(() => {
+    setOpen(false)
+    if (pathname) router.replace(pathname)
+  }, [pathname, router])
+  if (!open) return null
+  return <HostLiveNotice hostId={hostId} onClose={close} />
+}
+
+/** The notice itself, read off the site's own document. */
+function HostLiveNotice({ hostId, onClose }: { hostId: string; onClose: () => void }) {
+  const {
+    doc: { data: host },
+  } = useHost({ hostId })
+  const orgSlug = useOrgSlug()
+  const params = useParams<{ host?: string }>()
+  const routeHost = params?.host ?? hostId
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm" aria-label="Your site is live">
+      <DialogContent sx={{ py: 4 }}>
+        <SiteLiveNotice
+          liveUrl={hostLiveUrl(host)}
+          pagesHref={orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host: routeHost }) : null}
+        />
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function HostFirstRunOffer({ hostId }: { hostId: string }) {
@@ -74,7 +115,6 @@ function HostFirstRunOffer({ hostId }: { hostId: string }) {
   // of the object that says so.
   const userRef = useRef(user)
   userRef.current = user
-  const params = useParams<{ host?: string }>()
   const [open, setOpen] = useState(true)
   // The starter published the site: say so, with its address, until the
   // person closes it. Read before the blank-site check, which the starter
@@ -102,19 +142,7 @@ function HostFirstRunOffer({ hostId }: { hostId: string }) {
     leaveUrl()
   }, [leaveUrl])
 
-  if (live) {
-    const routeHost = params?.host ?? hostId
-    return (
-      <Dialog open onClose={closeLive} fullWidth maxWidth="sm" aria-label="Your site is live">
-        <DialogContent sx={{ py: 4 }}>
-          <SiteLiveNotice
-            liveUrl={hostLiveUrl(host)}
-            pagesHref={orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host: routeHost }) : null}
-          />
-        </DialogContent>
-      </Dialog>
-    )
-  }
+  if (live) return <HostLiveNotice hostId={hostId} onClose={closeLive} />
   if (!open || status !== 'success' || !hostIsBlankSite(host)) return null
   return (
     <PluginWidgetSlot

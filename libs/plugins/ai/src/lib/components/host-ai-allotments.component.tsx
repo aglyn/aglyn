@@ -156,8 +156,8 @@ export function AiSiteAllotmentCard(props: { hostId?: string; orgId?: string }) 
   return (
     <CardDisplay
       header={'Site AI allotment'}
-      help={pluginDocsHelp('billing', {
-        anchor: '#ai-allotments',
+      help={pluginDocsHelp('aiAllotments', {
+        anchor: '#a-sites-allotment',
         excerpt: 'What everyone on this site may draw from the workspace’s AI credits each month, together.',
       })}
       contentGutterX

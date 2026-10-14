@@ -129,12 +129,6 @@
       "reason": "To fix: a draft or POS order; its id is in the console's ?order= link, /v1/sites/{siteId}/orders/{orderId} and the stock ledger's orderId. Customers read its number, never its id."
     },
     {
-      "site": "libs/plugins/commerce/src/lib/server/reviews.ts: hostRef.collection('reviews').add(…)",
-      "class": "RESOURCE",
-      "issue": "AGL-3084",
-      "reason": "To fix: a product review; the public reviews API returns its id and moderation updates by it."
-    },
-    {
       "site": "apps/console/app/api/support/forum/route.ts: threadsRef.doc()",
       "class": "RESOURCE",
       "issue": "AGL-3085",

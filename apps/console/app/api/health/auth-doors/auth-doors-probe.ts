@@ -63,6 +63,8 @@ import { isEmailConfigured } from '@aglyn/shared-util-email'
 // replace the delivery reader with whatever the factory happened to list, and
 // a stub there is a green on the one fact this arm exists to establish.
 import { readEmailDeliveryHistory } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+import { withRenderCache } from '@aglyn/tenant-data-admin/render-cache'
+import { createHash } from 'crypto'
 import { HEALTH_PROBE_TTL_MS, memoizeWithTtl } from '@aglyn/aglyn/server'
 
 import {
@@ -684,6 +686,25 @@ async function tallyVerificationDeliveries(
 ): Promise<DeliveryTally> {
   const sample = addresses.slice(0, VERIFICATION_DELIVERY_SAMPLE)
   if (sample.length === 0) return NO_DELIVERIES_READ
+  /*
+   * Shared across instances, not only held in this one (AGL-3741). The memo
+   * around the probe is per instance, and the uptime checks land on whichever
+   * instance is warm, so in production this arm re-ran about every four
+   * minutes rather than every fifteen. Keyed by a hash of the sample, so a new
+   * signup is a new key and is read at once, and no address is a cache key.
+   * An unreadable tally is never stored.
+   */
+  const sampleKey = createHash('sha256').update(sample.join('\n')).digest('hex')
+  return withRenderCache<DeliveryTally>({
+    key: ['auth-doors-delivery-tally', sampleKey],
+    revalidate: DELIVERY_PROBE_TTL_MS / 1_000,
+    tags: [],
+    read: () => readDeliveryTally(sample),
+    store: (tally) => !tally.unreadable,
+  })
+}
+
+async function readDeliveryTally(sample: readonly string[]): Promise<DeliveryTally> {
   const reads = await Promise.all(
     sample.map((address) =>
       readEmailDeliveryHistory(address, { limit: DELIVERY_ROWS_PER_ADDRESS }),

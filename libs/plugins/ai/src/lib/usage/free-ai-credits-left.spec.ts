@@ -31,7 +31,7 @@ jest.mock('@aglyn/tenant-data-admin/server/admin-audit-write', () => ({
 }))
 
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
-import { aiFreeSiteCreditEstimate, aiFreeSiteShortfall } from '../model/ai-site-job'
+import { aiFreeSiteCreditRange, aiFreeSitePrompt } from '../model/ai-site-job'
 import { assistUsdFromCredits } from './assist-credits'
 import { freeAiCreditsLeftFrom, readFreeAiCreditsLeft } from './free-ai-credits-left'
 
@@ -71,17 +71,19 @@ describe('readFreeAiCreditsLeft — two Free workspaces of one owner', () => {
 
   it('tells the new workspace what the owner has left, not the 300 a fresh band shows', async () => {
     const left = await readFreeAiCreditsLeft(fakeFirestore(docs), { orgId: 'org-b', org: free('org-b'), now: NOW })
-    expect(left).toEqual({ left: 70, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: '2026-11-01' })
-    // A two-page start's quoted figure is past it, so the start is refused;
-    // a give-back that reopens the owner's month admits it again.
-    expect(aiFreeSiteShortfall(left, 2)).toEqual({ needed: aiFreeSiteCreditEstimate(2), left: 70 })
+    expect(left).toMatchObject({ left: 70, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: '2026-11-01' })
+    // Both meters ride along for the usage strip (AGL-3722).
+    expect(left?.used).toMatchObject({ account: 230, org: 0, state: 'ok' })
+    // A two-page start's p90 is past it, so the start asks first (AGL-3722);
+    // a give-back that reopens the owner's month admits it with no prompt.
+    expect(aiFreeSitePrompt(left, 2)).toMatchObject({ ...aiFreeSiteCreditRange(2), left: 70 })
     const returned = {
       ...docs,
       [`users/${owner}/aiUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(230), returnedUsd: assistUsdFromCredits(230) },
     }
     const after = await readFreeAiCreditsLeft(fakeFirestore(returned), { orgId: 'org-b', org: free('org-b'), now: NOW })
     expect(after?.left).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
-    expect(aiFreeSiteShortfall(after, 2)).toBeNull()
+    expect(aiFreeSitePrompt(after, 2)).toBeNull()
   })
 
   it('reads the workspace that spent as limited by both walls', async () => {
@@ -95,7 +97,7 @@ describe('readFreeAiCreditsLeft — two Free workspaces of one owner', () => {
       org: free('org-b'),
       now: new Date('2026-11-01T00:00:00.000Z'),
     })
-    expect(left).toEqual({ left: FREE_AI_TASTE_CREDITS_PER_MONTH, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: '2026-12-01' })
+    expect(left).toMatchObject({ left: FREE_AI_TASTE_CREDITS_PER_MONTH, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: '2026-12-01' })
   })
 
   it('answers null for a paid workspace and for a read that fails', async () => {
@@ -103,5 +105,36 @@ describe('readFreeAiCreditsLeft — two Free workspaces of one owner', () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
     const broken = { collection: () => { throw new Error('unreachable') } } as unknown as FirebaseFirestore.Firestore
     expect(await readFreeAiCreditsLeft(broken, { orgId: 'org-b', org: free('org-b'), now: NOW })).toBeNull()
+  })
+})
+
+describe('readFreeAiCreditsLeft — a plan step’s own spend, counted once (AGL-3722)', () => {
+  // zachary1748, 2026-10-10: the chat turn's 31 credits were on both meters
+  // (183 used, 117 left) when the build's plan step asked, and the plan's own
+  // 46 were not yet — the machine meters a step after it returns.
+  const before = {
+    [`orgs/org-a/assistUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(183) },
+    [`users/${owner}/aiUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(183) },
+  }
+  const after = {
+    [`orgs/org-a/assistUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(229) },
+    [`users/${owner}/aiUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(229) },
+  }
+
+  it('reads 117 before the plan, and 71 from inside the plan step net of its 46', async () => {
+    const firestore = fakeFirestore(before)
+    expect((await readFreeAiCreditsLeft(firestore, { orgId: 'org-a', org: free('org-a'), now: NOW }))?.left).toBe(117)
+    const inside = await readFreeAiCreditsLeft(firestore, {
+      orgId: 'org-a',
+      org: free('org-a'),
+      now: NOW,
+      pendingUsd: assistUsdFromCredits(46),
+    })
+    expect(inside).toMatchObject({ left: 71, used: { account: 229, org: 229 } })
+  })
+
+  it('reads the same 71 once the machine has metered the plan, which is what the strip then shows', async () => {
+    const metered = await readFreeAiCreditsLeft(fakeFirestore(after), { orgId: 'org-a', org: free('org-a'), now: NOW })
+    expect(metered).toMatchObject({ left: 71, used: { account: 229, org: 229 } })
   })
 })

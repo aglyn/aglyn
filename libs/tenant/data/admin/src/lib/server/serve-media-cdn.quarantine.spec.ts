@@ -546,3 +546,29 @@ describe('AGL-1512 · quarantine and lockdown compose', () => {
     )
   })
 })
+
+describe('AGL-3716 · a copyright takedown stops a track', () => {
+  beforeEach(() => {
+    mockState.media['orgs/acme/media/track'] = {
+      ...mediaDoc(INFECTED_HASH),
+      fileName: 'song.mp3',
+      contentType: 'audio/mpeg',
+    }
+    mockState.metadata = { contentType: 'audio/mpeg', size: 8 }
+  })
+
+  it('a dmca quarantine refuses the track with the same neutral 410', async () => {
+    mockState.quarantine = denyList({
+      [`hash--${INFECTED_HASH}`]: quarantined({ reason: 'dmca' }),
+    })
+    expectRefused(await serve(['org:acme', 'track']))
+    // A seek is refused as firmly as the first request.
+    expectRefused(await serve(['org:acme', 'track'], {}, { range: 'bytes=2-5' }))
+  })
+
+  it('the track plays again once the takedown is lifted', async () => {
+    const res = await serve(['org:acme', 'track'])
+    expect(served(res)).toBe(true)
+    expect(res.headers['content-type']).toBe('audio/mpeg')
+  })
+})

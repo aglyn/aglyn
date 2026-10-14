@@ -65,11 +65,7 @@ export default function StaffReversalRecoveryCard({
         (total > 0 ? ` — $${(total / 100).toFixed(2)}` : '')
       }
       help={pluginDocsHelp('publisherHandbook', {
-        anchor: '#getting-paid',
-        excerpt:
-          'Refunded sales where Stripe refused to pull the publisher’s ' +
-          'share back — the publisher kept it and the platform absorbed the ' +
-          'gross until it is recovered.',
+        anchor: '#refund-reversals',
       })}
       contentGutterX
       contentGutterY

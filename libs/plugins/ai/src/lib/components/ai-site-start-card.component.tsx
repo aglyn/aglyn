@@ -44,10 +44,10 @@ import {
   mdiViewGridOutline,
   mdiWrench,
   mdiYoga,
-  mdiInformationOutline,
   mdiPageLayoutHeaderFooter,
 } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -74,7 +74,6 @@ import {
   Stepper,
   TextField,
   Toolbar,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import { alpha, type Theme } from '@mui/material/styles'
@@ -93,16 +92,23 @@ import {
   AI_SITE_FREE_PAGES,
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
+  aiFreeCreditsNoneLeftText,
   aiFreeCreditsResetLabel,
-  aiFreeSiteCreditEstimate,
-  aiFreeSiteShortfall,
-  aiFreeSiteShortfallText,
-  aiSiteCreditEstimate,
+  aiFreeSiteCreditRange,
+  aiFreeSitePrompt,
+  aiSiteCreditRange,
   type AiFreeCreditsLeft,
   aiSitePagesBand,
   type AiSiteSubmissions,
 } from '../model/ai-site-job'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import {
+  AI_CREDITS_CONFIRM_CODE,
+  aiCreditRangeText,
+  type AiCreditRange,
+  type AiCreditsPrompt,
+} from '../model/ai-credit-estimate'
+import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_TYPES,
@@ -113,7 +119,7 @@ import {
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+import { AI_SITE_KINDS, aiSiteKindOfInputs } from '../model/ai-site-kinds'
 
 /** The icon each kind of site's card shows. */
 const AI_SITE_KIND_ICONS: Record<string, string> = {
@@ -172,6 +178,17 @@ import { publishAiJob } from './ai-jobs-store'
  * starter site, and no job, no draft, no record of a site half begun. After,
  * they close through `leave`, and the job builds the site.
  *
+ * ── Or before the site exists (AGL-3761) ─────────────────────────────────
+ *
+ * "Create site" draws this straight away, with the zone's `pendingSite` and
+ * no site. Step 1 then asks the site's name and address (the shell's own
+ * fields) above the two cards, and the site is created only by a choice that
+ * needs one: the starter card or Skip (`startBlank`, which creates it with the
+ * starter), or Plan my site, which creates it and then starts the job on it.
+ * The close control and Escape create nothing there: they are `leave`. If the
+ * site was created and its job could not start, the site is a real one, and
+ * every way out gives it the starter as above, so none is left empty.
+ *
  * Escape and the close control are DISMISSALS, though, and Skip is a choice
  * (AGL-3660, 2026-10-08). Once anything is typed or picked, a dismissal asks
  * "Leave without your answers?" first, focused on Keep editing, so a stray
@@ -198,13 +215,13 @@ import { publishAiJob } from './ai-jobs-store'
  * the reader's `ai.generate` first. A lockdown is the start door's to say,
  * here, in its own words.
  *
- * ── It asks, it does not build ───────────────────────────────────────────
+ * ── It builds and publishes for you ──────────────────────────────────────
  *
  * "Plan my site" starts a `site` job, which PLANS first: the pages, their
- * addresses, the navigation, the layout, the contact form and a palette, with
- * an estimated cost beside the button that confirms it. Nothing is built
- * until the person confirms that plan, and everything it then builds is an
- * unpublished draft.
+ * addresses, the navigation, the layout, the contact form and a palette. The
+ * guided start confirms its own plan (AGL-3594), so the build follows with no
+ * approval to make, and the site is published, indexable, when it is done.
+ * The person edits or unpublishes it afterwards.
  *
  * ── It stays with the job (AGL-3593) ─────────────────────────────────────
  *
@@ -329,11 +346,46 @@ function ChoiceCard({
 }
 
 /** A small label above a group of questions. */
-function SectionLabel({ children }: { children: ReactNode }) {
+/**
+ * Each part of the guided start links its own section of the Start with AI
+ * guide (AGL-3660), so a `?` says what that one group of answers changes.
+ */
+const START_HELP = {
+  choose: pluginDocsHelp('aiStart', {
+    anchor: '#how-do-you-want-to-start',
+    excerpt:
+      'The starter site gives you a ready-made home page to edit. Start with AI asks a few questions, then plans, writes and publishes your pages.',
+  }),
+  business: pluginDocsHelp('aiStart', {
+    anchor: '#your-business',
+    excerpt:
+      'What kind of site it is picks its style and pages; who it is for is who every page and the contact form are written for.',
+  }),
+  style: pluginDocsHelp('aiSiteLooks', {
+    anchor: '#choose-a-style',
+    excerpt:
+      'The style decides the look — theme, colors, fonts, buttons — and which pages the site usually has. Every site gets its own variation.',
+  }),
+  details: pluginDocsHelp('aiStart', {
+    anchor: '#details',
+    excerpt:
+      'Where contact form messages go, how many pages to write, and on paid plans whether to draft a welcome email. All can be changed later.',
+  }),
+  estimate: pluginDocsHelp('aiCredits', {
+    anchor: '#before-a-job-starts',
+    excerpt:
+      'About what a start like this costs, measured on real builds, and the most it can cost. What it really costs is what each step spends, and you can watch that add up while it runs.',
+  }),
+}
+
+function SectionLabel({ children, help }: { children: ReactNode; help?: ReturnType<typeof pluginDocsHelp> }) {
   return (
-    <Typography variant="overline" color="text.secondary" component="h2" sx={{ display: 'block' }}>
-      {children}
-    </Typography>
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+      <Typography variant="overline" color="text.secondary" component="h2" sx={{ display: 'block' }}>
+        {children}
+      </Typography>
+      {help ? <HelpTip {...help} /> : null}
+    </Stack>
   )
 }
 
@@ -353,6 +405,7 @@ export function AiSiteStartCard({
   host,
   startBlank,
   leave,
+  pendingSite,
   initialAnswers = null,
 }: AiSiteStartCardProps) {
   const { data: user } = useUser()
@@ -383,6 +436,13 @@ export function AiSiteStartCard({
   const [confirmingLeave, setConfirmingLeave] = useState(false)
   // The dialog's own root, to tell its Escape from a nested popup's.
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  // Drawn by "Create site" before the site exists (AGL-3761): the shell's
+  // name and address are asked on step 1, and the site is created only by
+  // the starter, Skip, or Plan my site. Read through a ref by the verdict
+  // below, which must not re-run when the shell re-renders it.
+  const pendingRef = useRef(pendingSite)
+  pendingRef.current = pendingSite
+  const creating = Boolean(pendingSite) && !pendingSite?.created
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -406,10 +466,16 @@ export function AiSiteStartCard({
               welcomeEmail: false,
             }))
           }
-          setVerdict(response.status === 404 || response.status === 403 ? 'hidden' : 'ready')
+          const shown = response.status !== 404 && response.status !== 403
+          setVerdict(shown ? 'ready' : 'hidden')
+          // "Create site" shows its own dialog when this one will not draw.
+          pendingRef.current?.ready(shown)
         }
       } catch {
-        if (active) setVerdict('hidden')
+        if (active) {
+          setVerdict('hidden')
+          pendingRef.current?.ready(false)
+        }
       }
     })()
     return () => {
@@ -423,9 +489,17 @@ export function AiSiteStartCard({
     [],
   )
 
-  // A Free start what is left cannot pay for is not started (AGL-3660): the
-  // dialog says so before anything spends, and the create door refuses it too.
-  const shortfall = freeTaste ? aiFreeSiteShortfall(freeCredits, answers.pages) : null
+  // A Free start past what is left asks first (AGL-3722): it is admitted on
+  // its measured p90, and one past what is left starts only on "Build what
+  // fits" (pausing with Resume where the credits run out), or smaller as the
+  // home page alone. The create door asks the same, so a stale dialog meets
+  // the prompt there too (`serverPrompt`). Nothing at all left is a dead
+  // stop until the credits renew or the workspace upgrades.
+  const [serverPrompt, setServerPrompt] = useState<AiCreditsPrompt | null>(null)
+  // The door's prompt was for the pages it was asked with.
+  useEffect(() => setServerPrompt(null), [answers.pages])
+  const prompt = freeTaste ? (aiFreeSitePrompt(freeCredits, answers.pages) ?? serverPrompt) : null
+  const noneLeft = freeTaste && freeCredits !== null && freeCredits.left <= 0
   const refusal = aiSiteStartRefusal(answers, { freeTaste })
   const band = aiSitePagesBand(freeTaste)
   // On a paid plan the person picks the model that builds the site (AGL-3660),
@@ -440,27 +514,51 @@ export function AiSiteStartCard({
   }, [freeTaste, step, rememberedModel, loadModels])
   const pickedModel = freeTaste ? null : modelChoice.model
 
-  const plan = useCallback(async () => {
-    if (!orgId || aiSiteStartRefusal(answers, { freeTaste }) || shortfall) return
+  const plan = useCallback(async (options: { creditsConfirmed?: boolean; pages?: number } = {}) => {
+    const asked = options.pages ? { ...answers, pages: options.pages } : answers
+    if (!orgId || aiSiteStartRefusal(asked, { freeTaste }) || noneLeft) return
+    // Past what is left, only an explicit go-ahead starts it.
+    if (freeTaste && !options.creditsConfirmed && aiFreeSitePrompt(freeCredits, asked.pages)) return
+    if (options.pages) answer({ pages: options.pages })
     setBusy(true)
     setNotice(null)
+    setServerPrompt(null)
     try {
+      // The site, created now when it does not exist yet (AGL-3761): this is
+      // the moment the person asked for it. A refusal is said here, and one
+      // about the name or address goes back to step 1, where they are typed.
+      let site = { hostId, host, orgSlug }
+      if (!hostId && pendingSite) {
+        const made = await pendingSite.create()
+        if ('error' in made) {
+          setNotice(made.error)
+          if (made.address) setStep('choose')
+          return
+        }
+        site = { hostId: made.hostId, host: made.host, orgSlug: made.orgSlug || orgSlug }
+      }
+      if (!site.hostId) return
       const response = await authorizedFetch(userRef.current, '/api/ai/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
-          hostId,
+          hostId: site.hostId,
           kind: 'site',
-          brief: aiSiteStartBrief(answers),
+          brief: aiSiteStartBrief(asked),
           // The guided start confirms its own plan (AGL-3594): the build
           // follows the plan with no approval to make.
-          inputs: { ...aiSiteStartInputs(answers), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
+          inputs: { ...aiSiteStartInputs(asked), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
           ...(pickedModel ? { model: pickedModel } : {}),
+          ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
         }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
+        if (response.status === 409 && payload?.code === AI_CREDITS_CONFIRM_CODE && payload?.credits) {
+          setServerPrompt(payload.credits as AiCreditsPrompt)
+          return
+        }
         const locked = parseLockdownRefusal(response.status, payload)
         setNotice(
           locked
@@ -479,7 +577,7 @@ export function AiSiteStartCard({
       // Where the next step is (AGL-3594): the site's "Building your site"
       // page for this job. The zone closes without the starter first, so the
       // setup page does not ask again behind it.
-      const href = aiSiteBuildHref(orgSlug, host, created.id)
+      const href = aiSiteBuildHref(site.orgSlug, site.host, created.id)
       if (href) {
         ;(leave ?? (() => undefined))()
         router.push(href)
@@ -491,29 +589,54 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, freeTaste, shortfall, orgSlug, host, leave, router, pickedModel])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite])
 
-  const chooseStarter = useCallback(() => {
-    setStartingStarter(true)
-    trackEvent('site_start_choice', { choice: 'starter' })
-    startBlank()
+  // The zone's `startBlank`. Before the site exists it creates it with the
+  // starter, and answers `false` when it could not — most often a name or
+  // address to fix, which step 1 shows.
+  const runStartBlank = useCallback(() => {
+    const result = startBlank()
+    if (result && typeof result.then === 'function') {
+      void result.then((done) => {
+        if (done) return
+        setStartingStarter(false)
+        setStep('choose')
+      })
+    }
   }, [startBlank])
 
+  const chooseStarter = useCallback(() => {
+    if (pendingSite && !pendingSite.created && !pendingSite.check()) return
+    setStartingStarter(true)
+    trackEvent('site_start_choice', { choice: 'starter' })
+    runStartBlank()
+  }, [pendingSite, runStartBlank])
+
   const chooseAi = useCallback(() => {
+    if (pendingSite && !pendingSite.created && !pendingSite.check()) return
     trackEvent('site_start_choice', { choice: 'ai' })
     setStep('describe')
-  }, [])
+  }, [pendingSite])
 
   if (verdict !== 'ready') return null
 
-  // Before a job is started every way out is the blank site, which writes the
-  // starter (AGL-3594); after, it only closes — the job builds the site.
-  const exit = started ? (leave ?? startBlank) : startBlank
+  // Before a job is started Skip is the blank site, which writes the starter
+  // (AGL-3594); after, it only closes — the job builds the site.
+  const exit = started ? (leave ?? runStartBlank) : runStartBlank
+  // Escape and the close control. Before "Create site" has made the site
+  // (AGL-3761) there is nothing to give a starter to, so they only close,
+  // and nothing is created; otherwise they are the same way out as Skip.
+  const dismissTo = creating && !started ? (leave ?? runStartBlank) : exit
   // Anything the person typed or picked, which a dismissal must not discard
   // silently (AGL-3660). After a job starts there is nothing left to lose.
   const drafted =
     !started &&
-    Boolean(answers.siteType.trim() || answers.audience.trim() || answers.kind !== null)
+    Boolean(
+      answers.siteType.trim() ||
+        answers.audience.trim() ||
+        answers.kind !== null ||
+        (creating && pendingSite?.dirty),
+    )
   // Escape and the close control: a dismissal, never a choice. Escape that
   // bubbled here through React from a portal outside this dialog's own DOM is
   // a nested menu's, already handled there, and is not this dialog's to act on.
@@ -524,30 +647,39 @@ export function AiSiteStartCard({
       if (root && target instanceof Node && !root.contains(target)) return
     }
     if (drafted) setConfirmingLeave(true)
-    else exit()
+    else dismissTo()
   }
   const leaveDraft = () => {
     setConfirmingLeave(false)
-    exit()
+    dismissTo()
   }
 
   // The chosen model's cost against Auto's, as the model list states it.
   const modelMultiplier =
     (pickedModel && modelChoice.options?.options.find((option) => option.id === pickedModel)?.multiplier) || 1
+  // What the start is likely to cost and at most (AGL-3722): "About 137
+  // credits (up to 283)", the measured figures scaled by the chosen model.
+  const scaled = (range: AiCreditRange): AiCreditRange => ({
+    likely: Math.round(range.likely * modelMultiplier),
+    p90: Math.round(range.p90 * modelMultiplier),
+    ceiling: Math.round(range.ceiling * modelMultiplier),
+  })
   const estimate = freeTaste
-    ? aiFreeSiteCreditEstimate(answers.pages)
-    : Math.round(
-        aiSiteCreditEstimate(answers.pages, {
+    ? aiFreeSiteCreditRange(answers.pages)
+    : scaled(
+        aiSiteCreditRange(answers.pages, {
           welcomeEmail: answers.welcomeEmail,
-        }) * modelMultiplier,
+          // A store's first products and a blog's first posts are part of the start (AGL-3676).
+          siteKind: aiSiteKindOfInputs(aiSiteStartInputs(answers))?.id ?? null,
+        }),
       )
   // A Free start quotes what is LEFT (AGL-3660), shared across the owner's
   // Free workspaces — never the month's whole allowance as if none were spent.
   const estimateText = freeTaste
     ? freeCredits
-      ? `Up to about ${estimate.toLocaleString('en-US')} AI credits. You have ${freeCredits.left.toLocaleString('en-US')} of your ${freeCredits.total.toLocaleString('en-US')} free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}`
-      : `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits you get free each month`
-    : `About ${estimate.toLocaleString('en-US')} credits, estimated`
+      ? `${aiCreditRangeText(estimate)}. You have ${freeCredits.left.toLocaleString('en-US')} of your ${freeCredits.total.toLocaleString('en-US')} free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}`
+      : `${aiCreditRangeText(estimate)}, of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits you get free each month`
+    : `${aiCreditRangeText(estimate)}, estimated`
 
   const choosing = step === 'choose' && !started
 
@@ -619,13 +751,16 @@ export function AiSiteStartCard({
                 {choosing ? 'How do you want to start?' : 'Tell us about your site'}
               </Typography>
               <Typography variant="body1" color="text.secondary">
+                {choosing ? <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} /> : null}
                 {choosing
-                  ? 'You can change everything later.'
+                  ? creating
+                    ? 'Name your site, then choose how it starts. You can change everything later.'
+                    : 'You can change everything later.'
                   : `A few answers and ${PLATFORM_BRAND_NAME} AI plans and writes your pages, then publishes your site.`}
               </Typography>
             </Stack>
             {notice && <Alert severity="info">{notice}</Alert>}
-            {step === 'describe' && !started && shortfall && freeCredits && (
+            {step === 'describe' && !started && noneLeft && freeCredits && (
               <Alert
                 severity="warning"
                 action={
@@ -636,12 +771,25 @@ export function AiSiteStartCard({
                   ) : undefined
                 }
               >
-                {aiFreeSiteShortfallText(shortfall, freeCredits.resetsOn)}
-                {answers.pages > 1 && !aiFreeSiteShortfall(freeCredits, 1)
-                  ? ' Or choose 1 page, which what you have left covers.'
-                  : null}
+                {aiFreeCreditsNoneLeftText(freeCredits.resetsOn)}
               </Alert>
             )}
+            {step === 'describe' && !started && !noneLeft && prompt && (
+              <AiCreditsPromptNotice
+                prompt={prompt}
+                noun="site"
+                orgSlug={orgSlug}
+                busy={busy}
+                onBuildWhatFits={() => void plan({ creditsConfirmed: true })}
+                onSmaller={() => void plan({ creditsConfirmed: true, pages: 1 })}
+              />
+            )}
+            {choosing && creating && pendingSite ? (
+              <Stack spacing={2} component="section" aria-label="Your site">
+                <SectionLabel>{'Your site'}</SectionLabel>
+                {pendingSite.fields}
+              </Stack>
+            ) : null}
             {choosing ? (
               <Box
                 sx={{
@@ -683,8 +831,8 @@ export function AiSiteStartCard({
                   orgSlug={orgSlug}
                   user={user}
                   intro={
-                    'Your site is being planned. Review the plan here or in AI jobs, and confirm ' +
-                    'it to build — nothing is built, and nothing is published, until you do.'
+                    'Your site is being planned. It is then built and published for you, with ' +
+                    'nothing to approve. You can edit or unpublish it afterwards.'
                   }
                   // Full screen: AI jobs opens in the panel this dialog covers.
                   onOpenJobs={exit}
@@ -693,7 +841,7 @@ export function AiSiteStartCard({
             ) : (
               <>
                 <Stack spacing={2} component="section" aria-label="Your business">
-                  <SectionLabel>{'Your business'}</SectionLabel>
+                  <SectionLabel help={START_HELP.business}>{'Your business'}</SectionLabel>
                   <TextField
                     fullWidth
                     required
@@ -725,7 +873,7 @@ export function AiSiteStartCard({
                   />
                 </Stack>
                 <Stack spacing={2} component="section" aria-label="Style">
-                  <SectionLabel>{'Style'}</SectionLabel>
+                  <SectionLabel help={START_HELP.style}>{'Style'}</SectionLabel>
                   <Typography variant="body2" color="text.secondary">
                     {answers.kind
                       ? 'This decides how your site looks and which pages it usually has.'
@@ -744,7 +892,7 @@ export function AiSiteStartCard({
                   />
                 </Stack>
                 <Stack spacing={2} component="section" aria-label="Details">
-                  <SectionLabel>{'Details'}</SectionLabel>
+                  <SectionLabel help={START_HELP.details}>{'Details'}</SectionLabel>
                   {/*
                     The one setting a new site owner has to make, asked where
                     they are already answering: a contact form nobody routed
@@ -822,16 +970,7 @@ export function AiSiteStartCard({
             <Typography variant="body2" color="text.secondary">
               {`${estimateText}.`}
             </Typography>
-            <Tooltip title="What it really costs is what each step spends, and you can watch that add up while it runs.">
-              <Box
-                component="span"
-                tabIndex={0}
-                aria-label="How the estimate works"
-                sx={{ display: 'inline-flex', color: 'text.secondary' }}
-              >
-                <MdiIcon path={mdiInformationOutline.path} fontSize="small" />
-              </Box>
-            </Tooltip>
+            <HelpTip {...START_HELP.estimate} ariaLabel="How the estimate works" />
           </Stack>
           {refusal && (
             <Typography variant="body2" color="text.secondary">
@@ -843,8 +982,8 @@ export function AiSiteStartCard({
           <Button
             variant="contained"
             size="large"
-            disabled={busy || Boolean(refusal) || Boolean(shortfall)}
-            onClick={plan}
+            disabled={busy || Boolean(refusal) || Boolean(prompt) || noneLeft}
+            onClick={() => void plan()}
             startIcon={<MdiIcon path={mdiCreation.path} />}
           >
             {busy ? 'Starting…' : 'Plan my site'}
@@ -861,12 +1000,14 @@ export function AiSiteStartCard({
         <DialogTitle id={`${TITLE_ID}-leave`}>{'Leave without your answers?'}</DialogTitle>
         <DialogContent>
           <DialogContentText id={`${TITLE_ID}-leave-text`}>
-            {'What you typed is not saved. Leaving starts your site from the starter site instead.'}
+            {creating
+              ? 'What you typed is not saved, and no site is created.'
+              : 'What you typed is not saved. Leaving starts your site from the starter site instead.'}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={leaveDraft}>
-            {'Leave and start blank'}
+            {creating ? 'Leave' : 'Leave and start blank'}
           </Button>
           <Button variant="contained" autoFocus onClick={() => setConfirmingLeave(false)}>
             {'Keep editing'}

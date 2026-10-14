@@ -17,8 +17,15 @@
 
 'use client'
 
-import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
+import {
+  mdiAccountOutline,
+  mdiDomain,
+  mdiEyeOutline,
+  mdiInformationOutline,
+  mdiOpenInNew,
+} from '@aglyn/shared-data-mdi'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { buildRoute, Route } from '../constants/route-links'
 import { buildSiteLiveUrl } from '../constants/tenant-links'
 import { staffSitePreviewHref } from '../utils/staff-site-links'
@@ -46,15 +53,26 @@ export interface StaffSiteRow {
      * The plan staff asked the workspace to buy, and its subscription
      * status, for the site page's "Ask to upgrade" (AGL-3466).
      */
-    upgradeProposal?: { plan: string; proposedBy: string; proposedAt: number; note?: string } | null
+    upgradeProposal?: {
+      plan: string
+      proposedBy: string
+      proposedAt: number
+      note?: string
+    } | null
     billingStatus?: string | null
   } | null
-  owner: { uid: string; email: string | null; displayName: string | null } | null
+  owner: {
+    uid: string
+    email: string | null
+    displayName: string | null
+  } | null
   publishedPages: number
   homeScreenId: string | null
   suspended: boolean
   maintenance: boolean
   createdAt: { seconds: number } | null
+  /** The host document's `updatedAt`: the Sites list's Last updated column. */
+  updatedAt?: { seconds: number } | null
 }
 
 /**
@@ -71,65 +89,130 @@ export const staffSiteLiveUrl = (
   })
 
 /**
- * The row's ways out: the live site and the preview in a new tab, and the
- * staff pages for the site, its organization and its owner. Shared with the
+ * The menu under the row's ⋮. "Visit live site" is its first entry and lives
+ * ONLY here: it used to be a ↗ icon beside the menu as well, and
+ * `ListRowActions` restated that icon as the menu's first item, so the one
+ * action showed twice (Zach, 2026-10-10). Each label names where it goes —
+ * a staff page, or a new tab — rather than "Open …" four times over (Zach,
+ * 2026-10-09: "confusing menu items"). An item a row cannot use says why on
+ * a second line, not only in a tooltip nobody hovers: the preview of a site
+ * with no published home page, a site with no organization, an organization
+ * with no owner. Every item leads with its icon, on the left, as the
+ * besigner's File menu does (Zach, 2026-10-10).
+ */
+export function staffSiteMenuItems(
+  site: Pick<StaffSiteRow, '$id' | 'orgId' | 'homeScreenId'> &
+    Partial<
+      Pick<StaffSiteRow, 'subdomain' | 'cname' | 'cnameAttachmentPending'>
+    > & {
+      ownerUid?: string | null
+    },
+): RowActionsMenuItem[] {
+  const liveUrl = staffSiteLiveUrl({
+    subdomain: site.subdomain ?? null,
+    cname: site.cname ?? null,
+    cnameAttachmentPending: site.cnameAttachmentPending ?? false,
+  })
+  const icons = {
+    live: { path: mdiOpenInNew.path },
+    open: { path: mdiInformationOutline.path },
+    preview: { path: mdiEyeOutline.path },
+    org: { path: mdiDomain.path },
+    owner: { path: mdiAccountOutline.path },
+  }
+  const unavailable = (reason: string) => ({
+    disabled: true,
+    disabledReason: reason,
+    description: reason,
+  })
+  return [
+    liveUrl
+      ? {
+          key: 'live',
+          label: 'Visit live site',
+          icon: icons.live,
+          href: liveUrl,
+          external: true,
+        }
+      : {
+          key: 'live',
+          label: 'Visit live site',
+          icon: icons.live,
+          external: true,
+          ...unavailable('This site has no address yet'),
+        },
+    {
+      key: 'open',
+      label: 'Site details',
+      icon: icons.open,
+      href: buildRoute(Route.ADMIN_SITE_DETAIL, { hostId: site.$id }),
+    },
+    site.homeScreenId
+      ? {
+          key: 'preview',
+          label: 'Preview home page',
+          icon: icons.preview,
+          href: staffSitePreviewHref(site.$id, 'screen', site.homeScreenId),
+          external: true,
+        }
+      : {
+          key: 'preview',
+          label: 'Preview home page',
+          icon: icons.preview,
+          external: true,
+          ...unavailable('No home page published yet'),
+        },
+    site.orgId
+      ? {
+          key: 'org',
+          label: 'Organization details',
+          icon: icons.org,
+          href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: site.orgId }),
+        }
+      : {
+          key: 'org',
+          label: 'Organization details',
+          icon: icons.org,
+          ...unavailable('Belongs to no organization'),
+        },
+    site.ownerUid
+      ? {
+          key: 'owner',
+          label: 'Owner details',
+          icon: icons.owner,
+          href: buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.ownerUid }),
+        }
+      : {
+          key: 'owner',
+          label: 'Owner details',
+          icon: icons.owner,
+          ...unavailable('The organization records no owner'),
+        },
+  ]
+}
+
+/**
+ * The row's ways out, all in the ⋮ menu (no quick icon): the live site and
+ * the preview in a new tab, and the staff pages for the site, its organization and its owner. Shared with the
  * organization page's Sites card so both lists offer the same menu.
  */
 export function StaffSiteRowActions(props: {
   site: Pick<
     StaffSiteRow,
-    '$id' | 'displayName' | 'subdomain' | 'cname' | 'cnameAttachmentPending' | 'orgId' | 'homeScreenId'
+    | '$id'
+    | 'displayName'
+    | 'subdomain'
+    | 'cname'
+    | 'cnameAttachmentPending'
+    | 'orgId'
+    | 'homeScreenId'
   > & { ownerUid?: string | null }
 }) {
   const { site } = props
-  const liveUrl = staffSiteLiveUrl(site)
   return (
     <ListRowActions
       label={site.displayName ?? site.subdomain ?? site.$id}
-      quick={{
-        icon: mdiOpenInNew.path,
-        label: 'Visit live site',
-        href: liveUrl,
-        unavailableReason: liveUrl ? undefined : 'This site has no address yet',
-      }}
-      items={[
-        {
-          key: 'open',
-          label: 'Open site',
-          href: buildRoute(Route.ADMIN_SITE_DETAIL, { hostId: site.$id }),
-        },
-        {
-          key: 'preview',
-          label: 'Open preview',
-          href: site.homeScreenId
-            ? staffSitePreviewHref(site.$id, 'screen', site.homeScreenId)
-            : undefined,
-          external: true,
-          disabled: !site.homeScreenId,
-          disabledReason: site.homeScreenId
-            ? undefined
-            : 'No home page is published — open the site to preview another page',
-        },
-        {
-          key: 'org',
-          label: 'Open organization',
-          href: site.orgId
-            ? buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: site.orgId })
-            : undefined,
-          disabled: !site.orgId,
-          disabledReason: site.orgId ? undefined : 'This site belongs to no organization',
-        },
-        {
-          key: 'owner',
-          label: 'Open owner',
-          href: site.ownerUid
-            ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.ownerUid })
-            : undefined,
-          disabled: !site.ownerUid,
-          disabledReason: site.ownerUid ? undefined : 'The organization records no owner',
-        },
-      ]}
+      items={staffSiteMenuItems(site)}
     />
   )
 }
-

@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  pluginDocsHelp,
   type CrmLeadFields,
   normalizeContactEmail,
   readErasureRequestedAtMs,
@@ -38,7 +37,7 @@ import { useErasePersonAction } from './erase-person-action'
 import { LeadCampaignsCard, leadCampaignNames } from './lead-campaigns-card'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { LeadHistoryCard } from './lead-history-card'
-import { LeadPropertiesCard } from './lead-properties-card'
+import { LEAD_PAGE_HELP, LeadPropertiesCard } from './lead-properties-card'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
 import { RecordActivityCard } from './record-activity-card'
 import { CrmShareChipView, RecordSharingCard } from './record-sharing-card'
@@ -151,7 +150,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
       <CrmRecordHeader
         kind="Lead"
         title={undefined}
-        help={pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
+        help={LEAD_PAGE_HELP}
         backHref={routes.section('leads')}
         backLabel="Back to leads"
       >
@@ -168,7 +167,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
       <CrmRecordHeader
         kind="Lead"
         title={undefined}
-        help={pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
+        help={LEAD_PAGE_HELP}
         backHref={routes.section('leads')}
         backLabel="Back to leads"
         loading

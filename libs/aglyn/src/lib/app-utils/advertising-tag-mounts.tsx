@@ -26,6 +26,7 @@
 // `site-analytics-independence.spec.ts` walks and which must stay independent
 // of the site-plugin gate.
 import {
+  ADVERTISING_EVENTS_ATTRIBUTE,
   ADVERTISING_TAG_ATTRIBUTE,
   type ResolvedAdvertisingTag,
   restoreAdvertisingTags,
@@ -213,7 +214,7 @@ export default function AdvertisingTagMounts({
 
   return (
     <>
-      {tags.map(({ vendor, accountId }) => (
+      {tags.map(({ vendor, accountId, siteOwned }) => (
         // A PAIR per vendor, inline boot first and library second — the same
         // shape as the GA `ga-init` / `ga-src` pair, and for the same reason:
         // the boot defines the vendor's queue shim and declares the consent
@@ -226,6 +227,9 @@ export default function AdvertisingTagMounts({
             strategy="afterInteractive"
             nonce={nonce}
             {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
+            // A site owner's own tag carries the second mark (AGL-3694),
+            // which is what lets the site's conversion events reach it.
+            {...(siteOwned ? { [ADVERTISING_EVENTS_ATTRIBUTE]: '1' } : {})}
           >
             {vendor.bootSnippet ? vendor.bootSnippet(accountId) : ''}
           </Script>
@@ -244,6 +248,7 @@ export default function AdvertisingTagMounts({
               strategy="afterInteractive"
               nonce={nonce}
               {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
+              {...(siteOwned ? { [ADVERTISING_EVENTS_ATTRIBUTE]: '1' } : {})}
               // `scriptSrcFor` where the vendor has one: gtag reads the
               // container out of the loader's query, so the copy we bring
               // ourselves has to name the account. See `scriptSrcFor`.

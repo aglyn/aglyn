@@ -231,7 +231,7 @@ export function ListEditCard(props: ListEditCardProps) {
     return (
       <CardDisplay
         header={'Edit list'}
-        help={pluginDocsHelp('emailCampaigns', { anchor: '#email-lists' })}
+        help={pluginDocsHelp('emailCampaigns', { anchor: '#lists-built-from-a-rule' })}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: headerActions }}

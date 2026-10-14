@@ -127,6 +127,26 @@ export interface AiInventoryDataset {
    * `{{item.<id>}}` (AGL-3475). Absent where the reader did not see them.
    */
   fieldIds?: string[]
+  /**
+   * The id of the field holding each record's photo, where it has one
+   * (AGL-3616): what a record template's Image binds as its `src`.
+   */
+  imageField?: string
+  /**
+   * The id of the record's page-address field, where it has one (AGL-3727):
+   * what a listing's card links each record's own page by. Where the site
+   * already serves record pages for the dataset, the field those pages are
+   * served by (AGL-3747).
+   */
+  addressField?: string
+  /**
+   * Where this site already serves each record a page of its own (AGL-3747):
+   * the base of the dataset's saved record template (AGL-3475), without
+   * slashes at either end — `team` for `/team/ada`. Absent where the site
+   * keeps no record template for it. Never shown in the prompt: code links a
+   * listing's cards by it.
+   */
+  recordBase?: string
 }
 
 export interface AiInventoryCollection {
@@ -270,6 +290,12 @@ export function aiHomeScreenIds(inventory: AiSiteInventory | null): string[] {
   // wherever the site already has one.
   const kept = homes.filter((screen) => !screen.replaceable)
   return (kept.length ? kept : homes).map((screen) => screen.id)
+}
+
+/** The titles of the site's home screens ({@link aiHomeScreenIds}): a link under one says home, in the site's own language (AGL-3760). */
+export function aiHomeScreenNames(inventory: AiSiteInventory | null): string[] {
+  const ids = new Set(aiHomeScreenIds(inventory))
+  return (inventory?.screens ?? []).filter((screen) => ids.has(screen.id) && screen.name.trim()).map((screen) => screen.name.trim())
 }
 
 /** A site the org does not own; the inventory is never read for it. */

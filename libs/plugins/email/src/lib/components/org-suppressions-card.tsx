@@ -123,7 +123,7 @@ function OrgSuppressionsTable(props: { mount: EmailOrgMount }) {
   return (
     <CardDisplay
       header="Suppressions"
-      help={pluginDocsHelp('emailCampaigns', { anchor: '#suppressions' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#org-suppressions' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

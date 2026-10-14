@@ -1,5 +1,13 @@
 package com.aglyn.site.setup
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -548,12 +556,23 @@ private fun TrackingSection(host: Map<String, Any?>, api: HostSettingsApi, canEd
 
 @Composable
 private fun ThemeSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
-  ThemeLibraryCard(context, hostId, host, api, context.siteRole in THEME_LIBRARY_ROLES)
-  ThemeEditorCard(api, canEdit, hostVersion = host["themeOverride"])
+  var load by remember { mutableStateOf<Load<ThemeEditorLoad>>(Load.Loading) }
+  var attempt by remember { mutableStateOf(0) }
+  LaunchedEffect(attempt, host["themeOverride"], host["themeSelection"]) {
+    load = try {
+      Load.Ready(api.themeEditor())
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      Load.Failed(error.message ?: "The theme could not be loaded.")
+    }
+  }
+  ThemeLibraryCard(context, hostId, host, api, (load as? Load.Ready)?.value?.presets.orEmpty(), context.siteRole in THEME_LIBRARY_ROLES)
+  ThemeEditorCard(load, onRetry = { attempt++ }, api, canEdit)
+  FontInstallerCard(context, hostId, canEdit)
 }
 
 @Composable
-private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canManage: Boolean) {
+private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, presets: List<ThemePreset>, canManage: Boolean) {
   val selection = themeSelectionOf(host)
   val edited = hasThemeEdits(host)
   val saved by remember(hostId, context.firestore) {
@@ -588,6 +607,25 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
     }
     runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
     runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
+    if (presets.isNotEmpty()) {
+      Text("Built-in themes", style = MaterialTheme.typography.labelLarge)
+      presets.forEachIndexed { index, preset ->
+        if (index > 0) HorizontalDivider()
+        val current = selection.kind == "preset" && selection.id == preset.id
+        AglynListItem(
+          title = preset.name,
+          supporting = preset.description.ifBlank { null },
+          trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+              ThemeSwatches(preset.swatches)
+              if (current) StatusChip("In use", StatusTone.SUCCESS)
+              else TextButton(onClick = { runner.run("Switched to ${preset.name}.") { api.selectTheme("preset", preset.id) } }, enabled = canManage && !runner.busy) { Text("Use") }
+            }
+          },
+          modifier = Modifier.testTag("preset-${preset.id}"),
+        )
+      }
+    }
     Text("Saved themes", style = MaterialTheme.typography.labelLarge)
     when (val live = saved) {
       Live.Loading -> SkeletonList(rows = 2)
@@ -649,19 +687,65 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
   }
 }
 
+/** A preset's colors as small overlapping dots. */
 @Composable
-private fun ThemeEditorCard(api: HostSettingsApi, canEdit: Boolean, hostVersion: Any?) {
-  var load by remember { mutableStateOf<Load<Pair<ThemeCatalog, ThemeValues>>>(Load.Loading) }
-  var attempt by remember { mutableStateOf(0) }
-  LaunchedEffect(attempt, hostVersion) {
-    load = try {
-      Load.Ready(api.themeEditor())
-    } catch (error: Throwable) {
-      if (error is CancellationException) throw error
-      Load.Failed(error.message ?: "The theme could not be loaded.")
+private fun ThemeSwatches(colors: List<String>) {
+  Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
+    for (css in colors) {
+      Box(
+        Modifier.size(16.dp).clip(CircleShape)
+          .background(com.aglyn.ui.parseHexColor(css) ?: MaterialTheme.colorScheme.surfaceVariant)
+          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+      )
     }
   }
-  LoadContent(load, onRetry = { attempt++ }, failedTitle = "Could not load the theme", modifier = Modifier.fillMaxWidth()) { (catalog, stored) ->
+}
+
+/** The whole font catalog as a searchable list with category chips: pick one, or the theme's own. */
+@Composable
+private fun FontPickerField(catalog: ThemeCatalog, value: String, enabled: Boolean, onValue: (String) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  OutlinedButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("font-family-field")) {
+    Icon(AglynIcons.named("text_fields"), contentDescription = null)
+    Text(
+      "Font family: " + if (value == catalog.systemFont) "The theme's own" else value,
+      Modifier.padding(start = space(1f)).weight(1f),
+      maxLines = 1,
+    )
+  }
+  if (open) {
+    var search by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("all") }
+    val fonts = filterFonts(catalog.fonts, search, category.takeIf { it != "all" })
+    ActionDialog(
+      title = "Font family",
+      confirmLabel = "Use the theme's own",
+      dismissLabel = "Close",
+      icon = "text_fields",
+      onConfirm = { onValue(catalog.systemFont); open = false },
+      onDismiss = { open = false },
+    ) {
+      com.aglyn.ui.SearchField(search, { search = it }, "Search fonts")
+      ChoiceChipRow(listOf(ChipOption("all", "All")) + FONT_CATEGORIES.map { ChipOption(it.first, it.second) }, category, { category = it })
+      Text("${fonts.size} ${if (fonts.size == 1) "font" else "fonts"}", style = MaterialTheme.typography.labelLarge)
+      LazyColumn(Modifier.heightIn(max = 320.dp).testTag("font-list")) {
+        items(fonts, key = { it.family }) { font ->
+          AglynListItem(
+            title = font.family,
+            supporting = FONT_CATEGORIES.firstOrNull { it.first == font.category }?.second ?: font.category,
+            selected = font.family == value,
+            trailing = if (font.family == value) ({ Icon(AglynIcons.named("check"), contentDescription = "Selected") }) else null,
+            modifier = Modifier.clickable { onValue(font.family); open = false }.testTag("font-${font.family}"),
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun ThemeEditorCard(load: Load<ThemeEditorLoad>, onRetry: () -> Unit, api: HostSettingsApi, canEdit: Boolean) {
+  LoadContent(load, onRetry = onRetry, failedTitle = "Could not load the theme", modifier = Modifier.fillMaxWidth()) { (catalog, stored) ->
     var draft by remember(stored) { mutableStateOf(stored) }
     var scheme by remember { mutableStateOf(catalog.schemes.firstOrNull() ?: "light") }
     val runner = rememberRunner()
@@ -701,13 +785,7 @@ private fun ThemeEditorCard(api: HostSettingsApi, canEdit: Boolean, hostVersion:
       }
       HorizontalDivider()
       SelectField(catalog.darkSchemeLabel, catalog.darkSchemeOptions.map { SelectOption(it.first, it.second) }, draft.darkScheme, { draft = draft.copy(darkScheme = it ?: "auto") }, enabled = canEdit)
-      SelectField(
-        "Font family",
-        listOf(SelectOption(catalog.systemFont, "The theme's own")) + catalog.fonts.map { SelectOption(it.family, it.family, it.category) },
-        draft.fontFamily,
-        { draft = draft.copy(fontFamily = it ?: catalog.systemFont) },
-        enabled = canEdit,
-      )
+      FontPickerField(catalog, draft.fontFamily, canEdit) { draft = draft.copy(fontFamily = it) }
       NumberField(catalog.borderRadius, draft.borderRadius, canEdit) { draft = draft.copy(borderRadius = it) }
       NumberField(catalog.spacing, draft.spacing, canEdit) { draft = draft.copy(spacing = it) }
       NumberField(catalog.navHeightXs, draft.navHeightXs, canEdit) { draft = draft.copy(navHeightXs = it) }

@@ -27,10 +27,13 @@
  * Each signal now files an urgent row in the abuse queue that names the
  * workspace, the charge and the amount, links the staff Subscription card
  * on the org page (AGL-3359, where billing is canceled), and notifies staff
- * once. NOTHING IS DONE TO THE MONEY OR THE SUBSCRIPTION: no refund, no
- * cancel. An early fraud warning is not a chargeback, a review may clear, and
- * a refund issued before staff look can be the wrong half of a dispute. The
- * row is the prompt; staff decide.
+ * once. THIS MODULE DOES NOTHING TO THE MONEY OR THE SUBSCRIPTION: no
+ * refund, no cancel. What the platform does about a WORKSPACE's own flagged
+ * payment (AGL-3767) — refund an actionable early fraud warning before it
+ * becomes a dispute, cancel the subscription, place an automatic security
+ * hold — is the console's, handed in as `deps.respond` and recorded on the
+ * row. A site's sale on a connected account is never refunded by the
+ * platform; its row recommends the refund instead.
  *
  * ONE ROW PER CHARGE (AGL-3490). The three signals are separate Stripe
  * objects about the same payment, and one fraudulent charge routinely draws
@@ -63,6 +66,23 @@ import type { RiskEventInput } from './risk-notice'
  * handle, so the webhook's spec substitutes it with the barrel.
  */
 export type RiskNotifier = (input: RiskEventInput) => Promise<unknown>
+
+/**
+ * What the platform did, by itself, about a workspace's flagged payment
+ * (AGL-3767): `summary` is the line staff read on the row, `record` the
+ * structured half kept beside it.
+ */
+export interface WorkspaceSignalResponse {
+  summary: string
+  record: Record<string, unknown>
+}
+
+/** The console's answer to a new signal on a workspace's own charge. */
+export type WorkspaceSignalResponder = (input: {
+  signal: PaymentFraudSignal
+  reviewId: string
+  reference: string
+}) => Promise<WorkspaceSignalResponse | null>
 
 /** Which Stripe signal this is. */
 export type PaymentFraudSignalKind =
@@ -384,18 +404,28 @@ export async function recordPaymentFraudSignal(
     firestore: FirebaseFirestore.Firestore
     notifyRisk: RiskNotifier
     nowMs?: number
+    /**
+     * What the platform does about a NEW early fraud warning or Radar review
+     * on a workspace's own charge (AGL-3767): the console's refund and
+     * automatic security hold. Called once per signal, never for a
+     * redelivery; whatever it answers is written onto the row as
+     * `automatedResponse`, with its `summary` appended to the row's text.
+     * Absent, the row is filed exactly as before.
+     */
+    respond?: WorkspaceSignalResponder
   },
 ): Promise<{
   reviewId: string
   reference: string
   first: boolean
   reopened: boolean
+  response: WorkspaceSignalResponse | null
 }> {
   const reviewId = paymentFraudSignalReviewId(signal)
   const reference = paymentFraudSignalReference(reviewId)
   const ref = deps.firestore.collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
   const atMs = deps.nowMs ?? Date.now()
-  const { first, reopened } = await deps.firestore.runTransaction(
+  const { first, reopened, added, details } = await deps.firestore.runTransaction(
     async (transaction) => {
       const snapshot = await transaction.get(ref)
       const existing = snapshot.exists
@@ -411,7 +441,7 @@ export async function recordPaymentFraudSignal(
           { updatedAt: FieldValue.serverTimestamp() },
           { merge: true },
         )
-        return { first: false, reopened: false }
+        return { first: false, reopened: false, added: false, details: '' }
       }
       const status = existing ? String(existing['status'] ?? 'open') : 'open'
       const wasClosed = CLOSED_STATUSES.has(status)
@@ -452,6 +482,11 @@ export async function recordPaymentFraudSignal(
           signal.checks ??
           ((previous?.['checks'] ?? null) as PaymentFraudCardChecks | null),
       }
+      const rowDetails = describePaymentFraudSignal(merged, {
+        history: nextHistory,
+        closed: wasClosed ? { status, resolution } : null,
+        reopened: reopen,
+      })
       transaction.set(
         ref,
         {
@@ -464,11 +499,7 @@ export async function recordPaymentFraudSignal(
           reportedHostname: null,
           hostId: null,
           orgId,
-          details: describePaymentFraudSignal(merged, {
-            history: nextHistory,
-            closed: wasClosed ? { status, resolution } : null,
-            reopened: reopen,
-          }),
+          details: rowDetails,
           reporterEmail: null,
           reporterName: null,
           dmca: null,
@@ -500,9 +531,45 @@ export async function recordPaymentFraudSignal(
         },
         { merge: true },
       )
-      return { first: !existing, reopened: reopen }
+      return { first: !existing, reopened: reopen, added: true, details: rowDetails }
     },
   )
+  // The platform's own answer to a workspace's flagged payment (AGL-3767),
+  // once per new signal. Never able to fail the filing: the row is written.
+  let response: WorkspaceSignalResponse | null = null
+  if (
+    added &&
+    deps.respond &&
+    signal.orgId &&
+    (signal.kind === 'early-fraud-warning' || signal.kind === 'radar-review')
+  ) {
+    try {
+      response = await deps.respond({ signal, reviewId, reference })
+    } catch (error) {
+      console.error('[payment-fraud-signal] the automated response failed', reviewId, error)
+      response = {
+        summary: `The automated response did not complete: ${(error as Error)?.message ?? String(error)}. Check the workspace by hand.`,
+        record: { failed: true },
+      }
+    }
+    if (response) {
+      await ref
+        .set(
+          {
+            automatedResponse: response.record,
+            details: `${details.replace(
+              'This alert refunded and canceled nothing.',
+              'The alert itself refunded and canceled nothing; what the platform did on its own follows.',
+            )}\n${response.summary}`.slice(0, 5000),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+        .catch((error: unknown) =>
+          console.error('[payment-fraud-signal] row not annotated', reviewId, error),
+        )
+    }
+  }
   if (first || reopened) {
     // The workspace's owners are told their subscription payment was
     // flagged and how to confirm it; staff get the row with the evidence.
@@ -528,7 +595,7 @@ export async function recordPaymentFraudSignal(
       })
       .catch(() => undefined)
   }
-  return { reviewId, reference, first, reopened }
+  return { reviewId, reference, first, reopened, response }
 }
 
 /*==========================================
@@ -725,6 +792,7 @@ export async function recordSellerFraudSignal(
         (entry.detail ? ` · ${entry.detail}` : ''),
     ),
     'A shop taking stolen cards through its own storefront leaves this shape. Each merchant has already been shown the signal on its own order or booking.',
+    'Nothing here is refunded automatically: these are the seller\u2019s sales on its connected account, not the platform\u2019s own billing (AGL-3767). Recommended: refund each charge that drew an early fraud warning and has not been disputed yet \u2014 a fully refunded charge cannot then be disputed for fraud, which keeps it off the dispute rate.',
     `Nothing has been refunded, canceled or paused. If this is the seller's fraud, lock the workspace and pause the account's payouts in Stripe (${stripeUrl}), then close this row with what you did.`,
   ]
     .join('\n')

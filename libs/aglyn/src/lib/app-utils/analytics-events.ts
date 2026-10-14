@@ -100,6 +100,8 @@
  * experiment that decides which variant ships.
  */
 
+import { sendAdvertisingEvent } from './advertising-events'
+
 /**
  * Read the browser's GA `client_id` — the identifier that ties a hit to a GA
  * user and session.
@@ -673,8 +675,23 @@ export function sanitizeEventParams(
 export function trackEvent<K extends AnalyticsEventName>(
   name: K,
   params: AnalyticsEventParams[K],
+  options?: AnalyticsEventOptions,
 ): void {
-  deliver(name, sanitizeEventParams(params as Record<string, unknown>))
+  deliver(name, sanitizeEventParams(params as Record<string, unknown>), options)
+}
+
+/**
+ * What travels beside an event without being one of its parameters
+ * (AGL-3694). Never sent to the Google tag.
+ */
+export interface AnalyticsEventOptions {
+  /**
+   * The id a site's own advertising tags send this conversion under, when the
+   * server reports the same conversion through a Conversions API and the
+   * vendor must pair the two (`advertising-events.ts`). A purchase derives its
+   * own from `transaction_id` and needs none.
+   */
+  advertisingEventId?: string | null
 }
 
 /**
@@ -725,10 +742,12 @@ const NAVIGATION_FLUSH_TIMEOUT_MS = 300
 export async function trackEventBeforeNavigation<K extends AnalyticsEventName>(
   name: K,
   params: AnalyticsEventParams[K],
+  options?: AnalyticsEventOptions,
 ): Promise<void> {
   const delivered = deliver(
     name,
     sanitizeEventParams(params as Record<string, unknown>),
+    options,
   )
   // Synchronous transport (or none): already handed over, nothing to wait for.
   if (!delivered || typeof delivered.then !== 'function') return
@@ -913,7 +932,21 @@ export function isFirstPublishedRoute(
 function deliver(
   name: string,
   safe: Record<string, unknown>,
+  options?: AnalyticsEventOptions,
 ): void | Promise<void> {
+  // A site owner's own advertising tags (AGL-3694), BEFORE the Google path
+  // and independent of it: a site may run a pixel and no Google tag at all.
+  // Structural like the rest — only a tag the consent gate mounted on the
+  // merchant's own site carries the marks this looks for, so for a visitor
+  // who did not grant advertising this reaches nothing. Synchronous, so it
+  // holds no navigation.
+  try {
+    sendAdvertisingEvent(name, safe, {
+      eventId: options?.advertisingEventId ?? null,
+    })
+  } catch {
+    // Never breaks the page, like every other delivery here.
+  }
   try {
     if (configuredTransport) {
       // The transport's name parameter is the taxonomy union, which an

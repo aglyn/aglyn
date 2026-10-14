@@ -583,3 +583,38 @@ describe('hostThemeSource (AGL-2938)', () => {
     expect(hostThemeSource(undefined)).toBe('default')
   })
 })
+
+describe('a built-in theme recolored in the editor', () => {
+  /**
+   * A preset authors every shade and tint of its accent. The editor writes
+   * the accent back as `main` alone and drops its tint, and the stored patch
+   * is the diff of that against the preset, so it must carry deletions for
+   * the preset's shades. Otherwise they deep-merge back in and outlined
+   * buttons, hovers and tiles keep painting the preset's blue.
+   */
+  it('resolves to the new main with none of the preset shades or tint', () => {
+    const preset: HostTheme = {
+      colorSchemes: {
+        light: {
+          primary: { main: '#0d6efd', light: '#86b7fe', dark: '#0a58ca', contrastText: '#ffffff' },
+          secondary: { main: '#6c757d', dark: '#565e64', contrastText: '#ffffff' },
+          tint: { primary: '#cfe2ff', secondary: '#e2e3e5' },
+        },
+      },
+    }
+    const edited: HostTheme = {
+      colorSchemes: {
+        light: {
+          primary: { main: '#b3261e' },
+          secondary: { main: '#6c757d', dark: '#565e64', contrastText: '#ffffff' },
+          tint: { secondary: '#e2e3e5' },
+        },
+      },
+    }
+    const host = {
+      theme: preset,
+      themeOverride: overrideWriteValue(themeOverridePatch({ theme: preset }, edited), null),
+    }
+    expect(resolveSiteTheme(host)?.colorSchemes?.light).toEqual(edited.colorSchemes?.light)
+  })
+})

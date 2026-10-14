@@ -68,7 +68,7 @@ describe('the Pixabay search request', () => {
       category: 'people',
       safesearch: 'true',
       order: 'popular',
-      per_page: '20',
+      per_page: '40',
     })
     expect(params.has('key')).toBe(false)
   })

@@ -557,7 +557,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   return (
     <CardDisplay
       header={'Properties'}
-      help={Aglyn.pluginDocsHelp('contactRecord', { anchor: '#the-record-page' })}
+      help={Aglyn.pluginDocsHelp('contactRecord', { anchor: '#contact-properties' })}
       contentGutterX
       contentGutterY
       HeaderProps={{

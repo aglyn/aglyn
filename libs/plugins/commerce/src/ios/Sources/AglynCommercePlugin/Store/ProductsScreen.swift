@@ -11,7 +11,11 @@ import SwiftUI
 /// wide window the list sits beside the selected product.
 struct ProductsScreen: View {
   let context: NativePluginContext
+  /// Opens New product at once (the New product quick action).
+  var startNew = false
   @State private var model = ProductsModel()
+  @State private var creating: ProductEditorModel?
+  @State private var created: String?
   @State private var selection: ProductRow.ID?
   @State private var searchText = ""
 
@@ -41,6 +45,15 @@ struct ProductsScreen: View {
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         Button {
+          creating = .creating()
+        } label: {
+          Label("New product", systemImage: "plus")
+        }
+        .accessibilityIdentifier("new-product")
+        .help("Add a product to this site")
+      }
+      ToolbarItem(placement: .primaryAction) {
+        Button {
           context.navigate(commerceScanScreen)
         } label: {
           Label("Scan", systemImage: "barcode.viewfinder")
@@ -49,7 +62,14 @@ struct ProductsScreen: View {
       }
     }
     .task(id: context.hostID) { model.start(context.firestore, hostID: context.hostID) }
+    .onAppear { if startNew, creating == nil, created == nil { creating = .creating() } }
     .onDisappear { model.stop() }
+    .sheet(item: $creating) { editor in
+      ProductEditorSheet(context: context, model: editor) { id in
+        created = id
+        selection = id
+      }
+    }
   }
 
   private var chips: some View {
@@ -68,6 +88,10 @@ struct ProductsScreen: View {
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
+      if created != nil {
+        AglynNotice("Product added.", tone: .success) { created = nil }
+          .padding(.horizontal, AglynSpace.two)
+      }
       content(selectable: selectable)
     }
     .background(AglynColor.page)
@@ -158,6 +182,8 @@ struct ProductDetailView: View {
   let productID: String
   var titled = true
   @State private var model = ProductModel()
+  @State private var editing: ProductEditorModel?
+  @State private var adjusting = false
 
   var body: some View {
     Group {
@@ -172,6 +198,31 @@ struct ProductDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.name ?? "Product") : "Products")
+    .toolbar {
+      if let doc = model.doc, let row = model.row {
+        ToolbarItem(placement: .secondaryAction) {
+          Button {
+            editing = .editing(doc)
+          } label: {
+            Label("Edit", systemImage: "pencil")
+          }
+          .accessibilityIdentifier("edit-product")
+        }
+        ToolbarItem(placement: .secondaryAction) {
+          Button {
+            adjusting = true
+          } label: {
+            Label("Adjust stock", systemImage: "plusminus")
+          }
+          .disabled(row.item.variants.isEmpty)
+          .accessibilityIdentifier("adjust-stock")
+        }
+      }
+    }
+    .sheet(item: $editing) { editor in ProductEditorSheet(context: context, model: editor) }
+    .sheet(isPresented: $adjusting) {
+      if let row = model.row { StockAdjustSheet(context: context, row: row) }
+    }
     .task(id: "\(context.hostID ?? ""):\(productID)") {
       model.start(context.firestore, hostID: context.hostID, productID: productID)
     }

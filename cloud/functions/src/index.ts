@@ -17,7 +17,8 @@ import * as logger from 'firebase-functions/logger'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { signupsCreationVerdict } from './signups-lock'
-import { fetchPastEdgeChallenge } from './edge-challenge'
+import { fetchPastEdgeChallenge, isEdgeChallenge } from './edge-challenge'
+import { rateLimitRetryDelayMs } from './rate-limit-retry'
 
 /**
  * Shared secret for the tenant's job runner. Must match `PLUGIN_JOBS_SECRET`
@@ -452,14 +453,37 @@ async function postConsoleCron(
   // repeat is worse than a miss. The second answer, whatever it is, goes
   // through the handling below unchanged, so a second challenge is reported
   // as `console cron refused` exactly as a first one was before this.
-  const { response, text } = await fetchPastEdgeChallenge(attempt, {
-    onRetry: ({ status, retryInMs }) =>
-      logger.warn('console cron challenged by the edge — retrying once', {
-        route,
-        status,
-        retryInMs,
-      }),
-  })
+  const pastEdge = () =>
+    fetchPastEdgeChallenge(attempt, {
+      onRetry: ({ status, retryInMs }) =>
+        logger.warn('console cron challenged by the edge — retrying once', {
+          route,
+          status,
+          retryInMs,
+        }),
+    })
+  let { response, text } = await pastEdge()
+  // A JSON 429 — a rate limiter, not the edge — is retried a bounded number
+  // of times (`rate-limit-retry.ts`). Nothing ran, so nothing can repeat.
+  // A second edge challenge is NOT retried here: it stays reported, as the
+  // one-retry rule in `edge-challenge.ts` argues.
+  for (let retries = 0; ; retries += 1) {
+    if (isEdgeChallenge(response.status, response.headers.get('content-type'), text)) break
+    const retryInMs = rateLimitRetryDelayMs(
+      response.status,
+      response.headers.get('retry-after'),
+      retries,
+    )
+    if (retryInMs === null) break
+    logger.warn('console cron rate-limited — retrying', {
+      route,
+      status: response.status,
+      retryInMs,
+      retry: retries + 1,
+    })
+    await new Promise((resolve) => setTimeout(resolve, retryInMs))
+    ;({ response, text } = await pastEdge())
+  }
   if (response.status >= 300 && response.status < 400) {
     logger.error('console cron redirected — AGLYN_CONSOLE_URL is not the host that serves the console', {
       route,

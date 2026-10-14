@@ -30,6 +30,7 @@ import {
 } from '@aglyn/aglyn/app-utils/seo-locale'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import { packNodesForWire } from '@aglyn/aglyn/app-utils/wire-nodes'
+import { consentAnalyticsVendorsOf } from '@aglyn/aglyn/plugin-manager/site-page-hooks'
 import { isFirstPartySite } from '@aglyn/tenant-data-admin/server/first-party-hosts'
 import { FIRST_TOUCH_ROUTE_PATH } from '@aglyn/tenant-data-admin/server/first-touch-route'
 import {
@@ -1595,6 +1596,7 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
       <SiteAnalytics
         host={result.props.data?.host as any}
         screenId={(result.props.data?.screen?.data as any)?.$id}
+        analyticsVendors={consentAnalyticsVendorsOf(result.props)}
       />
       {firstTouch ? (
         // Same origin, so the site's `connect-src` needs nothing new. Pending,

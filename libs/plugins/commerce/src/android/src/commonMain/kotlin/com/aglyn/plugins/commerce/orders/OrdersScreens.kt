@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.OrderAddress
 import com.aglyn.contracts.OrderRefundState
+import com.aglyn.contracts.OrderRestockCheck
+import com.aglyn.contracts.describeRestockCheck
 import com.aglyn.contracts.OrderStatus
 import com.aglyn.contracts.OrderStatusColorValue
 import com.aglyn.contracts.formatOrderMoney
@@ -226,6 +228,7 @@ private fun OrderDetailContent(detail: OrderDetail, actions: OrderActionsModel) 
     actions.done?.let { message ->
       NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = { actions.done = null }) { Text("Dismiss") } })
     }
+    if (actions.dialog == null) actions.error?.let { NoticeBanner(it, StatusTone.ERROR) }
     SectionCard(null) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(detail.label, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
@@ -297,6 +300,51 @@ private fun OrderDetailContent(detail: OrderDetail, actions: OrderActionsModel) 
 
     order.note?.takeIf { it.isNotBlank() }?.let { note -> SectionCard("Note") { Text(note) } }
 
+    detail.restock?.let { check -> RestockCard(detail, check, actions) }
+
+    SectionCard("Timeline") {
+      if (detail.timeline.isEmpty()) Text("Nothing has happened on this order yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      detail.timeline.forEachIndexed { index, event ->
+        Text(
+          timelineLine(event),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.testTag("order-timeline-$index"),
+        )
+      }
+      OutlinedButton(onClick = { actions.open(OrderDialog.NOTE) }, modifier = Modifier.testTag("order-add-note")) {
+        Icon(AglynIcons.named("edit_note"), contentDescription = null)
+        Text("Add a note", Modifier.padding(start = space(1f)))
+      }
+    }
+  }
+}
+
+/** The question a refund or chargeback leaves: did the goods come back? An answer moves no stock. */
+@Composable
+private fun RestockCard(detail: OrderDetail, check: OrderRestockCheck, actions: OrderActionsModel) {
+  SectionCard("Restock check") {
+    Text(describeRestockCheck(check, detail.order), style = MaterialTheme.typography.bodyMedium)
+    check.lines.forEach { line ->
+      Text(
+        "${line.quantity.toLong()}× ${line.name ?: line.productId}" + (line.variantLabel?.let { " — $it" } ?: ""),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+    Text(
+      "If goods came back, put them on the shelf with Adjust stock on the product first — these answers move no stock, they only clear this question.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      RestockAnswerChoice.entries.forEachIndexed { index, choice ->
+        val onClick = { actions.answerRestock(detail.id, choice, check.flaggedAtMs) }
+        val tag = Modifier.testTag("order-restock-${choice.raw}")
+        if (index == 0) OutlinedButton(onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
+        else TextButton(onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
+      }
+    }
   }
 }
 
@@ -404,6 +452,29 @@ private fun OrderDialogs(detail: OrderDetail, actions: OrderActionsModel) {
             modifier = Modifier.fillMaxWidth().testTag("refund-amount"),
           )
         }
+      }
+    }
+    OrderDialog.NOTE -> {
+      var note by rememberSaveable(actions.attemptKey) { mutableStateOf("") }
+      ActionDialog(
+        title = "Add a note",
+        body = "A note goes on ${detail.label}'s timeline, for your team. The customer does not see it.",
+        icon = "edit_note",
+        confirmLabel = "Add note",
+        confirmEnabled = checkOrderNote(note) == null,
+        busy = actions.busy,
+        error = actions.error,
+        onDismiss = actions::close,
+        onConfirm = { actions.run("The note is on the timeline.") { addNote(orderId, note) } },
+      ) {
+        OutlinedTextField(
+          note,
+          { note = it.take(ORDER_NOTE_MAX_LENGTH) },
+          label = { Text("Note") },
+          supportingText = { Text("${note.length}/$ORDER_NOTE_MAX_LENGTH") },
+          minLines = 3,
+          modifier = Modifier.fillMaxWidth().testTag("order-note-text"),
+        )
       }
     }
     OrderDialog.RECEIPT -> {

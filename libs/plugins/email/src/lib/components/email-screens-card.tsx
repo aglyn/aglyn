@@ -21,7 +21,7 @@ import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot
 import {
   mdiDeleteOutline,
   mdiContentCopy,
-  mdiEyeOutline,
+  mdiPageNextOutline,
   mdiPencilOutline,
 } from '@aglyn/shared-data-mdi'
 import {
@@ -251,7 +251,7 @@ export function EmailScreensCard(props: {
     {
       key: 'details',
       label: 'Open details',
-      icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+      icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
       href: templateHref(screen),
     },
     {

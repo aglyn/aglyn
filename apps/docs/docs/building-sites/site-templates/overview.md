@@ -64,6 +64,9 @@ appear once you add profile URLs.
 
 ## Content collections & blog
 
+A site's **Content** page holds its collections — a blog, a news feed, a portfolio —
+each with its own entries, authors and categories, published as pages of your site.
+
 - Create **collections** managed in the console.
 - Publish a **blog** with rich entries (images, preview, scheduling) and an **RSS** feed.
 - Use **entry-template pages** with `{{entry.*}}` bindings to render each collection item.

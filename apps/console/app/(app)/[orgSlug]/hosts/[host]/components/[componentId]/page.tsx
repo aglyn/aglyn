@@ -382,9 +382,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
         <CardDisplay
           header={'Details'}
           help={docsHelp('components', {
-            excerpt:
-              'A reusable component: build it once, drop it on any page, ' +
-              'and every instance updates when you publish a new version.',
+            anchor: '#component-details-card',
           })}
           contentGutterX
           contentGutterY

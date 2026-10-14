@@ -91,7 +91,6 @@ import {
 import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_FREE_SITE_MAX_SECTIONS,
-  AI_FREE_SITE_NOMINAL_SECTIONS,
   AI_SITE_FREE_PAGES,
   AI_SITE_HOME_MIN_SECTIONS,
   AI_SITE_MAX_SECTIONS,
@@ -122,6 +121,7 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import {
+  AI_SITE_STORE_PAGES_SENTENCE,
   aiPlanSiteLines,
   aiSitePlanCapabilities,
   aiSitePlanHomeRule,
@@ -380,6 +380,9 @@ describe('a Free workspace’s site start is one or two pages', () => {
     // A paid site start plans no theme change either: its look is a unit of its own (AGL-3660).
     expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)?.create['theme-change'].allowed).toBe(false)
     expect(aiSitePlanCapabilities({ kind: 'page', inputs: {} }, FREE)).toBe(FREE)
+    // A site start's work sections get their fewest pieces in code (AGL-3754).
+    expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)?.galleryMinItems).toBe(3)
+    expect(aiSitePlanCapabilities({ kind: 'build', inputs: {} }, PAID)?.galleryMinItems).toBeUndefined()
   })
 
   // A site start builds no component, so a paid plan draws its repeated items
@@ -652,9 +655,36 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
       expect(wall(fivePlusThree)).toEqual([])
     })
 
-    it('keeps the home’s five through the plan step: 6 + 4, then 5 + 3', async () => {
+    // Three past the wall, where the trim (AGL-3737) leaves the plan to the re-ask.
+    const sixPlusFive: AiBuildPlan = {
+      ...AI_YOGA_SITE_PLAN_FIRST_ANSWER,
+      screens: [
+        AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[0],
+        {
+          ...AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1],
+          sections: [
+            ...AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1].sections.slice(0, 3),
+            { name: 'Meet the Teachers', uses: [], items: 0 },
+            AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1].sections[3],
+          ],
+        },
+      ],
+    }
+
+    it('settles the recorded 6 + 4 — two past the wall — to 5 + 3 in code, with no re-ask (AGL-3737)', async () => {
       mockRunAiRequest.mockReset()
-      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER)).mockResolvedValueOnce(toolAnswer(fivePlusThree))
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER))
+      const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.sections.map((section) => section.name))).toEqual([
+        ['Hero', 'What is Yoga & Mindfulness', 'Our Drop-In Classes', 'Why Beginners Choose Still Point', 'Start Your Practice'],
+        ['Classes Hero', 'Class Schedule', 'Get Started'],
+      ])
+    })
+
+    it('keeps the home’s five through the plan step: 6 + 5, then 5 + 3', async () => {
+      mockRunAiRequest.mockReset()
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(sixPlusFive)).mockResolvedValueOnce(toolAnswer(fivePlusThree))
       const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
       const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
       expect(sent).toHaveLength(2)
@@ -665,7 +695,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     it('keeps the recorded 4 + 2 redo rather than stopping the start: it is the loop’s last answer, and a third ask is past the plan’s two', async () => {
       mockRunAiRequest.mockReset()
       mockRunAiRequest
-        .mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER))
+        .mockResolvedValueOnce(toolAnswer(sixPlusFive))
         .mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_REDO_ANSWER))
         .mockResolvedValueOnce(toolAnswer(fivePlusThree))
       const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
@@ -799,6 +829,16 @@ describe('a paid blog start plans no page that stands in for its blog (AGL-3660)
     const free = aiSitePlanCapabilities(blogJob('free'), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] }))
     expect(aiPlanSiteLines(blogJob('free'), empty, free).join('\n')).not.toContain('first posts at /blog')
     expect(aiPlanSiteLines(siteJob({ pages: 4 }), empty, aiSitePlanCapabilities(siteJob({ pages: 4 }), paidEmpty)).join('\n')).not.toContain('first posts at /blog')
+  })
+
+  it('tells a paid store start’s plan the platform adds its account, cart and policy pages beside its own, and a Free one nothing (AGL-3676)', () => {
+    const storeJob = (org: 'paid' | 'free') => siteJob({ businessType: 'Ember & Oak, hand-poured candles', siteKind: 'store', pages: org === 'paid' ? 6 : 2 })
+    const paid = aiPlanSiteLines(storeJob('paid'), empty, aiSitePlanCapabilities(storeJob('paid'), paidEmpty))
+    expect(paid).toContain(AI_SITE_STORE_PAGES_SENTENCE)
+    expect(AI_SITE_STORE_PAGES_SENTENCE).toMatch(/do not count toward this plan's pages/)
+    const free = aiSitePlanCapabilities(storeJob('free'), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] }))
+    expect(aiPlanSiteLines(storeJob('free'), empty, free)).not.toContain(AI_SITE_STORE_PAGES_SENTENCE)
+    expect(aiPlanSiteLines(blogJob(), empty, aiSitePlanCapabilities(blogJob(), paidEmpty))).not.toContain(AI_SITE_STORE_PAGES_SENTENCE)
   })
 
   it('re-asks the recorded first answer for its Articles page through the plan step, and keeps the plan that comes back without it', async () => {
@@ -1087,12 +1127,20 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     expect(aiPlanSiteLines(yogaJob(), empty, free).join('\n')).toContain('at least 5 sections')
   })
 
-  it('quotes the dialog an estimate from the same figures, inside the wall', () => {
+  it('quotes the dialog and holds the door to the WHOLE worst case — layout, form, the sections the plan may hold and the retry — inside the wall (AGL-3660)', () => {
     const credits = AI_FREE_SITE_WORST_CASE_CREDITS
-    expect(aiFreeSiteCreditEstimate(2)).toBe(
-      credits.plan + credits.look + credits.layout + credits.form + 2 * (credits.page + credits.listing) + 2 * AI_FREE_SITE_NOMINAL_SECTIONS * credits.section,
-    )
-    expect(aiFreeSiteCreditEstimate(2)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    for (const pages of [1, 2]) {
+      const creations = { layouts: 1, pages, forms: 1 }
+      const sections = aiFreeSiteSectionsWithin(creations, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      expect(aiFreeSiteCreditEstimate(pages)).toBe(aiFreeSiteWorstCaseCredits(creations, sections))
+      // Nothing the job may spend is left out: the layout, the form and the retry are in it.
+      expect(aiFreeSiteCreditEstimate(pages)).toBeGreaterThanOrEqual(
+        aiFreeSiteWorstCaseCredits({ layouts: 0, pages, forms: 0 }, sections) + credits.layout + credits.form,
+      )
+      expect(aiFreeSiteCreditEstimate(pages)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    }
+    // The two-page figure is the one the notes quote for the wall.
+    expect(aiFreeSiteCreditEstimate(2)).toBe(aiFreeSiteWorstCaseCredits({ layouts: 1, pages: 2, forms: 1 }, AI_FREE_SITE_MAX_SECTIONS))
     expect(aiFreeSiteCreditEstimate(1)).toBeLessThan(aiFreeSiteCreditEstimate(2))
   })
 
