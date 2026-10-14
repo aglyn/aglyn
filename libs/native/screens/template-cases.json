@@ -151,7 +151,9 @@
       "badFrom": "true",
       "hundred": 100,
       "depKey": "layout/main-layout",
-      "noSlash": "plain"
+      "noSlash": "plain",
+      "listResource": "email.list-members:abc123",
+      "wholeResource": "commerce.gift-cards"
     }
   },
   "render": [
@@ -390,6 +392,10 @@
     {
       "template": "{data.noSlash:head}|{data.noSlash:tail}",
       "expect": "plain|"
+    },
+    {
+      "template": "{data.listResource:instance}|{data.wholeResource:instance}|",
+      "expect": "abc123||"
     },
     {
       "template": "{'(512) 555-0123':phone}",

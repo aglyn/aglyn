@@ -796,6 +796,8 @@ object ScreenValues {
       // The two halves of a `kind/id` key.
       "head" -> text(value).substringBefore('/')
       "tail" -> text(value).substringAfter('/', "")
+      // The instance a resource key names (`email.list-members:abc` is the list `abc`); empty for a resource with none.
+      "instance" -> text(value).substringAfter(':', "")
       "json" -> value?.toString() ?: ""
       else -> text(value)
     }

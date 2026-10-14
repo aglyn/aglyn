@@ -146,7 +146,9 @@
               "importResult": null,
               "importAck": null,
               "importProgress": null,
-              "importUndo": null
+              "importUndo": null,
+              "importExtras": null,
+              "importPlanBody": null
             },
             "after": {
               "label": "Read the file",
@@ -971,6 +973,7 @@
               "dateOrders?": "{stash.importDates}",
               "picklistChoices?": "{stash.importPicklists}",
               "lookupChoices?": "{stash.importLookups}",
+              "extras?": "{stash.importExtras}",
               "policy": {
                 "record": {
                   "onMatch": "{form.onMatch}",
@@ -996,6 +999,29 @@
                 "fieldDefault": {
                   "mode": "{form.mode}",
                   "blank": "{form.blank}"
+                }
+              },
+              "importPlanBody": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}",
+                "mapping": "{stash.importMapping}",
+                "matchKeys?": "{stash.importKeys}",
+                "dateOrders?": "{stash.importDates}",
+                "picklistChoices?": "{stash.importPicklists}",
+                "lookupChoices?": "{stash.importLookups}",
+                "extras?": "{stash.importExtras}",
+                "policy": {
+                  "record": {
+                    "onMatch": "{form.onMatch}",
+                    "onNew": "{form.onNew}",
+                    "onAmbiguous": "{form.onAmbiguous}"
+                  },
+                  "fieldDefault": {
+                    "mode": "{form.mode}",
+                    "blank": "{form.blank}"
+                  },
+                  "fields?": "{stash.importFields}",
+                  "rows?": "{stash.importRows}"
                 }
               }
             },
@@ -1279,6 +1305,7 @@
                 "dateOrders?": "{stash.importDates}",
                 "picklistChoices?": "{stash.importPicklists}",
                 "lookupChoices?": "{stash.importLookups}",
+                "extras?": "{stash.importExtras}",
                 "policy": {
                   "record": "{stash.importPolicy.record}",
                   "fieldDefault": "{stash.importPolicy.fieldDefault}",
@@ -1302,6 +1329,30 @@
                     "key": "{item.row}",
                     "value": {
                       "recordId": "{form.record}"
+                    }
+                  }
+                },
+                "importPlanBody": {
+                  "orgId": "{org.id}",
+                  "jobId": "{stash.importJob}",
+                  "mapping": "{stash.importMapping}",
+                  "matchKeys?": "{stash.importKeys}",
+                  "dateOrders?": "{stash.importDates}",
+                  "picklistChoices?": "{stash.importPicklists}",
+                  "lookupChoices?": "{stash.importLookups}",
+                  "extras?": "{stash.importExtras}",
+                  "policy": {
+                    "record": "{stash.importPolicy.record}",
+                    "fieldDefault": "{stash.importPolicy.fieldDefault}",
+                    "fields?": "{stash.importFields}",
+                    "rows?": {
+                      "$put": {
+                        "map": "{stash.importRows}",
+                        "key": "{item.row}",
+                        "value": {
+                          "recordId": "{form.record}"
+                        }
+                      }
                     }
                   }
                 }
@@ -1335,6 +1386,7 @@
                 "dateOrders?": "{stash.importDates}",
                 "picklistChoices?": "{stash.importPicklists}",
                 "lookupChoices?": "{stash.importLookups}",
+                "extras?": "{stash.importExtras}",
                 "policy": {
                   "record": "{stash.importPolicy.record}",
                   "fieldDefault": "{stash.importPolicy.fieldDefault}",
@@ -1358,6 +1410,30 @@
                     "key": "{item.row}",
                     "value": {
                       "action": "skip"
+                    }
+                  }
+                },
+                "importPlanBody": {
+                  "orgId": "{org.id}",
+                  "jobId": "{stash.importJob}",
+                  "mapping": "{stash.importMapping}",
+                  "matchKeys?": "{stash.importKeys}",
+                  "dateOrders?": "{stash.importDates}",
+                  "picklistChoices?": "{stash.importPicklists}",
+                  "lookupChoices?": "{stash.importLookups}",
+                  "extras?": "{stash.importExtras}",
+                  "policy": {
+                    "record": "{stash.importPolicy.record}",
+                    "fieldDefault": "{stash.importPolicy.fieldDefault}",
+                    "fields?": "{stash.importFields}",
+                    "rows?": {
+                      "$put": {
+                        "map": "{stash.importRows}",
+                        "key": "{item.row}",
+                        "value": {
+                          "action": "skip"
+                        }
+                      }
                     }
                   }
                 }
@@ -1393,6 +1469,18 @@
           "secondary": "{const.reason[@item.reason]|''}",
           "tertiary": "{item.diff.*.fieldId}",
           "icon": "doc.text|description"
+        },
+        {
+          "type": "zone",
+          "name": "transferStep",
+          "title": "Before you import",
+          "when": "stash.importPlan",
+          "footer": "These come from the plugin this import belongs to. Answer them, then import.",
+          "params": {
+            "resource": "{stash.importResource}",
+            "hostId": "{stash.importHost}",
+            "jobId": "{stash.importJob}"
+          }
         },
         {
           "type": "actions",
@@ -1773,7 +1861,9 @@
                 "importResult": null,
                 "importAck": null,
                 "importProgress": null,
-                "importUndo": null
+                "importUndo": null,
+                "importExtras": null,
+                "importPlanBody": null
               },
               "after": {
                 "label": "Read the file",
@@ -1814,7 +1904,9 @@
                 "importResult": null,
                 "importAck": null,
                 "importProgress": null,
-                "importUndo": null
+                "importUndo": null,
+                "importExtras": null,
+                "importPlanBody": null
               },
               "url": "/api/transfer/apply",
               "body": {
@@ -1854,7 +1946,9 @@
                 "importResult": null,
                 "importAck": null,
                 "importProgress": null,
-                "importUndo": null
+                "importUndo": null,
+                "importExtras": null,
+                "importPlanBody": null
               },
               "navigate": {
                 "screen": "core.settings.data.import.done"
