@@ -215,6 +215,27 @@ object ScreenValues {
       val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
       if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
       JsonObject(map)
+    } else if (body.size == 1 && body["\$cents"] != null) {
+      // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`) as whole cents; null when it is not an amount.
+      val typed = text(resolveBody(body.getValue("\$cents"), context)).trim().removePrefix("$").replace(",", "")
+      if (Regex("""\d+(\.\d{0,2})?|\.\d{1,2}""").matches(typed)) {
+        val (whole, fraction) = typed.split('.').let { it[0] to it.getOrElse(1) { "" } }
+        JsonPrimitive(whole.ifEmpty { "0" }.toLong() * 100 + fraction.padEnd(2, '0').take(2).ifEmpty { "0" }.toLong())
+      } else JsonNull
+    } else if (body.size == 1 && body["\$gather"] is JsonObject) {
+      // `{"$gather": {"from": "{form}", "prefix": "restock_", "key": "lineItemId", "value": "quantity"}}`: the entries of
+      // an object whose names start with `prefix`, as `{ key: <rest of the name>, value: <entry> }` rows in name order.
+      val spec = body["\$gather"] as JsonObject
+      val source = (spec["from"]?.let { resolveBody(it, context) } as? JsonObject) ?: JsonObject(emptyMap())
+      val prefix = (spec["prefix"] as? JsonPrimitive)?.content.orEmpty()
+      val keyName = (spec["key"] as? JsonPrimitive)?.content ?: "key"
+      val valueName = (spec["value"] as? JsonPrimitive)?.content ?: "value"
+      JsonArray(
+        source.entries.filter { it.key.startsWith(prefix) }.sortedBy { it.key }.map { (name, entry) ->
+          val rest = name.removePrefix(prefix)
+          JsonObject(mapOf(keyName to (rest.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(rest)), valueName to entry))
+        },
+      )
     } else if (body.size == 1 && body["\$uuid"] is JsonPrimitive) {
       // `{"$uuid": "box_"}`: the prefix and eight random hex digits, a fresh id for a row the person is adding.
       JsonPrimitive(text(resolveBody(body.getValue("\$uuid"), context)) + (1..8).map { "0123456789abcdef".random() }.joinToString(""))
@@ -433,6 +454,8 @@ object ScreenValues {
         formatOrderMoney(round(amount), currency.ifEmpty { "USD" })
       } ?: text(value)
       "dollars" -> number(value)?.let { formatOrderMoney(round(it * 100), "USD") } ?: text(value)
+      // Whole cents as a plain amount a money field starts with: 1250 -> 12.50 (nothing for no amount).
+      "amount" -> number(value)?.let { cents -> val whole = round(cents); "${whole / 100}.${(abs(whole) % 100).toString().padStart(2, '0')}" } ?: ""
       "bytes" -> number(value)?.let { bytesText(it) } ?: text(value)
       "number" -> number(value)?.let { grouped(it, 2) } ?: text(value)
       "percent" -> number(value)?.let { "${grouped(it * 100, 1)}%" } ?: text(value)

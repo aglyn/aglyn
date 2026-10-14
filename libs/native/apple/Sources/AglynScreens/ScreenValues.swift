@@ -236,6 +236,29 @@ public enum ScreenValues {
         if truthy(value) { map[key] = value } else { map[key] = nil }
       }
       return .object(map)
+    case .object(let record) where record.count == 1 && record["$cents"] != nil:
+      // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`) as whole cents; null when it is not an amount.
+      let typed = Self.text(resolveBody(record["$cents"] ?? .null, in: context)).trimmingCharacters(in: .whitespaces)
+        .replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: "")
+      guard typed.range(of: #"^(\d+(\.\d{0,2})?|\.\d{1,2})$"#, options: .regularExpression) != nil else { return .null }
+      let parts = typed.split(separator: ".", omittingEmptySubsequences: false)
+      let whole = Int(parts[0].isEmpty ? "0" : String(parts[0])) ?? 0
+      let fraction = parts.count > 1 ? Int(String(parts[1]).padding(toLength: 2, withPad: "0", startingAt: 0)) ?? 0 : 0
+      return .number(Double(whole * 100 + fraction))
+    case .object(let record) where record.count == 1 && record["$gather"] != nil:
+      // `{"$gather": {"from": "{form}", "prefix": "restock_", "key": "lineItemId", "value": "quantity"}}`: the entries of
+      // an object whose names start with `prefix`, as `{ key: <rest of the name>, value: <entry> }` rows in name order.
+      let spec = record["$gather"] ?? .null
+      var source: [String: JSONValue] = [:]
+      if case .object(let found) = resolveBody(spec["from"] ?? .null, in: context) { source = found }
+      let prefix = spec["prefix"]?.stringValue ?? ""
+      let keyName = spec["key"]?.stringValue ?? "key"
+      let valueName = spec["value"]?.stringValue ?? "value"
+      return .array(
+        source.filter { $0.key.hasPrefix(prefix) }.sorted { $0.key < $1.key }.map { name, entry in
+          let rest = String(name.dropFirst(prefix.count))
+          return .object([keyName: Int64(rest).map { .number(Double($0)) } ?? .string(rest), valueName: entry])
+        })
     case .object(let record) where record.count == 1 && record["$uuid"] != nil:
       // `{"$uuid": "box_"}`: the prefix and eight random hex digits, a fresh id for a row the person is adding.
       return .string(Self.text(resolveBody(record["$uuid"] ?? .null, in: context)) + String(UUID().uuidString.lowercased().prefix(8)))
@@ -500,6 +523,11 @@ public enum ScreenValues {
     case "dollars":
       guard let amount = number(value) else { return text(value) }
       return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
+    case "amount":
+      // Whole cents as a plain amount a money field starts with: 1250 -> 12.50 (nothing for no amount).
+      guard let cents = number(value) else { return "" }
+      let whole = Int(cents.rounded())
+      return "\(whole / 100).\(String(format: "%02d", abs(whole) % 100))"
     case "bytes":
       return number(value).map(bytesText) ?? text(value)
     case "number":

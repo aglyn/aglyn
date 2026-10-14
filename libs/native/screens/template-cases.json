@@ -160,6 +160,14 @@
     {
       "template": "{data.members.*.joined}",
       "expect": "1791331200"
+    },
+    {
+      "template": "{data.money:amount}",
+      "expect": "1234.56"
+    },
+    {
+      "template": "{data.missing:amount}",
+      "expect": ""
     }
   ],
   "url": [
@@ -373,6 +381,59 @@
           {
             "$id": "u2",
             "role": "viewer"
+          }
+        ]
+      }
+    },
+    {
+      "body": {
+        "c1": {
+          "$cents": "12.50"
+        },
+        "c2": {
+          "$cents": "$1,200"
+        },
+        "c3": {
+          "$cents": ".5"
+        },
+        "c4": {
+          "$cents": "abc"
+        },
+        "c5": {
+          "$cents": "7"
+        }
+      },
+      "expect": {
+        "c1": 1250,
+        "c2": 120000,
+        "c3": 50,
+        "c5": 700
+      }
+    },
+    {
+      "body": {
+        "rows": {
+          "$gather": {
+            "from": {
+              "restock_10": "2",
+              "restock_2": "1",
+              "note": "x"
+            },
+            "prefix": "restock_",
+            "key": "lineItemId",
+            "value": "quantity"
+          }
+        }
+      },
+      "expect": {
+        "rows": [
+          {
+            "lineItemId": 10,
+            "quantity": "2"
+          },
+          {
+            "lineItemId": 2,
+            "quantity": "1"
           }
         ]
       }
