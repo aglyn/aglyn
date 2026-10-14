@@ -150,6 +150,10 @@ const NOT_A_SETTING: Record<string, string> = {
   NEXT_RUNTIME:
     'Set by Next itself to `nodejs` or `edge` so instrumentation can tell which bundle it is in. An operator setting it would lie to the framework about its own runtime.',
   TZ: 'The standard POSIX timezone variable, read by the jest configuration to pin test runs to UTC. Not a product setting.',
+  AGLYN_LIVE_AI:
+    "Read by the AI plugin's jest configuration to run its live-model specs verbosely. A developer's switch for a paid eval run; no deployment reads it.",
+  AI_EVAL_LIVE_LAUNCHER:
+    "Set by tools/ai-eval/record-live.mjs for the jest it starts, so the AI plugin's jest configuration knows a live eval round is running. Never an operator's to set.",
 }
 
 function stripComments(source: string): string {
