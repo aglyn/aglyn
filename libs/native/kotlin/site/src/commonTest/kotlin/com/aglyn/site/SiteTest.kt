@@ -36,6 +36,7 @@ import com.aglyn.site.pages.pageStatus
 import com.aglyn.site.pages.pageTree
 import com.aglyn.site.sites.SiteDomainFilter
 import com.aglyn.site.sites.SUBDOMAIN_PATTERN
+import com.aglyn.site.sites.createSiteBody
 import com.aglyn.site.sites.suggestSubdomain
 import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
@@ -148,6 +149,16 @@ class SiteTest {
     assertTrue(FirestoreFilter("searchTokens", FilterOp.ARRAY_CONTAINS, "dem") in query.filters)
     assertEquals("my-new-site", suggestSubdomain("My New Site!"))
     assertTrue(SUBDOMAIN_PATTERN.matches("my-new-site"))
+  }
+
+  @Test
+  fun createsTheSiteWithTheStarterInTheSameRequest() {
+    val body = createSiteBody("org1", "  My Shop ", " MyShop ")
+    assertEquals("My Shop", body["displayName"]?.jsonPrimitive?.content)
+    assertEquals("myshop", body["subdomain"]?.jsonPrimitive?.content)
+    assertEquals("org1", body["orgId"]?.jsonPrimitive?.content)
+    // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
+    assertEquals("starter", body["start"]?.jsonPrimitive?.content)
   }
 
   @Test
