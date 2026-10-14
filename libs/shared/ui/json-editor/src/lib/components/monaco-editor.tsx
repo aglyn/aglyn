@@ -17,6 +17,7 @@
 
 import ReactMonacoEditor, { EditorProps, loader } from '@monaco-editor/react'
 import { useColorScheme, useTheme } from '@mui/material/styles'
+import useMediaQuery from '@mui/material/useMediaQuery'
 
 /**
  * Where Monaco's AMD bundle is served from — our origin, never a CDN.
@@ -79,14 +80,20 @@ export const MonacoEditor = (props: MonacoEditorProps) => {
   // one — `systemMode` when following the OS, else the explicit `mode` —
   // with `palette.mode` kept as the fallback for the non-CSS-vars trees.
   // `props` spreads last, so a caller can still pin a Monaco theme.
-  const { palette } = useTheme()
+  const theme = useTheme()
   const { mode, systemMode } = useColorScheme()
-  const resolved = systemMode ?? mode ?? palette.mode
+  const resolved = systemMode ?? mode ?? theme.palette.mode
+  // Below `md` the minimap costs a strip of an already narrow editor and is
+  // no use for navigation at that width (AGL-3770). A caller's own
+  // `options.minimap` still wins.
+  const compact = useMediaQuery(theme.breakpoints.down('md'))
+  const { options, ...rest } = props
   return (
     <ReactMonacoEditor
       defaultLanguage="json"
       theme={resolved === 'dark' ? 'vs-dark' : 'light'}
-      {...props}
+      options={{ minimap: { enabled: !compact }, ...options }}
+      {...rest}
     />
   )
 }
