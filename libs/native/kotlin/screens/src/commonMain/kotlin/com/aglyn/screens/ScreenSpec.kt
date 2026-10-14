@@ -126,6 +126,11 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val besigner: String? = json.str("besigner")
   val copy: String? = json.str("copy")
   /**
+   * A Firestore document path (a template): the stored document is read when the action runs and is `overlay` in the body,
+   * without its timestamps, for a route that replaces the document with the person's edits on top (`$overlay`).
+   */
+  val overlay: String? = json.str("overlay")
+  /**
    * `{ resource, title, fileStem, scope, filter }`: opens the export dialog on a transfer resource (`commerce.products`),
    * which asks for the columns and the format and hands the file to the device. `scope` is `{ "kind": "all" }` unless it
    * names a filter; `title`, `fileStem` and `filter` are templates.

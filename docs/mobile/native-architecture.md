@@ -886,7 +886,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
 reason, success, instead, check, open, navigate, back, reload, when, link, copy, export,
-reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+overlay, reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
 (Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
@@ -902,6 +902,10 @@ that matches wins) shown in place of `success` when the route's answer meets
 (`open` then names the response field holding the invoice page to open).
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
+
+`overlay` names a Firestore document (a template) that is read when the action runs and put in the body as `overlay`, without
+its timestamps, for a route that replaces the whole document: `{"$overlay": {"base": "{overlay}", "set": {...}}}` is the base
+with each key of `set` put on top and any whose value is null taken off (a product's details are saved this way).
 
 `export` is `{ resource, title, fileStem, scope, filter }`: it makes no request of its own but opens the export
 sheet (`TransferExportSheet`, `TransferExportDialog`) on a transfer resource such as `commerce.products`, which asks for

@@ -391,6 +391,16 @@ class ScreenModel(
     }
     val template = action.url ?: return ActionOutcome.Done(null, null)
     val client = api ?: return ActionOutcome.Failed("Sign in to continue.")
+    val scope = action.overlay?.let { doc ->
+      val stored = try {
+        reader?.get(ScreenValues.render(doc, scope))?.data
+      } catch (error: CancellationException) {
+        throw error
+      } catch (_: Throwable) {
+        null
+      }
+      ScreenContext.with(scope, "overlay", FirestoreLoads.stored(stored ?: return ActionOutcome.Failed("That could not be read. Try again.")))
+    } ?: scope
     val path = ScreenValues.renderUrl(template, scope)
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {

@@ -1,5 +1,5 @@
 {
-  "$comment": "The Commerce plugin's catalog organization, natively: the category tree (add, rename, move, delete with its children moved up) written to the store's productCategories as the console writes them, and manual and smart collections through the console's /api/hosts/collections route (name and mode, the products a manual one holds, the rules a smart one matches, delete) with the membership refreshed afterwards. Grammar: docs/mobile/native-architecture.md section 13.",
+  "$comment": "The Commerce plugin's catalog organization, natively: a product's details (address, supplier, tags, categories, stock and tax settings, billing and search listing, saved through the product route with the stored product under the edits); the category tree (add, rename, move, delete with its children moved up) written to the store's productCategories as the console writes them, and manual and smart collections through the console's /api/hosts/collections route (name and mode, the products a manual one holds, the rules a smart one matches, delete) with the membership refreshed afterwards. Grammar: docs/mobile/native-architecture.md section 13.",
   "screens": [
     {
       "id": "commerce.categories",
@@ -1186,6 +1186,403 @@
                 }
               },
               "success": "Saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.productDetails",
+      "title": "{data.product.name|'Product'}",
+      "label": "Product details",
+      "subtitle": "Address, supplier, tags, categories, stock, tax, billing and search listing",
+      "icon": "tune|tune",
+      "scope": "site",
+      "load": {
+        "product": {
+          "doc": "hosts/{site.id}/products/{params.productId}",
+          "optional": true
+        },
+        "suppliers": {
+          "query": {
+            "collection": "hosts/{site.id}/suppliers",
+            "limit": 100
+          }
+        },
+        "categories": {
+          "query": {
+            "collection": "hosts/{site.id}/productCategories",
+            "limit": 250,
+            "orderBy": "name asc"
+          }
+        },
+        "gifts": {
+          "entitlement": "giftCards"
+        },
+        "subs": {
+          "entitlement": "storefrontSubscriptions"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "missing",
+          "tone": "info",
+          "when": "!data.product",
+          "text": "This product could not be found. It may have been deleted."
+        },
+        {
+          "type": "form",
+          "id": "details",
+          "title": "Details",
+          "when": "data.product",
+          "fields": [
+            {
+              "key": "slug",
+              "label": "Address",
+              "kind": "text",
+              "initial": "{data.product.slug}",
+              "help": "The product page is at /products/ and then this."
+            },
+            {
+              "key": "supplierId",
+              "label": "Supplier",
+              "kind": "select",
+              "when": "data.suppliers.items.0",
+              "initial": "{data.product.supplierId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "None"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.suppliers.items",
+                "value": "{item.$id}",
+                "label": "{item.name}"
+              },
+              "help": "Routes paid orders"
+            },
+            {
+              "key": "tags",
+              "label": "Tags",
+              "kind": "text",
+              "initial": "{data.product.tags}",
+              "help": "Separate tags with commas."
+            },
+            {
+              "fieldsFrom": {
+                "items": "data.categories.items",
+                "each": [
+                  {
+                    "key": "cat_{item.$id}",
+                    "label": "Category: {item.name}",
+                    "kind": "toggle",
+                    "initial": "{?data.product.categoryIds[=item.$id]}"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "oversellPolicy",
+              "label": "When out of stock",
+              "kind": "select",
+              "initial": "{data.product.oversellPolicy|'deny'}",
+              "options": [
+                {
+                  "value": "deny",
+                  "label": "Stop selling (sold out)"
+                },
+                {
+                  "value": "backorder",
+                  "label": "Keep selling (backorder)"
+                }
+              ]
+            },
+            {
+              "key": "giftCard",
+              "label": "Sell as a gift card (issues a code)",
+              "kind": "toggle",
+              "when": "data.gifts.carried || data.product.giftCard",
+              "initial": "{?data.product.giftCard == true}"
+            },
+            {
+              "key": "taxExempt",
+              "label": "Tax exempt",
+              "kind": "toggle",
+              "initial": "{?data.product.taxExempt == true}"
+            },
+            {
+              "key": "lowStock",
+              "label": "Low-stock alert at (blank = off)",
+              "kind": "number",
+              "integer": true,
+              "min": 0,
+              "initial": "{data.product.lowStockThreshold}",
+              "help": "Notifies managers"
+            },
+            {
+              "key": "seoTitle",
+              "label": "Search title",
+              "kind": "text",
+              "initial": "{data.product.seo.title}",
+              "help": "A search result shows about 60 characters."
+            },
+            {
+              "key": "seoDescription",
+              "label": "Search description",
+              "kind": "multiline",
+              "initial": "{data.product.seo.description}",
+              "help": "A search result shows about 155 characters."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "success": "Product saved",
+            "url": "/api/commerce/products/save",
+            "overlay": "hosts/{site.id}/products/{params.productId}",
+            "body": {
+              "hostId": "{site.id}",
+              "productId": "{params.productId}",
+              "create": false,
+              "product": {
+                "$overlay": {
+                  "base": "{overlay}",
+                  "set": {
+                    "slug": {
+                      "$slug": "{form.slug}"
+                    },
+                    "supplierId": {
+                      "$orNull": "{form.supplierId}"
+                    },
+                    "tags": {
+                      "$split": "{form.tags}"
+                    },
+                    "categoryIds": {
+                      "$gather": {
+                        "from": "{form}",
+                        "prefix": "cat_",
+                        "keys": true
+                      }
+                    },
+                    "oversellPolicy": "{form.oversellPolicy}",
+                    "giftCard": "{form.giftCard}",
+                    "taxExempt": "{form.taxExempt}",
+                    "lowStockThreshold": {
+                      "$orNull": "{form.lowStock}"
+                    },
+                    "seo": {
+                      "$overlay": {
+                        "base": "{overlay.seo}",
+                        "set": {
+                          "title": {
+                            "$orNull": "{form.seoTitle}"
+                          },
+                          "description": {
+                            "$orNull": "{form.seoDescription}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "fields",
+          "id": "billing",
+          "title": "Billing",
+          "when": "data.product",
+          "rows": [
+            {
+              "label": "Billing",
+              "value": "One-time purchase",
+              "when": "!data.product.subscription"
+            },
+            {
+              "label": "Billing",
+              "value": "Monthly subscription",
+              "when": "data.product.subscription.interval == month && !data.product.subscriptionOptional"
+            },
+            {
+              "label": "Billing",
+              "value": "Yearly subscription",
+              "when": "data.product.subscription.interval == year && !data.product.subscriptionOptional"
+            },
+            {
+              "label": "Billing",
+              "value": "Buyer chooses: one-time or {data.product.subscription.interval}ly",
+              "when": "data.product.subscription && data.product.subscriptionOptional"
+            },
+            {
+              "label": "Free trial",
+              "value": "{data.product.subscription.trialDays:plural/day}",
+              "when": "data.product.subscription.trialDays"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "subsLocked",
+          "tone": "info",
+          "when": "data.product && !data.subs.carried",
+          "text": "Subscriptions are on {data.subs.label|'a higher plan'}. A subscription this product already has keeps working."
+        },
+        {
+          "type": "actions",
+          "id": "billingChange",
+          "title": "Change billing",
+          "when": "data.product",
+          "items": [
+            {
+              "id": "once",
+              "label": "One-time purchase",
+              "icon": "payments|payments",
+              "when": "data.product.subscription",
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": null,
+                      "subscriptionOptional": null
+                    }
+                  }
+                }
+              },
+              "success": "Now a one-time purchase"
+            },
+            {
+              "id": "month",
+              "label": "Monthly subscription",
+              "icon": "autorenew|autorenew",
+              "when": "data.subs.carried",
+              "prompt": [
+                {
+                  "key": "trialDays",
+                  "label": "Free trial (days, blank = none)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{data.product.subscription.trialDays}"
+                }
+              ],
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": {
+                        "interval": "month",
+                        "trialDays": "{form.trialDays}"
+                      },
+                      "subscriptionOptional": null
+                    }
+                  }
+                }
+              },
+              "success": "Now a monthly subscription"
+            },
+            {
+              "id": "year",
+              "label": "Yearly subscription",
+              "icon": "autorenew|autorenew",
+              "when": "data.subs.carried",
+              "prompt": [
+                {
+                  "key": "trialDays",
+                  "label": "Free trial (days, blank = none)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{data.product.subscription.trialDays}"
+                }
+              ],
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": {
+                        "interval": "year",
+                        "trialDays": "{form.trialDays}"
+                      },
+                      "subscriptionOptional": null
+                    }
+                  }
+                }
+              },
+              "success": "Now a yearly subscription"
+            },
+            {
+              "id": "both",
+              "label": "Buyer chooses: one-time or subscription",
+              "icon": "autorenew|autorenew",
+              "when": "data.subs.carried",
+              "prompt": [
+                {
+                  "key": "interval",
+                  "label": "Subscription interval",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.product.subscription.interval|'month'}",
+                  "options": [
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    },
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    }
+                  ]
+                },
+                {
+                  "key": "trialDays",
+                  "label": "Free trial (days, blank = none)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{data.product.subscription.trialDays}"
+                }
+              ],
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": {
+                        "interval": "{form.interval}",
+                        "trialDays": "{form.trialDays}"
+                      },
+                      "subscriptionOptional": true
+                    }
+                  }
+                }
+              },
+              "success": "Buyers can now choose"
             }
           ]
         }

@@ -436,6 +436,12 @@ public final class ScreenModel {
     }
     guard let urlTemplate = action.url else { return .done(message: nil, response: nil) }
     guard let api else { return .failed("Sign in to continue.") }
+    var scope = scope
+    if let doc = action.overlay {
+      let stored = reader == nil ? nil : (try? await FirestoreLoads.rawDocument(reader!, ScreenValues.render(doc, in: scope))) ?? nil
+      guard let stored, let overlay = FirestoreLoads.stored(stored.data) else { return .failed("That could not be read. Try again.") }
+      scope = ScreenContext.with(scope, "overlay", overlay)
+    }
     let path = ScreenValues.renderURL(urlTemplate, in: scope)
     let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: scope) }
     do {

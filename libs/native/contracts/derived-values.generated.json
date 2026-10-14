@@ -17,6 +17,7 @@
       "screenAnalytics": false,
       "outreach": false,
       "giftCards": false,
+      "storefrontSubscriptions": false,
       "commerceAnalytics": false,
       "abandonedCart": false,
       "productReviews": false,
@@ -29,6 +30,7 @@
       "screenAnalytics": false,
       "outreach": false,
       "giftCards": false,
+      "storefrontSubscriptions": false,
       "commerceAnalytics": false,
       "abandonedCart": false,
       "productReviews": false,
@@ -41,6 +43,7 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": false,
+      "storefrontSubscriptions": false,
       "commerceAnalytics": true,
       "abandonedCart": true,
       "productReviews": true,
@@ -53,6 +56,7 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
+      "storefrontSubscriptions": true,
       "commerceAnalytics": true,
       "abandonedCart": true,
       "productReviews": true,
@@ -65,6 +69,7 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
+      "storefrontSubscriptions": true,
       "commerceAnalytics": true,
       "abandonedCart": true,
       "productReviews": true,
@@ -77,6 +82,7 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
+      "storefrontSubscriptions": true,
       "commerceAnalytics": true,
       "abandonedCart": true,
       "productReviews": true,
@@ -89,6 +95,7 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
+      "storefrontSubscriptions": true,
       "commerceAnalytics": true,
       "abandonedCart": true,
       "productReviews": true,
@@ -101,6 +108,7 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
+      "storefrontSubscriptions": true,
       "commerceAnalytics": true,
       "abandonedCart": true,
       "productReviews": true,
@@ -113,6 +121,7 @@
     "abTesting": "Business",
     "screenAnalytics": "Pro",
     "giftCards": "Business",
+    "storefrontSubscriptions": "Business",
     "commerceAnalytics": "Pro",
     "abandonedCart": "Pro",
     "productReviews": "Pro",
@@ -159,6 +168,13 @@
       "org": {
         "plan": "free"
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free"
+      },
       "feature": "commerceAnalytics",
       "result": false
     },
@@ -229,6 +245,13 @@
       "org": {
         "plan": "starter"
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
       "feature": "commerceAnalytics",
       "result": false
     },
@@ -299,6 +322,13 @@
       "org": {
         "plan": "pro"
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro"
+      },
       "feature": "commerceAnalytics",
       "result": true
     },
@@ -369,6 +399,13 @@
       "org": {
         "plan": "business"
       },
+      "feature": "storefrontSubscriptions",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business"
+      },
       "feature": "commerceAnalytics",
       "result": true
     },
@@ -439,6 +476,13 @@
       "org": {
         "plan": "enterprise"
       },
+      "feature": "storefrontSubscriptions",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise"
+      },
       "feature": "commerceAnalytics",
       "result": true
     },
@@ -509,6 +553,13 @@
       "org": {
         "plan": "nonsense"
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
       "feature": "commerceAnalytics",
       "result": false
     },
@@ -585,6 +636,14 @@
         "plan": "business",
         "billingStatus": "canceled"
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "canceled"
+      },
       "feature": "commerceAnalytics",
       "result": false
     },
@@ -665,6 +724,14 @@
         "plan": "business",
         "billingStatus": "past_due"
       },
+      "feature": "storefrontSubscriptions",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
       "feature": "commerceAnalytics",
       "result": true
     },
@@ -757,6 +824,16 @@
           "status": "unpaid"
         }
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
       "feature": "commerceAnalytics",
       "result": false
     },
@@ -869,6 +946,18 @@
           }
         }
       },
+      "feature": "storefrontSubscriptions",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
       "feature": "commerceAnalytics",
       "result": true
     },
@@ -995,6 +1084,19 @@
           }
         }
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
       "feature": "commerceAnalytics",
       "result": false
     },
@@ -1125,6 +1227,19 @@
           }
         }
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
       "feature": "commerceAnalytics",
       "result": true
     },
@@ -1255,6 +1370,19 @@
           }
         }
       },
+      "feature": "storefrontSubscriptions",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
       "feature": "commerceAnalytics",
       "result": false
     },
@@ -1368,6 +1496,18 @@
         }
       },
       "feature": "giftCards",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "storefrontSubscriptions",
       "result": true
     },
     {

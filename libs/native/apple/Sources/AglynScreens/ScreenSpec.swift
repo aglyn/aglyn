@@ -183,6 +183,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// which asks for the columns and the format and hands the file to the device. `scope` is `{ "kind": "all" }` unless it
   /// names a filter; `title`, `fileStem` and `filter` are templates.
   public let export: JSONValue?
+  /// A Firestore document path (a template): the stored document is read when the action runs and is `overlay` in the body,
+  /// without its timestamps, for a route that replaces the document with the person's edits on top (`$overlay`).
+  public let overlay: String?
   /// A response field shown once, to be copied (a new API key's secret).
   public let reveal: String?
   /// A Firestore merge the signed-in person makes themselves, where the
@@ -236,6 +239,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.besigner = json["besigner"]?.stringValue
     self.copy = json["copy"]?.stringValue
     self.export = json["export"]
+    self.overlay = json["overlay"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
     self.instead = json["instead"]

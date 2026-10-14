@@ -209,6 +209,15 @@ struct ProductDetailView: View {
           .accessibilityIdentifier("edit-product")
         }
         ToolbarItem(placement: .secondaryAction) {
+          // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
+          Button {
+            context.navigate("commerce.productDetails", ["productId": productID])
+          } label: {
+            Label("Details", systemImage: "slider.horizontal.3")
+          }
+          .accessibilityIdentifier("product-details")
+        }
+        ToolbarItem(placement: .secondaryAction) {
           Button {
             adjusting = true
           } label: {

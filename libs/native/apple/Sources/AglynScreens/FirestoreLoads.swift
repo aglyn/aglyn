@@ -27,6 +27,18 @@ enum FirestoreLoads {
     }
   }
 
+  /// A stored document as the JSON a route that replaces it takes back: every field as stored, except the timestamps, which a
+  /// client's JSON cannot carry (the route keeps the stored ones). `overlay` hands a spec this.
+  static func stored(_ value: Any?) -> JSONValue? {
+    switch value {
+    case nil: return .null
+    case is Date: return nil
+    case let items as [Any]: return .array(items.compactMap { stored($0) })
+    case let record as [String: Any]: return .object(record.compactMapValues { stored($0) })
+    default: return json(value)
+    }
+  }
+
   /// JSON as the plain values a Firestore write takes.
   static func plain(_ value: JSONValue) -> Any {
     switch value {

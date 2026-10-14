@@ -50,6 +50,7 @@ import {
 } from './constants/local-fulfillment-list-query'
 import { STOCK_MOVEMENT_REASON_LABEL } from './constants/stock-movement-query'
 import { COMMERCE_TRANSFER_RESOURCES } from './transfer/transfer-keys'
+import { SEO_LISTING_FIELDS } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 
 /**
  * The Commerce plugin's native screens restate some facts the console works out in code, because a screen spec has no
@@ -200,5 +201,22 @@ describe('native commerce screens', () => {
         `Export ${labels[item.export.resource].toLowerCase()}`,
       )
     }
+  })
+
+  it('say how long a search listing reads and offer the stock policies the product holds', () => {
+    const form = screens['commerce.productDetails'].blocks.find(
+      (block: { id: string }) => block.id === 'details',
+    )
+    const field = (key: string) =>
+      form.fields.find((one: { key: string }) => one.key === key)
+    expect(field('seoTitle').help).toContain(String(SEO_LISTING_FIELDS.title.maxLength))
+    expect(field('seoDescription').help).toContain(
+      String(SEO_LISTING_FIELDS.description.maxLength),
+    )
+    expect(field('oversellPolicy').options.map((option: { value: string }) => option.value)).toEqual([
+      'deny',
+      'backorder',
+    ])
+    expect(form.submit.url).toBe('/api/commerce/products/save')
   })
 })

@@ -290,6 +290,16 @@ public enum ScreenValues {
       let key = spec["key"]?.stringValue ?? ""
       let match = Self.text(resolveBody(spec["match"] ?? .null, in: context))
       return .array(list.filter { Self.text(lookup(key, in: $0)) != match })
+    case .object(let record) where record.count == 1 && record["$overlay"] != nil:
+      // `{"$overlay": {"base": "{overlay}", "set": {"slug": "{form.slug}", "supplierId": {"$orNull": "{form.supplier}"}}}}`: the base object with each
+      // key of `set` put on top, a key whose value is null taken off. What a route that replaces a document is sent.
+      let spec = record["$overlay"] ?? .null
+      var merged: [String: JSONValue] = [:]
+      if case .object(let base) = resolveBody(spec["base"] ?? .null, in: context) { merged = base }
+      if case .object(let set) = resolveBody(spec["set"] ?? .null, in: context) {
+        for (key, value) in set { if case .null = value { merged[key] = nil } else { merged[key] = value } }
+      }
+      return .object(merged)
     case .object(let record) where record.count == 1 && record["$map"] != nil:
       // `{"$map": {"list": "{data.rates.results}", "where": "item.rate", "fields": {"recordId": "{item.recordId}"}}}`: one object of
       // `fields` for each row of the list that meets `where` (all of them with none), each read with `item` set to the row.

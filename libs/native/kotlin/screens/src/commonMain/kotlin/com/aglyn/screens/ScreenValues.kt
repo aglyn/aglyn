@@ -256,6 +256,15 @@ object ScreenValues {
       val key = (spec["key"] as? JsonPrimitive)?.content.orEmpty()
       val match = text(spec["match"]?.let { resolveBody(it, context) })
       JsonArray(list.filter { text(lookup(key, it)) != match })
+    } else if (body.size == 1 && body["\$overlay"] is JsonObject) {
+      // `{"$overlay": {"base": "{overlay}", "set": {"slug": "{form.slug}", "supplierId": {"$orNull": "{form.supplier}"}}}}`: the base object with each
+      // key of `set` put on top, a key whose value is null taken off. What a route that replaces a document is sent.
+      val spec = body["\$overlay"] as JsonObject
+      val base = (spec["base"]?.let { resolveBody(it, context) } as? JsonObject) ?: JsonObject(emptyMap())
+      val set = (spec["set"]?.let { resolveBody(it, context) } as? JsonObject) ?: JsonObject(emptyMap())
+      val merged = base.toMutableMap()
+      for ((key, value) in set) if (value is JsonNull) merged.remove(key) else merged[key] = value
+      JsonObject(merged)
     } else if (body.size == 1 && body["\$map"] is JsonObject) {
       // `{"$map": {"list": "{data.rates.results}", "where": "item.rate", "fields": {"recordId": "{item.recordId}"}}}`: one object of
       // `fields` for each row of the list that meets `where` (all of them with none), each read with `item` set to the row.

@@ -35,6 +35,21 @@ internal object FirestoreLoads {
 
   fun json(doc: FirestoreDoc): JsonElement = JsonObject(doc.data.mapValues { json(it.value) } + ("\$id" to JsonPrimitive(doc.id)))
 
+  /**
+   * A stored document as the JSON a route that replaces it takes back: every field as stored, except the timestamps, which a
+   * client's JSON cannot carry (the route keeps the stored ones). `overlay` hands a spec this.
+   */
+  fun stored(value: Any?): JsonElement? = when (value) {
+    null -> JsonNull
+    is String -> JsonPrimitive(value)
+    is Boolean -> JsonPrimitive(value)
+    is Number -> JsonPrimitive(value)
+    is FirestoreTimestamp -> null
+    is List<*> -> JsonArray(value.mapNotNull { stored(it) })
+    is Map<*, *> -> JsonObject(value.entries.mapNotNull { (key, inner) -> stored(inner)?.let { key.toString() to it } }.toMap())
+    else -> JsonPrimitive(value.toString())
+  }
+
   suspend fun document(reader: FirestoreReader, path: String): JsonElement = reader.get(path)?.let { json(it) } ?: JsonNull
 
   /**

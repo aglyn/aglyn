@@ -893,6 +893,31 @@
         ],
         "none": []
       }
+    },
+    {
+      "body": {
+        "o": {
+          "$overlay": {
+            "base": "{data.members.0}",
+            "set": {
+              "role": "viewer",
+              "displayName": null,
+              "extra": "{params.uid}",
+              "gone": "{params.empty}"
+            }
+          }
+        }
+      },
+      "expect": {
+        "o": {
+          "$id": "u1",
+          "email": "a@acme.test",
+          "role": "viewer",
+          "count": 0,
+          "extra": "u2",
+          "gone": ""
+        }
+      }
     }
   ],
   "condition": [
