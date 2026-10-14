@@ -54,6 +54,8 @@ export async function staffSources() {
   const options = (codes, labels) => codes.map((value) => ({ value, label: labels[value] }))
   // The AI plugin declares the AI levers the Locks screen lists beside the core ones.
   await jiti.import(join(ROOT, 'libs/plugins/ai/src/lib/declarations.ts'))
+  const emails = await jiti.import(join(ROOT, 'libs/shared/util/email/src/lib/system-email-catalog.ts'))
+  const suppression = await jiti.import(join(ROOT, 'apps/console/utils/email-suppression-filters.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
   const model = (file) => jiti.import(join(ROOT, `libs/plugins/marketplace/src/lib/model/${file}.ts`))
   const checklist = await model('plugin-review-checklist')
@@ -61,6 +63,25 @@ export async function staffSources() {
   const statuses = await model('plugin-review-status')
   const attestation = await model('publisher-attestation')
   return {
+    emails: {
+      templates: emails.SYSTEM_EMAIL_TEMPLATES.map(({ key, name, description, deliveredBy }) => ({
+        key,
+        name,
+        description,
+        deliveredBy,
+        editable: emails.isSystemEmailEditable({ deliveredBy }),
+      })),
+      // What the console's test drawer sends before staff change a value: each token's sample.
+      samples: Object.fromEntries(
+        emails.SYSTEM_EMAIL_TEMPLATES.filter((template) => emails.isSystemEmailEditable(template)).map((template) => [
+          template.key,
+          Object.fromEntries(template.mergeTokens.map((token) => [token.name, token.sample])),
+        ]),
+      ),
+    },
+    suppressions: {
+      reasons: Object.entries(suppression.SUPPRESSION_REASON_LABELS).map(([value, { label }]) => ({ value, label })),
+    },
     abuse: {
       categories: abuse.ABUSE_REPORT_CATEGORIES.map(({ id, label, severity }) => ({ value: id, label, severity })),
     },
@@ -243,6 +264,8 @@ const replace = (id, change) => {
   spec.screens[at] = change(spec.screens[at])
 }
 replace('core.staff.health', (screen) => ({ ...screen, constants: { probes: sources.probes } }))
+replace('core.staff.emails', (screen) => ({ ...screen, constants: sources.emails }))
+replace('core.staff.emailSuppressions', (screen) => ({ ...screen, constants: sources.suppressions }))
 replace('core.staff.abuse', (screen) => ({ ...screen, constants: sources.abuse }))
 replace('core.staff.lockdown', (screen) => ({ ...screen, constants: sources.lockdown }))
 replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons } }))

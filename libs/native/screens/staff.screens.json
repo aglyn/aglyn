@@ -737,11 +737,17 @@
           "type": "list",
           "title": "Recent emails",
           "items": "data.deliveries.rows",
-          "primary": "{item.subject|item.template}",
-          "secondary": "{item.to} · {item.status:title}",
-          "tertiary": "{item.createdAt|item.sentAt:datetime}",
+          "primary": "{item.subject|item.context|'No subject recorded'}",
+          "secondary": "{item.to} · {item.status:title} · opened {item.openCount:number}, clicked {item.clickCount:number}",
+          "tertiary": "{item.firstSeenAtMs:datetime}",
           "count": false,
-          "empty": "None."
+          "empty": "None.",
+          "open": {
+            "screen": "core.staff.emailMessage",
+            "params": {
+              "messageId": "{item.messageId}"
+            }
+          }
         },
         {
           "type": "zone",
@@ -1605,11 +1611,17 @@
           "type": "list",
           "title": "Recent emails",
           "items": "data.deliveries.rows",
-          "primary": "{item.subject|item.template}",
-          "secondary": "{item.to} · {item.status:title}",
-          "tertiary": "{item.createdAt|item.sentAt:datetime}",
+          "primary": "{item.subject|item.context|'No subject recorded'}",
+          "secondary": "{item.to} · {item.status:title} · opened {item.openCount:number}, clicked {item.clickCount:number}",
+          "tertiary": "{item.firstSeenAtMs:datetime}",
           "count": false,
-          "empty": "None."
+          "empty": "None.",
+          "open": {
+            "screen": "core.staff.emailMessage",
+            "params": {
+              "messageId": "{item.messageId}"
+            }
+          }
         },
         {
           "type": "zone",
@@ -2052,7 +2064,13 @@
           "tertiary": "{item.firstSeenAtMs:datetime}",
           "icon": "envelope|mail",
           "load": "mail",
-          "empty": "No mail recorded for this person's addresses."
+          "empty": "No mail recorded for this person's addresses.",
+          "open": {
+            "screen": "core.staff.emailMessage",
+            "params": {
+              "messageId": "{item.messageId}"
+            }
+          }
         },
         {
           "type": "list",
@@ -4497,49 +4515,1671 @@
         {
           "type": "notice",
           "tone": "info",
-          "text": "A template with no custom version sends the built-in copy. Editing opens the Besigner."
+          "text": "Billing emails (receipts, failed payments, refunds) are sent by Stripe from its Dashboard settings and listed for reference only. Everything else is composed and sent by Aglyn, password reset and email verification included, so editing it changes what recipients get. The default copy is used until you design a template."
+        },
+        {
+          "type": "links",
+          "title": "The mail pipeline",
+          "items": [
+            {
+              "title": "Platform send rate",
+              "icon": "speedometer|speed",
+              "screen": "core.staff.settings"
+            },
+            {
+              "title": "Platform suppressions",
+              "icon": "nosign|block",
+              "screen": "core.staff.emailSuppressions"
+            }
+          ]
         },
         {
           "type": "list",
-          "items": "data.templates.items",
-          "primary": "{item.name|item.$id:title}",
-          "secondary": "{item.$id}",
-          "tertiary": "Custom version {item.versionId|'none'}",
+          "title": "System emails",
+          "items": "const.templates",
+          "search": false,
+          "primary": "{item.name}",
+          "secondary": "{item.description}",
+          "tertiary": "Last edited {data.templates.items[$id=item.key].updatedAt:datetime} {data.templates.items[$id=item.key].updatedByEmail}",
           "icon": "envelope|mail",
           "badges": [
             {
-              "text": "Custom",
-              "when": "item.versionId",
+              "text": "Customized",
+              "when": "data.templates.items[$id=item.key].versionId",
               "tone": "info"
+            },
+            {
+              "text": "Using default",
+              "when": "item.editable && !data.templates.items[$id=item.key].versionId",
+              "tone": "neutral"
+            },
+            {
+              "text": "Sent by {item.deliveredBy:title}",
+              "when": "!item.editable",
+              "tone": "neutral"
             }
           ],
           "actions": [
             {
+              "id": "design",
+              "label": "Design",
+              "icon": "paintbrush|edit",
+              "when": "item.editable && !data.templates.items[$id=item.key].versionId",
+              "url": "/api/admin/emails/open-version",
+              "body": {
+                "templateKey": "{item.key}"
+              },
+              "success": "Ready. Open it again to edit in the Besigner.",
+              "reload": true
+            },
+            {
               "id": "edit",
               "label": "Edit in the Besigner",
               "icon": "paintbrush|edit",
-              "when": "item.versionId",
-              "besigner": "/admin/emails/{item.$id}/versions/{item.versionId}/besigner"
+              "when": "data.templates.items[$id=item.key].versionId",
+              "besigner": "/admin/emails/{item.key}/versions/{data.templates.items[$id=item.key].versionId}/besigner"
+            },
+            {
+              "id": "test",
+              "label": "Send a test",
+              "icon": "paperplane|send",
+              "when": "item.editable",
+              "url": "/api/admin/emails/test",
+              "prompt": [
+                {
+                  "key": "to",
+                  "label": "Send it to",
+                  "kind": "email",
+                  "required": true,
+                  "initial": "{user.email}",
+                  "help": "Sends the email as it would go out now, your designed version if published and otherwise the built-in default, with sample values. The subject is prefixed with [Test]."
+                }
+              ],
+              "body": {
+                "templateKey": "{item.key}",
+                "mergeValues": "{const.samples[@item.key]}",
+                "to": "{form.to}"
+              },
+              "reload": false,
+              "success": "{response.subject}",
+              "report": [
+                {
+                  "text": "Sent to {form.to}.",
+                  "when": "response.sent"
+                },
+                {
+                  "text": "Rendered, but email delivery is not configured here.",
+                  "when": "response.reason == unconfigured"
+                },
+                {
+                  "text": "Not sent: {response.reason} {response.detail}",
+                  "when": "!response.sent && response.reason != unconfigured"
+                },
+                {
+                  "text": "{response.preview}"
+                }
+              ]
             },
             {
               "id": "reset",
               "label": "Back to the default copy",
               "icon": "arrow.uturn.backward|undo",
-              "when": "item.versionId",
-              "confirm": "Send the built-in copy again?",
+              "when": "data.templates.items[$id=item.key].versionId",
+              "confirm": "Send the built-in copy of {item.name} again?",
               "write": {
-                "doc": "systemEmailTemplates/{item.$id}",
+                "doc": "systemEmailTemplates/{item.key}",
                 "fields": {
                   "versionId": null
                 }
               },
-              "success": "Reset"
+              "success": "{item.name} is back to the default copy"
             }
           ],
-          "empty": "No template has a custom version."
+          "count": true,
+          "empty": "No emails."
         }
       ],
-      "subtitle": "The platform's own email templates"
+      "subtitle": "The mail Aglyn itself sends",
+      "constants": {
+        "templates": [
+          {
+            "key": "org-invite",
+            "name": "Organization invite",
+            "description": "Sent when an admin invites someone to an organization from the Team page.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "org-owner-handoff",
+            "name": "Workspace handoff",
+            "description": "Sent when the owner of a workspace, or the platform team, invites someone to take the workspace over as its new owner.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "org-upgrade-proposal",
+            "name": "Upgrade proposal",
+            "description": "Sent to a workspace's owner when the platform team proposes a paid plan for it, after the workspace has been evaluated.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "usage-summary",
+            "name": "Monthly usage summary",
+            "description": "Monthly per-organization usage and metered-cost summary, sent by the scheduled job.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "erasure-hold-alert",
+            "name": "Erasure hold staff alert",
+            "description": "Internal alert to STAFF_ALERT_EMAIL when GDPR erasure requests pass their 7-day hold.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "welcome",
+            "name": "Welcome",
+            "description": "Sent to a new owner the first time they create an organization (not on every organization they later create).",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "member-added",
+            "name": "Added to an organization",
+            "description": "Sent when an existing Aglyn account is added directly to an organization. People who do not have an account yet get the organization invite email instead.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "erasure-confirmation",
+            "name": "Erasure completed",
+            "description": "Sent to an organization owner once its data has been permanently erased under a GDPR request.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "erasure-requested",
+            "name": "Erasure requested",
+            "description": "Confirms to an organization owner that a GDPR erasure request was recorded, and that deletion follows after a 7-day hold.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "admin-password-reset",
+            "name": "Password reset (sent by an admin)",
+            "description": "Password reset link sent on someone else's behalf from the console — by staff from a user's detail page, or by an organization admin from a team member's page.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "password-changed-by-admin",
+            "name": "Password changed by an admin",
+            "description": "Notice sent to the account holder after an admin sets their password directly. Always sent — it is how someone finds out an administrator changed their credentials.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "security-new-device",
+            "name": "New device sign-in",
+            "description": "Security alert sent when an account signs in from a device it has not used before. Not sent on routine sign-ins from known devices.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "security-passkey-added",
+            "name": "New passkey added",
+            "description": "Security alert sent when a passkey is registered on an account. The trigger ships with passkey support (AGL-662); until then no call site sends this.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "password-reset",
+            "name": "Forgot password",
+            "description": "Password reset link, sent when someone asks for one from Account recovery.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "email-verification",
+            "name": "Confirm email",
+            "description": "Address verification link, sent after sign-up and whenever someone asks for another from the verify page.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "email-address-confirmation",
+            "name": "Confirm added email",
+            "description": "Confirmation link, sent when someone adds another email address to their account under Manage Account → Email addresses.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "staff-follow-up",
+            "name": "Follow-up from the team",
+            "description": "A message a staff member writes to one account from its page in the staff console, sent in the platform design. Replies go to the staff member who sent it.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "notification",
+            "name": "Notification",
+            "description": "The email copy of a console notification, sent to people who turned email on for that kind of notification: staff alerts, workspace-admin and site-manager notices.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "staff-alert",
+            "name": "Staff alert",
+            "description": "Operational alerts to STAFF_ALERT_EMAIL: free-tier AI spend, usage margins, SSO re-verification and the like.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "operator-alert",
+            "name": "Operator alert",
+            "description": "Emailed to the operator for every operator alert delivered right away: fraud and risk, a lost dispute, a failed erasure, a degraded health check, a webhook failing its signature, and every other type listed on Staff → Operator alerts. Goes to STAFF_ALERT_EMAIL, else the operator support address, else every staff account.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "operator-alert-digest",
+            "name": "Operator alert digest",
+            "description": "Once a day, every operator alert set to the digest on Staff → Operator alerts — new support tickets and replies, listings waiting for review, and any type staff moved there — in one email. Goes to the same inbox as the operator alert.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "support-ticket-alert",
+            "name": "Support ticket to success manager",
+            "description": "Copies an organization’s named success manager on a support ticket it opened or replied to.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "workspace-notice",
+            "name": "Workspace notice",
+            "description": "Operational notices to a workspace’s people: usage alerts and SSO domain lapses to its owners and admins, and a stopped outreach mailbox to the member who connected it.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "member-email-alias-confirmation",
+            "name": "Member email address confirmation",
+            "description": "Sent to an address a workspace member asked to add as one of their own, so mail from it is filed under the people it was written to.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "crm-daily-digest",
+            "name": "Daily CRM digest",
+            "description": "Each morning, a member’s overdue and due-today tasks and unworked leads, for members who turned the digest on.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "crm-task-reminder",
+            "name": "CRM task reminder",
+            "description": "A reminder for CRM tasks that have come due.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "ai-insights-digest",
+            "name": "Weekly insights digest",
+            "description": "The week’s AI insights for a site, for members who turned the digest on for that workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "legal-intake-receipt",
+            "name": "Report and notice receipt",
+            "description": "The receipt for an abuse report, a copyright notice or a counter-notice, carrying its reference.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "plugin-review-update",
+            "name": "Plugin review update",
+            "description": "Tells a marketplace publisher’s owners and admins what review decided about their submission.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "stripe-receipt",
+            "name": "Payment receipt",
+            "description": "Receipt for a successful subscription or invoice payment. Sent by Stripe if \"Successful payments\" is enabled under Customer emails.",
+            "deliveredBy": "stripe",
+            "editable": false
+          },
+          {
+            "key": "stripe-payment-failed",
+            "name": "Payment failed",
+            "description": "Dunning notice when a subscription charge fails and Stripe retries it. Sent by Stripe if failed-payment emails are enabled under Subscriptions and emails.",
+            "deliveredBy": "stripe",
+            "editable": false
+          },
+          {
+            "key": "stripe-refund",
+            "name": "Refund confirmation",
+            "description": "Confirms a refund back to the customer. Sent by Stripe if \"Refunds\" is enabled under Customer emails.",
+            "deliveredBy": "stripe",
+            "editable": false
+          },
+          {
+            "key": "stripe-card-expiring",
+            "name": "Card expiring soon",
+            "description": "Reminder that the card on file is about to expire. Sent by Stripe if expiring-card reminders are enabled under Subscriptions and emails.",
+            "deliveredBy": "stripe",
+            "editable": false
+          },
+          {
+            "key": "stripe-invoice",
+            "name": "Invoice",
+            "description": "A finalized invoice emailed to the organization. Sent by Stripe when invoice emails are enabled for the billing configuration.",
+            "deliveredBy": "stripe",
+            "editable": false
+          },
+          {
+            "key": "risk-email-held",
+            "name": "Risk notice: An email is on hold for review",
+            "description": "Sent to the owners and admins when this happens (email-held). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-email-released",
+            "name": "Risk notice: Your held email was released",
+            "description": "Sent to the owners and admins when this happens (email-released). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-email-rejected",
+            "name": "Risk notice: A held email will not be sent",
+            "description": "Sent to the owners and admins when this happens (email-rejected). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-page-held",
+            "name": "Risk notice: A published page is on hold for review",
+            "description": "Sent to the owners and admins when this happens (page-held). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-page-released",
+            "name": "Risk notice: Your held page is live",
+            "description": "Sent to the owners and admins when this happens (page-released). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-page-rejected",
+            "name": "Risk notice: A held page will not be published",
+            "description": "Sent to the owners and admins when this happens (page-rejected). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-page-flagged",
+            "name": "Risk notice: A live page is being reviewed",
+            "description": "Sent to the owners and admins when this happens (page-flagged). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-listing-held",
+            "name": "Risk notice: A marketplace submission is on hold for review",
+            "description": "Sent to the owners and admins when this happens (listing-held). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-listing-released",
+            "name": "Risk notice: Your marketplace submission was cleared",
+            "description": "Sent to the owners and admins when this happens (listing-released). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-listing-rejected",
+            "name": "Risk notice: A marketplace submission will not be listed",
+            "description": "Sent to the owners and admins when this happens (listing-rejected). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-domain-flagged",
+            "name": "Risk notice: A domain you added is being reviewed",
+            "description": "Sent to the owners and admins when this happens (domain-flagged). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-domain-cleared",
+            "name": "Risk notice: Your domain review is complete",
+            "description": "Sent to the owners and admins when this happens (domain-cleared). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-domain-rejected",
+            "name": "Risk notice: A domain on your workspace was not approved",
+            "description": "Sent to the owners and admins when this happens (domain-rejected). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-billing-payment-flagged",
+            "name": "Risk notice: A payment on your subscription needs attention",
+            "description": "Sent to the owners and admins when this happens (billing-payment-flagged). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-link-blocked",
+            "name": "Risk notice: A link on … was blocked",
+            "description": "Sent to the owners and admins when this happens (link-blocked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-card-testing",
+            "name": "Risk notice: Unusual checkout activity on …",
+            "description": "Sent to the owners and admins when this happens (card-testing). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-gift-card-hold",
+            "name": "Risk notice: Gift cards from an order are on hold",
+            "description": "Sent to the owners and admins when this happens (gift-card-hold). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-sale-fraud-warning",
+            "name": "Risk notice: A payment you received may be fraudulent",
+            "description": "Sent to the owners and admins when this happens (sale-fraud-warning). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-sale-payment-review",
+            "name": "Risk notice: A payment you received is on hold for review",
+            "description": "Sent to the owners and admins when this happens (sale-payment-review). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-sale-dispute",
+            "name": "Risk notice: A customer disputed a payment",
+            "description": "Sent to the owners and admins when this happens (sale-dispute). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-seller-review",
+            "name": "Risk notice: We are reviewing recent payments on your store",
+            "description": "Sent to the owners and admins when this happens (seller-review). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-marketplace-sale-review",
+            "name": "Risk notice: A marketplace sale is under review",
+            "description": "Sent to the owners and admins when this happens (marketplace-sale-review). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-marketplace-sale-warning",
+            "name": "Risk notice: A marketplace sale may be reversed",
+            "description": "Sent to the owners and admins when this happens (marketplace-sale-warning). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-publisher-payouts-held",
+            "name": "Risk notice: Your marketplace payouts are on an extended schedule",
+            "description": "Sent to the owners and admins when this happens (publisher-payouts-held). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-publisher-payouts-standard",
+            "name": "Risk notice: Your marketplace payouts are back on the standard schedule",
+            "description": "Sent to the owners and admins when this happens (publisher-payouts-standard). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-review-cleared",
+            "name": "Risk notice: Our review is complete",
+            "description": "Sent to the owners and admins when this happens (review-cleared). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-review-upheld",
+            "name": "Risk notice: Our review found a problem",
+            "description": "Sent to the owners and admins when this happens (review-upheld). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-workspace-locked",
+            "name": "Risk notice: … has been locked",
+            "description": "Sent to the owners and admins when this happens (workspace-locked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-workspace-unlocked",
+            "name": "Risk notice: … has been restored",
+            "description": "Sent to the owners and admins when this happens (workspace-unlocked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-site-locked",
+            "name": "Risk notice: A site on … has been locked",
+            "description": "Sent to the owners and admins when this happens (site-locked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-site-unlocked",
+            "name": "Risk notice: A site on … has been restored",
+            "description": "Sent to the owners and admins when this happens (site-unlocked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-domain-locked",
+            "name": "Risk notice: A domain on … has been locked",
+            "description": "Sent to the owners and admins when this happens (domain-locked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-domain-unlocked",
+            "name": "Risk notice: A domain on … has been restored",
+            "description": "Sent to the owners and admins when this happens (domain-unlocked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-account-locked",
+            "name": "Risk notice: Your account has been locked",
+            "description": "Sent to the owners and admins when this happens (account-locked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-account-unlocked",
+            "name": "Risk notice: Your account has been restored",
+            "description": "Sent to the owners and admins when this happens (account-unlocked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-feature-locked",
+            "name": "Risk notice: Paused on …: …",
+            "description": "Sent to the owners and admins when this happens (feature-locked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-feature-unlocked",
+            "name": "Risk notice: Back on for …: …",
+            "description": "Sent to the owners and admins when this happens (feature-unlocked). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-subscription-canceled",
+            "name": "Risk notice: The subscription for … was canceled",
+            "description": "Sent to the owners and admins when this happens (subscription-canceled). Transactional: it ignores notification settings and reaches a locked workspace.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-digest",
+            "name": "Risk notice: summary of held or flagged items",
+            "description": "Sent instead of one email per item when many items on a workspace are held or flagged within an hour.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "risk-review-requested",
+            "name": "Risk notice: review request received",
+            "description": "Sent to an owner or admin who asked for a review of a held or flagged item, confirming the request reached the review team.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "retention-verify-reminder",
+            "name": "Getting started: confirm your email",
+            "description": "Sent about an hour, and again a day, after sign-up to an account that has not confirmed its email address. Carries a fresh link.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "retention-build-site",
+            "name": "Getting started: build your site",
+            "description": "Sent a day, and again three days, after sign-up to a confirmed account with no page of its own yet: no workspace, no site, or only the starter pages.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "retention-publish-reminder",
+            "name": "Getting started: publish your changes",
+            "description": "Sent once to an account that edited pages a day or more ago and has published none of its own work.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "retention-idle",
+            "name": "Getting started: pick up where you left off",
+            "description": "Sent 7 days, and again 14 days, after the last sign-in of an account that has worked on its site. Once per quiet spell; coming back resets it.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "retention-next-steps",
+            "name": "Getting started: your site is live",
+            "description": "Sent once, after an account first publishes pages of its own: what to do next, a custom domain and a contact form.",
+            "deliveredBy": "resend",
+            "editable": true
+          }
+        ],
+        "samples": {
+          "org-invite": {
+            "org.name": "Test Org",
+            "invite.role": "editor",
+            "signInUrl": "https://app.aglyn.com",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "org-owner-handoff": {
+            "org.name": "Test Org",
+            "handoff.previousOwner": "The current owner stays on as an admin.",
+            "signInUrl": "https://app.aglyn.com",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "org-upgrade-proposal": {
+            "org.name": "Test Org",
+            "plan.name": "Starter",
+            "proposal.note": "As we discussed on Tuesday.",
+            "billingUrl": "https://app.aglyn.com/test-org/billing?plan=starter",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "usage-summary": {
+            "month": "2026-06",
+            "month.label": "June 2026",
+            "org.name": "Test Org",
+            "usage.summary": "Plan: Starter\nPage views: 12,400\nMetered usage beyond your plan: none, so nothing extra is billed for it.",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "erasure-hold-alert": {
+            "count": "3",
+            "orgs.list": "- Test Org (org_123), requested 2026-07-01",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "welcome": {
+            "name": "Alex",
+            "org.name": "Test Org",
+            "consoleUrl": "https://app.aglyn.com",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "member-added": {
+            "org.name": "Test Org",
+            "member.role": "editor",
+            "signInUrl": "https://app.aglyn.com",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "erasure-confirmation": {
+            "org.name": "Test Org",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "erasure-requested": {
+            "org.name": "Test Org",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "admin-password-reset": {
+            "resetUrl": "https://app.aglyn.com/reset-password?oobCode=…",
+            "actor.name": "{{brand.productName}} support",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "password-changed-by-admin": {
+            "actor.name": "{{brand.productName}} support",
+            "signInUrl": "https://app.aglyn.com",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "security-new-device": {
+            "device.name": "Chrome on macOS",
+            "device.location": "Denver, CO, US",
+            "device.ip": "203.0.113.7",
+            "device.time": "2026-08-08 14:03 UTC",
+            "accountSecurityUrl": "https://app.aglyn.com/manage/user/security",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "security-passkey-added": {
+            "passkey.label": "MacBook Touch ID",
+            "device.time": "2026-08-08 14:03 UTC",
+            "accountSecurityUrl": "https://app.aglyn.com/manage/user",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "password-reset": {
+            "resetUrl": "https://app.aglyn.com/reset-password?oobCode=…",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "email-verification": {
+            "verifyUrl": "https://app.aglyn.com/verify-email?oobCode=…",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "email-address-confirmation": {
+            "confirmUrl": "https://app.aglyn.com/manage/user?confirmEmail=…",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "staff-follow-up": {
+            "name": "Alex",
+            "message.subject": "Your site is ready to publish",
+            "message.body": "I saw you started a site yesterday. Reply here if anything got in the way and I will sort it out.",
+            "sender.name": "Zach",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "notification": {
+            "notification.title": "Subscription canceled",
+            "notification.body": "Test Org canceled, leaving the Advanced plan.",
+            "notification.url": "https://app.aglyn.com/manage/notifications",
+            "settingsUrl": "https://app.aglyn.com/manage/notifications/settings",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "staff-alert": {
+            "alert.subject": "Free AI spend at 80% of today’s ceiling",
+            "alert.body": "Free-tier AI spend for 2026-09-28 (UTC) is at $40.00 of the $50.00 ceiling.",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "operator-alert": {
+            "alert.title": "Card testing on northwind.test",
+            "alert.body": "38 declined card attempts in 10 minutes on the checkout of northwind.test. Checkout is rate limited while this is reviewed.",
+            "alert.url": "https://app.aglyn.com/admin/abuse-reports",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "operator-alert-digest": {
+            "digest.title": "3 operator alerts on 2026-09-28",
+            "digest.date": "2026-09-28",
+            "digest.count": "3",
+            "digest.body": "• New support ticket: Checkout button missing\nnorthwind opened a ticket.\n\n• Plugin listing waiting for review\nAcme Forms 2.1.0 was submitted for review.",
+            "digest.url": "https://app.aglyn.com/admin/operator-alerts",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "support-ticket-alert": {
+            "ticket.heading": "New ticket",
+            "ticket.subject": "Domain will not verify",
+            "ticket.body": "Test Org opened a support ticket.\nFrom: owner@example.com",
+            "ticket.url": "https://app.aglyn.com/admin/support",
+            "manager.name": "Sam",
+            "org.name": "Test Org",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "workspace-notice": {
+            "notice.subject": "Test Org has used 80% of this month’s emails",
+            "notice.body": "Test Org has sent 8,000 of its 10,000 emails this month.",
+            "org.name": "Test Org",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "member-email-alias-confirmation": {
+            "member.name": "Alex",
+            "address": "alex@example.com",
+            "org.name": "Test Org",
+            "confirmUrl": "https://app.aglyn.com/manage/account",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "crm-daily-digest": {
+            "digest.subject": "2 tasks overdue, 3 new leads",
+            "digest.body": "Overdue (2)\n- Call back Jordan · Sep 27, 9:00 AM",
+            "settingsUrl": "https://app.aglyn.com/manage/notifications/settings",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "crm-task-reminder": {
+            "reminder.subject": "Reminder: Call back Jordan",
+            "reminder.body": "- Call back Jordan · due today at 9:00 AM",
+            "settingsUrl": "https://app.aglyn.com/manage/notifications/settings",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "ai-insights-digest": {
+            "site.name": "Test Site",
+            "digest.body": "1. Visits from search rose 18% on last week.",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "legal-intake-receipt": {
+            "receipt.subject": "Report received — AR-3F9K2",
+            "receipt.body": "We have received your report about https://example.com.\n\nYour reference is AR-3F9K2.",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "plugin-review-update": {
+            "review.subject": "Your plugin was approved",
+            "review.body": "Test Plugin 1.2.0 passed review and is live in the marketplace.",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-email-held": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-email-released": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-email-rejected": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-page-held": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-page-released": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-page-rejected": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-page-flagged": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-listing-held": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-listing-released": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-listing-rejected": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-domain-flagged": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-domain-cleared": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-domain-rejected": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-billing-payment-flagged": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-link-blocked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-card-testing": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-gift-card-hold": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-sale-fraud-warning": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-sale-payment-review": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-sale-dispute": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-seller-review": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-marketplace-sale-review": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-marketplace-sale-warning": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-publisher-payouts-held": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-publisher-payouts-standard": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-review-cleared": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-review-upheld": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-workspace-locked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-workspace-unlocked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-site-locked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-site-unlocked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-domain-locked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-domain-unlocked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-account-locked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-account-unlocked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-feature-locked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-feature-unlocked": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-subscription-canceled": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-digest": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "risk-review-requested": {
+            "notice.title": "An email is on hold for review",
+            "notice.summary": "Our automated safety review held the campaign \"Spring sale\" from Test Org on Sep 28, 2026, 16:31 UTC before it was sent.",
+            "notice.meaning": "This email was not sent. Nobody on your list received it.",
+            "notice.steps": "1. Open the email and check it.\n2. If you think this is a mistake, choose Request a review.",
+            "notice.actions": "Request a review: https://app.example.com/test-org/settings/holds",
+            "notice.primaryActionLabel": "Request a review",
+            "notice.primaryActionUrl": "https://app.example.com/test-org/settings/holds",
+            "workspace.name": "Test Org",
+            "lock.message": "Access is temporarily disabled while we investigate a security concern.",
+            "reference": "HS-0A1B2C3D4E",
+            "holds.url": "https://app.example.com/test-org/settings/holds",
+            "help.url": "https://docs.example.com/help/holds-and-reviews",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "retention-verify-reminder": {
+            "name": "Alex",
+            "verifyUrl": "https://app.aglyn.com/verify-email?oobCode=…",
+            "docs.verifyEmailUrl": "https://docs.aglyn.com/workspace-and-billing/signing-in-and-sessions#verifying-your-email",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "retention-build-site": {
+            "name": "Alex",
+            "ctaUrl": "https://app.aglyn.com/test-org/hosts/test-site",
+            "docs.generateSiteUrl": "https://docs.aglyn.com/ai/generate-a-site",
+            "preferencesUrl": "https://app.aglyn.com/manage/user/emails",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "retention-publish-reminder": {
+            "name": "Alex",
+            "site.name": "Test Site",
+            "ctaUrl": "https://app.aglyn.com/test-org/hosts/test-site",
+            "docs.publishUrl": "https://docs.aglyn.com/getting-started/publish-your-first-screen",
+            "preferencesUrl": "https://app.aglyn.com/manage/user/emails",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "retention-idle": {
+            "name": "Alex",
+            "site.name": "Test Site",
+            "ctaUrl": "https://app.aglyn.com/test-org/hosts/test-site",
+            "docs.generateSectionUrl": "https://docs.aglyn.com/ai/generate-section",
+            "docs.copyAssistUrl": "https://docs.aglyn.com/ai/copy-assist",
+            "preferencesUrl": "https://app.aglyn.com/manage/user/emails",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          },
+          "retention-next-steps": {
+            "name": "Alex",
+            "site.name": "Test Site",
+            "siteUrl": "https://www.example.com",
+            "domainUrl": "https://app.aglyn.com/test-org/hosts/test-site/admin/domain",
+            "formsUrl": "https://app.aglyn.com/test-org/hosts/test-site/forms",
+            "docs.connectDomainUrl": "https://docs.aglyn.com/building-sites/custom-domains/connect-a-domain",
+            "docs.formsUrl": "https://docs.aglyn.com/content-and-data/forms/overview",
+            "preferencesUrl": "https://app.aglyn.com/manage/user/emails",
+            "brand.productName": "Aglyn",
+            "brand.fromName": "Aglyn",
+            "brand.supportUrl": "https://app.aglyn.com/support"
+          }
+        }
+      },
+      "actions": [
+        {
+          "id": "importHistory",
+          "label": "Import delivery history",
+          "icon": "square.and.arrow.down|download",
+          "url": "/api/admin/emails/import-history",
+          "body": {},
+          "confirm": "Reads the sending provider's own history and files it under each recipient, so the per-person delivery log knows mail sent before the live feed was connected. Safe to run more than once; no open or click counts are invented.",
+          "loop": {
+            "cursor": "nextCursor",
+            "param": "cursor",
+            "max": 25
+          },
+          "reload": false,
+          "success": "Imported {response.recorded:number} delivery record(s) from {response.scanned:number} message(s)",
+          "report": [
+            {
+              "text": "It stopped after {response.pages} passes. Run it again to continue.",
+              "when": "response.bounded"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "core.staff.suppressions",
@@ -8818,6 +10458,241 @@
               },
               "reload": true,
               "success": "Report is now dismissed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.emailSuppressions",
+      "title": "Platform suppressions",
+      "subtitle": "Addresses nothing is mailed to, from any site",
+      "icon": "nosign|block",
+      "scope": "staff",
+      "requires": "staff.is",
+      "constants": {
+        "reasons": [
+          {
+            "value": "bounce",
+            "label": "Bounced"
+          },
+          {
+            "value": "complaint",
+            "label": "Marked as spam"
+          },
+          {
+            "value": "staff",
+            "label": "Recorded by staff"
+          },
+          {
+            "value": "no_mail_server",
+            "label": "No mail server"
+          },
+          {
+            "value": "account_ban",
+            "label": "Banned account"
+          }
+        ]
+      },
+      "links": [
+        "/admin/emails/suppressions"
+      ],
+      "load": {
+        "rows": {
+          "url": "/api/admin/emails/suppressions?pageSize=50",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "filters": [
+            {
+              "field": "status",
+              "op": "equals",
+              "value": "{params.status}"
+            },
+            {
+              "field": "reason",
+              "op": "equals",
+              "value": "{params.reason}"
+            }
+          ]
+        }
+      },
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter the list",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "status",
+              "label": "State",
+              "kind": "select",
+              "initial": "{params.status}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "false",
+                  "label": "Active"
+                },
+                {
+                  "value": "true",
+                  "label": "Released"
+                }
+              ]
+            },
+            {
+              "key": "reason",
+              "label": "Reason",
+              "kind": "select",
+              "initial": "{params.reason}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                }
+              ],
+              "optionsFrom": {
+                "items": "const.reasons",
+                "value": "{item.value}",
+                "label": "{item.label}"
+              }
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.emailSuppressions",
+            "params": {
+              "status": "{form.status}",
+              "reason": "{form.reason}"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "load": "rows",
+          "search": true,
+          "items": "data.rows.rows",
+          "footer": "A hard bounce, a spam complaint or a staff hold. Nothing in the product mails one until it is released. Search finds an address by the start of any part of it.",
+          "primary": "{item.email|item.$id}",
+          "secondary": "{const.reasons[value=item.reason].label|item.reason:title}",
+          "tertiary": "Learned from {item.context|'unknown'} {item.hostId} · since {item.suppressedAt:datetime}",
+          "icon": "nosign|block",
+          "badges": [
+            {
+              "text": "Active",
+              "when": "!item.releasedAt",
+              "tone": "error"
+            },
+            {
+              "text": "Released",
+              "when": "item.releasedAt",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "release",
+              "label": "Release",
+              "icon": "lock.open|lock_open",
+              "when": "!item.releasedAt",
+              "url": "/api/admin/emails/suppressions",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "Why is it being put back?",
+                  "kind": "multiline",
+                  "required": true,
+                  "help": "At least 8 characters. It hard-bounced or reported spam, and releasing it re-mails it on the domain every customer's mail leaves by."
+                }
+              ],
+              "confirm": "Release {item.email}? Mail to it resumes.",
+              "body": {
+                "email": "{item.email}",
+                "note": "{form.note}"
+              },
+              "reload": true,
+              "success": "Released",
+              "report": [
+                {
+                  "text": "Nothing to release.",
+                  "when": "response.released == false"
+                }
+              ]
+            }
+          ],
+          "empty": "No suppressions match."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.emailMessage",
+      "title": "{data.message.subject|'Email message'}",
+      "label": "Email message",
+      "subtitle": "What the provider holds of one message",
+      "icon": "envelope|mail",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "message": "/api/admin/emails/message?id={params.messageId}"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "The message",
+          "object": "data.message",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{item.status:title}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "To",
+              "value": "{item.to}"
+            },
+            {
+              "label": "From",
+              "value": "{item.from}"
+            },
+            {
+              "label": "Reply-to",
+              "value": "{item.replyTo}"
+            },
+            {
+              "label": "Cc",
+              "value": "{item.cc}"
+            },
+            {
+              "label": "Bcc",
+              "value": "{item.bcc}"
+            },
+            {
+              "label": "Subject",
+              "value": "{item.subject}"
+            },
+            {
+              "label": "Provider",
+              "value": "{item.provider}"
+            },
+            {
+              "label": "Message id",
+              "value": "{item.providerMessageId}"
+            }
+          ],
+          "footer": "Reading a message is recorded in the audit log against the recipient. The message is shown as plain text; the formatted version is on the web console."
+        },
+        {
+          "type": "fields",
+          "title": "Text",
+          "object": "data.message",
+          "rows": [
+            {
+              "label": "Body",
+              "value": "{item.text|'No plain-text version was stored.'}"
             }
           ]
         }
