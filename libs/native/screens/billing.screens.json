@@ -961,7 +961,7 @@
     },
     {
       "id": "core.billing.cancel",
-      "title": "Cancel your plan",
+      "title": "Before you go",
       "icon": "xmark.circle|cancel",
       "scope": "org",
       "requires": "org.manager",
@@ -1020,7 +1020,7 @@
             "body": {
               "orgId": "{org.id}",
               "action": "survey",
-              "surface": "subscription_cancel",
+              "surface": "{params.surface|'subscription_cancel'}",
               "reason": "{form.reason}",
               "detail": "{form.detail}"
             },
@@ -1031,7 +1031,8 @@
                 "downsellPlan": "{response.downsellPlan}",
                 "winbackAvailable": "{response.winbackAvailable}",
                 "winbackPercentOff": "{response.winbackPercentOff}",
-                "winbackMonths": "{response.winbackDurationMonths}"
+                "winbackMonths": "{response.winbackDurationMonths}",
+                "surface": "{params.surface|'subscription_cancel'}"
               }
             },
             "reload": false
@@ -1041,7 +1042,7 @@
     },
     {
       "id": "core.billing.cancel.offers",
-      "title": "Cancel your plan",
+      "title": "Before you go",
       "icon": "xmark.circle|cancel",
       "scope": "org",
       "requires": "org.manager",
@@ -1058,7 +1059,7 @@
         {
           "type": "actions",
           "title": "Would a smaller plan work better?",
-          "when": "params.downsellPlan",
+          "when": "params.downsellPlan && data.org.subscription.status == active,trialing,past_due",
           "footer": "{params.downsellPlan:title} costs less and keeps your sites, data and team exactly where they are. Moving down takes effect at the end of your current billing period; you keep everything you have already paid for until then.",
           "items": [
             {
@@ -1087,7 +1088,7 @@
         {
           "type": "actions",
           "title": "Stay for {params.winbackPercentOff}% off?",
-          "when": "params.winbackAvailable == true",
+          "when": "params.winbackAvailable == true && data.org.subscription.status == active,trialing,past_due",
           "footer": "Keep your current plan at {params.winbackPercentOff}% off for the next {params.winbackMonths} months. After that your plan returns to its regular price. One offer per organization.",
           "items": [
             {
@@ -1108,7 +1109,14 @@
         {
           "type": "notice",
           "tone": "warning",
-          "text": "Your plan stays active until the end of the paid period, then this workspace moves to the Free plan. Nothing is deleted, and you can resume any time before it ends."
+          "text": "Your plan stays active until the end of the paid period, then this workspace moves to the Free plan. Nothing is deleted, and you can resume any time before it ends.",
+          "when": "params.surface != account_delete"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "when": "params.surface == account_delete",
+          "text": "This starts the deletion of this workspace and everything in it. You can cancel the request during the 7-day hold; after that all of its sites, files and data are permanently erased."
         },
         {
           "type": "actions",
@@ -1126,6 +1134,28 @@
                 "funnelId": "{params.funnelId}"
               },
               "success": "Subscription cancels {response.currentPeriodEnd|'at the end of the period':date}",
+              "back": true
+            }
+          ],
+          "when": "params.surface != account_delete"
+        },
+        {
+          "type": "actions",
+          "when": "params.surface == account_delete",
+          "items": [
+            {
+              "id": "delete",
+              "label": "Yes, delete this workspace",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "confirm": "Delete {org.name}? Nothing is removed for 7 days and you can cancel until then.",
+              "url": "/api/orgs/delete",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "request",
+                "funnelId": "{params.funnelId}"
+              },
+              "success": "Deletion requested. Your data is erased after a 7-day hold; cancel on the delete screen to keep the workspace.",
               "back": true
             }
           ]
