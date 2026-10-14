@@ -76,6 +76,27 @@ describe('the email platforms card', () => {
     expect(container.innerHTML).toBe('')
   })
 
+  it('draws ONE card, a row per platform, sized for the settings column (AGL-3711)', async () => {
+    const routes = api({
+      list: jest.fn(async () => ({
+        available: [
+          { id: 'mailchimp' as const, apiKey: true, oauth: false },
+          { id: 'klaviyo' as const, apiKey: true, oauth: false },
+          { id: 'omnisend' as const, apiKey: true, oauth: false },
+        ],
+        connections: [],
+      })),
+    })
+    render(<MarketingPlatformsCard hostId="h" api={routes} />)
+    expect(await screen.findByText('Email platforms')).toBeTruthy()
+    // One heading for the card; each platform is a row in it, not a card.
+    expect(screen.getAllByText('Email platforms')).toHaveLength(1)
+    for (const name of ['Mailchimp', 'Klaviyo', 'Omnisend']) {
+      expect(screen.getByRole('region', { name })).toBeTruthy()
+    }
+    expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(3)
+  })
+
   it('connects with the merchant’s own key', async () => {
     const routes = api({
       list: jest.fn(async () => ({ available: [{ id: 'klaviyo' as const, apiKey: true, oauth: false }], connections: [] })),
@@ -112,6 +133,29 @@ describe('the email platforms card', () => {
     await waitFor(() => expect(routes.syncNow).toHaveBeenCalledWith('klaviyo'))
   })
 
+  /**
+   * A Tag field only where the tag reaches the platform (AGL-3775): Attentive
+   * has nowhere to put it, and a field it silently drops is a promise broken.
+   */
+  it('offers the Tag field only for platforms that carry it', async () => {
+    const klaviyo = api({
+      list: jest.fn(async () => ({ available: [{ id: 'klaviyo' as const, apiKey: true, oauth: false }], connections: [connection()] })),
+    })
+    const { unmount } = render(<MarketingPlatformsCard hostId="h" api={klaviyo} />)
+    expect(await screen.findByLabelText('Tag')).toBeTruthy()
+    unmount()
+
+    const attentive = api({
+      list: jest.fn(async () => ({
+        available: [{ id: 'attentive' as const, apiKey: false, oauth: true }],
+        connections: [connection({ id: 'h_attentive', provider: 'attentive', authKind: 'oauth', listId: null, lists: [] })],
+      })),
+    })
+    render(<MarketingPlatformsCard hostId="h" api={attentive} />)
+    await screen.findByText(/contacts sent/)
+    expect(screen.queryByLabelText('Tag')).toBeNull()
+  })
+
   it('pages the sync log with the shared footer', async () => {
     const entries = Array.from({ length: 12 }, (_, n) => ({ id: `e${n}`, atMs: 1000 - n, kind: 'run' as const, message: `Run ${n}` }))
     const routes = api({
@@ -119,6 +163,9 @@ describe('the email platforms card', () => {
       log: jest.fn(async () => ({ entries, nextBefore: null })),
     })
     render(<MarketingPlatformsCard hostId="h" api={routes} />)
+    // The log opens under the platform's row on request.
+    expect(routes.log).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Sync log' }))
     expect(await screen.findByText('Run 0')).toBeTruthy()
     // The shared footer starts on the smallest page size, and turns the page.
     expect(screen.queryByText('Run 11')).toBeNull()

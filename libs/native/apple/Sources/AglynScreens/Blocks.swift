@@ -483,8 +483,8 @@ struct ActionInputSheet: View {
   var body: some View {
     NavigationStack {
       Form {
-        if let confirm = pending.action.confirm {
-          Section { Text(ScreenValues.render(confirm, in: pending.scope)).font(AglynFont.subheadline) }
+        if let confirm = pending.action.confirmText(in: pending.scope) {
+          Section { Text(confirm).font(AglynFont.subheadline) }
         }
         Section {
           ForEach(inputs.filter { ScreenValues.condition($0.when, in: filled) }) { field in
