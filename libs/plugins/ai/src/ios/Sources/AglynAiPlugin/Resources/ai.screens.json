@@ -558,7 +558,7 @@
     {
       "id": "ai.signals",
       "title": "Assist signal",
-      "subtitle": "Docs gaps, AI cost and free-plan spend",
+      "subtitle": "Docs gaps, what Assist costs and who spends it",
       "icon": "waveform|insights",
       "scope": "staff",
       "requires": "staff.is",
@@ -570,31 +570,58 @@
         "/admin/assist-signals"
       ],
       "load": {
-        "signals": "/api/ai/admin/signals?limit=25"
+        "view": "/api/ai/admin/signals?view=prepared&limit=25"
       },
       "blocks": [
         {
-          "type": "fields",
-          "title": "This month",
-          "object": "data.signals",
-          "rows": [
-            {
-              "label": "Spend",
-              "value": "{item.spend.totalUsd|item.spend.usd:dollars}"
-            },
-            {
-              "label": "Free-plan spend",
-              "value": "{item.freeSpend.totalUsd|item.freeSpend.usd:dollars}"
-            }
-          ]
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.view.truncatedNote",
+          "text": "{data.view.truncatedNote}"
         },
         {
           "type": "list",
-          "title": "Workspaces",
-          "items": "data.signals.orgs",
-          "primary": "{item.orgLabel|item.orgId}",
-          "secondary": "{item.requests:number} requests",
-          "trailing": "{item.costUsd:dollars}",
+          "title": "Fleet",
+          "items": "data.view.fleet.chips",
+          "primary": "{item}",
+          "icon": "chart.bar|insights",
+          "count": false,
+          "empty": "{data.view.fleet.empty}"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "when": "data.view.freeSpend.tone == error",
+          "text": "{data.view.freeSpend.line}"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.view.freeSpend.tone == warning",
+          "text": "{data.view.freeSpend.line}"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.view.freeSpend.tone == neutral",
+          "text": "{data.view.freeSpend.line}"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.view.spend.note",
+          "text": "{data.view.spend.note}"
+        },
+        {
+          "type": "list",
+          "title": "{data.view.spend.heading}",
+          "footer": "{data.view.spend.footnote}",
+          "items": "data.view.spend.rows",
+          "primary": "{item.workspace}",
+          "secondary": "{item.plan} · {data.view.spend.addonName} {item.addon} · {item.credits} credits",
+          "tertiary": "{item.refusals} refusals {item.refusalDetail}",
+          "trailing": "{item.cost}",
+          "icon": "creditcard|payments",
           "open": {
             "screen": "core.staff.org",
             "params": {
@@ -602,16 +629,104 @@
             },
             "when": "item.orgId"
           },
-          "empty": "No AI use."
+          "count": false,
+          "empty": "No workspace has spent AI credits this month."
         },
         {
           "type": "list",
-          "title": "What people asked that the docs did not answer",
-          "items": "data.signals.prose",
-          "primary": "{item.text|item.prompt}",
-          "secondary": "{item.orgLabel} · {item.at|item.createdAt:datetime}",
+          "title": "Where the money goes: by tier",
+          "footer": "{data.view.split.note}",
+          "items": "data.view.split.tier",
+          "primary": "{item.key}",
+          "trailing": "{item.detail}",
+          "icon": "chart.pie|insights",
           "count": false,
-          "empty": "Nothing new."
+          "empty": "{data.view.split.empty|'No turns in this sample.'}"
+        },
+        {
+          "type": "list",
+          "title": "Where the money goes: by model",
+          "items": "data.view.split.model",
+          "primary": "{item.key}",
+          "trailing": "{item.detail}",
+          "icon": "cpu|memory",
+          "count": false,
+          "empty": "{data.view.split.empty|'No turns in this sample.'}"
+        },
+        {
+          "type": "list",
+          "title": "Tokens by kind",
+          "footer": "What each kind of model request costs per request, what its prompts and answers weigh, how much of its prompt the cache served, and the answer size 95 of every 100 requests stayed within: the figure its output ceiling is sized against.",
+          "items": "data.view.kinds",
+          "primary": "{item.kind}",
+          "secondary": "{item.headline}",
+          "tertiary": "{item.detail}",
+          "icon": "text.alignleft|text_fields",
+          "count": false,
+          "empty": "No model turns in this sample."
+        },
+        {
+          "type": "list",
+          "title": "Docs gaps",
+          "footer": "Cited pages ranked by thumbs-down, then by how often a question landed there. A page near the top is being found and is not answering: that is a docs issue with its evidence attached. {data.view.docsGaps.footnote}",
+          "items": "data.view.docsGaps.rows",
+          "primary": "{item.path}",
+          "secondary": "{item.headline}",
+          "tertiary": "{item.detail}",
+          "icon": "doc.text|description",
+          "count": false,
+          "empty": "Nothing cited yet."
+        },
+        {
+          "type": "list",
+          "title": "Questions the docs could not answer",
+          "footer": "{data.view.ungrounded.note} {data.view.ungrounded.footnote}",
+          "items": "data.view.ungrounded.rows",
+          "primary": "{item.route}",
+          "secondary": "{item.detail}",
+          "icon": "questionmark.circle|help_outline",
+          "count": false,
+          "empty": "Every question so far matched something."
+        },
+        {
+          "type": "list",
+          "title": "What people actually asked",
+          "footer": "The verbatim question behind each failing turn, rated down or grounded in nothing. Kept for 180 days and then deleted, so an older failure shows its counts with the words gone. Who asked is deliberately not shown: the question is what this is for.",
+          "items": "data.view.prose",
+          "primary": "{item.text}",
+          "secondary": "{item.where}",
+          "tertiary": "{item.answer}",
+          "icon": "text.bubble|forum",
+          "badges": [
+            {
+              "text": "{item.flag}",
+              "tones": {
+                "rated down": "error",
+                "*": "neutral"
+              }
+            }
+          ],
+          "count": false,
+          "empty": "No failing turns in this sample: nothing to read."
+        },
+        {
+          "type": "list",
+          "title": "What Assist costs, by workspace",
+          "footer": "Our estimated cost at the serving model’s list rates: telemetry for tuning price against margin, not a bill. {data.view.orgs.footnote}",
+          "items": "data.view.orgs.rows",
+          "primary": "{item.workspace}",
+          "secondary": "{item.headline}",
+          "tertiary": "{item.detail}",
+          "icon": "building.2|business",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            },
+            "when": "item.orgId"
+          },
+          "count": false,
+          "empty": "No workspace has used Assist yet."
         }
       ]
     }
