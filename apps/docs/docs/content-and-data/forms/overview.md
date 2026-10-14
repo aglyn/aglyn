@@ -375,7 +375,7 @@ row actions.
   that off. It names the form, the page and the campaign, and opens **that submission**
   rather than the list — see [What an open submission links to](#what-it-links-to).
   The email also lists every answer under the field's label, so you can read an
-  enquiry without opening the console; the in-app notification leaves the answers out.
+  inquiry without opening the console; the in-app notification leaves the answers out.
 - The row's **⋮** menu holds **Open contact in CRM** — the person this submission
   updated, found by the address they gave — beside **Mark read** and **Delete**. A
   submission that carried no email address updated no contact, and the item says so.

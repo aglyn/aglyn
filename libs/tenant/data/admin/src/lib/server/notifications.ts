@@ -86,7 +86,7 @@ export interface NotifyUsersOptions {
   skipEmailFor?: readonly string[]
   /**
    * Particulars the email carries and the notification does not: a form
-   * submission's answers, so the person reading the email has the enquiry
+   * submission's answers, so the person reading the email has the inquiry
    * without opening the console.
    *
    * Email only, never written to the notification document or pushed. The

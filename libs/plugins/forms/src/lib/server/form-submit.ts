@@ -1042,7 +1042,7 @@ export async function POST(request: Request): Promise<Response> {
      * links inside the reader.
      *
      * The email also lists the answers, under the form's own labels, so a
-     * manager can act on an enquiry from the inbox it landed in. Email only:
+     * manager can act on an inquiry from the inbox it landed in. Email only:
      * the console notification and the push keep to the sentence above.
      */
     const alertPath = typeof path === 'string' ? path.slice(0, 500) : ''
