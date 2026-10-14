@@ -169,6 +169,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
+  /// `download`: the route answers with a file (an export), not JSON; the person saves or shares it.
+  /// Its value names the file when the route names none.
+  public let download: String?
 
   public init?(_ json: JSONValue) {
     guard let label = json["label"]?.stringValue else { return nil }
@@ -196,6 +199,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)
   }
 
   /// Every field the action asks for before it runs: its prompt, then a reason.

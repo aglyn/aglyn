@@ -175,6 +175,7 @@ private fun SpecBody(
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
+  val exporter = com.aglyn.ui.LocalFileExporter.current
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
 
@@ -213,6 +214,14 @@ private fun SpecBody(
     when (outcome) {
       is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, outcome.message)
       is ActionOutcome.Failed -> show(outcome.message, StatusTone.ERROR)
+      is ActionOutcome.File -> {
+        val exporter = exporter
+        when {
+          exporter == null -> show("Saving a file is not available here.", StatusTone.WARNING)
+          exporter.export(outcome.name, outcome.mimeType, outcome.bytes) -> show(outcome.message ?: "Saved ${outcome.name}", StatusTone.SUCCESS)
+          else -> Unit
+        }
+      }
       is ActionOutcome.Done -> {
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }

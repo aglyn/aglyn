@@ -102,6 +102,8 @@ extension EnvironmentValues {
 /// What running an action came to.
 public enum ActionOutcome: Equatable {
   case done(message: String?, response: JSONValue?)
+  /// A route answered with a file to save or share.
+  case file(DownloadedFile, name: String, message: String?)
   /// The route wants a recent sign-in (`reauth-required`) before it acts.
   case needsReauth(String)
   case failed(String)
@@ -285,6 +287,18 @@ public final class ScreenModel {
     guard let api else { return .failed("Sign in to continue.") }
     let path = ScreenValues.renderURL(urlTemplate, in: scope)
     let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: scope) }
+    if let fallback = action.download {
+      do {
+        let file = try await api.download(path, method: action.method, body: action.method == .get ? nil : (body ?? [:]))
+        let name = file.name ?? ScreenValues.render(fallback, in: scope)
+        return .file(file, name: name, message: action.success.map { ScreenValues.render($0, in: scope) })
+      } catch let error as ConsoleAPIError {
+        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        return .failed(error.message)
+      } catch {
+        return .failed(error.localizedDescription)
+      }
+    }
     do {
       let response = try await api.request(path, method: action.method, body: body ?? (action.method == .get ? nil : [:]))
       let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", response ?? .null)) }

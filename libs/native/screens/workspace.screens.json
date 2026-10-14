@@ -403,6 +403,19 @@
         { "type": "notice", "tone": "warning", "when": "data.org.erasureRequestedAt", "text": "Deletion was requested {data.org.erasureRequestedAt:date}. You can cancel it until the grace period ends." },
         {
           "type": "actions",
+          "title": "Your data",
+          "when": "org.owner || staff.is",
+          "footer": "Export anything you want to keep before deleting: everything in the workspace as one JSON file. You may be asked for your password first.",
+          "items": [
+            {
+              "id": "export", "label": "Download a copy of the workspace data", "icon": "arrow.down.doc|download",
+              "method": "GET", "url": "/api/orgs/export-data?orgId={org.id}", "download": "aglyn-workspace-export.json",
+              "success": "The export is ready to save"
+            }
+          ]
+        },
+        {
+          "type": "actions",
           "items": [
             {
               "id": "request", "label": "Delete this workspace", "icon": "trash|delete_forever", "destructive": true, "when": "!data.org.erasureRequestedAt",

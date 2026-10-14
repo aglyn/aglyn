@@ -91,6 +91,8 @@ val LocalScreenSession = compositionLocalOf { ScreenSession() }
 
 sealed interface ActionOutcome {
   data class Done(val message: String?, val response: JsonElement?) : ActionOutcome
+  /** A route answered with a file to save. */
+  class File(val name: String, val mimeType: String, val bytes: ByteArray, val message: String?) : ActionOutcome
   data class NeedsReauth(val message: String) : ActionOutcome
   data class Failed(val message: String) : ActionOutcome
 }
@@ -239,6 +241,12 @@ class ScreenModel(
     val path = ScreenValues.renderUrl(template, scope)
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {
+      action.download?.let { fallback ->
+        val file = client.download(path, if (action.method == ApiMethod.GET) null else (body ?: JsonObject(emptyMap())), action.method)
+        return ActionOutcome.File(
+          file.name ?: ScreenValues.render(fallback, scope), file.contentType, file.bytes, action.success?.let { ScreenValues.render(it, scope) },
+        )
+      }
       val response = client.request(path, action.method, body)
       ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
     } catch (error: CancellationException) {

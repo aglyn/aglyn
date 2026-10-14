@@ -166,6 +166,27 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun aDownloadActionHandsBackTheFileUnderTheNameTheRouteGives() = runTest {
+    val engine = MockEngine { request ->
+      val named = request.url.encodedPath.endsWith("/named")
+      respond(
+        """{"a":1}""", HttpStatusCode.OK,
+        if (named) headersOf("Content-Disposition" to listOf("attachment; filename=\"export-2026.json\""), "Content-Type" to listOf("application/json")) else headersOf(),
+      )
+    }
+    val api = ConsoleApiClient("http://localhost", HttpClient(engine) { expectSuccess = false }, { "t" }, sleep = {})
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val named = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Export","method":"GET","url":"/api/x/named","download":"fallback.json","success":"Ready"}"""))!!
+    val file = model.run(named, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.File>(file)
+    assertEquals("export-2026.json", file.name)
+    assertEquals("Ready", file.message)
+    assertEquals("""{"a":1}""", file.bytes.decodeToString())
+    val unnamed = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Export","method":"GET","url":"/api/x/other","download":"fallback.json"}"""))!!
+    assertEquals("fallback.json", (model.run(unnamed, JsonObject(emptyMap())) as ActionOutcome.File).name)
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)

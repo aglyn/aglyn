@@ -132,6 +132,29 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testADownloadActionHandsBackTheFileUnderTheNameTheRouteGives() async throws {
+    struct FileTransport: HTTPTransport {
+      func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let named = request.url?.path.hasSuffix("/named") == true
+        let response = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil,
+          headerFields: named ? ["Content-Disposition": #"attachment; filename="export-2026.json""#, "Content-Type": "application/json"] : [:])!
+        return (Data(#"{"a":1}"#.utf8), response)
+      }
+    }
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: FileTransport())
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    let named = try XCTUnwrap(ActionSpec(["label": "Export", "method": "GET", "url": "/api/x/named", "download": "fallback.json", "success": "Ready"]))
+    guard case .file(let file, let name, let message) = await model.run(named, in: [:]) else { return XCTFail("expected a file") }
+    XCTAssertEqual(name, "export-2026.json")
+    XCTAssertEqual(message, "Ready")
+    XCTAssertEqual(String(data: file.data, encoding: .utf8), #"{"a":1}"#)
+    let unnamed = try XCTUnwrap(ActionSpec(["label": "Export", "method": "GET", "url": "/api/x/other", "download": "fallback.json"]))
+    guard case .file(_, let fallback, _) = await model.run(unnamed, in: [:]) else { return XCTFail("expected a file") }
+    XCTAssertEqual(fallback, "fallback.json")
+  }
+
+  @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
     let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
