@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynHardware
 import AglynUI
 import SwiftUI
 
@@ -16,6 +17,10 @@ struct AglynPOSApp: App {
 
   init() {
     AglynFonts.register()
+    // A card typed in at the register goes into Stripe's own card form, on iPhone and iPad only.
+    #if os(iOS) && canImport(StripePaymentSheet)
+      DeviceKeyedCardEntry.shared = StripeKeyedCardEntry()
+    #endif
     #if DEBUG && os(macOS)
       DebugSnapshot.scheduleIfAsked()
     #endif
