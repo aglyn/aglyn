@@ -440,6 +440,28 @@ export function useSlotWidgets(slots: readonly string[]): {
 }
 
 /**
+ * Whether a zone has any card to draw for this reader (AGL-3711): at least
+ * one widget passed every gate {@link useSlotWidgets} applies, and is a card
+ * rather than a table column.
+ *
+ * For a page that gives a zone a place of its own — a section in a hub's
+ * rail — and must offer that place only when something would fill it. The
+ * same gates as the slot itself, so the rail and the section can never
+ * disagree about whether the zone is empty. `ready` is false until the zone's
+ * plugins have loaded and every gate has settled.
+ */
+export function useSlotHasWidgets(slot: string): {
+  hasWidgets: boolean
+  ready: boolean
+} {
+  const { widgets, ready } = useSlotWidgets([slot])
+  return {
+    hasWidgets: widgets.some((widget) => widget.column === undefined),
+    ready,
+  }
+}
+
+/**
  * Renders every plugin widget registered for a named slot (AGL-419) —
  * the shell owns placement, the plugins own the UI, and the app never
  * imports a plugin. Extra props pass straight through to each widget.

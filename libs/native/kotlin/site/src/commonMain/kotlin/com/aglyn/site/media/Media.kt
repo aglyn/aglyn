@@ -229,10 +229,11 @@ class MediaListModel(
   private val scope: MediaScope,
   private val firestore: FirestoreReader,
   private val coroutines: CoroutineScope,
+  initialType: String? = null,
 ) {
   var folder by mutableStateOf<FolderPick>(FolderPick.All)
     private set
-  var type by mutableStateOf<String?>(null)
+  var type by mutableStateOf(initialType)
     private set
   var sort by mutableStateOf(MediaSort.NEWEST)
     private set

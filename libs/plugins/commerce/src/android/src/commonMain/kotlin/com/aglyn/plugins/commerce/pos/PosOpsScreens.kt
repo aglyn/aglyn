@@ -64,6 +64,7 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   val cashier = model.cashier
   val shift = model.shift
   var switching by remember { mutableStateOf(false) }
+  var returning by remember { mutableStateOf(false) }
   AlertDialog(
     onDismissRequest = onDismiss,
     modifier = Modifier.testTag("pos-ops"),
@@ -86,6 +87,9 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
           }
         }
         SectionCard("Shift") { ShiftControls(model) }
+        SectionCard("Returns") {
+          OutlinedButton(onClick = { returning = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-return")) { Text("Return items") }
+        }
         StaffPinsSection(model)
       }
     },
@@ -97,6 +101,7 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
       switching = false
     }
   }
+  if (returning) PosReturnDialog(model) { returning = false }
   ShiftDialogs(model)
 }
 

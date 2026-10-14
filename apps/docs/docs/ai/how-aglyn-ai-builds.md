@@ -48,6 +48,11 @@ A plan only proposes what your workspace can create: what your plan includes, an
 your site still has room for. A plan the job could not build is stopped before you are
 asked to confirm it, with the reason. What a page's plan creates, such as its layout, a
 card that repeats or its form, is built first when you confirm, in the same job.
+If another build on the same site used the last form your plan includes after you
+confirmed, the page places the form that build just made instead, and the job says so.
+When no such form will do, the job stops, and you are not charged for what it could not
+build. Starting a page while another is being built on the same site says *A page is
+already being built*: wait for it, or start another anyway.
 
 The job then waits for you. The window you started it from stays with it: it
 shows the job planning, then the plan itself, with **Confirm plan** to build it
