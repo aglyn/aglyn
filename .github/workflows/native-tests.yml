@@ -228,22 +228,38 @@ jobs:
           --scratch "$RUNNER_TEMP/spm-scratch"
           --build-system "$SPM_BUILD_SYSTEM"
 
+      # The full log goes to a file. What is printed: how many tasks of each
+      # kind ran (a warm build should compile next to nothing, so this is
+      # where a cache that stopped working shows), the timing summary, every
+      # distinct error and warning, and on failure the end of the log.
       - name: xcodebuild Aglyn and AglynPOS (macOS)
         if: env.RUN == 'true'
         run: |
           set -euo pipefail
           for scheme in Aglyn AglynPOS; do
             echo "::group::xcodebuild $scheme"
+            log="$RUNNER_TEMP/xcodebuild-$scheme.log"
+            status=0
             xcodebuild build \
               -project apps/ios/Aglyn.xcodeproj \
               -scheme "$scheme" \
               -destination 'platform=macOS' \
               -derivedDataPath "$RUNNER_TEMP/DerivedData" \
               -skipPackagePluginValidation \
+              -showBuildTimingSummary \
               CODE_SIGNING_ALLOWED=NO \
               COMPILER_INDEX_STORE_ENABLE=NO \
-              -quiet
+              > "$log" 2>&1 || status=$?
+            echo "tasks run:"
+            grep -oE '^(SwiftCompile|SwiftEmitModule|SwiftDriver|CompileC|Ld|Libtool|ProcessXCFramework|CopySwiftLibs|PhaseScriptExecution|ScanDependencies|PrecompileModule) ' "$log" | sort | uniq -c || true
+            sed -n '/Build Timing Summary/,$p' "$log" | head -40
+            grep -E ': (error|warning): ' "$log" | sort -u | head -300 || true
             echo "::endgroup::"
+            if [ "$status" != 0 ]; then
+              tail -80 "$log"
+              echo "::error::xcodebuild $scheme failed (exit $status)"
+              exit "$status"
+            fi
           done
 
       # Only a run on a branch saves, each under its own sha (the oldest are
