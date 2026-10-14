@@ -120,6 +120,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val instead: JsonElement? = json.obj("instead")
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
+  /** `{ doc, current, edited }`: the owner's save of a business profile (`edited` the typed values, `current` the path to the stored document); the write follows [BusinessProfile.ownerWrite]. */
+  val businessProfile: JsonElement? = json.obj("businessProfile")
 
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>

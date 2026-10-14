@@ -196,6 +196,48 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun theBusinessProfileOwnerWriteReplaysTheConsolesAnswers() {
+    val file = Json.parseToJsonElement(File(root, "libs/native/contracts/function-cases.generated.json").readText())
+    val cases = file.obj("functions").obj("businessProfileOwnerWrite").arr("cases")
+    assertTrue(cases.isNotEmpty())
+    for (case in cases) {
+      val args = case.arr("args")
+      val current = args.first().takeIf { it != JsonNull }
+      val got = JsonObject(BusinessProfile.ownerWrite(current, args.last()))
+      assertEquals(case.obj("result"), got, args.toString())
+    }
+  }
+
+  @Test
+  fun savingTheBusinessProfileWritesFieldsSourcesAndWhoSavedIt() = runTest {
+    var path = ""
+    var fields: Map<String, Any?> = emptyMap()
+    val writer = object : com.aglyn.core.FirestoreWriter {
+      override suspend fun merge(path0: String, data: Map<String, Any?>) { path = path0; fields = data }
+    }
+    val spec = ScreenSpec.parseFile(File(screensDir, "workspace.screens.json").readText()).first { it.id == "core.settings.profile" }
+    val form = spec.blocks.first { it.id == "businessProfile" }
+    val submit = ActionSpec.parse(form["submit"])!!
+    val model = ScreenModel(spec, JsonObject(emptyMap()), null, writer = writer)
+    val scope = Json.parseToJsonElement(
+      """{"org":{"id":"o1"},"user":{"uid":"u1"},
+          "data":{"business":{"whatYouDo":"Grooming","tone":"plain","sources":{"whatYouDo":"start","tone":"ai"}}},
+          "form":{"whatYouDo":"Grooming","services":["Bath","bath","Groom"],"serviceArea":"","audience":"","tone":"premium","toneNotes":""}}""",
+    )
+    val outcome = model.run(submit, scope)
+    assertIs<ActionOutcome.Done>(outcome)
+    assertEquals("orgs/o1/businessProfile/defaults", path)
+    assertEquals(listOf("Bath", "Groom"), fields["services"])
+    assertEquals("premium", fields["tone"])
+    assertEquals("u1", fields["updatedBy"])
+    @Suppress("UNCHECKED_CAST") val sources = fields["sources"] as Map<String, Any?>
+    assertEquals("start", sources["whatYouDo"])
+    assertEquals("owner", sources["tone"])
+    assertEquals("owner", sources["services"])
+    assertEquals(com.aglyn.core.FirestoreDelete, sources["audience"])
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)

@@ -261,6 +261,29 @@ class ScreenModel(
         ActionOutcome.Failed(error.message ?: "That did not work. Try again.")
       }
     }
+    action.businessProfile?.let { profile ->
+      val doc = profile.str("doc") ?: return ActionOutcome.Failed("Saving is not available here.")
+      val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
+      return try {
+        val edited = ScreenValues.resolveBody(profile.obj("edited") ?: JsonObject(emptyMap()), scope)
+        val current = ScreenValues.lookup(profile.str("current").orEmpty(), scope)
+        val next = BusinessProfile.ownerWrite(current, edited)
+        val fields = linkedMapOf<String, JsonElement>()
+        for (field in BusinessProfile.fields) fields[field] = next[field] ?: JsonNull
+        // `sources` replaces the stored map: a field with no source loses its key.
+        val written = (next["sources"] as? JsonObject) ?: JsonObject(emptyMap())
+        fields["sources"] = JsonObject(BusinessProfile.fields.associateWith { written[it] ?: JsonObject(mapOf("\$delete" to JsonPrimitive(true))) })
+        fields["updatedAt"] = JsonObject(mapOf("\$serverTimestamp" to JsonPrimitive(true)))
+        fields["updatedBy"] = ScreenValues.lookup("user.uid", scope) ?: JsonNull
+        @Suppress("UNCHECKED_CAST")
+        target.merge(ScreenValues.render(doc, scope), (plain(JsonObject(fields)) as? Map<String, Any?>) ?: emptyMap())
+        ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)
+      } catch (error: CancellationException) {
+        throw error
+      } catch (error: Throwable) {
+        ActionOutcome.Failed(error.message ?: "That did not save.")
+      }
+    }
     action.write?.let { write ->
       val doc = write.str("doc") ?: return ActionOutcome.Failed("Saving is not available here.")
       val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")

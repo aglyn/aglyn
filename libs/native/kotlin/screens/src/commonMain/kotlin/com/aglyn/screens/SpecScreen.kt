@@ -697,6 +697,9 @@ internal sealed interface FieldValue {
 
 internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when {
   field.kind == "toggle" && value is FieldValue.Flag -> JsonPrimitive(value.value)
+  // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
+  field.kind == "lines" && value is FieldValue.Text ->
+    JsonArray(value.value.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.map { JsonPrimitive(it) })
   field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
@@ -706,6 +709,7 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
 internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
   val resolved = field.initial?.let { ScreenValues.resolve(it, context) } ?: JsonNull
   if (field.kind == "toggle") return FieldValue.Flag(ScreenValues.truthy(resolved))
+  if (field.kind == "lines") return FieldValue.Text(((resolved as? JsonArray) ?: JsonArray(emptyList())).joinToString("\n") { ScreenValues.text(it) })
   if (field.kind == "date") ScreenValues.epochMillis(resolved)?.let { millis ->
     val (y, m, d) = localParts(millis, "UTC")
     return FieldValue.Text("$y-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}")
@@ -745,8 +749,8 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         onValueChange = { onChange(FieldValue.Text(it)) },
         label = { Text(field.label + if (field.required) " *" else "") },
         placeholder = field.placeholder?.let { { Text(it) } },
-        singleLine = field.kind != "multiline",
-        minLines = if (field.kind == "multiline") 3 else 1,
+        singleLine = field.kind != "multiline" && field.kind != "lines",
+        minLines = if (field.kind == "multiline" || field.kind == "lines") 3 else 1,
         visualTransformation = if (field.kind == "password") PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
           keyboardType = when (field.kind) {

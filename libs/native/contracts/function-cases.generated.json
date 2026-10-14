@@ -1520,6 +1520,242 @@
         }
       ]
     },
+    "businessProfileOwnerWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile-values.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            {
+              "whatYouDo": "  Grooming   for dogs ",
+              "services": [
+                "Full groom",
+                "full groom",
+                "Bath",
+                ""
+              ],
+              "tone": "friendly",
+              "serviceArea": "North Austin"
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "North Austin",
+            "services": [
+              "Full groom",
+              "Bath"
+            ],
+            "sources": {
+              "serviceArea": "owner",
+              "services": "owner",
+              "tone": "owner",
+              "whatYouDo": "owner"
+            },
+            "tone": "friendly",
+            "toneNotes": "",
+            "whatYouDo": "Grooming for dogs"
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Grooming",
+              "sources": {
+                "whatYouDo": "start"
+              }
+            },
+            {
+              "whatYouDo": "Grooming"
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [],
+            "sources": {
+              "whatYouDo": "start"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": "Grooming"
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Grooming",
+              "sources": {
+                "whatYouDo": "ai"
+              }
+            },
+            {
+              "whatYouDo": "Dog grooming"
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [],
+            "sources": {
+              "whatYouDo": "owner"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": "Dog grooming"
+          }
+        },
+        {
+          "args": [
+            {
+              "audience": "Owners",
+              "sources": {
+                "audience": "ai"
+              }
+            },
+            {
+              "audience": ""
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [],
+            "sources": {
+              "audience": "owner"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "audience": "",
+              "sources": {
+                "audience": "owner"
+              }
+            },
+            {
+              "audience": ""
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [],
+            "sources": {
+              "audience": "owner"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "tone": "plain"
+            },
+            {
+              "tone": "loud"
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [],
+            "sources": {
+              "tone": "owner"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "serviceArea": "Austin"
+            },
+            {
+              "services": "a, b\nc"
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "Austin",
+            "services": [
+              "a",
+              "b",
+              "c"
+            ],
+            "sources": {
+              "serviceArea": "owner",
+              "services": "owner"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Keep"
+            },
+            {
+              "toneNotes": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [],
+            "sources": {
+              "toneNotes": "owner",
+              "whatYouDo": "owner"
+            },
+            "tone": null,
+            "toneNotes": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "whatYouDo": "Keep"
+          }
+        },
+        {
+          "args": [
+            {
+              "services": [
+                "A",
+                "B"
+              ],
+              "sources": {
+                "services": "start"
+              }
+            },
+            {
+              "services": [
+                "A",
+                "B"
+              ]
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [
+              "A",
+              "B"
+            ],
+            "sources": {
+              "services": "start"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": ""
+          }
+        }
+      ]
+    },
     "buyerNotificationEnabled": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "cases": [

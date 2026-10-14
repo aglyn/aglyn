@@ -86,8 +86,45 @@
       "icon": "building.2|business",
       "scope": "org",
       "links": ["/settings/profile"],
-      "load": { "org": { "doc": "orgs/{org.id}" } },
+      "load": {
+        "org": { "doc": "orgs/{org.id}" },
+        "business": { "doc": "orgs/{org.id}/businessProfile/defaults", "optional": true }
+      },
       "blocks": [
+        {
+          "type": "form",
+          "id": "businessProfile",
+          "title": "Business profile defaults",
+          "footer": "What every site in this workspace starts from; a site's own profile wins wherever it says something. The AI reads these on every job and never replaces what you write here.",
+          "fields": [
+            { "key": "whatYouDo", "label": "What the business does", "kind": "multiline", "initial": "{data.business.whatYouDo}", "placeholder": "Mobile dog grooming for busy owners in north Austin", "help": "One sentence, as you would say it to a new customer." },
+            { "key": "services", "label": "Services", "kind": "lines", "initial": "{data.business.services}", "placeholder": "Full groom", "help": "One per line, up to 12." },
+            { "key": "audience", "label": "Who it is for", "kind": "multiline", "initial": "{data.business.audience}", "help": "The customers you want more of." },
+            { "key": "serviceArea", "label": "Area served", "kind": "text", "initial": "{data.business.serviceArea}", "help": "Cities, regions or online." },
+            {
+              "key": "tone", "label": "Tone of voice", "kind": "select", "initial": "{data.business.tone}", "help": "How the copy should sound.",
+              "options": [
+                { "value": "", "label": "Not set" },
+                { "value": "friendly", "label": "Friendly and warm" },
+                { "value": "professional", "label": "Professional and clear" },
+                { "value": "playful", "label": "Playful and upbeat" },
+                { "value": "premium", "label": "Premium and refined" },
+                { "value": "plain", "label": "Plain and direct" }
+              ]
+            },
+            { "key": "toneNotes", "label": "Notes on tone", "kind": "text", "initial": "{data.business.toneNotes}", "help": "Words to use or avoid, in your own words." }
+          ],
+          "submit": {
+            "label": "Save defaults",
+            "when": "org.manager",
+            "businessProfile": {
+              "doc": "orgs/{org.id}/businessProfile/defaults",
+              "current": "data.business",
+              "edited": { "whatYouDo": "{form.whatYouDo}", "services": "{form.services}", "serviceArea": "{form.serviceArea}", "audience": "{form.audience}", "tone": "{form.tone}", "toneNotes": "{form.toneNotes}" }
+            },
+            "success": "Saved"
+          }
+        },
         {
           "type": "form",
           "fields": [
