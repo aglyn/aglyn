@@ -347,7 +347,7 @@ struct FieldInput: View {
       switch field.kind {
       case "toggle":
         Toggle(label, isOn: flag)
-      case "select":
+      case "select", "country":
         Picker(label, selection: text) {
           ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
         }

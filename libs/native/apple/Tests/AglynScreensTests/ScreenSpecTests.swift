@@ -73,7 +73,7 @@ final class ScreenSpecTests: XCTestCase {
         XCTAssertTrue(ids.insert(spec.id).inserted, "duplicate screen id \(spec.id)")
         XCTAssertTrue(["org", "site", "account", "staff"].contains(spec.scope), "\(spec.id): scope \(spec.scope)")
         for link in spec.links { XCTAssertTrue(link.hasPrefix("/"), "\(spec.id): link \(link)") }
-        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image"])
+        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html"])
         for block in spec.blocks { XCTAssertTrue(known.contains(block.type), "\(spec.id): block \(block.type)") }
       }
       specs += parsed
@@ -223,6 +223,74 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(first, "Returned 40 credits to the workspace.")
     guard case .done(let message, _) = await model.run(action, in: model.context) else { return XCTFail("expected done") }
     XCTAssertEqual(message, "Already given back.")
+  }
+
+  /// The console's "Actions taken in this session": a lock or lift that reached the server leaves its lines, newest
+  /// first (the lines of one act with the last listed on top), each verified or not, at most 25 of them.
+  @MainActor
+  func testActionsKeepASessionLog() async throws {
+    let answer = #"{"confirmed":true,"logLines":[{"text":"Locked org o1","confirmed":true},{"text":"Billing cancel NOT confirmed","confirmed":false}]}"#
+    let transport = RecordingTransport(responses: Array(repeating: (200, answer), count: 14) + [(500, #"{"error":"no"}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    XCTAssertEqual(ScreenValues.lookup("session.log", in: model.context).array.count, 0)
+    let lock = try XCTUnwrap(
+      ActionSpec([
+        "label": "Lock", "url": "/api/admin/lockdown", "log": [["each": "response.logLines", "text": "{item.text}", "confirmed": "item.confirmed"]],
+      ]))
+    _ = await model.run(lock, in: model.context)
+    let first = ScreenValues.lookup("session.log", in: model.context).array
+    // The last line of the act is on top, as the console prepends them.
+    XCTAssertEqual(first.map { ScreenValues.text($0["text"] ?? .null) }, ["Billing cancel NOT confirmed", "Locked org o1"])
+    XCTAssertEqual(first.map { $0["confirmed"] }, [.bool(false), .bool(true)])
+    XCTAssertNotNil(first.first?["at"]?.numberValue)
+    for _ in 0..<13 { _ = await model.run(lock, in: model.context) }
+    XCTAssertEqual(model.journal.count, ScreenModel.journalLimit)
+    // A refusal leaves nothing in the log: a click that did not reach the server is a line that never appears.
+    _ = await model.run(lock, in: model.context)
+    XCTAssertEqual(model.journal.count, ScreenModel.journalLimit)
+    XCTAssertEqual(ScreenValues.text(model.journal.first?["text"] ?? .null), "Billing cancel NOT confirmed")
+  }
+
+  /// A guarded run waits for a preview that was read: the preview arms a key, a failed preview takes it back, and the
+  /// run spends it (the console's maintenance cards).
+  @MainActor
+  func testAPreviewArmsTheRunAndTheRunSpendsIt() async throws {
+    let transport = RecordingTransport(responses: [(200, "{}"), (500, #"{"error":"down"}"#), (200, "{}"), (200, "{}")])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    let preview = try XCTUnwrap(ActionSpec(["label": "Preview", "method": "GET", "url": "/api/admin/audit-archive", "arm": "auditArchive"]))
+    let run = try XCTUnwrap(ActionSpec(["label": "Run", "url": "/api/admin/audit-archive", "disarm": "auditArchive"]))
+    func armed() -> Bool { ScreenValues.condition("session.armed.auditArchive", in: model.context) }
+    XCTAssertFalse(armed())
+    _ = await model.run(preview, in: model.context)
+    XCTAssertTrue(armed())
+    // The next preview fails: nothing was read, so the run is locked again.
+    _ = await model.run(preview, in: model.context)
+    XCTAssertFalse(armed())
+    _ = await model.run(preview, in: model.context)
+    XCTAssertTrue(armed())
+    _ = await model.run(run, in: model.context)
+    XCTAssertFalse(armed())
+  }
+
+  /// A country field offers the platform's own region list in the person's language, by name.
+  func testCountryFieldOffersThePlatformsRegions() throws {
+    let choices = ScreenRegions.choices(locale: Locale(identifier: "en_US"))
+    let codes = choices.map(\.value)
+    for known in ["US", "CA", "GB", "DE", "JP", "AU", "MX"] { XCTAssertTrue(codes.contains(known), known) }
+    XCTAssertEqual(choices.first { $0.value == "US" }?.label, "United States")
+    XCTAssertFalse(codes.contains("ZZ"))
+    XCTAssertFalse(codes.contains("EU"))
+    XCTAssertGreaterThan(choices.count, 200)
+    // By name in the locale's order, and each code once.
+    let labels = choices.map(\.label)
+    XCTAssertEqual(
+      labels, labels.sorted { $0.compare($1, options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US")) == .orderedAscending })
+    XCTAssertEqual(Set(codes).count, codes.count)
+    let field = try XCTUnwrap(FieldSpec(["key": "country", "label": "Country", "kind": "country", "options": [["value": "", "label": "Choose a country"]]]))
+    XCTAssertEqual(field.choices(in: [:]).first?.label, "Choose a country")
+    XCTAssertTrue(field.choices(in: [:]).contains { $0.value == "US" })
   }
 
   /// A probe that answers 503 is reporting: its body is the answer.

@@ -115,7 +115,15 @@ class ScreenModel(
   var phase: Phase by mutableStateOf(Phase.Loading)
     private set
   /** A spec's fixed rows (`constants`) read as `const`. */
-  var context: JsonElement by mutableStateOf(spec.raw.obj("constants")?.let { ScreenContext.with(initial, "const", it) } ?: initial)
+  var context: JsonElement by mutableStateOf(
+    ScreenContext.with(spec.raw.obj("constants")?.let { ScreenContext.with(initial, "const", it) } ?: initial, "session", sessionValue(emptyList(), emptySet())),
+  )
+    private set
+  /** What the person has done on this screen since it opened, newest first: `{ at, text, confirmed }` (`session.log`). */
+  var journal: List<JsonElement> by mutableStateOf(emptyList())
+    private set
+  /** Keys an action armed (`arm`) and none has spent (`disarm`): `session.armed.<key>`. */
+  var armed: Set<String> by mutableStateOf(emptySet())
     private set
   val cursors = mutableStateMapOf<String, String>()
   val loadingMore = mutableStateMapOf<String, Boolean>()
@@ -244,8 +252,37 @@ class ScreenModel(
 
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
     val outcome = perform(action, scope)
-    if (outcome is ActionOutcome.Done) action.then?.let { perform(it, ScreenContext.with(scope, "response", outcome.response)) }
+    when (outcome) {
+      is ActionOutcome.Done -> {
+        remember(action, outcome.response, scope)
+        action.then?.let { perform(it, ScreenContext.with(scope, "response", outcome.response)) }
+      }
+      // A preview that failed read nothing, so nothing is armed by it.
+      is ActionOutcome.Failed -> action.arm?.let { key ->
+        if (key in armed) {
+          armed = armed - key
+          publishSession()
+        }
+      }
+      is ActionOutcome.NeedsReauth -> Unit
+    }
     return outcome
+  }
+
+  private fun publishSession() {
+    context = ScreenContext.with(context, "session", sessionValue(journal, armed))
+  }
+
+  /**
+   * What a successful action leaves on the screen: its `log` lines (the last listed on top, as the console prepends the lines of one act
+   * in the order they happened), and the key it arms or spends.
+   */
+  private fun remember(action: ActionSpec, response: JsonElement?, scope: JsonElement) {
+    val entries = logEntries(action.log, response, scope, nowMillis())
+    if (entries.isNotEmpty()) journal = (entries.reversed() + journal).take(JOURNAL_LIMIT)
+    action.arm?.let { armed = armed + it }
+    action.disarm?.let { armed = armed - it }
+    if (entries.isNotEmpty() || action.arm != null || action.disarm != null) publishSession()
   }
 
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
@@ -362,6 +399,38 @@ class ScreenModel(
   }
 
   companion object {
+    /** The most lines the session log keeps, as the console's does. */
+    const val JOURNAL_LIMIT = 25
+
+    /** The session the templates read: the log, and what is armed. */
+    internal fun sessionValue(journal: List<JsonElement>, armed: Set<String>): JsonElement = JsonObject(
+      mapOf("log" to JsonArray(journal), "armed" to JsonObject(armed.associateWith { JsonPrimitive(true) })),
+    )
+
+    /** The session-log entries an action's `log` lines make of its answer. */
+    internal fun logEntries(log: List<ReportLine>, response: JsonElement?, scope: JsonElement, at: Long): List<JsonElement> {
+      val context = ScreenContext.with(scope, "response", response)
+      fun entry(line: ReportLine, within: JsonElement): JsonElement = JsonObject(
+        mapOf(
+          "at" to JsonPrimitive(at),
+          "text" to JsonPrimitive(ScreenValues.render(line.text, within)),
+          "confirmed" to JsonPrimitive(line.confirmed?.let { ScreenValues.condition(it, within) } ?: true),
+        ),
+      )
+      val entries = mutableListOf<JsonElement>()
+      for (line in log) {
+        if (line.each != null) {
+          for (row in ScreenValues.rows(ScreenValues.lookup(line.each, context))) {
+            val rowScope = ScreenContext.withItem(context, row)
+            if (ScreenValues.condition(line.whenCondition, rowScope)) entries += entry(line, rowScope)
+          }
+        } else if (ScreenValues.condition(line.whenCondition, context)) {
+          entries += entry(line, context)
+        }
+      }
+      return entries
+    }
+
     /** JSON as the plain values a Firestore merge takes. */
     fun plain(value: JsonElement): Any? = when (value) {
       JsonNull -> null

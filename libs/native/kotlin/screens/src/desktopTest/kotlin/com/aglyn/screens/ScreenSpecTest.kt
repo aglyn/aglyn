@@ -88,7 +88,7 @@ class ScreenSpecTest {
     }
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
-    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image")
+    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html")
     for (spec in specs) {
       assertTrue(spec.scope in setOf("org", "site", "account", "staff"), "${spec.id}: scope ${spec.scope}")
       for (block in spec.blocks) assertTrue(block.type in known, "${spec.id}: block ${block.type}")
@@ -266,6 +266,75 @@ class ScreenSpecTest {
     val second = model.run(action, JsonObject(emptyMap()))
     assertIs<ActionOutcome.Done>(second)
     assertEquals("Already given back.", second.message)
+  }
+
+  /**
+   * The console's "Actions taken in this session": a lock or lift that reached the server leaves its lines, newest first (the lines of one
+   * act with the last listed on top), each verified or not, at most 25 of them.
+   */
+  @Test
+  fun actionsKeepASessionLog() = runTest {
+    val answer = """{"confirmed":true,"logLines":[{"text":"Locked org o1","confirmed":true},{"text":"Billing cancel NOT confirmed","confirmed":false}]}"""
+    val api = client(*Array(14) { 200 to answer }, 500 to """{"error":"no"}""", sent = mutableListOf())
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    assertEquals(0, (ScreenValues.lookup("session.log", model.context) as? JsonArray)?.size)
+    val lock = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Lock","url":"/api/admin/lockdown",
+           "log":[{"each":"response.logLines","text":"{item.text}","confirmed":"item.confirmed"}]}""",
+      ),
+    )!!
+    model.run(lock, model.context)
+    val first = ScreenValues.lookup("session.log", model.context) as JsonArray
+    // The last line of the act is on top, as the console prepends them.
+    assertEquals(listOf("Billing cancel NOT confirmed", "Locked org o1"), first.map { it.str("text") })
+    assertEquals(listOf(false, true), first.map { (it.obj("confirmed") as JsonPrimitive).booleanOrNull })
+    assertNotNull((first.first().obj("at") as? JsonPrimitive)?.content?.toDoubleOrNull())
+    repeat(13) { model.run(lock, model.context) }
+    assertEquals(ScreenModel.JOURNAL_LIMIT, model.journal.size)
+    // A refusal leaves nothing in the log: a click that did not reach the server is a line that never appears.
+    model.run(lock, model.context)
+    assertEquals(ScreenModel.JOURNAL_LIMIT, model.journal.size)
+    assertEquals("Billing cancel NOT confirmed", model.journal.first().str("text"))
+  }
+
+  /** A guarded run waits for a preview that was read: the preview arms a key, a failed preview takes it back, and the run spends it. */
+  @Test
+  fun aPreviewArmsTheRunAndTheRunSpendsIt() = runTest {
+    val api = client(200 to "{}", 500 to """{"error":"down"}""", 200 to "{}", 200 to "{}", sent = mutableListOf())
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val preview = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Preview","method":"GET","url":"/api/admin/audit-archive","arm":"auditArchive"}"""))!!
+    val run = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Run","url":"/api/admin/audit-archive","disarm":"auditArchive"}"""))!!
+    fun armed() = ScreenValues.condition("session.armed.auditArchive", model.context)
+    assertFalse(armed())
+    model.run(preview, model.context)
+    assertTrue(armed())
+    // The next preview fails: nothing was read, so the run is locked again.
+    model.run(preview, model.context)
+    assertFalse(armed())
+    model.run(preview, model.context)
+    assertTrue(armed())
+    model.run(run, model.context)
+    assertFalse(armed())
+  }
+
+  /** A country field offers the platform's own region list in the person's language, by name. */
+  @Test
+  fun countryFieldOffersThePlatformsRegions() {
+    val choices = isoRegions()
+    val codes = choices.map { it.first }
+    for (known in listOf("US", "CA", "GB", "DE", "JP", "AU", "MX")) assertTrue(known in codes, known)
+    assertFalse("ZZ" in codes)
+    assertFalse("EU" in codes)
+    assertTrue(choices.size > 200)
+    assertEquals(codes.size, codes.toSet().size)
+    // By name in the locale's order.
+    val collator = java.text.Collator.getInstance(java.util.Locale.getDefault())
+    val labels = choices.map { it.second }
+    assertEquals(labels.sortedWith { a, b -> collator.compare(a, b) }, labels)
+    val field = FieldSpec.parse(Json.parseToJsonElement("""{"key":"country","label":"Country","kind":"country","options":[{"value":"","label":"Choose a country"}]}"""))!!
+    assertEquals("Choose a country", field.choices(JsonObject(emptyMap())).first().second)
+    assertTrue(field.choices(JsonObject(emptyMap())).any { it.first == "US" })
   }
 
   /** A probe that answers 503 is reporting: its body is the answer. */

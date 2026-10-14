@@ -443,6 +443,27 @@ private fun Block(
         }
       }
     }
+    "html" -> {
+      // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text. Scripts, styles,
+      // frames, forms and images never reach the platform's reader, and a link opens in the system handler.
+      val source = ScreenValues.render(block.string("source").orEmpty(), context)
+      SectionCard(title) {
+        if (source.isEmpty()) {
+          Text(
+            block.string("empty")?.let { ScreenValues.render(it, context) } ?: "Nothing to show.",
+            Modifier.padding(horizontal = space(2f), vertical = space(1f)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          val shown = remember(source) { EmailHtml.annotated(source) }
+          androidx.compose.foundation.text.selection.SelectionContainer {
+            Text(shown, Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("spec-html"), style = MaterialTheme.typography.bodyMedium)
+          }
+        }
+        footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
+    }
     "zone" -> {
       // A core screen's zone: whatever plugin screens contribute to it, never named here.
       val contributions = ScreenCatalog.zone(block.string("name").orEmpty()).filter { ScreenValues.condition(it.requires, context) }
@@ -749,7 +770,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
       "toggle" -> SwitchRow(label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
-      "select" -> {
+      "select", "country" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {

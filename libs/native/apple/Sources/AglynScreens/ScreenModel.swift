@@ -129,6 +129,10 @@ public final class ScreenModel {
   public private(set) var loadingMore: Set<String> = []
   /// Per-block search words for loads whose route searches (`search` param).
   public var search: [String: String] = [:]
+  /// What the person has done on this screen since it opened, newest first: `{ at, text, confirmed }` (`session.log`).
+  public private(set) var journal: [JSONValue] = []
+  /// Keys an action armed (`arm`) and none has spent (`disarm`): `session.armed.<key>`.
+  public private(set) var armed: Set<String> = []
   /// The `{attempt}` key of each action's last request, by action, path and body: a retry of the
   /// same request reuses it, and a different request gets its own.
   @ObservationIgnored private var attempts: [String: String] = [:]
@@ -142,7 +146,9 @@ public final class ScreenModel {
   ) {
     self.spec = spec
     // A spec's fixed rows (`constants`) read as `const`.
-    self.context = spec.raw["constants"].map { ScreenContext.with(context, "const", $0) } ?? context
+    self.context = ScreenContext.with(
+      spec.raw["constants"].map { ScreenContext.with(context, "const", $0) } ?? context, "session",
+      Self.sessionValue(journal: [], armed: []))
     self.api = api
     self.reader = reader
     self.writer = writer
@@ -294,10 +300,71 @@ public final class ScreenModel {
   /// item and the filled inputs under `form`).
   public func run(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     let outcome = await perform(action, in: scope)
-    if case .done(_, let response) = outcome, let then = action.then?.action {
-      _ = await perform(then, in: ScreenContext.with(scope, "response", response ?? .null))
+    switch outcome {
+    case .done(_, let response):
+      remember(action, response: response, in: scope)
+      if let then = action.then?.action {
+        _ = await perform(then, in: ScreenContext.with(scope, "response", response ?? .null))
+      }
+    case .failed:
+      // A preview that failed read nothing, so nothing is armed by it.
+      if let key = action.arm, armed.contains(key) {
+        armed.remove(key)
+        publishSession()
+      }
+    case .needsReauth:
+      break
     }
     return outcome
+  }
+
+  /// The session the templates read: the log, and what is armed.
+  static func sessionValue(journal: [JSONValue], armed: Set<String>) -> JSONValue {
+    .object([
+      "log": .array(journal),
+      "armed": .object(Dictionary(uniqueKeysWithValues: armed.map { ($0, JSONValue.bool(true)) })),
+    ])
+  }
+
+  private func publishSession() {
+    context = ScreenContext.with(context, "session", Self.sessionValue(journal: journal, armed: armed))
+  }
+
+  /// The most lines the session log keeps, as the console's does.
+  static let journalLimit = 25
+
+  /// What a successful action leaves on the screen: its `log` lines (the last listed on top, as the console prepends
+  /// the lines of one act in the order they happened), and the key it arms or spends.
+  private func remember(_ action: ActionSpec, response: JSONValue?, in scope: JSONValue) {
+    let entries = Self.logEntries(action.log, response: response, in: scope, at: Date().timeIntervalSince1970 * 1000)
+    if !entries.isEmpty { journal = Array((entries.reversed() + journal).prefix(Self.journalLimit)) }
+    if let key = action.arm { armed.insert(key) }
+    if let key = action.disarm { armed.remove(key) }
+    if !entries.isEmpty || action.arm != nil || action.disarm != nil { publishSession() }
+  }
+
+  /// The session-log entries an action's `log` lines make of its answer.
+  static func logEntries(_ log: [ReportLine], response: JSONValue?, in scope: JSONValue, at millis: Double) -> [JSONValue] {
+    let context = ScreenContext.with(scope, "response", response ?? .null)
+    func entry(_ line: ReportLine, in scope: JSONValue) -> JSONValue {
+      [
+        "at": .number(millis),
+        "text": .string(ScreenValues.render(line.text, in: scope)),
+        "confirmed": .bool(line.confirmed.map { ScreenValues.condition($0, in: scope) } ?? true),
+      ]
+    }
+    var entries: [JSONValue] = []
+    for line in log {
+      if let each = line.each {
+        for row in ScreenValues.rows(ScreenValues.lookup(each, in: context)) {
+          let rowScope = ScreenContext.with(context, item: row)
+          if ScreenValues.condition(line.when, in: rowScope) { entries.append(entry(line, in: rowScope)) }
+        }
+      } else if ScreenValues.condition(line.when, in: context) {
+        entries.append(entry(line, in: context))
+      }
+    }
+    return entries
   }
 
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {

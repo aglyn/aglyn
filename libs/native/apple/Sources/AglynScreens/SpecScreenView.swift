@@ -346,6 +346,19 @@ struct SpecScreenBody: View {
           if let footer, !footer.isEmpty { Text(footer) }
         }
       }
+    case "html":
+      // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text.
+      // Scripts, styles, frames, forms and images never reach the importer, and a link opens in the system handler.
+      let source = ScreenValues.render(block["source"]?.stringValue ?? "", in: context)
+      section(title, footer) {
+        if source.isEmpty {
+          Text(block["empty"]?.stringValue.map { ScreenValues.render($0, in: context) } ?? "Nothing to show.").foregroundStyle(.secondary)
+        } else {
+          Text(EmailHTML.attributed(source))
+            .font(AglynFont.body)
+            .textSelection(.enabled)
+        }
+      }
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))

@@ -191,6 +191,14 @@ public struct ActionSpec: Sendable, Identifiable {
   /// Lines a refusal is explained in, after the route's own words, over the route's answer as `response`
   /// (the workspaces that still need an owner, the addresses another account holds).
   public let failure: [ReportLine]
+  /// Lines the screen keeps in its session log (`session.log`, newest first) when the action succeeds, as the console's
+  /// "Actions taken in this session" does: a lock or lift that reached the server, stamped with when, and verified or not.
+  public let log: [ReportLine]
+  /// A key the screen remembers as armed (`session.armed.<key>`) once the action succeeds, and forgets if it fails: a
+  /// preview that has been read, which a guarded run waits for.
+  public let arm: String?
+  /// A key the screen forgets once the action succeeds: the run that spends its preview.
+  public let disarm: String?
   /// Hands text to the device as a file (Save, or the share sheet): the working papers' CSV, the audit log's.
   public let file: FileSpec?
   /// Repeats the request page by page until the route is done, and answers the totals.
@@ -234,6 +242,9 @@ public struct ActionSpec: Sendable, Identifiable {
     self.write = json["write"]
     self.report = json["report"].array.compactMap(ReportLine.init)
     self.failure = json["failure"].array.compactMap(ReportLine.init)
+    self.log = json["log"].array.compactMap(ReportLine.init)
+    self.arm = json["arm"]?.stringValue
+    self.disarm = json["disarm"]?.stringValue
     self.loop = json["loop"].flatMap(LoopSpec.init)
     self.file = json["file"].flatMap(FileSpec.init)
     self.instead = json["instead"]
@@ -269,23 +280,27 @@ public struct FileSpec: Sendable {
   }
 }
 
-/// One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it.
+/// One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it
+/// (for a repeated line, row by row). In a `log`, `confirmed` is a condition for the line to read as verified (default: it does).
 public struct ReportLine: Sendable {
   public let text: String
   public let when: String?
   public let each: String?
+  public let confirmed: String?
 
   init?(_ json: JSONValue) {
     if let text = json.stringValue {
       self.text = text
       self.when = nil
       self.each = nil
+      self.confirmed = nil
       return
     }
     guard let text = json["text"]?.stringValue else { return nil }
     self.text = text
     self.when = json["when"]?.stringValue
     self.each = json["each"]?.stringValue
+    self.confirmed = json["confirmed"]?.stringValue
   }
 }
 
@@ -325,7 +340,7 @@ public struct FieldSpec: Sendable, Identifiable {
   public var id: String { key }
   public let key: String
   public let label: String
-  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `date`.
+  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `country`, `date`.
   public let kind: String
   public let initial: String?
   public let placeholder: String?
@@ -422,8 +437,10 @@ public struct FieldSpec: Sendable, Identifiable {
     self.each = json["each"]?.stringValue
   }
 
-  /// The choices for a `select`: the static options, then any read from data.
+  /// The choices for a `select`: the static options, then any read from data. A `country` field offers the
+  /// platform's regions after them.
   public func choices(in context: JSONValue) -> [(value: String, label: String)] {
+    if kind == "country" { return options + ScreenRegions.choices() }
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate

@@ -108,12 +108,15 @@ class FileSpec(val name: String, val type: String, val from: String) {
   }
 }
 
-/** One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it. */
-class ReportLine(val text: String, val whenCondition: String?, val each: String?) {
+/**
+ * One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it (for a
+ * repeated line, row by row). In a `log`, `confirmed` is the condition for the line to read as verified (default: it does).
+ */
+class ReportLine(val text: String, val whenCondition: String?, val each: String?, val confirmed: String? = null) {
   companion object {
     fun parse(json: JsonElement): ReportLine? {
       (json as? JsonPrimitive)?.takeIf { it.isString }?.let { return ReportLine(it.content, null, null) }
-      return json.str("text")?.let { ReportLine(it, json.str("when"), json.str("each")) }
+      return json.str("text")?.let { ReportLine(it, json.str("when"), json.str("each"), json.str("confirmed")) }
     }
   }
 }
@@ -183,6 +186,15 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val failure: List<ReportLine> = json.arr("failure").mapNotNull { ReportLine.parse(it) }
   /** Repeats the request page by page until the route is done, and answers the totals. */
   val loop: LoopSpec? = json.obj("loop")?.let { LoopSpec(it) }
+  /**
+   * Lines the screen keeps in its session log (`session.log`, newest first) when the action succeeds, as the console's "Actions taken in
+   * this session" does: a lock or lift that reached the server, stamped with when, and verified or not.
+   */
+  val log: List<ReportLine> = json.arr("log").mapNotNull { ReportLine.parse(it) }
+  /** A key the screen remembers as armed (`session.armed.<key>`) once the action succeeds, and forgets if it fails: a preview that has been read. */
+  val arm: String? = json.str("arm")
+  /** A key the screen forgets once the action succeeds: the run that spends its preview. */
+  val disarm: String? = json.str("disarm")
 
   /** Every field the action asks for before it runs: its prompt (a field with `each` becoming one per row), then a reason. */
   fun inputs(scope: JsonElement): List<FieldSpec> {
@@ -252,6 +264,8 @@ class FieldSpec private constructor(
   }
 
   fun choices(context: JsonElement): List<Pair<String, String>> {
+    // A `country` field offers the platform's regions after the static options.
+    if (kind == "country") return options + isoRegions()
     val from = optionsFrom ?: return options
     val path = from.str("items") ?: return options
     val valueTemplate = from.str("value") ?: "{item.\$id}"
