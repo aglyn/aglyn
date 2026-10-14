@@ -42,7 +42,7 @@ export function registerMarketplacesConsole(): void {
     featureFlag: MARKETPLACES_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsChannels',
         widgetId: MARKETPLACES_SETTINGS_WIDGET_ID,
         title: 'Marketplaces',
         Component: MarketplacesCard,

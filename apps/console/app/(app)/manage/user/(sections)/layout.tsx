@@ -56,6 +56,7 @@ export default function AccountSectionsLayout({
   const sections = ACCOUNT_SECTIONS.map((section) => ({
     href: section.href,
     label: section.label,
+    group: section.group,
     /*
      * Security is conditional (AGL-662), and only Security is.
      *

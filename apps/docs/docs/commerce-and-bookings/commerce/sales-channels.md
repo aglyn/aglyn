@@ -13,12 +13,12 @@ Copilot). Each channel reads its own **product feed** from your store on a
 schedule you set on the channel's side, so a price, photo or stock change
 reaches it without another upload.
 
-Sales channels come with every plan that sells online. They are set up in the
-store's settings, under **Sales channels**, with one card per channel.
+Sales channels come with every plan that sells online. They are set up on
+**Products → Sales channels**, with one card per channel.
 
 ## Set up sales channels {#set-up-sales-channels}
 
-The **Sales channels** card, in the store's settings, lists your products on
+The **Sales channels** card, on **Products → Sales channels**, lists your products on
 shopping channels: set the feed defaults, check your products, then turn on each
 channel and paste its feed address there.
 
@@ -150,8 +150,8 @@ it anyway:
 - it has no photo or no price;
 - it is a service, or sold only as a subscription — shopping channels list
   goods sold at one price;
-- the site has no web address yet, or no product page template is chosen in
-  the store settings, so the product's link would not open.
+- the site has no web address yet, or no product page template is chosen on
+  **Products → Checkout**, so the product's link would not open.
 
 A **suggestion** means the product is listed but may show less widely: no
 barcode or part number, no description (its name is sent instead), a name

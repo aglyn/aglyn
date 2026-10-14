@@ -20,7 +20,7 @@
 /**
  * What one commerce console load actually READS (AGL-2501).
  *
- * The console page is a six-SECTION hub, and the reader looks at one section.
+ * The console page is a SECTIONED hub, and the reader looks at one section.
  * The question this answers is what the other five cost, and it has to be
  * answered in listens and documents rather than in rendered output: a spec that
  * asserts on what is on screen passes identically whether the other sections
@@ -323,6 +323,60 @@ describe('commerce console read cost (AGL-2501)', () => {
     // Arriving at Promotions by link must not drag Catalog's reads along.
     expect(seen).not.toContain('inventoryAdjustments')
     expect(seen).not.toContain('memberPosts')
+  })
+
+  /*
+   * The store's settings, a page each (AGL-3713). The point of the split, as
+   * a read: a page mounts its own cards and nothing else — the register list
+   * is not paid for by someone setting a shipping rate, and no settings page
+   * drags a working section's reads along.
+   */
+  describe('settings pages', () => {
+    const SETTINGS_PAGES = [
+      'payments',
+      'checkout',
+      'taxes',
+      'shipping',
+      'notifications',
+      'pos',
+      'channels',
+      'integrations',
+    ] as const
+
+    it('every settings page is a section the shell routes', () => {
+      const ids = COMMERCE_CONSOLE_SECTIONS.map((section) => section.id)
+      for (const page of SETTINGS_PAGES) expect(ids).toContain(page)
+      expect(ids).not.toContain('settings')
+    })
+
+    it.each(SETTINGS_PAGES)(
+      '%s reads no working section’s collections, under budget',
+      async (page) => {
+        await renderConsole(page)
+        summarize(`${page} settings`, mockListens)
+        const seen = listenedCollections()
+        for (const collections of Object.values(SECTION_COLLECTIONS))
+          for (const collection of collections)
+            expect(seen).not.toContain(collection)
+        expect(documentCeiling(mockListens)).toBeLessThanOrEqual(1000)
+      },
+    )
+
+    it('Point of sale reads the registers, Shipping & delivery does not', async () => {
+      await renderConsole('pos')
+      expect(listenedCollections()).toContain('registers')
+      expect(listenedCollections()).not.toContain('suppliers')
+      await renderConsole('shipping')
+      expect(listenedCollections()).toContain('suppliers')
+      expect(listenedCollections()).not.toContain('registers')
+    })
+
+    it('a page that is only other plugins’ cards reads nothing of its own', async () => {
+      await renderConsole('channels')
+      expect(mockListens).toHaveLength(0)
+      await renderConsole('integrations')
+      expect(mockListens).toHaveLength(0)
+    })
   })
 
   /*

@@ -23,7 +23,7 @@ card offers only the networks you can connect. Aglyn then:
 
 ## Connect a network
 
-1. Open your store's **Settings** and find the **Fulfillment networks** card.
+1. Open **Products → Shipping & delivery** and find the **Fulfillment networks** card.
 2. Next to **ShipBob** or **Amazon Multi-Channel Fulfillment** (when the card
    offers them), select **Connect**.
 3. Sign in to that account and allow Aglyn access. You come back to the store
@@ -43,7 +43,7 @@ of a sign-in:
    under **Stores**.
 2. Create an API key for your API store, and note the store's **id** shown
    beside it.
-3. In your store's **Settings**, select **Connect ShipMonk**, paste the key,
+3. On **Products → Shipping & delivery**, select **Connect ShipMonk**, paste the key,
    enter the store id and select **Connect**.
 
 Aglyn checks the key with ShipMonk before keeping it, keeps it encrypted, and

@@ -216,7 +216,9 @@ export function aiStoreFinishLinks(
         ? buildRoute(Route.HOST_SCREENS, context)
         : step.opens === 'layouts' || step.opens === 'layout'
           ? buildRoute(Route.HOST_LAYOUTS, context)
-          : pluginRecordListHref(step.opens, context),
+          : step.record
+            ? pluginRecordHref(step.opens, context, step.record)
+            : pluginRecordListHref(step.opens, context),
   }))
   if (!build) return steps
   // The site's own header and footer (AGL-3676): links it had no list for are

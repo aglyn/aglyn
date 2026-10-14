@@ -342,7 +342,7 @@ export async function deliverOrderEventToWebhooks(
             `${envelope.event} never reached ${safeHost(endpoint.url)} on {site} after ` +
             `${envelope.attempt} attempts (${settled.attempt.error ?? 'no answer'}). ` +
             'Resend it from the delivery log once the endpoint is fixed.',
-          link: `/${envelope.hostId}/products/settings`,
+          link: `/${envelope.hostId}/products/notifications`,
         }).catch(() => undefined)
       }
       return status
