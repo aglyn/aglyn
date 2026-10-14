@@ -435,24 +435,33 @@ the cheapest rung that can see its mistake, from a checkout cut from
 
 ### The development layers
 
-All three live in `runAiRequest` (`src/lib/runtime/ai-runtime.ts`), are read
+All of them live in `runAiRequest` (`src/lib/runtime/ai-runtime.ts`), are read
 from the environment by `src/lib/runtime/ai-dev-env.ts`, and are OFF in any
 deployed server — `NODE_ENV=production`, `VERCEL_ENV` of `production` or
-`preview`, or `K_SERVICE` — whatever the variables say.
+`preview`, or `K_SERVICE` — whatever the variables say. A LIVE RUN — the
+launcher's mark, or a live spec started with `AGLYN_LIVE_AI=1` — runs replay,
+the hour-long cache and batch mode by default, each turned off by its own
+variable (AGL-3781): a live spec started without the launcher's mark used to
+send every request again, at full price. Of the 74 live runs agents started
+from October 8 to 14, 14 ran with replay off that way, 12 refreshed every
+request and 16 batched.
 
 - **Replay** (`ai-dev-replay.ts`). A request's key is a SHA-256 of the
   provider, model, system text, tools, messages, ceiling, thinking and
   effort, as canonical JSON. `AGLYN_AI_REPLAY=1` replays and records,
   `refresh` sends every request and records over the old answer, `off`
-  does neither; unset, it is on under the launcher and off elsewhere.
+  does neither; unset, it is on in a live run and off elsewhere.
   `AGLYN_AI_REPLAY_DIR` moves the store. A replayed answer is one the same
   model gave to the same bytes, so a run that passes on replays has still
   had every changed prompt answered live. A prompt that carries something
-  per run — a fresh job id, a random seed — never replays; a spec that wants
-  replays builds its ids from its briefs.
-- **Batch** (`ai-live-batch.ts`). On by default under `npm run
-  eval:ai-live`, whose briefs then run side by side (AGL-3781); a spec run
-  some other way asks for it. `AGLYN_LIVE_AI_BATCH=1` turns every
+  per run — a fresh job id, a random seed, today's date — never replays; a
+  spec that wants replays builds its ids from its briefs, and every live spec
+  runs on one fixed day, since a build plan and an events plan state the date.
+- **Batch** (`ai-live-batch.ts`). On by default in a live run, and `npm run
+  eval:ai-live`'s briefs then run side by side (AGL-3781); `AGLYN_LIVE_AI_BATCH=0`
+  is for the single quick run an iteration wants in seconds. A batched spec
+  waits `AI_LIVE_BATCH_TIMEOUT_MS` (`aiLiveTimeoutMs`), since a timed-out run
+  keeps none of the answers it paid for. Batch mode turns every
   non-streaming request into an entry of a Message Batch: requests that
   arrive within `AGLYN_LIVE_AI_BATCH_WINDOW_MS` (2 s) of each other — a
   `Promise.all` over the briefs — go as one batch, and the re-asks, asked
@@ -464,11 +473,21 @@ deployed server — `NODE_ENV=production`, `VERCEL_ENV` of `production` or
   In a development run the first request over a cached prefix is sent
   alone and the others follow it. Production's beat runs one step at a
   time, so it never needed this and never gets it.
-- **The hour-long cache.** Under the launcher every breakpoint asks for
+- **The hour-long cache.** In a live run every breakpoint asks for
   `ttl: "1h"` (`AGLYN_AI_CACHE_TTL=5m` turns it back), since an agent re-runs
   an eval every ten to forty minutes, past the default five. Production
   keeps five minutes: a job's steps run a beat apart, and a one-call step
   with no re-ask would pay the hour's dearer write for nothing.
+- **A retired model is refused by name in a live run** (AGL-3781). Routing
+  serves a retired catalog row's successor wherever a setting or an override
+  names it, so a retired id that reaches the runtime in a live run was asked
+  for by name, and would bill a model production no longer serves.
+- **An effort A/B arm.** `AGLYN_AI_EFFORT=job.form:medium,job.text:low` (or
+  `*:medium`) asks those step kinds at that effort in a development run, and
+  `npm run eval:ai-live` records the arm's answers beside the defaults'
+  (`<case>.<model>.effort-<arm>.json`) and prints one score line a brief, so
+  one round compares two efforts. Production's efforts move only once such a
+  round shows the lower one holds.
 
 ## Rules a kind can actually break
 

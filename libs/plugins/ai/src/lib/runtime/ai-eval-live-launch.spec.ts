@@ -144,8 +144,8 @@ describe('a live eval run keeps the provider key it was started with (AGL-3038)'
     expect(report?.keyKept).toBe(true)
   })
 
-  it('the launcher sends the round as Message Batches unless the caller says not to (AGL-3781)', () => {
-    expect(run(viaLauncher, { AI_EVAL_LIVE: '1', [KEY_ENV]: MADE_UP_KEY }).report?.batch).toBe('1')
+  it('the launcher leaves the batch choice to the caller, which the runtime defaults on under its mark (AGL-3781)', () => {
+    expect(run(viaLauncher, { AI_EVAL_LIVE: '1', [KEY_ENV]: MADE_UP_KEY }).report?.batch).toBeNull()
     expect(
       run(viaLauncher, { AI_EVAL_LIVE: '1', [KEY_ENV]: MADE_UP_KEY, AGLYN_LIVE_AI_BATCH: '0' }).report?.batch,
     ).toBe('0')

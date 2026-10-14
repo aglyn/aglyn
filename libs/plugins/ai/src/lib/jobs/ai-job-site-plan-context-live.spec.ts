@@ -49,9 +49,13 @@ import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { createAiJobPlanStep } from './ai-job-plan-step'
+import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
-const NOW = new Date()
+// A fixed day (AGL-3781): a build's or an events plan's prompt states today's
+// date, and a date that moved every run gave each run new request bytes, so
+// the replay cache answered none of them.
+const NOW = new Date('2026-10-14T12:00:00Z')
 const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
 const PAGES = ORG_PLAN === 'business' ? 5 : 2
 const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, ownerUid: 'owner-1' }
@@ -176,7 +180,7 @@ function inventedContacts(plan: unknown, brief: Brief): string[] {
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive("a guided start's plan from the real model, with the site's business profile", () => {
-  jest.setTimeout(10 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(10 * 60_000))
 
   it(`names the business and invents no contact detail, on a ${ORG_PLAN} workspace`, async () => {
     const capabilities = aiPlanCapabilitiesFrom(ORG, { layout: [], template: [] })

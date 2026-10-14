@@ -23,9 +23,9 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
-import { readAiEvalCase, type AiEvalCase } from './ai-eval'
+import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
 import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
-import { aiLiveBatchWanted } from './ai-dev-env'
+import { AI_EFFORT_ARM_ENV, aiLiveTimeoutMs } from './ai-dev-env'
 import { aiLiveRunLedger } from './ai-dev-replay'
 import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 
@@ -75,14 +75,6 @@ const files = (dir: string): string[] =>
 
 const live = aiEvalLiveAllowed(process.env)
 
-/**
- * How long a batched round may take (AGL-3781): the adapter waits up to an
- * hour on each batch, and a round is its answers, their re-asks, the grades
- * and the grades' re-asks, one batch after another. A run that timed out
- * would write none of the answers it already paid for, so the bound is the
- * worst case rather than the usual one, which is minutes.
- */
-const AI_EVAL_LIVE_BATCH_TIMEOUT_MS = 5 * 60 * 60_000
 
 ;(live ? describe : describe.skip)('the live eval run', () => {
   it(
@@ -103,12 +95,24 @@ const AI_EVAL_LIVE_BATCH_TIMEOUT_MS = 5 * 60 * 60_000
         process.env,
       )
       const report = await recordAiEvalLive(cases, { env: process.env, readFixture })
+      // An effort A/B arm (AGL-3781) records beside the defaults' answers, not
+      // over them, and says per brief what it scored, so two runs compare.
+      const arm = String(process.env[AI_EFFORT_ARM_ENV] ?? '').trim()
+      const suffix = arm ? `.effort-${arm.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}` : ''
       for (const { caseId, kind, candidate } of report.recorded) {
         const dir = join(RECORDINGS_DIR, kind)
         mkdirSync(dir, { recursive: true })
         writeFileSync(
-          join(dir, `${caseId}.${candidate.model ?? 'unknown'}.json`),
+          join(dir, `${caseId}.${candidate.model ?? 'unknown'}${suffix}.json`),
           `${JSON.stringify({ caseId, candidate }, null, 2)}\n`,
+        )
+        const evalCase = cases.find((entry) => entry.id === caseId)
+        const score = evalCase ? scoreAiEvalCandidate(evalCase, candidate) : null
+        const rubric = candidate.rubric
+        console.log(
+          `score ${caseId} (${kind}) ${candidate.model}${arm ? ` effort ${arm}` : ''}: ${score?.pass ? 'pass' : 'fail'}` +
+            `, structure ${rubric?.structure ?? '-'}, copy ${rubric?.copy ?? '-'}, reuse ${rubric?.reuse ?? '-'}` +
+            `, output ${candidate.usage?.outputTokens ?? '-'} tokens`,
         )
       }
       // Live against replayed (AGL-3660): a recording whose request was
@@ -138,6 +142,6 @@ const AI_EVAL_LIVE_BATCH_TIMEOUT_MS = 5 * 60 * 60_000
       expect(report.recorded.length).toBeGreaterThan(0)
       expect(report.failed).toEqual([])
     },
-    aiLiveBatchWanted(process.env) ? AI_EVAL_LIVE_BATCH_TIMEOUT_MS : 30 * 60_000,
+    aiLiveTimeoutMs(30 * 60_000),
   )
 })

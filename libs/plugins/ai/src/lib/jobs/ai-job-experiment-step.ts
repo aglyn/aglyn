@@ -37,6 +37,7 @@ import {
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
   runAiRequest,
@@ -311,6 +312,8 @@ export const runAiJobExperimentStep: AiJobStepRunner = async (
   if (!task) return stop(AI_EXPERIMENT_NO_TASK_COPY)
   if (!job.hostId) return stop(AI_EXPERIMENT_NO_SITE_COPY)
 
+  // A development run's effort A/B arm (AGL-3781), else the row's.
+  const effort = aiDevEffortFor('job.experiment') ?? AI_ROUTING_TABLE['job.experiment'].effort
   const ask = (messages: AiMessage[], tool: ReturnType<typeof aiExperimentExplainTool>) =>
     runAiRequest({
       model,
@@ -321,6 +324,7 @@ export const runAiJobExperimentStep: AiJobStepRunner = async (
       ...(AI_ROUTING_TABLE['job.experiment'].thinking
         ? { thinking: AI_ROUTING_TABLE['job.experiment'].thinking }
         : {}),
+      ...(effort ? { effort } : {}),
       stream: false,
       ...(signal ? { signal } : {}),
     })

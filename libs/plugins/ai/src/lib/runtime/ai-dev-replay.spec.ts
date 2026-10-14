@@ -23,7 +23,15 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AiProvider, AiProviderRequest, AiResult } from '../providers/contract'
-import { aiDevCacheTtl, aiDevReplayMode, aiIsDeployedRuntime, aiLiveBatchWanted } from './ai-dev-env'
+import {
+  AI_LIVE_BATCH_TIMEOUT_MS,
+  aiDevCacheTtl,
+  aiDevEffortFor,
+  aiDevReplayMode,
+  aiIsDeployedRuntime,
+  aiLiveBatchWanted,
+  aiLiveTimeoutMs,
+} from './ai-dev-env'
 import {
   aiCachedPrefixKey,
   aiCanonicalJson,
@@ -67,6 +75,35 @@ describe('which development layers a process runs', () => {
     expect(aiDevReplayMode({ ...LAUNCHER, AGLYN_AI_REPLAY: 'refresh' })).toBe('refresh')
     expect(aiDevCacheTtl({ ...LAUNCHER, AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
     expect(aiDevReplayMode({ AGLYN_AI_REPLAY: '1' })).toBe('replay')
+  })
+
+  it('runs every layer in any live run, the launcher’s or a live spec’s, each one off by its own variable (AGL-3781)', () => {
+    for (const live of [LAUNCHER, { AGLYN_LIVE_AI: '1' }]) {
+      const env = { NODE_ENV: 'test', ...live }
+      expect([live, aiDevReplayMode(env), aiDevCacheTtl(env), aiLiveBatchWanted(env)]).toEqual([live, 'replay', '1h', true])
+      expect(aiDevReplayMode({ ...env, AGLYN_AI_REPLAY: 'off' })).toBe('off')
+      expect(aiDevCacheTtl({ ...env, AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
+      expect(aiLiveBatchWanted({ ...env, AGLYN_LIVE_AI_BATCH: '0' })).toBe(false)
+    }
+    // `AGLYN_LIVE_AI` set to anything else is not a live run.
+    expect(aiLiveBatchWanted({ AGLYN_LIVE_AI: '0' })).toBe(false)
+  })
+
+  it('gives a batched live spec the time its batches can take, and leaves an unbatched one its own', () => {
+    expect(aiLiveTimeoutMs(10 * 60_000, { AGLYN_LIVE_AI: '1' })).toBe(AI_LIVE_BATCH_TIMEOUT_MS)
+    expect(aiLiveTimeoutMs(10 * 60_000, { AGLYN_LIVE_AI: '1', AGLYN_LIVE_AI_BATCH: '0' })).toBe(10 * 60_000)
+    expect(aiLiveTimeoutMs(10 * 60_000, {})).toBe(10 * 60_000)
+  })
+
+  it('reads an effort A/B arm per step kind, a wildcard after, and never in a deployed server (AGL-3781)', () => {
+    const env = { AGLYN_AI_EFFORT: 'job.form:low, *:medium, job.plan:bogus' }
+    expect(aiDevEffortFor('job.form', env)).toBe('low')
+    expect(aiDevEffortFor('job.page', env)).toBe('medium')
+    // A level the contract does not name is not an arm.
+    expect(aiDevEffortFor('job.plan', env)).toBe('medium')
+    expect(aiDevEffortFor('job.form', { AGLYN_AI_EFFORT: 'job.page:low' })).toBeUndefined()
+    expect(aiDevEffortFor('job.form', {})).toBeUndefined()
+    expect(aiDevEffortFor('job.form', { ...env, NODE_ENV: 'production' })).toBeUndefined()
   })
 })
 
@@ -176,7 +213,8 @@ describe('a request through the runtime in a development process', () => {
   const ask = (content: string) =>
     runAiRequest({
       provider,
-      model: 'claude-sonnet-5',
+      // A current model: a live run refuses a retired one by name (AGL-3781).
+      model: 'claude-sonnet-5-5',
       system: [{ text: 'rules', cacheBreakpoint: true }],
       messages: [{ role: 'user', content }],
       maxTokens: 50,
