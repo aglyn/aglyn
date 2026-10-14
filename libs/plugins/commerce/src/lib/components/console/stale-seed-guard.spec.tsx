@@ -363,6 +363,42 @@ describe('DiscountsCard (AGL-1358)', () => {
 })
 
 /**
+ * A switched-off discount can be switched back on (AGL-3774).
+ *
+ * Imported and AI-proposed discounts start disabled and Save keeps `enabled`
+ * as it was, so the card needs its own control. It writes ONLY `enabled`,
+ * which is why it is safe even while the seed is unconfirmed: no copy of
+ * `redemptions` rides along to roll the live counter back.
+ */
+describe('DiscountsCard Enable / Disable (AGL-3774)', () => {
+  afterEach(() => {
+    discountDocs[0].enabled = true
+  })
+
+  it('switches a disabled discount on, writing only `enabled`', async () => {
+    discountDocs[0].enabled = false
+    listener.fromCache = true
+    render(<DiscountsCard hostId="host-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+    expect(payload).toEqual({ enabled: true })
+    expect(setDoc).not.toHaveBeenCalled()
+  })
+
+  it('switches an enabled discount off', async () => {
+    render(<DiscountsCard hostId="host-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }))
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    expect((updateDoc as jest.Mock).mock.calls[0][1]).toEqual({ enabled: false })
+  })
+})
+
+/**
  * Stock adjustment (AGL-1358).
  *
  * The dangerous part is that this does NOT write a delta. It recomputes the

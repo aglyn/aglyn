@@ -138,7 +138,7 @@ export function OwnAccountsCard(props: ShippingSettingsWidgetProps) {
     <CardDisplay
       header="Your shipping accounts"
       subheader="Ship through an account of your own. Every site in this workspace uses it."
-      help={pluginDocsHelp('shipping', {
+      help={pluginDocsHelp('carrierAccounts', {
         anchor: '#carrier-accounts',
         title: 'Your shipping accounts',
         excerpt:

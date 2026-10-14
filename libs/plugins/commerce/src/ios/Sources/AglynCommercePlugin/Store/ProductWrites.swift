@@ -57,8 +57,12 @@ struct VariantDraft: Identifiable, Equatable {
   var compareAt = ""
   var sku = ""
   var barcode = ""
-  /// Starting stock; a new product only (an edit adjusts stock separately).
+  /// Starting stock; a new product, or a variant new to the matrix (an edit adjusts stock separately).
   var stock = ""
+  /// The option picks that make this variant, by option name; empty for the default variant.
+  var selections: [String: String] = [:]
+  /// Added to the matrix in this edit, so its stock and picks are written with the save.
+  var fresh = false
 }
 
 /// What the editor edits.
@@ -69,6 +73,7 @@ struct ProductDraft: Equatable {
   var description = ""
   var status: ProductStatus = .draft
   var type: ProductType = .physical
+  var options: [OptionDraft] = []
   var variants: [VariantDraft] = [VariantDraft(id: "default", label: "Default")]
 }
 
@@ -96,24 +101,41 @@ func productDraft(_ doc: FirestoreDocument) -> ProductDraft {
         id: id,
         label: variantLabel(raw["options"] as? [String: Any]) ?? (stored.count == 1 ? "Default" : "Variant \(index + 1)"),
         price: moneyText(raw["priceUsd"]), compareAt: moneyText(raw["compareAtPriceUsd"]),
-        sku: raw["sku"] as? String ?? "", barcode: raw["barcode"] as? String ?? "")
+        sku: raw["sku"] as? String ?? "", barcode: raw["barcode"] as? String ?? "",
+        stock: (raw["inventory"] as? NSNumber).flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0 }.map { String($0.intValue) } ?? "",
+        selections: (raw["options"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String })
     }
+  let options: [OptionDraft] = (data["options"] as? [Any] ?? []).compactMap { entry in
+    guard let raw = entry as? [String: Any], let name = raw["name"] as? String else { return nil }
+    return OptionDraft(name: name, valuesText: (raw["values"] as? [Any] ?? []).compactMap { $0 as? String }.joined(separator: ", "))
+  }
   return ProductDraft(
     productID: doc.id, create: false, name: doc.string("name") ?? "", description: doc.string("description") ?? "",
     status: doc.string("status").flatMap(ProductStatus.init(rawValue:)) ?? .active,
-    type: doc.string("type").flatMap(ProductType.init(rawValue:)) ?? .physical, variants: variants)
+    type: doc.string("type").flatMap(ProductType.init(rawValue:)) ?? .physical, options: options, variants: variants)
 }
+
+/// A price above this is refused, as the console's editor refuses it.
+let maxPriceCents = 10_000_00
 
 /// Why the draft cannot be sent, or nil. The route validates again.
 func checkProductDraft(_ draft: ProductDraft) -> String? {
   if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Product name is required" }
+  if let problem = checkOptions(draft.options) { return problem }
+  var skus = Set<String>()
   for variant in draft.variants {
-    if centsFromText(variant.price) == nil { return "Enter a price for \(variant.label)" }
-    if !variant.compareAt.trimmingCharacters(in: .whitespaces).isEmpty, centsFromText(variant.compareAt) == nil {
-      return "Enter a compare-at price for \(variant.label), or leave it empty"
+    guard let price = centsFromText(variant.price) else { return "Enter a price for \(variant.label)" }
+    if price > maxPriceCents { return "Prices are capped at $\(maxPriceCents / 100)" }
+    if !variant.compareAt.trimmingCharacters(in: .whitespaces).isEmpty {
+      guard let compareAt = centsFromText(variant.compareAt) else {
+        return "Enter a compare-at price for \(variant.label), or leave it empty"
+      }
+      if compareAt <= price { return "Compare-at price must exceed the price" }
     }
+    let sku = variant.sku.trimmingCharacters(in: .whitespaces)
+    if !sku.isEmpty, !skus.insert(sku).inserted { return "Variant SKUs must be unique" }
     let stock = variant.stock.trimmingCharacters(in: .whitespaces)
-    if draft.create, !stock.isEmpty, (Int(stock).map { $0 < 0 } ?? true) {
+    if draft.create || variant.fresh, !stock.isEmpty, (Int(stock).map { $0 < 0 } ?? true) {
       return "Enter a whole number of units, or leave stock empty"
     }
   }
@@ -147,13 +169,20 @@ func productSaveJSON(_ draft: ProductDraft, stored: [String: Any]?) -> JSONValue
     put("compareAtPriceUsd", edit.compareAt, dollars)
     put("sku", edit.sku) { .string($0) }
     put("barcode", edit.barcode) { .string($0) }
-    if draft.create { fields["inventory"] = Int(trimmed(edit.stock)).map { .number(Double($0)) } ?? .null }
+    if !edit.selections.isEmpty { fields["options"] = .object(edit.selections.mapValues { .string($0) }) }
+    if draft.create || edit.fresh { fields["inventory"] = Int(trimmed(edit.stock)).map { .number(Double($0)) } ?? .null }
     return .object(fields)
   }
   base["name"] = .string(draft.name)
   base["description"] = .string(draft.description)
   base["status"] = .string(draft.status.rawValue)
   base["type"] = .string(draft.type.rawValue)
+  if !draft.options.isEmpty || base.keys.contains("options") {
+    base["options"] = .array(
+      draft.options.map { option in
+        .object(["name": .string(option.option.name), "values": .array(option.values.map { .string($0) })])
+      })
+  }
   base["variants"] = .array(variants)
   if draft.create { base["slug"] = .string(commerceSlug(draft.name)) }
   return .object(base)
