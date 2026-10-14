@@ -38,6 +38,17 @@ for the how-to.
   Workspace settings and your account group their sections the same way, with
   **Data & compliance** and **Danger zone** set apart.
 
+## October 2026 — dropship suppliers get cart orders
+
+- **[Dropship suppliers](commerce-and-bookings/commerce/dropship-suppliers.md)** —
+  orders placed through the cart now reach your suppliers too, not only Buy-button
+  orders. Each supplier is sent just its own items with a link to record the
+  tracking, so an order shared between suppliers ships in parts. A new setup guide
+  walks through adding a supplier, assigning products and signed webhooks.
+- **[Discounts and coupons](commerce-and-bookings/commerce/discounts-and-coupons.md)** —
+  switch a discount on or off from its row on the **Discounts** card, including the
+  ones you imported or Aglyn AI proposed, which start switched off.
+
 ## October 2026 — translate your site with Weglot
 
 - **[Weglot translation](building-sites/multilingual/weglot.md)** — already use

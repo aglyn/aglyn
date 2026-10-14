@@ -73,7 +73,7 @@ export function LabelSpendCard(props: LabelSpendCardProps) {
   return (
     <CardDisplay
       header="Shipping labels"
-      help={pluginDocsHelp('shipping', {
+      help={pluginDocsHelp('carrierAccounts', {
         anchor: '#shipping-labels',
         title: 'Shipping labels',
         excerpt:

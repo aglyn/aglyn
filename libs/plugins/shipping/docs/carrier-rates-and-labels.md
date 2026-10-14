@@ -88,7 +88,7 @@ moves to **Delivered** and the customer gets the delivered email.
 
 ## Carrier rates at checkout
 
-A **Carrier rates** rate in your [shipping zones](./shipping.md#live-carrier-rates)
+A **Carrier rates** rate in your [shipping zones](./shipping.md#zones-and-rates)
 quotes the parcel to the shopper's address at checkout, with your markup and
 handling fee, and falls back to the rate you choose whenever a live quote is
 not available.

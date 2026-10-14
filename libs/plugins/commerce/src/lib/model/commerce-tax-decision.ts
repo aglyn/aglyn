@@ -136,7 +136,7 @@ export function storefrontTaxDecision(
  */
 export const STOREFRONT_TAX_UNDECIDED_MESSAGE =
   'This store has not set up sales tax yet, so we can’t take the order. ' +
-  'The store owner can fix this in Commerce → Settings → Taxes.'
+  'The store owner can fix this in Products → Taxes.'
 
 /**
  * A second refusal, for the two states that ARE decisions but that the path
@@ -198,7 +198,7 @@ export const STOREFRONT_TAX_NO_ORIGIN_MESSAGE =
 export const STOREFRONT_TAX_POS_STRIPE_MESSAGE =
   'This store uses automatic tax, which the register can’t calculate for an ' +
   'in-person sale. The store owner can switch Taxes to Manual and add a rate ' +
-  'for the store address in Commerce → Settings → Taxes.'
+  'for the store address in Products → Taxes.'
 
 /**
  * WHICH MACHINERY produced the tax on a storefront sale (AGL-1904).

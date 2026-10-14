@@ -105,7 +105,9 @@ import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_DRAFT_FIELDS } from './ai-job-drafts'
+import { AI_FORM_REUSED_NOTE } from './ai-job-form-reuse'
 import {
+  AI_FORM_BAND_TAKEN_COPY,
   AI_FORM_CONSENT_CHECKBOX_NODE_ID,
   AI_FORM_CONSENT_NODE_ID,
   AI_FORM_CONSENT_VALUE,
@@ -604,20 +606,127 @@ describe('the form step', () => {
     })
   })
 
-  it('stops for the member, with its spend recorded, when the last form was taken while it generated', async () => {
+  it('stops for the member when the site was already full when its plan was confirmed (AGL-3765)', async () => {
+    mockDocs.set('orgs/org-1', FREE_ORG)
+    mockDocs.set('hosts/host-1/forms/frm-only', { displayName: 'Contact', createdAt: new Date(NOW.getTime() - 60_000) })
+    const outcome = await createAiJobFormStep()(context())
+    expect(outcome.review).toEqual({
+      reason: 'limit',
+      message: 'Your plan includes 1 forms — upgrade in Billing for more',
+      findings: [],
+    })
+    expect(outcome.failure).toBeUndefined()
+  })
+
+  it('stops on our side, spending nothing, when the last form was taken after its plan was confirmed (AGL-3765)', async () => {
+    // The plan was confirmed at NOW with room; another build made the site's
+    // one Free form a few seconds later. Not the workspace's to pay for.
+    mockDocs.set('orgs/org-1', FREE_ORG)
+    mockDocs.set('hosts/host-1/forms/frm-sibling', { displayName: 'Booking request', createdAt: new Date(NOW.getTime() + 33_000) })
+    const outcome = await createAiJobFormStep()(context())
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome).toEqual({
+      outputs: [],
+      usage: AI_JOB_ZERO_USAGE,
+      estCostUsd: 0,
+      model: 'routed-model',
+      stopReason: null,
+      failure: AI_FORM_BAND_TAKEN_COPY,
+    })
+    expect(commits).toEqual([])
+  })
+
+  it('stops on our side, with its spend recorded, when the last form was taken while it generated', async () => {
     mockDocs.set('orgs/org-1', { ...STARTER_ORG, entitlements: { formsPerHost: 1 } })
     mockRunAiRequest.mockImplementationOnce(async () => {
-      mockDocs.set('hosts/host-1/forms/frm-meanwhile', { displayName: 'Made meanwhile' })
+      mockDocs.set('hosts/host-1/forms/frm-meanwhile', { displayName: 'Made meanwhile', createdAt: new Date(NOW.getTime() + 5_000) })
       return completion(GOLDENS['roofingQuote'].answer)
     })
     const outcome = await createAiJobFormStep()(context())
-    expect(outcome).toMatchObject({
-      outputs: [],
-      usage: USAGE,
-      estCostUsd: 0.01,
-      review: { reason: 'limit', message: 'Your plan includes 1 forms — upgrade in Billing for more' },
-    })
+    expect(outcome).toMatchObject({ outputs: [], usage: USAGE, estCostUsd: 0.01, failure: AI_FORM_BAND_TAKEN_COPY })
+    expect(outcome.review).toBeUndefined()
     expect(commits).toEqual([])
+  })
+
+  describe('a form a page job builds, refused at the band (AGL-3765)', () => {
+    /** The form unit a page job derives: its id is the plan's minted form id, its inputs name the page job. */
+    const unitPatch = (patch: Partial<AiJob> = {}): Partial<AiJob> => ({
+      $id: FORM_ID,
+      inputs: { pageType: 'contact', originJobId: 'page-job' },
+      steps: [],
+      ...patch,
+    })
+    const SIBLING = { id: 'frm-sibling', versionId: null, name: 'Booking request', hostSubdomain: 'acme' }
+
+    beforeEach(() => {
+      mockDocs.set('orgs/org-1', FREE_ORG)
+      mockDocs.set('hosts/host-1/forms/frm-sibling', { displayName: 'Booking request', createdAt: new Date(NOW.getTime() + 33_000) })
+    })
+
+    it('places the form another build just made, and asks no model', async () => {
+      const siblingForm = jest.fn(async () => SIBLING)
+      const outcome = await createAiJobFormStep({ siblingForm })(context(unitPatch()))
+      expect(siblingForm).toHaveBeenCalledWith(firestore, { job: expect.objectContaining({ $id: FORM_ID }), now: NOW })
+      expect(mockRunAiRequest).not.toHaveBeenCalled()
+      expect(outcome).toEqual({
+        outputs: [
+          {
+            resource: 'form',
+            id: 'frm-sibling',
+            versionId: null,
+            hostId: 'host-1',
+            hostSubdomain: 'acme',
+            label: 'Booking request',
+            note: AI_FORM_REUSED_NOTE,
+          },
+        ],
+        usage: AI_JOB_ZERO_USAGE,
+        estCostUsd: 0,
+        model: 'routed-model',
+        stopReason: null,
+      })
+      expect(commits).toEqual([])
+    })
+
+    it('places it after generating too, when the form was made while it generated', async () => {
+      mockDocs.set('orgs/org-1', { ...STARTER_ORG, entitlements: { formsPerHost: 1 } })
+      mockDocs.delete('hosts/host-1/forms/frm-sibling')
+      mockRunAiRequest.mockImplementationOnce(async () => {
+        mockDocs.set('hosts/host-1/forms/frm-sibling', { displayName: 'Booking request', createdAt: new Date(NOW.getTime() + 5_000) })
+        return completion(GOLDENS['roofingQuote'].answer)
+      })
+      const outcome = await createAiJobFormStep({ siblingForm: async () => SIBLING })(context(unitPatch()))
+      expect(outcome).toMatchObject({
+        outputs: [{ resource: 'form', id: 'frm-sibling', note: AI_FORM_REUSED_NOTE }],
+        usage: USAGE,
+        estCostUsd: 0.01,
+      })
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.failure).toBeUndefined()
+      expect(commits).toEqual([])
+    })
+
+    it('stops on our side when no other build’s form will do', async () => {
+      const outcome = await createAiJobFormStep({ siblingForm: async () => null })(context(unitPatch()))
+      expect(outcome.failure).toBe(AI_FORM_BAND_TAKEN_COPY)
+      expect(outcome.outputs).toEqual([])
+    })
+
+    it('leaves the refusal as it was when the lookup fails', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      try {
+        mockDocs.set('hosts/host-1/forms/frm-sibling', { displayName: 'Booking request', createdAt: new Date(NOW.getTime() - 60_000) })
+        const siblingForm = jest.fn(async () => {
+          throw new Error('14 UNAVAILABLE')
+        })
+        const outcome = await createAiJobFormStep({ siblingForm })(context(unitPatch()))
+        expect(outcome.review).toMatchObject({ reason: 'limit' })
+        expect(outcome.failure).toBeUndefined()
+        expect(error).toHaveBeenCalledWith('ai form step: band refusal lookup failed', expect.objectContaining({ jobId: FORM_ID }))
+      } finally {
+        error.mockRestore()
+      }
+    })
   })
 
   it('adds the facts in square brackets the form shows after what the member decides (AGL-3056)', async () => {

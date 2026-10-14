@@ -61,7 +61,6 @@ plan** saves it.
   instead.
 - If the change leaves some destinations with no rate, the build says so, as the
   **Coverage** line does.
-- Carrier rates need a carrier account, so you set those up yourself.
 - Changes work as soon as they are saved, like a save on this card. They cost no AI
   credits.
 - Only an admin or editor on the site can ask Aglyn AI for these changes. An author can
@@ -74,32 +73,3 @@ settings) can carry a postal address: choose **Add address** on its row, or **Ed
 once it has one. The address is the street, an optional apartment or suite,
 city, state or region, postal code, the two-letter country code and a phone
 number, saved beside the location's name.
-
-## Carrier accounts
-
-The **Carrier accounts** card lists the carriers your labels and checkout
-rates come from, for every site in the workspace. By default these are
-Aglyn's own accounts, marked **Discounted rates**. A switch on each row turns
-that carrier on or off.
-
-If you have your own negotiated carrier account, choose **Connect your own
-account** and pick the carrier. Which carriers are listed depends on the
-shipping provider behind your labels. For UPS and FedEx you enter the account
-number, a contact and the account's address, and UPS then asks you to sign in
-at UPS; a row that still needs it shows **Sign-in needed** or **Reconnect
-needed**. Other carriers, such as DHL Express or Canada Post, ask for the
-credentials that carrier issued you, which are passed to the provider to
-connect the account and not kept by Aglyn. Labels bought on your own account
-are billed to you by the carrier, so Aglyn charges nothing for them.
-
-## Shipping labels
-
-A label bought on Aglyn's carrier accounts is charged to the workspace at the
-carrier's price, with nothing added. It is taken from your Stripe balance when
-the label is bought, once a member has agreed to that; when Stripe cannot take
-it, the label goes on the workspace's monthly invoice instead. A voided label
-that the carrier refunds is given back the same way it was paid.
-
-**Billing → Usage** shows a **Shipping labels** card once the workspace has
-bought a label: for each month, how many labels, how much came from the Stripe
-balance, how much went on the invoice, and what voided labels returned.
