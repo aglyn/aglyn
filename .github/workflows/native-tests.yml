@@ -30,18 +30,18 @@ name: Native tests
 #   and run everything: its outputs are empty, and empty is not "false".
 #
 # THE SWIFT BUILD IS CACHED, FROM MAIN (AGL-3783)
-#   One cache entry holds the SwiftPM scratch path and the xcodebuild
-#   DerivedData (1.7 GB compressed). A run on `main` saves it under its own
-#   sha: a push, or the dispatch auto-merge-green.yml sends after it merges
-#   (a merge made with GITHUB_TOKEN starts no push run). A PR restores main's
-#   newest, so it recompiles only what differs from that commit. A PR saves its
-#   own entry only when nothing was restored, because a PR's entry is readable
-#   by that PR alone and per-PR entries would evict main's (the repository has
-#   10 GB of cache). For a restored build to
-#   be reusable, every tracked file is first stamped with a modification time
-#   derived from its content (`native-swift-tests.mjs mtimes`): a fresh
-#   checkout otherwise dates every file "now", and both build systems would
-#   recompile everything.
+#   One cache entry holds the SwiftPM scratch path, the xcodebuild DerivedData
+#   and the compiled package manifests (1.7 GB compressed), keyed by Xcode and
+#   the runner image. A run on `main` saves it under its own sha: a push, or
+#   the dispatch auto-merge-green.yml sends after it merges (a merge made with
+#   GITHUB_TOKEN starts no push run). A PR restores main's newest, so it
+#   recompiles only what differs from that commit. A PR saves its own entry
+#   only when nothing was restored, because a PR's entry is readable by that PR
+#   alone and per-PR entries would evict main's (the repository has 10 GB of
+#   cache). For a restored build to be reusable, every tracked file is first
+#   stamped with a modification time derived from its content
+#   (`native-swift-tests.mjs mtimes`): a fresh checkout otherwise dates every
+#   file "now", and both build systems would recompile everything.
 
 on:
   pull_request:
@@ -176,8 +176,11 @@ jobs:
           sudo xcode-select -s "$best"
           xcodebuild -version
           swift --version
-          # A build from another compiler is useless, so the cache key names it.
+          # A build from another compiler is useless, so the cache key names it,
+          # and the runner image: a new image's SDK and toolchain files are new
+          # files, so a build from another image recompiles much of itself.
           echo "version=$best_version-$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
 
       # Content-derived modification times (see the header), and XCBuild told
       # to compare files by them rather than by inode, which a restore changes.
@@ -187,6 +190,10 @@ jobs:
           defaults write com.apple.dt.XCBuild IgnoreFileSystemDeviceInodeChanges -bool YES
           node tools/scripts/native-swift-tests.mjs mtimes
 
+      # Same Xcode and image first; failing that, same Xcode on another image
+      # (during an image rollout), which still saves resolving the packages.
+      # The compiled Package.swift manifests are cached too: compiling the
+      # nineteen of them took a minute on every run without it.
       - name: Restore the Swift build
         id: swift-cache
         if: env.RUN == 'true'
@@ -195,8 +202,11 @@ jobs:
           path: |
             ${{ runner.temp }}/spm-scratch
             ${{ runner.temp }}/DerivedData
-          key: native-swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ github.sha }}
-          restore-keys: native-swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ steps.xcode.outputs.image }}-${{ github.sha }}
+          restore-keys: |
+            native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ steps.xcode.outputs.image }}-
+            native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
 
       - name: swift test (every package's test targets, built once) + the plugin manifest
         if: env.RUN == 'true'
@@ -244,4 +254,5 @@ jobs:
           path: |
             ${{ runner.temp }}/spm-scratch
             ${{ runner.temp }}/DerivedData
+            ~/Library/Caches/org.swift.swiftpm/manifests
           key: ${{ steps.swift-cache.outputs.cache-primary-key }}
