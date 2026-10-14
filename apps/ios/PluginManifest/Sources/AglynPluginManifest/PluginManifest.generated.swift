@@ -39,7 +39,7 @@ public enum NativePluginManifest {
   public static let entries: [NativePluginManifestEntry] = [
     NativePluginManifestEntry(
       id: "accounting",
-      contributes: ["screens": ["accounting.activity", "accounting.attention", "accounting.books"]],
+      contributes: ["screens": ["accounting.activity", "accounting.attention", "accounting.books"], "deepLinks": ["accounting.books.link", "accounting.books.link2"]],
       register: AglynAccountingPlugin.registerAccountingNative
     ),
     NativePluginManifestEntry(

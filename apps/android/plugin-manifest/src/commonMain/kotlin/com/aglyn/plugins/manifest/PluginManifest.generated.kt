@@ -44,7 +44,7 @@ object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
         NativePluginManifestEntry(
             id = "accounting",
-            contributes = mapOf("screens" to listOf("accounting.activity", "accounting.attention", "accounting.books")),
+            contributes = mapOf("screens" to listOf("accounting.activity", "accounting.attention", "accounting.books"), "deepLinks" to listOf("accounting.books.link", "accounting.books.link2")),
             register = ::registerAccountingNative,
         ),
         NativePluginManifestEntry(

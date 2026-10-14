@@ -1586,6 +1586,10 @@
             "accounting.books",
             "accounting.attention",
             "accounting.activity"
+          ],
+          "deepLinks": [
+            "accounting.books.link",
+            "accounting.books.link2"
           ]
         }
       },

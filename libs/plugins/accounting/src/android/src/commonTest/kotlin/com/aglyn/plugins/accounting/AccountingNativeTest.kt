@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 class AccountingNativeTest {
   private val declared = mapOf(
     "screens" to listOf("accounting.books", "accounting.attention", "accounting.activity"),
-    "deepLinks" to listOf(),
+    "deepLinks" to listOf("accounting.books.link", "accounting.books.link2"),
   )
 
   @Test

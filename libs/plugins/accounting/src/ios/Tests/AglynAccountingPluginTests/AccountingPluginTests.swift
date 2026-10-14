@@ -12,7 +12,7 @@ final class AccountingPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["accounting.activity", "accounting.attention", "accounting.books"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["accounting.activity", "accounting.attention", "accounting.books"], deepLinks: ["accounting.books.link", "accounting.books.link2"])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "accounting", contributes: declared, register: registerAccountingNative)], into: registry)
     XCTAssertEqual(result.failed, [])
