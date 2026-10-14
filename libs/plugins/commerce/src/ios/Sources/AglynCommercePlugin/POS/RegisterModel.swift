@@ -52,6 +52,8 @@ final class RegisterModel {
   private(set) var charging = false
   var toast: CheckoutNotice?
   private(set) var readers: [any CardReaderService] = []
+  /// The checked-in stays a sale can be charged to.
+  private(set) var stays: [PosStay] = []
 
   @ObservationIgnored private let reader: FirestoreReader
   @ObservationIgnored private let api: PosSaleAPI
@@ -157,6 +159,9 @@ final class RegisterModel {
     }
     listen("categories", categoriesQuery(hostID)) { [weak self] docs in
       self?.categories = sortCategories(docs.map(posCategory))
+    }
+    listen("stays", staysQuery(hostID)) { [weak self] docs in
+      self?.stays = docs.map(posStay).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
     loadGrid()
     if let register { lastReceipt.watch(registerID: register.id) }
@@ -452,7 +457,7 @@ final class RegisterModel {
       return
     }
     // A card payment waiting on the reader: the display says so rather than showing the balance.
-    if checkout?.inFlight.contains(where: { $0.method.hasPrefix("card") }) == true {
+    if checkout?.inFlight.contains(where: { $0.method == "card_present" }) == true {
       if !displayShowsProcessing {
         displayShowsProcessing = true
         await display.show(posDisplayProcessing(now: nowMs()))
@@ -495,10 +500,19 @@ final class RegisterModel {
     case .sms?:
       guard let phone = answer.phone else { return }
       done = await paid.sendReceipt(channel: "sms", to: phone)
-    case .print?: done = await paid.sendReceipt(channel: "print")
+    case .print?:
+      // The register's cloud printer prints it; with none, the choice is only recorded.
+      done = lastReceipt.hasPrinter ? await paid.printToCloud() : await paid.sendReceipt(channel: "print")
     default: done = await paid.sendReceipt(channel: "none")
     }
     if done, checkout === paid { finished() }
+  }
+
+  /// A store that always prints: the receipt goes to the register's printer as soon as the sale is paid, once. The cashier
+  /// still ends the sale (a copy by email can follow).
+  func printReceiptByDefault(_ paid: Checkout) async {
+    guard context?.settings.receiptDefault == .print, lastReceipt.hasPrinter, !paid.printed else { return }
+    _ = await paid.printToCloud()
   }
 
   /// The sale was voided: back to the basket, which is kept for another try.

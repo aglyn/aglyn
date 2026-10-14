@@ -119,6 +119,10 @@ class RegisterModel(
 
   var categories by mutableStateOf<List<PosCategory>>(emptyList())
     private set
+
+  /** The checked-in stays a sale can be charged to. */
+  var stays by mutableStateOf<List<PosStay>>(emptyList())
+    private set
   var args by mutableStateOf(PosGridArgs(quickKeys = true))
     private set
   var grid by mutableStateOf<Load<List<PosItem>>>(Load.Loading)
@@ -167,6 +171,7 @@ class RegisterModel(
     scope.launch { loadRegisters() }
     scope.launch { loadStore() }
     scope.launch { loadCategories() }
+    scope.launch { loadStays() }
     scope.launch { loadContext() }
     scope.launch { reconnectWhileOffline() }
     scope.launch { keepTheTill() }
@@ -242,6 +247,12 @@ class RegisterModel(
   private suspend fun loadCategories() {
     categories = runCatching { sortCategories(firestore.page(categoriesQuery(hostId)).docs.map(::posCategoryFrom)) }
       .getOrElse { if (it is CancellationException) throw it else emptyList() }
+  }
+
+  /** The checked-in stays a sale can be charged to; read again whenever the room charge opens, since guests come and go. */
+  suspend fun loadStays() {
+    stays = runCatching { firestore.page(staysQuery(hostId)).docs.map(::posStayFrom).sortedBy { it.name.lowercase() } }
+      .getOrElse { if (it is CancellationException) throw it else stays }
   }
 
   suspend fun loadContext() {
@@ -554,7 +565,7 @@ class RegisterModel(
       return
     }
     // A card payment waiting on the reader: the display says so rather than showing the balance.
-    if (open?.inFlight?.any { it.method.startsWith("card") } == true) {
+    if (open?.inFlight?.any { it.method == "card_present" } == true) {
       if (!displayShowsProcessing) {
         displayShowsProcessing = true
         display.show(posDisplayProcessing(nowMs()))
@@ -591,10 +602,36 @@ class RegisterModel(
     val done = when (answer.receiptChannel) {
       com.aglyn.contracts.PosReceiptChannel.EMAIL -> paid.sendReceipt("email", answer.email ?: return, answer.marketingOptIn == true)
       com.aglyn.contracts.PosReceiptChannel.SMS -> paid.sendReceipt("sms", answer.phone ?: return)
-      com.aglyn.contracts.PosReceiptChannel.PRINT -> paid.sendReceipt("print")
+      com.aglyn.contracts.PosReceiptChannel.PRINT -> printReceipt(paid) == null
       else -> paid.sendReceipt("none")
     }
     if (done && checkout === paid) finished()
+  }
+
+  /**
+   * Prints the paid sale's receipt where this register prints: its direct printer, else its cloud printer; with
+   * neither, the choice is only recorded. Null when it went, the words when it did not.
+   */
+  suspend fun printReceipt(paid: Checkout): String? {
+    if (peripherals.printers.isNotEmpty()) {
+      val data = receipt ?: return "The receipt is still loading. Try again in a moment."
+      val cash = paid.state.value.sale.payments.any { it.method == "cash" && it.status == "succeeded" }
+      print(data, openDrawer = cash)?.let { return it }
+      paid.markPrinted()
+      return null
+    }
+    if (lastReceipt.hasPrinter) return paid.printToCloud()
+    paid.sendReceipt("print")
+    return null
+  }
+
+  /** A store that always prints: the receipt goes to the register's printer as soon as the sale is paid, once. */
+  suspend fun printReceiptByDefault(paid: Checkout) {
+    if (context?.settings?.receiptDefault != ReceiptDefault.PRINT || paid.state.value.printed) return
+    // A direct printer prints from the stored sale, so it waits for that read.
+    if (peripherals.printers.isEmpty() && !lastReceipt.hasPrinter) return
+    if (peripherals.printers.isNotEmpty() && receipt == null) return
+    printReceipt(paid)?.let { toast = Notice(NoticeTone.ERROR, it) }
   }
 
   /** The sale was voided: back to the basket, which is kept for another try. */
