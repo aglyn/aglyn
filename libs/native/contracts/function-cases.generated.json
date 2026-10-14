@@ -9682,6 +9682,137 @@
         }
       ]
     },
+    "mediaQueryRequest": {
+      "module": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": "2.5"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "2621440"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": "<=",
+              "value": "10"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": "<=",
+            "value": "10485760"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">",
+              "value": " 0.001 "
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">",
+            "value": "1049"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": "<",
+              "value": "1e2"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": "<",
+            "value": "104857600"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": ""
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": "  "
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "  "
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": "abc"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "abc"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "type",
+              "op": "equals",
+              "value": "image"
+            }
+          ],
+          "result": {
+            "field": "type",
+            "op": "equals",
+            "value": "image"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "orientation",
+              "op": "equals",
+              "value": "landscape"
+            }
+          ],
+          "result": {
+            "field": "orientation",
+            "op": "equals",
+            "value": "landscape"
+          }
+        }
+      ]
+    },
     "mediaSearchToken": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "cases": [

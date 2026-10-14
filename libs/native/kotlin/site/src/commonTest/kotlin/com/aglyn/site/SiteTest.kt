@@ -24,10 +24,14 @@ import com.aglyn.pluginhost.DeepLinks
 import com.aglyn.pluginhost.NativeLinkTarget
 import com.aglyn.pluginhost.NativePluginRegistry
 import com.aglyn.site.media.FolderPick
+import com.aglyn.site.media.MediaFilters
 import com.aglyn.site.media.MediaItem
 import com.aglyn.site.media.MediaScope
 import com.aglyn.site.media.formatBytes
+import com.aglyn.site.media.mediaPlan
+import com.aglyn.site.media.mediaPlanNotices
 import com.aglyn.site.media.mediaQuery
+import com.aglyn.site.media.megabytesInput
 import com.aglyn.site.pages.PageNode
 import com.aglyn.site.pages.SiteRouting
 import com.aglyn.site.pages.livePageUrl
@@ -162,6 +166,30 @@ class SiteTest {
     assertTrue(FirestoreFilter("visibleTo", FilterOp.ARRAY_CONTAINS_ANY, listOf("org", "host:h")) in scoped.filters)
     assertTrue(FirestoreFilter("folderId", FilterOp.EQ, null) in scoped.filters)
     assertTrue(scoped.filters.none { it.field == "nameTokens" })
+  }
+
+  @Test
+  fun plansTheLibraryFiltersAsTheConsoleDoes() {
+    val filters = MediaFilters(orientation = "landscape", alt = "false", tag = " Hero ", minMegabytes = "1", maxMegabytes = "2.5")
+    assertEquals(5, filters.count)
+    assertEquals(0, MediaFilters().count)
+    val site = mediaQuery(MediaScope.Site("h"), FolderPick.All, null, "image", MediaSort.NEWEST, "", filters = filters)
+    assertTrue(FirestoreFilter("orientation", FilterOp.EQ, "landscape") in site.filters)
+    assertTrue(FirestoreFilter("hasAlt", FilterOp.EQ, false) in site.filters)
+    // Tags are stored trimmed and lower-cased, so the one asked for is too.
+    assertTrue(FirestoreFilter("tags", FilterOp.ARRAY_CONTAINS, "hero") in site.filters)
+    // The size is typed in megabytes and stored in bytes.
+    assertTrue(FirestoreFilter("sizeBytes", FilterOp.GTE, 1_048_576L) in site.filters)
+    assertTrue(FirestoreFilter("sizeBytes", FilterOp.LTE, 2_621_440L) in site.filters)
+    // A reader limited to some sites has no Tags filter: the scope holds the query's one array clause.
+    val scoped = mediaQuery(MediaScope.Org("o", "h"), FolderPick.All, listOf("org", "host:h"), null, MediaSort.NEWEST, "", filters = filters)
+    assertTrue(scoped.filters.none { it.field == "tags" })
+    // A blank box asks nothing, and a megabyte box takes digits and one point.
+    assertEquals(emptyList(), MediaFilters(tag = "  ", minMegabytes = " ").clauses(scoped = false))
+    assertEquals("12.57", megabytesInput("1a2.5.7"))
+    // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
+    val notices = mediaPlanNotices(mediaPlan(FolderPick.All, null, null, MediaSort.NEWEST, "hero", MediaFilters(tag = "sunset")))
+    assertTrue(notices.isNotEmpty(), notices.toString())
   }
 
   @Test

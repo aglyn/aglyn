@@ -152,6 +152,40 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(scoped.order.first?.descending, false)
   }
 
+  func testPlansTheLibraryFiltersAsTheConsoleDoes() {
+    let filters = MediaFilters(
+      orientation: "landscape", alt: "false", tag: " Hero ", minMegabytes: "1", maxMegabytes: "2.5")
+    XCTAssertEqual(filters.count, 5)
+    XCTAssertEqual(MediaFilters().count, 0)
+    let site = mediaQuery(
+      scope: .site(hostID: "h"), folder: .all, scopeTokens: nil, type: "image", sort: .newest, search: "",
+      filters: filters)
+    XCTAssertTrue(has(site, "orientation", .equal, "landscape"))
+    XCTAssertTrue(has(site, "hasAlt", .equal, false))
+    // Tags are stored trimmed and lower-cased, so the one asked for is too.
+    XCTAssertTrue(has(site, "tags", .arrayContains, "hero"))
+    // The size is typed in megabytes and stored in bytes.
+    func size(_ op: ListQueryOp) -> Double? {
+      site.filters.first { $0.path == "sizeBytes" && $0.op == op }.flatMap { ($0.value as? NSNumber)?.doubleValue }
+    }
+    XCTAssertEqual(size(.greaterThanOrEqual), 1_048_576)
+    XCTAssertEqual(size(.lessThanOrEqual), 2_621_440)
+    // A reader limited to some sites has no Tags filter: the scope holds the query's one array clause.
+    let scoped = mediaQuery(
+      scope: .org(orgID: "o", forHostID: "h"), folder: .all, scopeTokens: ["org", "host:h"], type: nil,
+      sort: .newest, search: "", filters: filters)
+    XCTAssertFalse(scoped.filters.contains { $0.path == "tags" })
+    // A blank box asks nothing, and a megabyte box takes digits and one point.
+    XCTAssertEqual(MediaFilters(tag: "  ", minMegabytes: " ").clauses(scoped: false), [])
+    XCTAssertEqual(megabytesInput("1a2.5.7"), "12.57")
+    // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
+    let notices = mediaPlanNotices(
+      mediaPlan(
+        folder: .all, scopeTokens: nil, type: nil, sort: .newest, search: "hero",
+        filters: MediaFilters(tag: "sunset")))
+    XCTAssertFalse(notices.isEmpty, "\(notices)")
+  }
+
   func testWritesTheScopeIntoEveryMediaRoute() {
     let client = ConsoleAPIClient(origin: "https://console.test") { _ in "t" }
     let org = MediaAPI(api: client, scope: .org(orgID: "o", forHostID: "h"))

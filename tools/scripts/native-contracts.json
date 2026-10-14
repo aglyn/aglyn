@@ -736,7 +736,8 @@
       "base": "TEMPLATE_LIST_BASE"
     },
     "ENTRY_LIST_QUERY": {},
-    "MARKETPLACE_BROWSE_QUERY": {}
+    "MARKETPLACE_BROWSE_QUERY": {},
+    "MEDIA_LIST_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -12194,6 +12195,74 @@
         [
           "component",
           "C"
+        ]
+      ]
+    },
+    "mediaQueryRequest": {
+      "module": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "args": [
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "2.5"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": "<=",
+            "value": "10"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">",
+            "value": " 0.001 "
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": "<",
+            "value": "1e2"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": ""
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "  "
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "abc"
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "image"
+          }
+        ],
+        [
+          {
+            "field": "orientation",
+            "op": "equals",
+            "value": "landscape"
+          }
         ]
       ]
     }
