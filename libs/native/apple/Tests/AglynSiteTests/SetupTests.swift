@@ -96,6 +96,27 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(themeEdits(from: before, to: cleared), [.color(scheme: "light", token: "primary", value: nil)])
   }
 
+  func testReadsTheStyleComponentsCatalogAndSendsOnlyTheLooksThatChanged() throws {
+    let answer = try JSONDecoder().decode(
+      JSONValue.self,
+      from: Data(
+        """
+        {"componentLooks":{"groups":[{"group":"button","label":"Buttons"}],"fields":[{"id":"button.variant","group":"button","label":"Button style","kind":"select","options":[{"value":"contained","label":"Filled"},{"value":"outlined","label":"Outlined"}]},{"id":"input.border","group":"input","label":"Input border color","kind":"color","options":[{"value":"primary","label":"Primary","token":"primary"}]}]}}
+        """.utf8))
+    let catalog = themeCatalog(of: answer)
+    XCTAssertEqual(catalog.lookGroups.map(\.group), ["button"])
+    XCTAssertEqual(catalog.looks.map(\.id), ["button.variant", "input.border"])
+    XCTAssertEqual(catalog.looks[1].options[0].token, "primary")
+    let values = themeValues(
+      of: try JSONDecoder().decode(JSONValue.self, from: Data(#"{"componentLooks":{"button.variant":"","input.border":"__custom__","card.variant":"outlined"}}"#.utf8)))
+    XCTAssertEqual(values.componentLooks["card.variant"], "outlined")
+    var after = values
+    after.componentLooks = ["button.variant": "outlined", "input.border": "__custom__", "card.variant": ""]
+    // A Custom look is left alone; "Theme default" is the empty choice that clears one.
+    XCTAssertEqual(themeEdits(from: values, to: after), [.componentLook(field: "button.variant", value: "outlined"), .componentLook(field: "card.variant", value: "")])
+    XCTAssertEqual(ThemeEdit.componentLook(field: "card.variant", value: "").body["control"] as? String, "componentLook")
+  }
+
   func testReadsTheThemeEditorsAnswer() {
     let catalog = themeCatalog(
       of: .object([
