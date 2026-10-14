@@ -71,7 +71,15 @@
       "msA": 30000,
       "msB": 720000,
       "msC": 11100000,
-      "msD": 360000000
+      "msD": 360000000,
+      "rolesInfo": {
+        "h1": {
+          "label": "Editor"
+        },
+        "h2": {
+          "label": "Viewer"
+        }
+      }
     }
   },
   "render": [
@@ -178,6 +186,10 @@
     {
       "template": "{data.msA:duration}|{data.msB:duration}|{data.msC:duration}|{data.msD:duration}|{data.nothing:duration}",
       "expect": "under a minute|12 min|3h 5m|4 days|unknown"
+    },
+    {
+      "template": "{data.rolesInfo[@data.hostKey].label}",
+      "expect": "Viewer"
     }
   ],
   "url": [

@@ -62,14 +62,14 @@ line here is done; each line names the console source it was read from.
 | Organization | Effective entitlements table, media library card (`/api/admin/media-library`, `/asset`), activity card | open |
 | Site | Suspend and unsuspend had the same reason-code bug (fixed); domain card (`StaffDomainCard`), content card, media library card, usage and settings snapshot | open |
 | Person | System email: follow-up, preview (subject and recipient; the console also draws the HTML) and send (`/api/admin/users/system-email`), product-email consent facts, acquisition: done. Erase card: to be read against `StaffUserEraseCard` | open |
-| Overview | Users total, Top usage, anomalies banner, marketplace overview cards (`/api/marketplace/admin/overview`) | open |
+| Overview | The anomalies list read fields the route never sends (fixed), people total, top usage (the metered plugin counts stay on each workspace's usage by month), marketplace purchases and refund reversals (`/api/marketplace/admin/overview`) | done |
 | Health | The nine probes (the old list read a shape the route never answers), CSP and server config (also read the wrong fields), scope drift (`/api/admin/backfill-scope`), pending erasures (`/api/admin/run-erasures`), idempotency claims | done (paged jobs: action `loop`) |
 | Maintenance | `/admin/maintenance`: schedule readings and the three guarded jobs (audit archive, plugin artifact reaper, plugin verdict re-verification), generated from `maintenance-jobs.ts`; the console also locks the real run until a preview has been read, which the screen leaves to the route's reason and typed phrase | done |
 | System emails | Suppressions (`/api/admin/emails/suppressions`), history import, message viewer, test send | open |
 | Abuse reports | Counter-notices (DMCA put-back) queue, risk-notice actions, session log | open |
 | Lockdown | Platform and feature locks, "what would this caller be told", session log | open |
-| Plugin reviews | `/admin/plugin-reviews` queue and a submission, plugin signing (`/api/marketplace/admin/{reviews,trust}`) | open |
-| Marketplace reports | `/admin/marketplace-reports` (`/api/marketplace/admin/reports`) | open |
+| Plugin reviews | `/admin/plugin-reviews` queue with search and status, and a submission: status, overview, capabilities, declared elements, verifier checks and findings, publisher attestation, the review checklist (toggles), versions with realm trust grant and revoke (super), stop and allow bytes, approve or reject a version, list, start review, verify, decline verification, delist, unverify, reject, take down and restore. Core staff specs, because the marketplace has no Apple package yet; the checklist, rejection reasons and status texts are generated from the plugin's model files | done |
+| Marketplace reports | `/admin/marketplace-reports` (`/api/marketplace/admin/reports`): state filter, mark reviewing, resolve with a note | done |
 | Revenue, Margin, Sales tax, Audit log, Support, Coupons, Flags, Settings | read against the console page by page in the PRs that follow; findings are added to this table | open |
 
 Texts (`sms`): the plugin is infrastructure with no console page of its own.

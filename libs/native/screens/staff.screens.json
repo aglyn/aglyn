@@ -15,7 +15,11 @@
         "/admin/overview"
       ],
       "load": {
-        "overview": "/api/admin/overview"
+        "overview": "/api/admin/overview",
+        "market": {
+          "url": "/api/marketplace/admin/overview",
+          "optional": true
+        }
       },
       "blocks": [
         {
@@ -30,6 +34,10 @@
             {
               "label": "New in 30 days",
               "value": "{item.signups30d:number}"
+            },
+            {
+              "label": "People",
+              "value": "{item.users:number}"
             },
             {
               "label": "Paying workspaces",
@@ -66,15 +74,14 @@
           "type": "list",
           "title": "Anomalies",
           "items": "data.overview.anomalies",
-          "primary": "{item.title|item.kind:title}",
-          "secondary": "{item.detail|item.message}",
+          "primary": "{item.orgLabel|item.orgId}",
+          "secondary": "{item.spikes}",
           "icon": "exclamationmark.triangle|warning",
           "open": {
             "screen": "core.staff.org",
             "params": {
               "orgId": "{item.orgId}"
-            },
-            "when": "item.orgId"
+            }
           },
           "empty": "Nothing unusual."
         },
@@ -92,6 +99,46 @@
             }
           },
           "count": false
+        },
+        {
+          "type": "list",
+          "title": "Top usage ({data.overview.metrics.rollupMonth|'last month'})",
+          "items": "data.overview.topUsage",
+          "primary": "{item.orgLabel|item.orgId}",
+          "secondary": "{item.storageGb:number} GB · {item.pageViews:number} views",
+          "trailing": "{item.costUsd:dollars}",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            }
+          },
+          "icon": "chart.bar|bar_chart",
+          "count": false,
+          "footer": "The workspaces with the highest monthly usage rollups: storage, page views and attributed cost. Metered plugin counts are on each workspace's usage by month.",
+          "empty": "No usage rollups for the month."
+        },
+        {
+          "type": "list",
+          "title": "Marketplace purchases",
+          "items": "data.market.purchases",
+          "primary": "{item.listingId|item.$id}",
+          "secondary": "{item.amountCents:cents} (fee {item.feeCents:cents})",
+          "tertiary": "{item.createdAt:date}",
+          "icon": "cart|storefront",
+          "count": false,
+          "empty": "No purchases yet."
+        },
+        {
+          "type": "list",
+          "title": "Refund reversals to recover",
+          "footer": "A refunded sale left the publisher's share in place. Recover it from the connected account, then clear the fields on the purchase. Owed: {data.market.reversalOwedCents:cents}.",
+          "items": "data.market.reversalRecovery",
+          "primary": "{item.listingId|item.$id}",
+          "secondary": "{item.owedCents:cents} owed · {item.reason|'unknown reason'}",
+          "tertiary": "seller {item.sellerOrgLabel|item.sellerOrgId|'unknown'} · {item.failedAt:date}",
+          "count": false,
+          "empty": "Nothing outstanding. Every refunded sale pulled the publisher's share back."
         },
         {
           "type": "actions",
@@ -170,6 +217,16 @@
               "screen": "core.staff.abuse"
             },
             {
+              "title": "Marketplace reports",
+              "icon": "flag|flag",
+              "screen": "core.staff.marketplaceReports"
+            },
+            {
+              "title": "Plugin reviews",
+              "icon": "puzzlepiece.extension|extension",
+              "screen": "core.staff.pluginReviews"
+            },
+            {
               "title": "Locks",
               "icon": "lock|lock",
               "screen": "core.staff.lockdown"
@@ -213,6 +270,11 @@
               "title": "Health",
               "icon": "waveform.path.ecg|monitor_heart",
               "screen": "core.staff.health"
+            },
+            {
+              "title": "Maintenance",
+              "icon": "hammer|construction",
+              "screen": "core.staff.maintenance"
             },
             {
               "title": "Operator alerts",
@@ -5237,6 +5299,1272 @@
           "tertiary": "{item.atMs:datetime}",
           "count": false,
           "empty": "No comments."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.marketplaceReports",
+      "title": "Marketplace reports",
+      "subtitle": "Reported listings and reviews",
+      "icon": "flag|flag",
+      "scope": "staff",
+      "group": "staff",
+      "order": 21,
+      "requires": "staff.is",
+      "links": [
+        "/admin/marketplace-reports"
+      ],
+      "load": {
+        "reports": {
+          "url": "/api/marketplace/admin/reports?status={params.status|'open'}",
+          "when": "params.status != all"
+        },
+        "allReports": {
+          "url": "/api/marketplace/admin/reports",
+          "when": "params.status == all"
+        }
+      },
+      "actions": [
+        {
+          "id": "status",
+          "label": "Show another state",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "status",
+              "label": "State",
+              "kind": "select",
+              "initial": "{params.status|'open'}",
+              "options": [
+                {
+                  "value": "open",
+                  "label": "Open"
+                },
+                {
+                  "value": "reviewing",
+                  "label": "Reviewing"
+                },
+                {
+                  "value": "actioned",
+                  "label": "Actioned"
+                },
+                {
+                  "value": "dismissed",
+                  "label": "Dismissed"
+                },
+                {
+                  "value": "all",
+                  "label": "Everything"
+                }
+              ]
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.marketplaceReports",
+            "params": {
+              "status": "{form.status}"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "These are the most recently updated reports in this state, and there are older ones not shown. Moving a report on takes it out of this list.",
+          "when": "data.reports.more"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "These are the most recently updated reports, and there are older ones not shown.",
+          "when": "data.allReports.more"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Reporter accounts are hidden at your access level. Every report still shows whether there is somebody behind it.",
+          "when": "data.reports.identityVisible == false"
+        },
+        {
+          "type": "list",
+          "when": "params.status != all",
+          "items": "data.reports.reports",
+          "primary": "{item.listingName|item.listingId|item.id}",
+          "secondary": "{item.reason|'(no reason given)'}",
+          "tertiary": "{item.targetType:title} · {item.publisherOrgId} · filed {item.createdAtMs:datetime} · {item.reporterUid|'reporter hidden'}",
+          "icon": "flag|flag",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Open": "warning",
+                "Reviewing": "info",
+                "Actioned": "success",
+                "Dismissed": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "reviewing",
+              "label": "Mark reviewing",
+              "icon": "eye|visibility",
+              "when": "item.status == open",
+              "url": "/api/marketplace/admin/reports",
+              "body": {
+                "id": "{item.id}",
+                "status": "reviewing",
+                "resolution": ""
+              },
+              "success": "Marked reviewing"
+            },
+            {
+              "id": "actioned",
+              "label": "Resolve: actioned",
+              "icon": "checkmark.shield|verified",
+              "url": "/api/marketplace/admin/reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "What did you do, and why?",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "id": "{item.id}",
+                "status": "actioned",
+                "resolution": "{form.resolution}"
+              },
+              "success": "Marked actioned"
+            },
+            {
+              "id": "dismissed",
+              "label": "Resolve: dismissed",
+              "icon": "xmark.circle|cancel",
+              "url": "/api/marketplace/admin/reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "Why is it dismissed?",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "id": "{item.id}",
+                "status": "dismissed",
+                "resolution": "{form.resolution}"
+              },
+              "success": "Marked dismissed"
+            }
+          ],
+          "count": true,
+          "empty": "Nothing in this state."
+        },
+        {
+          "type": "list",
+          "when": "params.status == all",
+          "items": "data.allReports.reports",
+          "primary": "{item.listingName|item.listingId|item.id}",
+          "secondary": "{item.reason|'(no reason given)'}",
+          "tertiary": "{item.targetType:title} · {item.publisherOrgId} · filed {item.createdAtMs:datetime} · {item.reporterUid|'reporter hidden'}",
+          "icon": "flag|flag",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Open": "warning",
+                "Reviewing": "info",
+                "Actioned": "success",
+                "Dismissed": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "reviewing",
+              "label": "Mark reviewing",
+              "icon": "eye|visibility",
+              "when": "item.status == open",
+              "url": "/api/marketplace/admin/reports",
+              "body": {
+                "id": "{item.id}",
+                "status": "reviewing",
+                "resolution": ""
+              },
+              "success": "Marked reviewing"
+            },
+            {
+              "id": "actioned",
+              "label": "Resolve: actioned",
+              "icon": "checkmark.shield|verified",
+              "url": "/api/marketplace/admin/reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "What did you do, and why?",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "id": "{item.id}",
+                "status": "actioned",
+                "resolution": "{form.resolution}"
+              },
+              "success": "Marked actioned"
+            },
+            {
+              "id": "dismissed",
+              "label": "Resolve: dismissed",
+              "icon": "xmark.circle|cancel",
+              "url": "/api/marketplace/admin/reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "Why is it dismissed?",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "id": "{item.id}",
+                "status": "dismissed",
+                "resolution": "{form.resolution}"
+              },
+              "success": "Marked dismissed"
+            }
+          ],
+          "count": true,
+          "empty": "Nothing in this state."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.pluginReviews",
+      "title": "Plugin reviews",
+      "subtitle": "Submissions, verification requests and listed plugins",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "staff",
+      "group": "staff",
+      "order": 22,
+      "requires": "staff.is",
+      "links": [
+        "/admin/plugin-reviews"
+      ],
+      "load": {
+        "reviews": "/api/marketplace/admin/reviews?q={params.q}&status={params.status}&limit=200"
+      },
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Search or filter",
+          "icon": "magnifyingglass|search",
+          "prompt": [
+            {
+              "key": "q",
+              "label": "Search by name",
+              "kind": "text",
+              "initial": "{params.q}"
+            },
+            {
+              "key": "status",
+              "label": "Status",
+              "kind": "select",
+              "initial": "{params.status}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "All statuses"
+                },
+                {
+                  "value": "submitted",
+                  "label": "Submitted"
+                },
+                {
+                  "value": "in_review",
+                  "label": "In review"
+                },
+                {
+                  "value": "listed",
+                  "label": "Listed"
+                },
+                {
+                  "value": "verified",
+                  "label": "Verified"
+                },
+                {
+                  "value": "hidden",
+                  "label": "Taken down"
+                }
+              ]
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.pluginReviews",
+            "params": {
+              "q": "{form.q}",
+              "status": "{form.status}"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "{item}",
+          "when": "data.reviews.notices"
+        },
+        {
+          "type": "list",
+          "title": "Awaiting a verdict",
+          "items": "data.reviews.queue",
+          "primary": "{item.displayName}",
+          "secondary": "{data.reviews.publishers[@item.profileId]|item.profileId} · v{item.version} · {item.license|'No license'}",
+          "tertiary": "{item.description}",
+          "icon": "puzzlepiece.extension|extension",
+          "badges": [
+            {
+              "text": "{item.reviewStatus:title}",
+              "tones": {
+                "Submitted": "neutral",
+                "In review": "info",
+                "Rejected": "error",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Taken down",
+              "when": "item.hidden",
+              "tone": "error"
+            },
+            {
+              "text": "Private",
+              "when": "item.private",
+              "tone": "neutral"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.pluginReview",
+            "params": {
+              "listingId": "{item.listingId}"
+            }
+          },
+          "empty": "Nothing waiting."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "More submissions are waiting than this page reads. Narrow the search.",
+          "when": "data.reviews.more.queue"
+        },
+        {
+          "type": "list",
+          "title": "Verification requests",
+          "items": "data.reviews.verificationRequests",
+          "primary": "{item.displayName}",
+          "secondary": "{data.reviews.publishers[@item.profileId]|item.profileId} · v{item.version}",
+          "icon": "checkmark.seal|verified",
+          "badges": [
+            {
+              "text": "{item.reviewStatus:title}",
+              "tone": "info"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.pluginReview",
+            "params": {
+              "listingId": "{item.listingId}"
+            }
+          },
+          "empty": "No requests."
+        },
+        {
+          "type": "list",
+          "title": "Listed plugins",
+          "items": "data.reviews.listed",
+          "primary": "{item.displayName}",
+          "secondary": "{data.reviews.publishers[@item.profileId]|item.profileId} · v{item.latestVersion} · {item.versionCount} version(s)",
+          "tertiary": "{item.hiddenReason}",
+          "icon": "puzzlepiece.extension|extension",
+          "badges": [
+            {
+              "text": "{item.reviewStatus:title}",
+              "tones": {
+                "Verified": "success",
+                "Listed": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Taken down",
+              "when": "item.hidden",
+              "tone": "error"
+            },
+            {
+              "text": "{item.pendingVersions:number} pending",
+              "when": "item.pendingVersions",
+              "tone": "info"
+            },
+            {
+              "text": "{item.realmVersions:number} realm",
+              "when": "item.realmVersions",
+              "tone": "neutral"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.pluginReview",
+            "params": {
+              "listingId": "{item.listingId}"
+            }
+          },
+          "empty": "Nothing listed."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.pluginReview",
+      "title": "{data.detail.displayName|'Plugin review'}",
+      "label": "Plugin review",
+      "subtitle": "One submission or listed plugin",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "staff",
+      "requires": "staff.is",
+      "links": [
+        "/admin/plugin-reviews/:listingId"
+      ],
+      "constants": {
+        "checklist": [
+          {
+            "id": "provenance",
+            "label": "Repository resolves and plausibly matches the bundle",
+            "detail": "Open the declared repository. It should exist, be public, and contain a plugin that could have produced this bundle. A listing whose repo 404s or has nothing to do with the code is the cheapest tell there is.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "publisher",
+            "label": "Publisher is identifiable and contactable",
+            "detail": "A real workspace with a history, not an account created this week. Publisher identity is what makes takedown and liability meaningful.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "capabilities",
+            "label": "Declared capabilities are minimal and justified by the README",
+            "detail": "Every declared network host becomes CSP connect-src for this plugin. A widget that renders a countdown does not need a network allowlist. Undeclared hosts are blocked, so over-declaration is the risk to look for.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "source-read",
+            "label": "Bundle source read, not just the verifier verdict",
+            "detail": "The verifier flags computed access on a global, string-built identifiers, base64 blobs and undeclared network calls — read the code for what it cannot flag: what the plugin is actually FOR, and whether the data it touches is any of its business.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "diff",
+            "label": "Changes since the last approved version reviewed",
+            "detail": "An update is the natural place to slip something in — the first version gets read closely, the fourth rarely does. For a first submission, tick this once you have read the whole bundle.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "behaviour",
+            "label": "Installed on a throwaway site and exercised",
+            "detail": "Static review cannot show you what it does at runtime. Install it somewhere disposable, use it, and watch the network tab.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "data",
+            "label": "Data handling matches what the listing claims",
+            "detail": "If it collects anything, the README should say so. Check for host-mediated fetches carrying page or member data to an origin that has no business receiving it.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "positioning",
+            "label": "Listing does not misrepresent or disparage Aglyn’s plans or pricing",
+            "detail": "Read the listing title, description and README the way a customer would. Describing what the plugin does, and stating which Aglyn plans or features it needs or is compatible with, is fine. Comparing against Aglyn’s prices, asserting what a plan costs or contains, or presenting the plugin as a way to avoid paying for a tier is not — this text renders in the console beside the upgrade the customer is weighing. Publisher Agreement §3(h): reject and say which line, rather than approving with a note.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "element-metadata",
+            "label": "Publisher text on declared elements read in the picker",
+            "detail": "None of this is on the listing page — it ships in the manifest's `elements` array, printed in full under Security above, and reaches the customer in the besigner element picker. Read all of it, not only the description: names, tags and search keywords are RANKED, so a competitor's name or a plan name buried in a search term steers what a customer is shown without ever appearing on screen. Then read it where a customer meets it — on the throwaway install from the item above, open the element picker and search the terms it declares. Same bar as the listing: saying what the element does is fine, quoting what a Aglyn plan costs or pitching it as a way to skip an upgrade is not. If the version declares no elements, confirm that from Security rather than assuming it.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "license",
+            "label": "License present and acceptable",
+            "detail": "Missing or incompatible licensing is a legal problem for every workspace that installs it, not just for us.",
+            "required": true,
+            "realmOnly": false
+          },
+          {
+            "id": "realm-need",
+            "label": "Realm access is genuinely necessary",
+            "detail": "Realm trust drops this code into the app realm, where the sandbox iframe and CSP no longer separate it from user data. Sandbox is the default; realm needs a reason you could defend afterwards.",
+            "required": false,
+            "realmOnly": true
+          },
+          {
+            "id": "support",
+            "label": "Changelog and support contact present",
+            "detail": "Not a security control — an operational one. When a plugin misbehaves in production, this is how it gets fixed instead of revoked.",
+            "required": false,
+            "realmOnly": false
+          }
+        ],
+        "rejectionCategories": [
+          {
+            "value": "readme",
+            "label": "Missing or inadequate README",
+            "guidance": "Describe what the plugin does, how to configure it, and what it needs access to.",
+            "requiresComment": false
+          },
+          {
+            "value": "license",
+            "label": "No license, or a license we cannot accept",
+            "guidance": "Include a license file. It has to permit redistribution through the marketplace.",
+            "requiresComment": false
+          },
+          {
+            "value": "repository",
+            "label": "Repository missing, private, or unrelated to the bundle",
+            "guidance": "The declared repository must resolve, be readable, and plausibly contain the code that produced this bundle.",
+            "requiresComment": false
+          },
+          {
+            "value": "capabilities",
+            "label": "Declared capabilities exceed what the plugin needs",
+            "guidance": "Ask only for what the plugin uses. Extra capabilities are the difference between a plugin and a liability.",
+            "requiresComment": false
+          },
+          {
+            "value": "undeclared-network",
+            "label": "Undeclared network access or data collection",
+            "guidance": "Every endpoint the bundle talks to, and every field it collects, has to be declared in the manifest and named in the listing.",
+            "requiresComment": false
+          },
+          {
+            "value": "obfuscated",
+            "label": "Obfuscated or unreadable bundle",
+            "guidance": "Ship readable code, or a source map. Nobody can review what nobody can read.",
+            "requiresComment": false
+          },
+          {
+            "value": "verifier",
+            "label": "Fails the static verifier",
+            "guidance": "Resolve the findings on the version page and publish a new version.",
+            "requiresComment": false
+          },
+          {
+            "value": "not-as-described",
+            "label": "Does not work as described",
+            "guidance": "The plugin has to do what the listing says it does, on a site that installs it.",
+            "requiresComment": false
+          },
+          {
+            "value": "duplicate",
+            "label": "Duplicate or spam listing",
+            "guidance": "This listing duplicates existing content or has no plausible use.",
+            "requiresComment": false
+          },
+          {
+            "value": "other",
+            "label": "Other",
+            "guidance": "See the reviewer’s comment.",
+            "requiresComment": true
+          }
+        ],
+        "statuses": {
+          "submitted": {
+            "label": "Submitted",
+            "meaning": "Waiting for a reviewer. Not in the marketplace, not installable.",
+            "live": false,
+            "color": "default"
+          },
+          "in_review": {
+            "label": "In review",
+            "meaning": "Someone is looking at it. Not in the marketplace, not installable.",
+            "live": false,
+            "color": "info"
+          },
+          "listed": {
+            "label": "Listed",
+            "meaning": "LIVE — browsable in the marketplace and installable by every workspace. This is the state that puts the code in front of customers.",
+            "live": true,
+            "color": "warning"
+          },
+          "verified": {
+            "label": "Verified",
+            "meaning": "LIVE, and carries the verified badge on its listing page — our own claim that a human reviewed it. Installability is identical to listed.",
+            "live": true,
+            "color": "success"
+          },
+          "rejected": {
+            "label": "Rejected",
+            "meaning": "Turned down with a reason the publisher was notified of. Not in the marketplace, not installable.",
+            "live": false,
+            "color": "error"
+          }
+        },
+        "attestation": {
+          "repository": "The repository URL is public and contains the source for this bundle",
+          "license": "A license is included and I have the right to publish this code",
+          "data-disclosure": "The README documents what data this plugin reads, stores or sends, and where it goes",
+          "network-hosts": "Every declared network host is required — I have removed the ones I do not use",
+          "tested": "I have tested this version on a site I control",
+          "listing-conduct": "Neither my listing nor any text on my elements disparages Aglyn, quotes what its plans cost, or sells a way around one",
+          "changelog": "The changelog describes what changed since the last version"
+        }
+      },
+      "load": {
+        "detail": "/api/marketplace/admin/reviews?listingId={params.listingId}&version={params.version}"
+      },
+      "actions": [
+        {
+          "id": "version",
+          "label": "Review another version",
+          "icon": "arrow.triangle.branch|account_tree",
+          "when": "data.detail.versions",
+          "prompt": [
+            {
+              "key": "version",
+              "label": "Version",
+              "kind": "select",
+              "initial": "{data.detail.reviewVersion}",
+              "options": [],
+              "optionsFrom": {
+                "items": "data.detail.versions",
+                "value": "{item.version}",
+                "label": "v{item.version} · {item.reviewState}"
+              }
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.pluginReview",
+            "params": {
+              "listingId": "{params.listingId}",
+              "version": "{form.version}"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Taken down: {data.detail.hiddenReason|'no reason recorded'}. Running installs stop on next load.",
+          "when": "data.detail.hidden"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Some version of this plugin is stopped by the kill switch.",
+          "when": "data.detail.revoked"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Unpublished by the publisher.",
+          "when": "data.detail.unpublished"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Rejected: {data.detail.rejectionCategory} {data.detail.rejectionReason}",
+          "when": "data.detail.reviewStatus == rejected"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Blocked from approving, listing and verifying: required checklist items are outstanding for these bytes.",
+          "when": "data.detail.checklistOutstanding"
+        },
+        {
+          "type": "fields",
+          "title": "Status",
+          "object": "data.detail",
+          "rows": [
+            {
+              "label": "Review status",
+              "value": "{const.statuses[@item.reviewStatus].label|item.reviewStatus:title}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "What it means",
+              "value": "{const.statuses[@item.reviewStatus].meaning}"
+            },
+            {
+              "label": "Latest version",
+              "value": "{item.latestVersion|'—'}"
+            },
+            {
+              "label": "Version under review",
+              "value": "{item.reviewVersion|'—'}"
+            },
+            {
+              "label": "Active installs",
+              "value": "{item.activeInstalls:number}"
+            },
+            {
+              "label": "Publisher",
+              "value": "{item.publisherName}"
+            },
+            {
+              "label": "Publisher agreement",
+              "value": "{item.publisherAgreement.state:title}"
+            },
+            {
+              "label": "Price",
+              "value": "{item.priceUsd:dollars}"
+            },
+            {
+              "label": "Private",
+              "value": "{item.private:yesno}"
+            },
+            {
+              "label": "Verification request",
+              "value": "{item.verificationRequest.state:title} {item.verificationRequest.declineReason}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Overview",
+          "object": "data.detail",
+          "rows": [
+            {
+              "label": "Description",
+              "value": "{item.description}"
+            },
+            {
+              "label": "License",
+              "value": "{item.license|'No license'}"
+            },
+            {
+              "label": "Categories",
+              "value": "{item.categories}"
+            },
+            {
+              "label": "Homepage",
+              "value": "{item.homepageUrl}"
+            },
+            {
+              "label": "Repository",
+              "value": "{item.repositoryUrl}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "What the bundle may reach",
+          "object": "data.detail.versions[version=data.detail.reviewVersion]",
+          "rows": [
+            {
+              "label": "Declared network",
+              "value": "{item.capabilities.network|'none'}"
+            },
+            {
+              "label": "Declared events",
+              "value": "{item.capabilities.events|'none'}"
+            },
+            {
+              "label": "Host ABI",
+              "value": "declared {item.hostAbi|'none (legacy)'}, platform runs {data.detail.platformHostAbi}"
+            },
+            {
+              "label": "Signed",
+              "value": "{item.signed:yesno}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Declared elements",
+          "footer": "Publisher text the picker renders and ranks its search on, none of it on the listing page. Read all of it.",
+          "items": "data.detail.versions[version=data.detail.reviewVersion].elements",
+          "primary": "{item.displayName|item.id}",
+          "secondary": "{item.category}",
+          "tertiary": "{item:facts}",
+          "count": true,
+          "empty": "Declares none."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "The static verifier has not run for this version: no artifact was reachable. Treat this as unchecked, not as clean.",
+          "when": "!data.detail.verifier"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Verifier could not run: {data.detail.verifier.error}",
+          "when": "data.detail.verifier.error"
+        },
+        {
+          "type": "list",
+          "title": "Static verifier",
+          "footer": "A stored verdict is for these exact bytes.",
+          "items": "data.detail.verifier.checks",
+          "primary": "{item.label}",
+          "secondary": "{item.detail}",
+          "badges": [
+            {
+              "text": "Passed",
+              "when": "item.status == pass",
+              "tone": "success"
+            },
+            {
+              "text": "Failed",
+              "when": "item.status == fail",
+              "tone": "error"
+            },
+            {
+              "text": "Worth questioning",
+              "when": "item.status == question",
+              "tone": "warning"
+            },
+            {
+              "text": "Not checked",
+              "when": "item.status == unknown",
+              "tone": "neutral"
+            }
+          ],
+          "count": false,
+          "empty": "No checks reported."
+        },
+        {
+          "type": "list",
+          "title": "Verifier findings",
+          "items": "data.detail.verifier.problems",
+          "primary": "{item.message}",
+          "secondary": "{item.check}",
+          "badges": [
+            {
+              "text": "{item.level:title}",
+              "tones": {
+                "Error": "error",
+                "Warn": "warning",
+                "Warning": "warning",
+                "*": "neutral"
+              }
+            }
+          ],
+          "count": false,
+          "empty": "Nothing found."
+        },
+        {
+          "type": "list",
+          "title": "Publisher attestation",
+          "footer": "What the publisher stated about these bytes. Not a review input: a reviewer still checks everything. Signed by {data.detail.attestedBy|'nobody'} {data.detail.attestedAt:datetime}.",
+          "items": "data.detail.attestation",
+          "primary": "{const.attestation[@item]|item}",
+          "icon": "checkmark.circle|check_circle",
+          "count": true,
+          "empty": "Nothing attested for these bytes."
+        },
+        {
+          "type": "list",
+          "title": "Review checklist",
+          "footer": "Ticks apply to the bytes under review; a republish starts clean. Required items gate approving, listing and verifying. Realm access needs the realm item too.",
+          "items": "const.checklist",
+          "primary": "{item.label}",
+          "secondary": "{item.detail}",
+          "badges": [
+            {
+              "text": "Required",
+              "when": "item.required",
+              "tone": "warning"
+            },
+            {
+              "text": "Realm trust",
+              "when": "item.realmOnly",
+              "tone": "info"
+            }
+          ],
+          "toggle": {
+            "value": "{data.detail.checklist[@item.id]}",
+            "label": "{item.label}",
+            "on": {
+              "id": "tick",
+              "label": "Tick",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "checklist",
+                "version": "{data.detail.reviewVersion}",
+                "itemId": "{item.id}",
+                "checked": true
+              },
+              "success": "Ticked",
+              "reload": true
+            },
+            "off": {
+              "id": "untick",
+              "label": "Untick",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "checklist",
+                "version": "{data.detail.reviewVersion}",
+                "itemId": "{item.id}",
+                "checked": false
+              },
+              "success": "Unticked",
+              "reload": true
+            }
+          },
+          "count": false
+        },
+        {
+          "type": "list",
+          "title": "Versions",
+          "footer": "Review status is per listing and decides who can install. Trust is per version and decides what the code can reach once installed. Granting realm trust signs a version to run inside the app realm instead of the sandbox; super staff only, audited.",
+          "items": "data.detail.versions",
+          "primary": "v{item.version}",
+          "secondary": "{item.reviewState:title} · {item.trust|'sandbox'} · {item.activeInstalls:number} running, {item.installCount:number} ever",
+          "tertiary": "Published {item.publishedAt:datetime}",
+          "badges": [
+            {
+              "text": "Realm trust",
+              "when": "item.trust == realm",
+              "tone": "info"
+            },
+            {
+              "text": "Stopped",
+              "when": "item.revoked",
+              "tone": "error"
+            },
+            {
+              "text": "Grandfathered",
+              "when": "item.grandfathered",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "review",
+              "label": "Review this version",
+              "icon": "arrow.triangle.branch|account_tree",
+              "navigate": {
+                "screen": "core.staff.pluginReview",
+                "params": {
+                  "listingId": "{params.listingId}",
+                  "version": "{item.version}"
+                }
+              }
+            },
+            {
+              "id": "grant",
+              "label": "Grant realm trust",
+              "icon": "checkmark.seal|verified",
+              "when": "staff.super && item.reviewState == approved && item.trust != realm && !item.revoked",
+              "url": "/api/marketplace/admin/trust",
+              "confirm": "Realm trust signs v{item.version} to run in the page itself, where the sandbox iframe and CSP no longer separate it from user data. Sandbox is the default; realm needs a reason you could defend afterwards.",
+              "body": {
+                "listingId": "{params.listingId}",
+                "version": "{item.version}"
+              },
+              "success": "v{item.version} signed for the app realm",
+              "reload": true
+            },
+            {
+              "id": "ungrant",
+              "label": "Return to the sandbox",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "staff.super && item.trust == realm",
+              "url": "/api/marketplace/admin/trust",
+              "body": {
+                "listingId": "{params.listingId}",
+                "version": "{item.version}",
+                "action": "revoke"
+              },
+              "success": "v{item.version} returned to the sandbox",
+              "reload": true
+            },
+            {
+              "id": "stop",
+              "label": "Stop these bytes",
+              "icon": "stop.circle|block",
+              "destructive": true,
+              "when": "!item.revoked && item.activeInstalls",
+              "url": "/api/marketplace/admin/reviews",
+              "confirm": "{item.activeInstalls:number} site(s) are running v{item.version}. Stopping it makes them render a placeholder on next load.",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "revoke-version",
+                "version": "{item.version}"
+              },
+              "success": "Stopped",
+              "reload": true
+            },
+            {
+              "id": "allow",
+              "label": "Allow again",
+              "icon": "play.circle|play_circle",
+              "when": "item.revoked",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "unrevoke-version",
+                "version": "{item.version}"
+              },
+              "success": "Allowed to run again",
+              "reload": true
+            }
+          ],
+          "count": true,
+          "empty": "No versions."
+        },
+        {
+          "type": "actions",
+          "title": "Verdict on the version under review",
+          "footer": "Approving makes these bytes the version new installs receive. Existing installs are pinned and do not move. A pending version is never installed by anyone but its publisher, so an update cannot ship past review.",
+          "items": [
+            {
+              "id": "approve",
+              "label": "Approve this version",
+              "icon": "checkmark.circle|check_circle",
+              "when": "!data.detail.checklistOutstanding && data.detail.versions[version=data.detail.reviewVersion].reviewState != approved",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "approve-version",
+                "version": "{data.detail.reviewVersion}"
+              },
+              "success": "Approved",
+              "reload": true
+            },
+            {
+              "id": "rejectVersion",
+              "label": "Reject this version",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "url": "/api/marketplace/admin/reviews",
+              "prompt": [
+                {
+                  "key": "category",
+                  "label": "Rejection reason",
+                  "kind": "select",
+                  "required": false,
+                  "optionsFrom": {
+                    "items": "const.rejectionCategories",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "comment",
+                  "label": "Comment (required for Other)",
+                  "kind": "multiline"
+                }
+              ],
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "reject-version",
+                "version": "{data.detail.reviewVersion}",
+                "category": "{form.category}",
+                "reason": "{form.comment}"
+              },
+              "success": "Rejected",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Marketplace listing",
+          "footer": "Listing makes the plugin browsable and installable by every workspace: the step that puts the code in front of customers. Delist pulls it and blocks new installs; existing installs keep working. Unverify only drops the badge. Reject notifies the publisher. None of these stop code already running.",
+          "items": [
+            {
+              "id": "start",
+              "label": "Start review",
+              "icon": "play.circle|play_circle",
+              "when": "data.detail.reviewStatus == submitted",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "start-review"
+              },
+              "success": "Marked in review",
+              "reload": true
+            },
+            {
+              "id": "list",
+              "label": "List in marketplace",
+              "icon": "storefront|storefront",
+              "when": "data.detail.reviewStatus != listed,verified && !data.detail.checklistOutstanding",
+              "url": "/api/marketplace/admin/reviews",
+              "confirm": "This makes the plugin browsable and installable by every workspace.",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "list"
+              },
+              "success": "Listed: installable by every workspace",
+              "reload": true
+            },
+            {
+              "id": "verify",
+              "label": "Verify (badge)",
+              "icon": "checkmark.seal|verified",
+              "when": "data.detail.reviewStatus != verified && !data.detail.checklistOutstanding",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "verify"
+              },
+              "success": "Verified",
+              "reload": true
+            },
+            {
+              "id": "declineVerification",
+              "label": "Decline verification",
+              "icon": "xmark.seal|cancel",
+              "when": "data.detail.verificationRequest.state == pending",
+              "url": "/api/marketplace/admin/reviews",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Why is verification declined?",
+                  "kind": "multiline",
+                  "required": true,
+                  "help": "The publisher is told this, and cannot ask again for 30 days."
+                }
+              ],
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "decline-verification",
+                "reason": "{form.reason}"
+              },
+              "success": "Verification declined",
+              "reload": true
+            },
+            {
+              "id": "delist",
+              "label": "Delist",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "data.detail.reviewStatus == listed,verified",
+              "url": "/api/marketplace/admin/reviews",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Comment",
+                  "kind": "multiline"
+                }
+              ],
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "delist",
+                "reason": "{form.reason}"
+              },
+              "success": "Delisted: back in review",
+              "reload": true
+            },
+            {
+              "id": "unverify",
+              "label": "Unverify",
+              "icon": "minus.circle|remove",
+              "when": "data.detail.reviewStatus == verified",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "unverify"
+              },
+              "success": "Badge removed",
+              "reload": true
+            },
+            {
+              "id": "reject",
+              "label": "Reject the listing",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "url": "/api/marketplace/admin/reviews",
+              "prompt": [
+                {
+                  "key": "category",
+                  "label": "Rejection reason",
+                  "kind": "select",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "const.rejectionCategories",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "comment",
+                  "label": "Comment (required for Other)",
+                  "kind": "multiline"
+                }
+              ],
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "reject",
+                "category": "{form.category}",
+                "reason": "{form.comment}"
+              },
+              "success": "Rejected",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Danger zone",
+          "footer": "Taking a plugin down stops running installs on next load.",
+          "items": [
+            {
+              "id": "takedown",
+              "label": "Take down",
+              "icon": "exclamationmark.octagon|report",
+              "destructive": true,
+              "when": "!data.detail.hidden",
+              "url": "/api/marketplace/admin/reviews",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "confirm": "Running installs stop on next load.",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "hide",
+                "reason": "{form.reason}"
+              },
+              "success": "Taken down",
+              "reload": true
+            },
+            {
+              "id": "restore",
+              "label": "Restore",
+              "icon": "arrow.uturn.backward|undo",
+              "when": "data.detail.hidden",
+              "url": "/api/marketplace/admin/reviews",
+              "body": {
+                "listingId": "{params.listingId}",
+                "action": "unhide",
+                "reason": ""
+              },
+              "success": "Restored",
+              "reload": true
+            }
+          ]
         }
       ]
     }

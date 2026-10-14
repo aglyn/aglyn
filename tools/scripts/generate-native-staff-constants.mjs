@@ -18,7 +18,8 @@
  * their values into `libs/native/screens/staff.screens.json`: the probe
  * texts as the `constants` of `core.staff.health`, the lock and cancellation
  * reasons a route insists on as the `constants` of the screens that offer
- * them, and the whole `core.staff.maintenance` screen, one block group per job. A reworded
+ * them, the plugin review checklist, rejection reasons and status texts as the
+ * `constants` of `core.staff.pluginReview`, and the whole `core.staff.maintenance` screen, one block group per job. A reworded
  * consequence or a new confirmation phrase cannot drift from the route that
  * enforces it. Values cross, never code.
  */
@@ -51,7 +52,29 @@ export async function staffSources() {
   const lockdown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/lockdown.ts'))
   const cancel = await jiti.import(join(ROOT, 'apps/console/constants/subscription-cancel.ts'))
   const options = (codes, labels) => codes.map((value) => ({ value, label: labels[value] }))
+  const model = (file) => jiti.import(join(ROOT, `libs/plugins/marketplace/src/lib/model/${file}.ts`))
+  const checklist = await model('plugin-review-checklist')
+  const rejections = await model('plugin-rejection-categories')
+  const statuses = await model('plugin-review-status')
+  const attestation = await model('publisher-attestation')
   return {
+    pluginReview: {
+      checklist: checklist.PLUGIN_REVIEW_CHECKLIST.map(({ id, label, detail, required, realmOnly }) => ({
+        id,
+        label,
+        detail,
+        required,
+        realmOnly: realmOnly === true,
+      })),
+      rejectionCategories: rejections.PLUGIN_REJECTION_CATEGORIES.map(({ id, label, guidance, requiresComment }) => ({
+        value: id,
+        label,
+        guidance,
+        requiresComment: requiresComment === true,
+      })),
+      statuses: statuses.REVIEW_STATUS_MEANINGS,
+      attestation: Object.fromEntries(attestation.PUBLISHER_ATTESTATION.map(({ id, label }) => [id, label])),
+    },
     lockReasons: options(lockdown.LOCKDOWN_REASON_CODES, lockdown.LOCKDOWN_REASON_LABELS),
     cancelReasons: options(cancel.SUBSCRIPTION_CANCEL_REASON_CODES, cancel.SUBSCRIPTION_CANCEL_REASON_LABELS),
     probes: Object.fromEntries(
@@ -203,6 +226,7 @@ const replace = (id, change) => {
 }
 replace('core.staff.health', (screen) => ({ ...screen, constants: { probes: sources.probes } }))
 replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons } }))
+replace('core.staff.pluginReview', (screen) => ({ ...screen, constants: sources.pluginReview }))
 replace('core.staff.site', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons } }))
 replace('core.staff.maintenance', () => maintenanceScreen(sources.jobs, sources.reasonMin))
 
