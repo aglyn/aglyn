@@ -296,7 +296,7 @@ class Checkout(
    * printed here, `none` when the customer declined. "No receipt" never holds
    * the next customer, so its note is best-effort. True when the sale is done.
    */
-  suspend fun sendReceipt(channel: String, to: String? = null): Boolean {
+  suspend fun sendReceipt(channel: String, to: String? = null, marketingOptIn: Boolean = false): Boolean {
     if (mutable.value.busy) return false
     if (channel == "none" || channel == "print") {
       runCatching { api.payment(mutable.value.opened.orderId, SaleStep.Receipt(channel)) }
@@ -305,7 +305,7 @@ class Checkout(
     }
     mutable.update { it.copy(busy = true, notice = null) }
     return try {
-      api.payment(mutable.value.opened.orderId, SaleStep.Receipt(channel, to?.trim()))
+      api.payment(mutable.value.opened.orderId, SaleStep.Receipt(channel, to?.trim(), marketingOptIn))
       mutable.update { it.copy(busy = false, notice = Notice(NoticeTone.SUCCESS, if (channel == "sms") "Receipt texted." else "Receipt emailed.")) }
       true
     } catch (error: Throwable) {

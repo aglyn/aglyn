@@ -46,6 +46,7 @@ struct RegisterOpsSheet: View {
           .accessibilityIdentifier("pos-lock")
         }
         Section("Shift") { ShiftControls(model: model) }
+        DisplayDevicesSection(model: model)
         LastReceiptSection(model: model)
         Section("Returns") {
           Button("Return items") { returning = true }
@@ -502,5 +503,101 @@ private struct LastReceiptSection: View {
         Text("The next sale you finish shows here.").font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }
+  }
+}
+
+/// The register's paired screens: whether a customer display is connected, who is paired, and a code to pair another.
+private struct DisplayDevicesSection: View {
+  let model: RegisterModel
+
+  var body: some View {
+    let display = model.display
+    Section("Customer display and kiosk") {
+      StatusChip(display.connected ? "Display connected" : "No display connected", tone: display.connected ? .success : .neutral)
+        .accessibilityIdentifier("pos-display-status")
+      if let notice = display.notice { AglynNotice(notice, tone: .success) { display.notice = nil } }
+      if let error = display.error { AglynNotice(error, tone: .warning) }
+      ForEach(display.devices) { device in
+        HStack {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(device.label).font(AglynFont.body)
+            Text(
+              "\(device.mode == .kiosk ? "Self-service kiosk" : "Customer display") · \(seen(device))"
+            )
+            .font(AglynFont.caption).foregroundStyle(.secondary)
+          }
+          Spacer()
+          Button("Sign out", role: .destructive) { Task { await display.revoke(device.id) } }
+            .buttonStyle(.borderless).disabled(display.busy)
+        }
+      }
+      Button("Pair a customer display") { Task { await display.newPairingCode(.display) } }
+        .disabled(model.register == nil || display.busy)
+        .accessibilityIdentifier("pos-pair-display")
+      Button("Pair a self-service kiosk") { Task { await display.newPairingCode(.kiosk) } }
+        .disabled(model.register == nil || display.busy)
+        .accessibilityIdentifier("pos-pair-kiosk")
+      if display.devices.count > 1 {
+        Button("Sign out every screen", role: .destructive) { Task { await display.revoke("*") } }.disabled(display.busy)
+      }
+    }
+    .task(id: model.register?.id) { await display.loadDevices() }
+    .sheet(isPresented: Binding(get: { display.pairing != nil }, set: { if !$0 { display.closePairing() } })) {
+      if let pairing = display.pairing {
+        PairingCodeSheet(model: model, pairing: pairing, mode: display.pairingMode)
+      }
+    }
+  }
+
+  private func seen(_ device: PosPairedDevice) -> String {
+    device.connected(now: Double(nowMs())) ? "connected" : "last seen \(Date(timeIntervalSince1970: device.lastSeenAtMs / 1000).formatted(date: .abbreviated, time: .shortened))"
+  }
+}
+
+/// The six-digit code a screen enters to pair, good for ten minutes and usable once.
+private struct PairingCodeSheet: View {
+  let model: RegisterModel
+  let pairing: PosPairingCode
+  let mode: PosDeviceMode
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: AglynSpace.three) {
+        Text(mode == .kiosk ? "Pair a self-service kiosk" : "Pair a customer display").font(AglynFont.title2)
+        Text(pairing.spoken)
+          .font(.system(size: 56, weight: .bold, design: .rounded)).monospacedDigit()
+          .accessibilityIdentifier("pairing-code")
+        Text(
+          mode == .kiosk
+            ? "On the tablet customers order from, choose Self-service kiosk and enter this code."
+            : "On the tablet facing your customer, choose Customer display and enter this code."
+        )
+        .multilineTextAlignment(.center).foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+          Text("Good for")
+          Text(Date(timeIntervalSince1970: pairing.expiresAtMs / 1000), style: .timer).monospacedDigit()
+          Text("and works once.")
+        }
+        .font(AglynFont.caption).foregroundStyle(.secondary)
+        Button("New code") { Task { await model.display.newPairingCode(mode) } }.buttonStyle(.bordered)
+        Spacer(minLength: 0)
+      }
+      .padding(AglynSpace.three)
+      .navigationTitle("Pairing code")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") {
+            model.display.closePairing()
+            Task { await model.display.loadDevices() }
+            dismiss()
+          }
+        }
+      }
+    }
+    .frame(minWidth: 420, minHeight: 440)
   }
 }

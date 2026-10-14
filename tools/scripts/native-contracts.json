@@ -585,6 +585,20 @@
         "FIRST_PARTY_PLUGINS"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-pos.ts": {
+      "types": [
+        "PosDisplayMode",
+        "PosDisplayLine",
+        "PosDisplayCart",
+        "PosDisplayResponse",
+        "PosDisplayState"
+      ],
+      "values": [
+        "POS_DISPLAY_MAX_LINES",
+        "POS_DISPLAY_PAIRING_TTL_MS",
+        "POS_DISPLAY_THANKS_MS"
+      ]
+    },
     "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts": {
       "types": [
         "PosShift",

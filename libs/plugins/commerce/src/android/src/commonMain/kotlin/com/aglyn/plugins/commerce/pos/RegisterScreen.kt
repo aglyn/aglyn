@@ -54,6 +54,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -141,6 +142,7 @@ fun RegisterScreen(context: NativePluginContext) {
       uid = context.uid,
       offlineApi = ConsolePosOfflineApi(context.api, hostId),
       returnsApi = ConsolePosReturnsApi(context.api, hostId),
+      displayApi = ConsolePosDisplayApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
@@ -162,6 +164,13 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
 
   // Charging from the phone's basket sheet moves to checkout; the sheet stays shut after it.
   LaunchedEffect(model.checkout) { if (model.checkout != null) basketOpen = false }
+
+  // The paired display follows the basket, once it has settled for a moment.
+  val openState = model.checkout?.state?.collectAsState()?.value
+  LaunchedEffect(model.cart, openState?.sale, openState?.tipCents, model.display.connected, model.display.asking != null) {
+    delay(400)
+    model.mirrorToDisplay()
+  }
 
   // The toast fades on its own.
   LaunchedEffect(model.toast) {

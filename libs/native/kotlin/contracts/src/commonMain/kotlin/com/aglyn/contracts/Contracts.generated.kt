@@ -1724,6 +1724,97 @@ internal object PosDeviceModeSerializer :
     RawEnumSerializer<PosDeviceMode>("com.aglyn.contracts.PosDeviceMode", PosDeviceMode.entries, PosDeviceMode.UNKNOWN, { it.raw })
 
 @Serializable
+data class PosDisplayCart(
+    val discountCents: Double,
+    val dueCents: Double? = null,
+    val itemsCents: Double,
+    val lines: List<PosDisplayLine>,
+    val paidCents: Double? = null,
+    val taxCents: Double,
+    val tipCents: Double? = null,
+    val totalCents: Double,
+)
+
+@Serializable
+data class PosDisplayLine(
+    val amountCents: Double,
+    val name: String,
+    val quantity: Double,
+    val variantLabel: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosDisplayModeSerializer::class)
+enum class PosDisplayMode(val raw: String) {
+    CART("cart"),
+    IDLE("idle"),
+    PROCESSING("processing"),
+    RECEIPT("receipt"),
+    THANKS("thanks"),
+    TIP("tip"),
+    UNKNOWN(""),
+}
+
+internal object PosDisplayModeSerializer :
+    RawEnumSerializer<PosDisplayMode>("com.aglyn.contracts.PosDisplayMode", PosDisplayMode.entries, PosDisplayMode.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosDisplayResponse(
+    val atMs: Double,
+    val email: String? = null,
+    val marketingOptIn: Boolean? = null,
+    val phone: String? = null,
+    val promptId: String,
+    val receiptChannel: PosReceiptChannel? = null,
+    val tipCents: Double? = null,
+    val tipChoice: PosDisplayResponseTipChoice? = null,
+    val tipPercent: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosDisplayResponseTipChoiceSerializer::class)
+enum class PosDisplayResponseTipChoice(val raw: String) {
+    CUSTOM("custom"),
+    NONE("none"),
+    PERCENT("percent"),
+    UNKNOWN(""),
+}
+
+internal object PosDisplayResponseTipChoiceSerializer :
+    RawEnumSerializer<PosDisplayResponseTipChoice>("com.aglyn.contracts.PosDisplayResponseTipChoice", PosDisplayResponseTipChoice.entries, PosDisplayResponseTipChoice.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosDisplayState(
+    val cart: PosDisplayCart? = null,
+    val currency: String? = null,
+    val mode: PosDisplayMode,
+    val processing: PosDisplayStateProcessing? = null,
+    val promptId: String? = null,
+    val receipt: PosDisplayStateReceipt? = null,
+    val response: PosDisplayResponse? = null,
+    val tip: PosDisplayStateTip? = null,
+    val updatedAtMs: Double,
+)
+
+@Serializable
+data class PosDisplayStateProcessing(
+    val message: String,
+)
+
+@Serializable
+data class PosDisplayStateReceipt(
+    val channels: List<PosReceiptChannel>,
+    val offerMarketing: Boolean,
+)
+
+@Serializable
+data class PosDisplayStateTip(
+    val allowCustom: Boolean,
+    val baseCents: Double,
+    val percentages: List<Double>,
+)
+
+@Serializable
 data class PosKioskCatalog(
     val categories: List<PosKioskCategory>,
     val currency: String,
@@ -2494,6 +2585,9 @@ internal data class ContractValuesPart3(
 @Serializable
 internal data class ContractValuesPart4(
     @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
+    @SerialName("POS_DISPLAY_MAX_LINES") val posDisplayMaxLines: Long,
+    @SerialName("POS_DISPLAY_PAIRING_TTL_MS") val posDisplayPairingTtlMs: Double,
+    @SerialName("POS_DISPLAY_THANKS_MS") val posDisplayThanksMs: Long,
     @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
     @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
@@ -2538,13 +2632,13 @@ internal data class ContractValuesPart4(
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
     @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
-    @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
-    @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
-    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
+    @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
+    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
@@ -2709,6 +2803,9 @@ class ContractValues internal constructor(
     val outreachTaskTitleMax: Long get() = part3.outreachTaskTitleMax
     val paymentAcceptedMaxLength: Long get() = part3.paymentAcceptedMaxLength
     val posCashEventLabels: Map<String, String> get() = part4.posCashEventLabels
+    val posDisplayMaxLines: Long get() = part4.posDisplayMaxLines
+    val posDisplayPairingTtlMs: Double get() = part4.posDisplayPairingTtlMs
+    val posDisplayThanksMs: Long get() = part4.posDisplayThanksMs
     val posKioskCatalogLimit: Long get() = part4.posKioskCatalogLimit
     val posKioskDoneSeconds: Long get() = part4.posKioskDoneSeconds
     val posKioskIdleSecondsDefault: Long get() = part4.posKioskIdleSecondsDefault
@@ -2753,9 +2850,9 @@ class ContractValues internal constructor(
     val submissionFilterHeaders: Map<String, String> get() = part4.submissionFilterHeaders
     val submissionListQuery: ListQueryDeclaration get() = part4.submissionListQuery
     val submissionReadOptions: List<ListFilterOption> get() = part4.submissionReadOptions
-    val suppressionListQuery: ListQueryDeclaration get() = part4.suppressionListQuery
-    val taskListDeclaration: ListQueryDeclaration get() = part4.taskListDeclaration
-    val templateKindOptions: List<ListFilterOption> get() = part4.templateKindOptions
+    val suppressionListQuery: ListQueryDeclaration get() = part5.suppressionListQuery
+    val taskListDeclaration: ListQueryDeclaration get() = part5.taskListDeclaration
+    val templateKindOptions: List<ListFilterOption> get() = part5.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part5.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part5.templateListQuery
     val tenantEmailCollection: String get() = part5.tenantEmailCollection

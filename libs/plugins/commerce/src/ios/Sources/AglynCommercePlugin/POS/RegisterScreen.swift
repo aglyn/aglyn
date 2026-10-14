@@ -96,6 +96,11 @@ struct RegisterScreen: View {
       }
     }
     .animation(.default, value: model.toast)
+    // The paired display follows the basket, once it has settled for a moment.
+    .task(id: DisplayMirrorKey(model: model)) {
+      try? await Task.sleep(for: .milliseconds(400))
+      if !Task.isCancelled { await model.mirrorToDisplay() }
+    }
     .task {
       model.start()
     }
@@ -399,5 +404,23 @@ struct ItemSheetView: View {
     }
     sheet.problem = nil
     model.sheet = sheet
+  }
+}
+
+/// Everything the customer display shows, so a change to any of it re-mirrors.
+private struct DisplayMirrorKey: Equatable {
+  let cart: Cart
+  let sale: PosSale?
+  let tipCents: Int
+  let connected: Bool
+  let asking: Bool
+
+  @MainActor
+  init(model: RegisterModel) {
+    cart = model.cart
+    sale = model.checkout?.sale
+    tipCents = model.checkout?.tipCents ?? 0
+    connected = model.display.connected
+    asking = model.display.asking != nil
   }
 }

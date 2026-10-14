@@ -74,6 +74,10 @@ final class RegisterModel {
   @ObservationIgnored let lastReceipt: PosLastReceiptModel
   @ObservationIgnored private var tillOffline: PosOfflineModel!
   @ObservationIgnored private var tillReturns: PosReturnModel!
+  @ObservationIgnored private var tillDisplay: PosDisplayControl!
+  /// The display is showing the basket (so an emptied basket tells it to go idle).
+  @ObservationIgnored private var displayShowsBasket = false
+  @ObservationIgnored private var displayShowsProcessing = false
   /// Who is ringing: the cashier a PIN switched in, and the idle lock.
   var cashier: PosCashier { tillCashier }
   /// The register's shift and its drawer.
@@ -82,11 +86,14 @@ final class RegisterModel {
   var offline: PosOfflineModel { tillOffline }
   /// The return being rung at the register.
   var returns: PosReturnModel { tillReturns }
+  /// The paired customer display and kiosks.
+  var display: PosDisplayControl { tillDisplay }
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
-    uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil
+    uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil,
+    displayAPI: PosDisplayAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
@@ -110,6 +117,8 @@ final class RegisterModel {
       shiftID: { [weak self] in self?.tillShift.shift?.id }, assertion: { [weak cashier] in cashier?.assertion })
     offline.networkSink = { [weak self] failed in if failed { self?.online = false } }
     tillOffline = offline
+    tillDisplay = PosDisplayControl(
+      api: displayAPI ?? ConsolePosDisplayAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id })
     tillReturns = PosReturnModel(
       api: returnsAPI ?? ConsolePosReturnsAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id },
       assertion: { [weak cashier] in cashier?.assertion })
@@ -170,6 +179,7 @@ final class RegisterModel {
       if Task.isCancelled { return }
       await cashier.tick()
       if online, offline.kitIsStale { await offline.refreshKit() }
+      if online { await display.check() }
     }
   }
 
@@ -211,6 +221,10 @@ final class RegisterModel {
     store.registerID = next.id
     cart = store.cart(next.id)
     lastReceipt.watch(registerID: next.id)
+    display.reset()
+    displayShowsBasket = false
+    displayShowsProcessing = false
+    Task { await display.check() }
     resumePendingSale(next)
     Task { await shift.refresh() }
   }
@@ -401,6 +415,66 @@ final class RegisterModel {
         store.savePendingSale(current.id, nil)
       }
     }
+  }
+
+  // MARK: The customer display
+
+  /// Mirrors the basket (and the open sale's totals) onto a connected display, once the basket has settled.
+  func mirrorToDisplay() async {
+    guard display.connected, display.asking == nil else { return }
+    if checkout?.sale.status == "paid" {
+      displayShowsBasket = false
+      displayShowsProcessing = false
+      return
+    }
+    // A card payment waiting on the reader: the display says so rather than showing the balance.
+    if checkout?.inFlight.contains(where: { $0.method.hasPrefix("card") }) == true {
+      if !displayShowsProcessing {
+        displayShowsProcessing = true
+        await display.show(posDisplayProcessing(now: nowMs()))
+      }
+      return
+    }
+    displayShowsProcessing = false
+    if cart.isEmpty && !displayShowsBasket { return }
+    displayShowsBasket = !cart.isEmpty
+    await display.show(
+      posDisplayBasketState(cart: cart, sale: checkout?.sale, pendingTipCents: checkout?.tipCents ?? 0, now: nowMs()))
+  }
+
+  /// Asks the customer for a tip on the display and puts their answer on the tender.
+  func askTipOnDisplay() async {
+    guard let checkout, display.connected, checkout.amountCents > 0 else { return }
+    let prompt = posDisplayTipPrompt(
+      baseCents: checkout.amountCents, percentages: context?.settings.tipPercentages ?? [], now: nowMs())
+    guard let answer = await display.ask(prompt) else { return }
+    let cents = Int(answer.tipCents ?? 0)
+    checkout.customTip(cents)
+    toast = CheckoutNotice(tone: .info, message: cents > 0 ? "Tip: \(money(cents))" : "No tip")
+  }
+
+  /// Hands the receipt choice to the customer's screen when the store asks, then sends it as they chose.
+  func askReceiptOnDisplay(_ paid: Checkout) async {
+    guard display.connected, context?.settings.receiptDefault == .ask else { return }
+    let prompt = posDisplayReceiptPrompt(
+      smsAvailable: context?.smsReceipts == true, offerMarketing: context?.settings.displayMarketingOptIn ?? true, now: nowMs())
+    guard let answer = await display.ask(prompt), !Task.isCancelled else {
+      // The cashier took the receipt over, or the customer walked away: the screen still ends on its thank-you.
+      await display.thank()
+      return
+    }
+    let done: Bool
+    switch answer.receiptChannel {
+    case .email?:
+      guard let email = answer.email else { return }
+      done = await paid.sendReceipt(channel: "email", to: email, marketingOptIn: answer.marketingOptIn == true)
+    case .sms?:
+      guard let phone = answer.phone else { return }
+      done = await paid.sendReceipt(channel: "sms", to: phone)
+    case .print?: done = await paid.sendReceipt(channel: "print")
+    default: done = await paid.sendReceipt(channel: "none")
+    }
+    if done, checkout === paid { finished() }
   }
 
   /// The sale was voided: back to the basket, which is kept for another try.

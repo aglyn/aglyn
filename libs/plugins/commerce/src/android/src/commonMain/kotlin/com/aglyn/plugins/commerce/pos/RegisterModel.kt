@@ -65,6 +65,8 @@ class RegisterModel(
   offlineApi: PosOfflineApi = UnreachablePosOffline,
   /** The return route. */
   returnsApi: PosReturnsApi = OfflinePosReturns,
+  /** The customer display route. */
+  displayApi: PosDisplayApi = OfflinePosDisplay,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -89,6 +91,13 @@ class RegisterModel(
   var offlineCashOpen by mutableStateOf(false)
   /** The return being rung at the register. */
   val returns = PosReturnModel(returnsApi, scope, { register?.id }, { cashier.assertion })
+
+  /** The paired customer display and kiosks. */
+  val display = PosDisplayControl(displayApi, scope, { register?.id })
+
+  /** The display is showing the basket (so an emptied basket tells it to go idle). */
+  private var displayShowsBasket = false
+  private var displayShowsProcessing = false
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
@@ -180,6 +189,7 @@ class RegisterModel(
       delay(CASHIER_TICK_MS)
       cashier.tick()
       if (online && offline.kitIsStale) offline.refreshKit()
+      if (online) display.check()
     }
   }
 
@@ -216,6 +226,10 @@ class RegisterModel(
     cart = store.cart(next.id)
     holds = store.holds(next.id)
     lastReceipt.watch(next.id)
+    display.reset()
+    displayShowsBasket = false
+    displayShowsProcessing = false
+    scope.launch { display.check() }
     resumePendingSale(next)
     shift.refresh()
   }
@@ -505,6 +519,61 @@ class RegisterModel(
         else -> store.savePendingSale(current.id, null)
       }
     }
+  }
+
+  // The customer display.
+
+  /** Mirrors the basket (and the open sale's totals) onto a connected display, once the basket has settled. */
+  suspend fun mirrorToDisplay() {
+    if (!display.connected || display.asking != null) return
+    val open = checkout?.state?.value
+    if (open?.sale?.status == "paid") {
+      displayShowsBasket = false
+      displayShowsProcessing = false
+      return
+    }
+    // A card payment waiting on the reader: the display says so rather than showing the balance.
+    if (open?.inFlight?.any { it.method.startsWith("card") } == true) {
+      if (!displayShowsProcessing) {
+        displayShowsProcessing = true
+        display.show(posDisplayProcessing(nowMs()))
+      }
+      return
+    }
+    displayShowsProcessing = false
+    if (cart.isEmpty && !displayShowsBasket) return
+    displayShowsBasket = !cart.isEmpty
+    display.show(posDisplayBasketState(cart, open?.sale, open?.tipCents ?: 0, nowMs()))
+  }
+
+  /** Asks the customer for a tip on the display and puts their answer on the tender. */
+  suspend fun askTipOnDisplay() {
+    val open = checkout ?: return
+    val amount = open.state.value.amountCents
+    if (!display.connected || amount <= 0) return
+    val answer = display.ask(posDisplayTipPrompt(amount, context?.settings?.tipPercentages ?: emptyList(), nowMs())) ?: return
+    val cents = (answer.tipCents ?: 0.0).toLong()
+    open.customTip(cents)
+    toast = Notice(NoticeTone.INFO, if (cents > 0) "Tip: ${money(cents, currency)}" else "No tip")
+  }
+
+  /** Hands the receipt choice to the customer's screen when the store asks, then sends it as they chose. */
+  suspend fun askReceiptOnDisplay(paid: Checkout) {
+    val settings = context?.settings ?: return
+    if (!display.connected || settings.receiptDefault != ReceiptDefault.ASK) return
+    val answer = display.ask(posDisplayReceiptPrompt(context?.smsReceipts == true, settings.displayMarketingOptIn, nowMs()))
+    if (answer == null) {
+      // The cashier took the receipt over, or the customer walked away: the screen still ends on its thank-you.
+      display.thank()
+      return
+    }
+    val done = when (answer.receiptChannel) {
+      com.aglyn.contracts.PosReceiptChannel.EMAIL -> paid.sendReceipt("email", answer.email ?: return, answer.marketingOptIn == true)
+      com.aglyn.contracts.PosReceiptChannel.SMS -> paid.sendReceipt("sms", answer.phone ?: return)
+      com.aglyn.contracts.PosReceiptChannel.PRINT -> paid.sendReceipt("print")
+      else -> paid.sendReceipt("none")
+    }
+    if (done && checkout === paid) finished()
   }
 
   /** The sale was voided: back to the basket, which is kept for another try. */

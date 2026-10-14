@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -40,6 +41,8 @@ data class PosRegisterSettings(
   val tippingEnabled: Boolean = false,
   val tipPercentages: List<Double> = emptyList(),
   val receiptDefault: ReceiptDefault = ReceiptDefault.ASK,
+  /** Offer the store's marketing opt-in under the email field a customer types on the display. */
+  val displayMarketingOptIn: Boolean = true,
 )
 
 data class PosSmartReader(
@@ -133,6 +136,7 @@ fun readPosContext(body: JsonElement?): PosContext {
         "none" -> ReceiptDefault.NONE
         else -> ReceiptDefault.ASK
       },
+      displayMarketingOptIn = (settings["displayMarketingOptIn"] as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull != false,
     ),
     terminalAvailable = terminal["available"].bool(),
     testMode = terminal["testMode"].bool(),
@@ -220,7 +224,7 @@ sealed class SaleStep(val action: String, val startsPayment: Boolean) {
   data class Cancel(val paymentId: String) : SaleStep("cancel", false)
   data object Sale : SaleStep("sale", false)
   data object Void : SaleStep("void", false)
-  data class Receipt(val channel: String, val to: String? = null) : SaleStep("receipt", false)
+  data class Receipt(val channel: String, val to: String? = null, val marketingOptIn: Boolean = false) : SaleStep("receipt", false)
 
   fun body(hostId: String, orderId: String): JsonObject = buildJsonObject {
     put("hostId", hostId)
@@ -250,6 +254,7 @@ sealed class SaleStep(val action: String, val startsPayment: Boolean) {
       is Receipt -> {
         put("channel", step.channel)
         step.to?.let { put("to", it) }
+        if (step.marketingOptIn) put("marketingOptIn", true)
       }
       Sale, Void -> Unit
     }
