@@ -1340,6 +1340,172 @@
           }
         }
       ]
+    },
+    {
+      "id": "marketplace.publish",
+      "title": "Publish to the marketplace",
+      "subtitle": "Components, layouts, themes, dataset schemas and emails, and the whole site",
+      "icon": "square.and.arrow.up|upload",
+      "scope": "site",
+      "order": 49,
+      "load": {
+        "components": {
+          "query": {
+            "collection": "hosts/{site.id}/components",
+            "limit": 100
+          },
+          "optional": true
+        },
+        "layouts": {
+          "query": {
+            "collection": "hosts/{site.id}/layouts",
+            "limit": 100
+          },
+          "optional": true
+        },
+        "emails": {
+          "query": {
+            "collection": "hosts/{site.id}/emailTemplates",
+            "limit": 100
+          },
+          "optional": true
+        },
+        "emailScreens": {
+          "query": {
+            "collection": "hosts/{site.id}/screens",
+            "limit": 100,
+            "where": [
+              [
+                "kind",
+                "==",
+                "email"
+              ]
+            ]
+          },
+          "optional": true
+        },
+        "datasets": {
+          "query": {
+            "collection": "orgs/{org.id}/datasets",
+            "limit": 100
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Pick what to publish. Publishing offers the current published version so other organizations can install it; your site is unaffected."
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "The whole site",
+              "subtitle": "Every published page and the theme, as a template",
+              "icon": "globe|language",
+              "screen": "marketplace.publishTemplate"
+            },
+            {
+              "title": "The theme",
+              "subtitle": "This site’s colors, fonts and shapes",
+              "icon": "paintpalette|palette",
+              "screen": "marketplace.publishTheme"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Components",
+          "items": "data.components",
+          "count": false,
+          "filter": "!item.deletedAt",
+          "primary": "{item.displayName|item.name|item.$id}",
+          "icon": "square.and.arrow.up|upload",
+          "open": {
+            "screen": "marketplace.publishComponent",
+            "params": {
+              "id": "{item.$id}",
+              "name": "{item.displayName|item.name}",
+              "description": "{item.description}"
+            }
+          },
+          "empty": "This site has no components yet."
+        },
+        {
+          "type": "list",
+          "title": "Layouts",
+          "items": "data.layouts",
+          "count": false,
+          "filter": "!item.deletedAt",
+          "primary": "{item.displayName|item.name|item.$id}",
+          "icon": "square.and.arrow.up|upload",
+          "open": {
+            "screen": "marketplace.publishLayout",
+            "params": {
+              "id": "{item.$id}",
+              "name": "{item.displayName|item.name}",
+              "description": "{item.description}"
+            }
+          },
+          "empty": "This site has no layouts yet."
+        },
+        {
+          "type": "list",
+          "title": "Email templates",
+          "items": "data.emails",
+          "count": false,
+          "filter": "!item.deletedAt && item.versionId",
+          "primary": "{item.displayName|item.name|item.$id}",
+          "icon": "square.and.arrow.up|upload",
+          "open": {
+            "screen": "marketplace.publishEmailTemplate",
+            "params": {
+              "id": "{item.$id}",
+              "name": "{item.displayName|item.name}",
+              "description": "{item.description}"
+            }
+          },
+          "empty": "No email template has a saved design yet."
+        },
+        {
+          "type": "list",
+          "title": "Emails",
+          "items": "data.emailScreens",
+          "count": false,
+          "filter": "!item.deletedAt && item.versionId",
+          "primary": "{item.displayName|item.name|item.$id}",
+          "icon": "square.and.arrow.up|upload",
+          "open": {
+            "screen": "marketplace.publishEmailStarter",
+            "params": {
+              "id": "{item.$id}",
+              "name": "{item.displayName|item.name}",
+              "description": "{item.description}"
+            }
+          },
+          "empty": "No email has a saved design yet."
+        },
+        {
+          "type": "list",
+          "title": "Dataset schemas",
+          "items": "data.datasets",
+          "count": false,
+          "filter": "!item.deletedAt",
+          "primary": "{item.displayName|item.name|item.$id}",
+          "icon": "square.and.arrow.up|upload",
+          "open": {
+            "screen": "marketplace.publishDatasetSchema",
+            "params": {
+              "id": "{item.$id}",
+              "name": "{item.displayName|item.name}",
+              "description": "{item.description}"
+            }
+          },
+          "empty": "The workspace has no datasets yet."
+        }
+      ]
     }
   ]
 }

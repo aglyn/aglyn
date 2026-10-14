@@ -1072,7 +1072,7 @@
         "ios": { "module": "AglynMarketplacePlugin", "register": "registerMarketplaceNative" },
         "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
         "contributes": {
-          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter"],
+          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter"],
           "quickActions": ["marketplace.open"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page"]
         }

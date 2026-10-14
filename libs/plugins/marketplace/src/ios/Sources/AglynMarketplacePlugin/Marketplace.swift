@@ -23,6 +23,8 @@ let marketplaceBrowseScreen = "marketplace.browse"
 let marketplaceListingScreen = "marketplace.listing"
 let marketplaceInstalledScreen = "marketplace.installed"
 let marketplaceLicencesScreen = "marketplace.licenses"
+/// Publishing to the marketplace is a spec screen (marketplace.screens.json): what this site and the workspace can publish.
+let marketplacePublishScreen = "marketplace.publish"
 
 /// Workspace roles with `plugins.install` (`installPlugins`): the admin tier and editors.
 let installRoles: Set<String> = ["owner", "admin", "editor"]

@@ -114,7 +114,7 @@ final class MarketplaceTests: XCTestCase {
   func testThePublishScreensAreBundledAndFillTheSiteTemplateZone() throws {
     let specs = ScreenCatalog.load(from: .module)
     let ids = [
-      "marketplace.publishComponent", "marketplace.publishDatasetSchema", "marketplace.publishEmailStarter", "marketplace.publishEmailTemplate",
+      "marketplace.publish", "marketplace.publishComponent", "marketplace.publishDatasetSchema", "marketplace.publishEmailStarter", "marketplace.publishEmailTemplate",
       "marketplace.publishLayout", "marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publisherAgreement",
     ]
     XCTAssertEqual(specs.map(\.id).sorted(), ids)

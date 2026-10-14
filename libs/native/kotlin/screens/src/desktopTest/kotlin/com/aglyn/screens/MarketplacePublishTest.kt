@@ -207,4 +207,39 @@ class MarketplacePublishTest {
     assertEquals("site", spec("marketplace.publishLayout").scope)
     assertEquals(null, spec("marketplace.publishLayout").zones.firstOrNull())
   }
+
+  @Test
+  fun thePublishHubListsWhatThisSiteAndTheWorkspaceCanPublishAndOpensTheRightForm() {
+    val hub = spec("marketplace.publish")
+    val context = json(
+      """{"site":{"id":"h1"},"org":{"id":"o1"},"data":{
+        "components":[{"${'$'}id":"c1","displayName":"Hero","description":"Top band"},{"${'$'}id":"c2","displayName":"Gone","deletedAt":1}],
+        "layouts":[{"${'$'}id":"l1","displayName":"Main"}],
+        "emails":[{"${'$'}id":"e1","displayName":"Receipt","versionId":"v1"},{"${'$'}id":"e2","displayName":"Never saved"}],
+        "emailScreens":[{"${'$'}id":"s1","displayName":"Welcome","versionId":"v1","deletedAt":null}],
+        "datasets":[{"${'$'}id":"d1","name":"Menu items"},{"${'$'}id":"d2","displayName":"Staff"}]}}""",
+    )
+    fun rows(title: String): List<Triple<String, String, Map<String, String>>> {
+      val block = hub.blocks.first { it.title == title }
+      return ScreenValues.scopes(block.string("items").orEmpty(), null, block.string("filter"), context).map { scope ->
+        val open = block["open"] as JsonObject
+        Triple(ScreenValues.render(block.string("primary").orEmpty(), scope), open.str("screen").orEmpty(), renderParams(open["params"], scope))
+      }
+    }
+    assertEquals(listOf(Triple("Hero", "marketplace.publishComponent", mapOf("id" to "c1", "name" to "Hero", "description" to "Top band"))), rows("Components"))
+    assertEquals(listOf("Main"), rows("Layouts").map { it.first })
+    // Only an email with a saved design can be published: a design that was opened and never saved has nothing to publish.
+    assertEquals(listOf("Receipt"), rows("Email templates").map { it.first })
+    assertEquals(listOf("Welcome"), rows("Emails").map { it.first })
+    assertEquals("marketplace.publishEmailStarter", rows("Emails").single().second)
+    // A dataset is named as the Data page names it.
+    assertEquals(listOf("Menu items", "Staff"), rows("Dataset schemas").map { it.first })
+    assertEquals(listOf("marketplace.publishTemplate", "marketplace.publishTheme"), hub.blocks.first { it.type == "links" }.raw.arr("items").mapNotNull { it.str("screen") })
+    // What it reads: this site's collections, and the workspace's datasets.
+    val paths = (hub.raw.obj("load") as JsonObject).mapValues { (_, load) -> ((load as JsonObject).obj("query") as JsonObject).str("collection") }
+    assertEquals(
+      mapOf("components" to "hosts/{site.id}/components", "layouts" to "hosts/{site.id}/layouts", "emails" to "hosts/{site.id}/emailTemplates", "emailScreens" to "hosts/{site.id}/screens", "datasets" to "orgs/{org.id}/datasets"),
+      paths,
+    )
+  }
 }

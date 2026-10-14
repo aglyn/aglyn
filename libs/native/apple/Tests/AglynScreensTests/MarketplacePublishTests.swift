@@ -196,4 +196,41 @@ final class MarketplacePublishTests: XCTestCase {
     XCTAssertEqual(try spec("marketplace.publishLayout").scope, "site")
     XCTAssertTrue(try spec("marketplace.publishLayout").zones.isEmpty)
   }
+
+  func testThePublishHubListsWhatThisSiteAndTheWorkspaceCanPublishAndOpensTheRightForm() throws {
+    let hub = try spec("marketplace.publish")
+    let context: JSONValue = [
+      "site": ["id": "h1"], "org": ["id": "o1"],
+      "data": [
+        "components": [["$id": "c1", "displayName": "Hero", "description": "Top band"], ["$id": "c2", "displayName": "Gone", "deletedAt": 1]],
+        "layouts": [["$id": "l1", "displayName": "Main"]],
+        "emails": [["$id": "e1", "displayName": "Receipt", "versionId": "v1"], ["$id": "e2", "displayName": "Never saved"]],
+        "emailScreens": [["$id": "s1", "displayName": "Welcome", "versionId": "v1", "deletedAt": .null]],
+        "datasets": [["$id": "d1", "name": "Menu items"], ["$id": "d2", "displayName": "Staff"]],
+      ],
+    ]
+    func rows(_ title: String) throws -> [(name: String, screen: String, params: [String: String])] {
+      let block = try XCTUnwrap(hub.blocks.first { $0.title == title })
+      let open = try XCTUnwrap(block["open"])
+      return ScreenValues.scopes(items: block["items"]?.stringValue ?? "", within: nil, filter: block["filter"]?.stringValue, in: context).map { scope in
+        (
+          ScreenValues.render(block["primary"]?.stringValue ?? "", in: scope), open["screen"]?.stringValue ?? "",
+          renderParams(open["params"], in: scope)
+        )
+      }
+    }
+    let components = try rows("Components")
+    XCTAssertEqual(components.map(\.name), ["Hero"])
+    XCTAssertEqual(components.first?.screen, "marketplace.publishComponent")
+    XCTAssertEqual(components.first?.params, ["id": "c1", "name": "Hero", "description": "Top band"])
+    XCTAssertEqual(try rows("Layouts").map(\.name), ["Main"])
+    // Only an email with a saved design can be published: a design that was opened and never saved has nothing to publish.
+    XCTAssertEqual(try rows("Email templates").map(\.name), ["Receipt"])
+    XCTAssertEqual(try rows("Emails").map(\.name), ["Welcome"])
+    XCTAssertEqual(try rows("Emails").first?.screen, "marketplace.publishEmailStarter")
+    // A dataset is named as the Data page names it.
+    XCTAssertEqual(try rows("Dataset schemas").map(\.name), ["Menu items", "Staff"])
+    let links = try XCTUnwrap(hub.blocks.first { $0.type == "links" })
+    XCTAssertEqual(links["items"].array.compactMap { $0["screen"]?.stringValue }, ["marketplace.publishTemplate", "marketplace.publishTheme"])
+  }
 }
