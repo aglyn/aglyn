@@ -279,4 +279,55 @@ final class DataTests: XCTestCase {
     XCTAssertEqual(writer.updates.first?.data["displayName"] as? String, "Menu items")
     XCTAssertNil(writer.updates.first?.data["visibleTo"])
   }
+
+  // The console's own specs for the Image and Page field types (dataset-image-field.spec.ts, dataset-page-field.spec.ts).
+  func testImageFieldValues() {
+    for value in [
+      "media:host-1/m-1", "media:org:fiL5LrShn9/abc123", "media:org:fiL5LrShn9:host-1/abc123",
+      "media:org:fiL5LrShn9/abc123@f00d", "media:host-1/m-1@f00d", "/api/media/cdn/org:fiL5LrShn9/abc123",
+      "https://images.example.com/a.jpg",
+    ] { XCTAssertTrue(isDatasetImageValue(value), value) }
+    for value in [
+      "media:", "media:org:/abc", "media:org:a:b:c/abc", "media:host-1/", "media:host 1/m-1", "media:host-1/m-1/extra",
+      "http://example.com/a.jpg", "//evil.example/a.jpg", "javascript:alert(1)", "a bowl on a shelf", "",
+    ] { XCTAssertFalse(isDatasetImageValue(value), value) }
+  }
+
+  func testImagePreviewQualifiesAnOrganizationPhotoForTheSite() {
+    XCTAssertEqual(
+      datasetImagePreviewURL("media:org:o1/m1", origin: "https://console.test/", hostID: "h1")?.absoluteString,
+      "https://console.test/api/media/cdn/org:o1:h1/m1?w=320")
+    XCTAssertEqual(
+      datasetImagePreviewURL("media:h1/m1", origin: "https://console.test", hostID: "h2")?.absoluteString,
+      "https://console.test/api/media/cdn/h1/m1?w=320")
+    XCTAssertEqual(datasetImagePreviewURL("/api/media/cdn/h1/m1", origin: "https://console.test", hostID: nil)?.absoluteString, "https://console.test/api/media/cdn/h1/m1")
+    XCTAssertNil(datasetImagePreviewURL("", origin: "https://console.test", hostID: nil))
+  }
+
+  func testPageFieldValues() {
+    XCTAssertEqual(datasetPageValue("abc_12"), "screen:abc_12")
+    XCTAssertEqual(datasetPageScreenID("screen:abc_12"), "abc_12")
+    for value in ["", "abc", "/pricing", "screen:", "screen:a/b", "screen:a b", "collection:c1", "https://x.test"] {
+      XCTAssertNil(datasetPageScreenID(value), value)
+    }
+  }
+
+  func testPageAddressesAreLowercaseSegments() {
+    XCTAssertTrue(isRecordAddress("kitchen-remodeling"))
+    for value in ["", "Kitchen", "a--b", "-a", "a-", "a b", String(repeating: "a", count: 65)] { XCTAssertFalse(isRecordAddress(value), value) }
+  }
+
+  func testTheTypeMenuMapsNamedTypesOntoTheirStorageType() {
+    var definition = DatasetFieldDefinition(name: "Photo", type: .text)
+    XCTAssertEqual(datasetTypeSelection(definition), "text")
+    applyDatasetTypeSelection("custom:rating", to: &definition)
+    XCTAssertEqual(definition.type, .int32)
+    XCTAssertEqual(definition.customType, "rating")
+    XCTAssertEqual(datasetTypeSelection(definition), "custom:rating")
+    applyDatasetTypeSelection("custom:nope", to: &definition)
+    XCTAssertEqual(definition.customType, "rating")
+    applyDatasetTypeSelection("bool", to: &definition)
+    XCTAssertEqual(definition.type, .bool)
+    XCTAssertNil(definition.customType)
+  }
 }

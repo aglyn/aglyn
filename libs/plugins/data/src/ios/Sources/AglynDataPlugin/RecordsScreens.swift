@@ -370,7 +370,7 @@ private struct RecordsBody: View {
     switch sheet {
     case .edit(let recordID, let values):
       RecordEditorSheet(
-        dataset: dataset, recordID: recordID, start: values, references: references.choices, runner: runner
+        context: context, dataset: dataset, recordID: recordID, start: values, references: references.choices, runner: runner
       ) { inputs in
         let written = inputsForWrite(dataset.model, inputs)
         if let recordID {
@@ -485,6 +485,7 @@ struct RecordDetailView: View {
 
 /// The record editor: one typed input per field, as the console's record dialog draws them.
 private struct RecordEditorSheet: View {
+  let context: NativePluginContext
   let dataset: DatasetRow
   let recordID: String?
   let start: [String: String]
@@ -497,9 +498,11 @@ private struct RecordEditorSheet: View {
   @Environment(\.dismiss) private var dismiss
 
   init(
-    dataset: DatasetRow, recordID: String?, start: [String: String], references: [String: [FilterChoice]],
-    runner: PluginActionRunner, save: @escaping ([String: String]) async throws -> Void, onSaved: @escaping () -> Void
+    context: NativePluginContext, dataset: DatasetRow, recordID: String?, start: [String: String],
+    references: [String: [FilterChoice]], runner: PluginActionRunner,
+    save: @escaping ([String: String]) async throws -> Void, onSaved: @escaping () -> Void
   ) {
+    self.context = context
     self.dataset = dataset
     self.recordID = recordID
     self.start = start
@@ -523,7 +526,7 @@ private struct RecordEditorSheet: View {
         Section {
           ForEach(dataset.model.orderedFields, id: \.id) { id, field in
             RecordInput(
-              id: id, field: field, value: Binding(get: { inputs[id] ?? "" }, set: { next in
+              context: context, id: id, field: field, value: Binding(get: { inputs[id] ?? "" }, set: { next in
                 inputs[id] = next
                 errors[id] = nil
               }), error: errors[id], choices: references[id] ?? [])
@@ -569,6 +572,7 @@ private struct RecordEditorSheet: View {
 }
 
 private struct RecordInput: View {
+  let context: NativePluginContext
   let id: String
   let field: DatasetFieldDefinition
   @Binding var value: String
@@ -601,7 +605,14 @@ private struct RecordInput: View {
 
   @ViewBuilder
   private var input: some View {
-    if field.customType != nil {
+    // A named type's own input takes over (the declaring plugin's `Input`); values stay text, so the write path is unchanged.
+    if field.customType == datasetImageFieldType {
+      DatasetImageInput(context: context, label: label, value: $value)
+    } else if field.customType == datasetPageFieldType {
+      DatasetPageInput(context: context, label: label, value: $value)
+    } else if field.customType == datasetRatingFieldType {
+      DatasetRatingInput(label: label, value: $value)
+    } else if field.customType != nil {
       TextField(label, text: $value)
     } else if field.type == .bool {
       Picker(label, selection: $value) {

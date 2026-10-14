@@ -414,13 +414,11 @@ private struct FieldEditorSheet: View {
           Text("Shown to people editing records and wherever the field appears")
         }
         Section {
-          if let customType = draft.definition.customType {
-            AglynNotice("A \(customType) field: its type is set by the plugin that declares it.", tone: .neutral)
-          } else {
-            Picker("Type", selection: Binding(get: { draft.definition.type ?? .text }, set: { draft.definition.type = $0 })) {
-              ForEach(types, id: \.rawValue) { Text(ContractValues.shared.datasetFieldTypeLabels[$0.rawValue] ?? $0.rawValue).tag($0) }
-            }
+          Picker("Type", selection: Binding(get: { datasetTypeSelection(draft.definition) }, set: { applyDatasetTypeSelection($0, to: &draft.definition) })) {
+            ForEach(types, id: \.rawValue) { Text(ContractValues.shared.datasetFieldTypeLabels[$0.rawValue] ?? $0.rawValue).tag($0.rawValue) }
+            ForEach(datasetCustomTypes, id: \.name) { Text("\($0.label) (\($0.pluginID))").tag("custom:\($0.name)") }
           }
+          if draft.definition.customType == recordAddressFieldType { fillInFromSection }
           if draft.definition.type == .reference { referenceSection }
           Toggle("Required", isOn: Binding(get: { draft.definition.required == true }, set: { draft.definition.required = $0 ? true : nil }))
           TextField(
@@ -447,6 +445,19 @@ private struct FieldEditorSheet: View {
     }
     .frame(minWidth: 420, minHeight: 520)
     .accessibilityIdentifier("field-editor")
+  }
+
+  /// A page address fills in from another text field once, and stays put when the record is renamed.
+  @ViewBuilder
+  private var fillInFromSection: some View {
+    Picker("Fill in from", selection: Binding(get: { draft.definition.slugFrom ?? "" }, set: { draft.definition.slugFrom = $0.isEmpty ? nil : $0 })) {
+      Text("Nothing — type each address").tag("")
+      ForEach(model.orderedFields.filter { $0.id != draft.fieldID && $0.field.type == .text && $0.field.customType != recordAddressFieldType }, id: \.id) {
+        Text($0.field.label($0.id)).tag($0.id)
+      }
+    }
+    Text("An empty address fills in from this field once, and stays put when the record is renamed")
+      .font(AglynFont.caption).foregroundStyle(.secondary)
   }
 
   @ViewBuilder
