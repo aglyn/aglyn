@@ -911,7 +911,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   crmSettings: {
     '#assignment-rules': 'Assignment rules',
-    '#companies': 'Companies',
     '#default-owner': 'Default owner',
     '#email-capture': 'Email capture',
     '#recipes': 'Recipes',
@@ -1258,7 +1257,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#user-organizations': 'Organizations',
     '#users-accounts': 'Accounts',
     '#users-admin': 'Users admin',
-    '#whats-there': 'What\'s there',
   },
   taxServices: {
     '#connect': 'Connect',

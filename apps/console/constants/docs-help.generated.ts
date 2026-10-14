@@ -293,6 +293,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/email-campaigns/designed-emails',
     title: 'Designed emails',
   },
+  discountsAndCoupons: {
+    path: '/commerce-and-bookings/commerce/discounts-and-coupons',
+    title: 'Discounts and coupons',
+  },
   domainProviders: {
     path: '/developers/domain-providers',
     title: 'Domain providers',
@@ -612,6 +616,10 @@ export const DOCS_HELP_TOPICS = {
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
+  },
+  productReviews: {
+    path: '/commerce-and-bookings/commerce/product-reviews',
+    title: 'Product reviews',
   },
   productsWithAi: {
     path: '/ai/products-with-ai',
@@ -962,6 +970,7 @@ export const DOCS_HELP_ANCHORS = {
   deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#import-from-csv', '#creating-a-deal', '#type-and-lead-source', '#contact-roles', '#line-items', '#moving-winning-and-losing', '#a-won-deal-makes-its-contact-a-customer', '#a-deals-page', '#deal-properties', '#deals-on-a-record', '#files', '#related'],
   deliverabilityChecks: ['#no-mail-server', '#gateway-hold', '#transactional-mail', '#when-an-address-arrives', '#before-a-campaign-sends', '#before-a-one-to-one-email', '#sender-readiness', '#what-aglyn-never-does', '#related'],
   designedEmails: ['#create-a-template', '#find-a-template', '#duplicate-a-template', '#template-page', '#template-report', '#template-preview', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version', '#start-from-a-brief-instead'],
+  discountsAndCoupons: ['#add-a-discount', '#discount-types', '#product-discounts', '#automatic-promotions', '#discount-codes', '#use-limits', '#where-discounts-apply', '#coupons', '#import-and-export', '#show-the-code-field', '#what-shoppers-see', '#troubleshooting', '#related'],
   domainProviders: ['#choosing', '#limits', '#contract', '#wildcard', '#wildcard-dns', '#wildcard-certificates', '#wildcard-proxy', '#wildcard-env', '#wildcard-verify', '#wildcard-honesty', '#webhook', '#webhook-request', '#webhook-replies', '#webhook-bad-answers', '#webhook-rules', '#webhook-traefik', '#unconfigured', '#status-states', '#completer', '#migrating', '#migrating-webhook', '#migrating-down', '#migrating-vercel', '#related'],
   downgradingAndCanceling: ['#when-changes-take-effect', '#downgrading-to-a-lower-plan', '#pending-downgrade', '#keep-my-current-plan', '#what-changes-on-a-downgrade', '#canceling-your-subscription', '#the-cancel-dialog', '#deleting-a-single-site', '#deleting-your-organization', '#confirm-deletion', '#related'],
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#moving-an-element-without-dragging', '#multi-drag', '#tips', '#related'],
@@ -1040,6 +1049,7 @@ export const DOCS_HELP_ANCHORS = {
   pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#self-service-kiosk', '#reservations', '#related'],
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#before-you-go-offline', '#related'],
+  productReviews: ['#add-the-reviews-block', '#write-a-review', '#verified-buyers', '#review-moderation', '#reply', '#troubleshooting', '#related'],
   productsWithAi: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#public-profile', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#bundle-and-manifest', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#edit-listing', '#your-listings', '#listing-links', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#listing-changelog', '#version-history', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#install-card', '#installed-from-the-marketplace', '#licenses', '#workspace-licenses', '#licenses-you-bought', '#getting-paid', '#set-up-payouts', '#purchases-and-fees', '#refund-reversals', '#low-prices-and-processing'],
@@ -1253,7 +1263,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#entry-details': 'What is recorded',
     '#entry-featured-video': 'Featured video',
     '#entry-seo': 'Search and social text',
-    '#entry-tokens': 'Entry tokens',
     '#entry-traffic': 'Entry traffic',
     '#scheduling': 'Scheduling',
     '#visual-editor': 'Visual editor',
@@ -1422,9 +1431,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#topics': 'Topics',
     '#two-ways-to-get-a-domain': 'The two ways to get a domain of this site\'s own',
     '#what-belongs-to-a-campaign': 'What belongs to a campaign',
-  },
-  errorScreens: {
-    '#the-error-screens': 'The error pages',
   },
   events: {
     '#manage-events': 'Manage events',
@@ -1604,7 +1610,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#pending-erasures': 'Pending erasures',
     '#resolved-server-config': 'Resolved server config',
     '#sharing-scope-drift': 'Sharing-scope drift',
-    '#the-probes': 'The probes',
   },
   plugins: {
     '#a-dependency-that-is-off-for-one-site': 'A dependency that is off for one site',
@@ -1626,6 +1631,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   posOperations: {
     '#shifts-and-the-cash-drawer': 'Shifts and the cash drawer',
     '#staff-pins': 'Staff PINs',
+  },
+  productReviews: {
+    '#review-moderation': 'Moderate reviews',
   },
   publishAPlugin: {
     '#listing-publisher-card': 'The Publisher card on a listing',
@@ -1790,9 +1798,6 @@ export const DOCS_HELP_SECTION_TITLES: {
   siteSearch: {
     '#the-layout-built-in-pages-use': 'The layout built-in pages use',
   },
-  sso: {
-    '#setting-it-up': 'Setting it up',
-  },
   staffConsole: {
     '#access': 'Access',
     '#acquisition': 'Acquisition',
@@ -1867,7 +1872,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#user-organizations': 'Organizations',
     '#users-accounts': 'Accounts',
     '#users-admin': 'Users admin',
-    '#whats-there': 'What\'s there',
   },
   supportAndCommunity: {
     '#community-forum': 'Community forum',
@@ -1877,6 +1881,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#your-tickets': 'Your tickets',
   },
   supportQueue: {
+    '#support-queue-page': 'The queue page',
     '#triage': 'Triage',
   },
   tasks: {

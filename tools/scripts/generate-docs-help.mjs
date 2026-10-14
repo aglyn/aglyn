@@ -400,7 +400,7 @@ function readDocPage(absPath) {
     if (slug && !seen.has(slug)) {
       seen.add(slug)
       anchors.push(`#${slug}`)
-      const section = readSection(source, match)
+      const section = readSection(body, match)
       if (section) sections.set(`#${slug}`, section)
     }
   }
