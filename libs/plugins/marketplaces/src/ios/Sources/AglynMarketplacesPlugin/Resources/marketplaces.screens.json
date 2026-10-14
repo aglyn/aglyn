@@ -398,7 +398,7 @@
               "when": "const.marketplaces[id=params.marketplace].canPublish"
             },
             {
-              "key": "listingModeBasic",
+              "key": "listingMode",
               "label": "Listings",
               "kind": "select",
               "initial": "{data.conn.connections[marketplace=params.marketplace].settings.listingMode}",
@@ -456,7 +456,7 @@
               "marketplaceId": "{form.marketplaceId}",
               "importOrders": "{form.importOrders}",
               "confirmShipments": "{form.confirmShipments}",
-              "listingMode": "{form.listingMode|form.listingModeBasic}",
+              "listingMode": "{form.listingMode}",
               "stockBuffer": "{form.stockBuffer}",
               "untrackedQuantity": "{form.untrackedQuantity}",
               "syncPrices": "{form.syncPrices}",

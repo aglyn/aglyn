@@ -391,7 +391,7 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
     destructive = pending.action.destructive,
     confirmEnabled = !missing,
     dismissLabel = "Cancel",
-    onConfirm = { onRun(filled()) },
+    onConfirm = { onRun(visibleOnly(filled(), inputs)) },
     onDismiss = onDismiss,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -714,6 +714,16 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
   else -> if (field.kind == "toggle") JsonPrimitive(false) else JsonNull
 }
 
+/**
+ * The scope a form or prompt runs its action with: `form` holds only the fields the person could see (their `when`
+ * holds), so a field the screen hid is never sent, as a console form that never drew it would not send it.
+ */
+internal fun visibleOnly(filled: JsonElement, fields: List<FieldSpec>): JsonElement {
+  val all = (filled as? JsonObject)?.get("form") as? JsonObject ?: return filled
+  val keep = fields.filter { ScreenValues.condition(it.whenCondition, filled) }.map { it.key }.toSet()
+  return ScreenContext.with(filled, "form", JsonObject(all.filterKeys { it in keep }))
+}
+
 internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
   val resolved = field.initial?.let { ScreenValues.resolve(it, context) } ?: JsonNull
   if (field.kind == "toggle") return FieldValue.Flag(ScreenValues.truthy(resolved))
@@ -792,7 +802,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
     }
     ActionSpec.parse(block["submit"])?.takeIf { ScreenValues.condition(it.whenCondition, scope) }?.let { action ->
       FilledTonalButton(
-        onClick = { submit(action, filled) },
+        onClick = { submit(action, visibleOnly(filled, fields)) },
         enabled = !busy && !missing,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {

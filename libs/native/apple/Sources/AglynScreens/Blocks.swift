@@ -300,6 +300,14 @@ enum FieldValue: Equatable {
   }
 }
 
+/// The scope a form or prompt runs its action with: `form` holds only the fields the person could see (their
+/// `when` holds), so a field the screen hid is never sent, as a console form that never drew it would not send it.
+func visibleOnly(_ filled: JSONValue, _ fields: [FieldSpec]) -> JSONValue {
+  guard case .object(let form)? = filled["form"] else { return filled }
+  let keep = Set(fields.filter { ScreenValues.condition($0.when, in: filled) }.map(\.key))
+  return ScreenContext.with(filled, "form", .object(form.filter { keep.contains($0.key) }))
+}
+
 func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   switch (field.kind, value) {
   case ("toggle", .flag(let flag)?): return .bool(flag)
@@ -420,7 +428,7 @@ struct FormBlock: View {
       }
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         Button {
-          submit(action, filled)
+          submit(action, visibleOnly(filled, fields))
         } label: {
           HStack {
             Spacer()
@@ -500,7 +508,7 @@ struct ActionInputSheet: View {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
           Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
-            run(filled)
+            run(visibleOnly(filled, inputs))
           }
           .disabled(missing)
           .accessibilityIdentifier("prompt-submit")

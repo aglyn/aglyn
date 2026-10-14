@@ -412,7 +412,7 @@ class CommerceServiceSpecsTest {
       fieldsShown(active),
     )
     val faire = marketplace("faire", "[${marketplaceConn("faire", "active")}]")
-    assertEquals(listOf("importOrders", "confirmShipments", "listingModeBasic", "stockBuffer", "untrackedQuantity"), fieldsShown(faire))
+    assertEquals(listOf("importOrders", "confirmShipments", "listingMode", "stockBuffer", "untrackedQuantity"), fieldsShown(faire))
     assertTrue("faire" in faire.shown(), "Faire says only stock is sent")
     val off = marketplace("amazon", "[${marketplaceConn("amazon", "active", mode = "off")}]")
     assertEquals(listOf("marketplaceId", "importOrders", "confirmShipments", "listingMode"), fieldsShown(off))
@@ -422,7 +422,7 @@ class CommerceServiceSpecsTest {
     )
     assertEquals(
       json("""{"hostId":"h1","marketplace":"faire","importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":1}"""),
-      faire.body(faire.form("settings"), """{"importOrders":true,"confirmShipments":true,"listingModeBasic":"link","stockBuffer":1}"""),
+      faire.body(faire.form("settings"), """{"importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":1}"""),
     )
     val modes = FieldSpec.parse(active.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.first { it.jsonObject["key"]!!.let { k -> (k as JsonPrimitive).content } == "listingMode" })!!
     assertEquals(listOf("off", "link", "publish"), modes.choices(active.context).map { it.first })
@@ -611,19 +611,25 @@ class CommerceServiceSpecsTest {
 
     fun fields(model: ScreenModel) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
       .filter { ScreenValues.condition(it.whenCondition, model.context) }.map { it.key }
-    assertEquals(listOf("stockSource", "locationId", "productSyncAll", "sendOrders", "orderCustomer", "taxRule"), fields(cin7))
-    assertEquals(listOf("stockSource", "locationId", "productSyncImport", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"))))
-    assertEquals(listOf("stockSource", "locationId", "productSyncExport", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("inflow"), importProducts = false)))
-    assertEquals(listOf("stockSource", "locationId", "productSyncOff", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"), importProducts = false)))
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer", "taxRule"), fields(cin7))
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"))))
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("inflow"), importProducts = false)))
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"), importProducts = false)))
+    fun productChoices(model: ScreenModel) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { it.key == "productSync" && ScreenValues.condition(it.whenCondition, model.context) }.single().choices(model.context).map { it.first }
+    assertEquals(listOf("import", "export", "off"), productChoices(cin7), "Cin7 imports, exports or matches by SKU")
+    assertEquals(listOf("import", "off"), productChoices(inventory(inventoryConnection("brightpearl"))), "Brightpearl cannot make products")
+    assertEquals(listOf("export", "off"), productChoices(inventory(inventoryConnection("inflow"), importProducts = false)), "no import where the deployment cannot")
+    assertEquals(listOf("off"), productChoices(inventory(inventoryConnection("brightpearl"), importProducts = false)))
     val location = FieldSpec.parse(cin7.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray[1])!!
     assertEquals(listOf("", "L1", "L2"), location.choices(cin7.context).map { it.first })
     assertEquals(
       json("""{"hostId":"h1","stockSource":"store","locationId":"","productSync":"export","sendOrders":false,"orderCustomer":"Web","taxRule":"GST"}"""),
-      cin7.body(cin7.form("settings"), """{"stockSource":"store","locationId":"","productSyncAll":"export","sendOrders":false,"orderCustomer":"Web","taxRule":"GST"}"""),
+      cin7.body(cin7.form("settings"), """{"stockSource":"store","locationId":"","productSync":"export","sendOrders":false,"orderCustomer":"Web","taxRule":"GST"}"""),
     )
     assertEquals(
       json("""{"hostId":"h1","stockSource":"off","locationId":"L2","productSync":"off","sendOrders":true,"orderCustomer":"123"}"""),
-      inventory(inventoryConnection("brightpearl")).let { it.body(it.form("settings"), """{"stockSource":"off","locationId":"L2","productSyncImport":"off","sendOrders":true,"orderCustomer":"123"}""") },
+      inventory(inventoryConnection("brightpearl")).let { it.body(it.form("settings"), """{"stockSource":"off","locationId":"L2","productSync":"off","sendOrders":true,"orderCustomer":"123"}""") },
     )
     assertEquals("PATCH", cin7.form("settings").method.name)
     assertEquals("DELETE", cin7.action("manage", "disconnect").method.name)
@@ -782,5 +788,62 @@ class CommerceServiceSpecsTest {
     val pinterest = ads("pinterest", "[${adConnection("pinterest")}]")
     assertEquals(listOf("status", "manage", "flag"), pinterest.shown())
     assertEquals("DELETE", active.action("manage", "disconnect").method.name)
+  }
+
+  // ---- review platforms --------------------------------------------------------------------------------------------
+
+  private fun reviews(mode: String = "off", apiAvailable: Boolean = true, yotpoConnected: Boolean = false, apiConnected: Boolean = false) =
+    screen(spec("review-platforms", "review-platforms.service"), emptyMap(),
+      """{"settings":{"settings":{"apiAvailable":$apiAvailable,"trustpilot":{"mode":"$mode","sendOn":"shipped","bccAddress":"shop+1@invite.trustpilot.com","apiConnected":$apiConnected,"businessUnitId":null,"businessUserId":null,"locale":null,"templateId":null},
+         "yotpo":{"enabled":false,"connected":$yotpoConnected,"appKey":"abc"}}}}""")
+
+  @Test
+  fun reviewPlatformsShowTrustpilotAlwaysAndYotpoWhereTheDeploymentCanKeepAKey() {
+    assertEquals(listOf("trustpilotStatus", "trustpilot", "yotpoStatus", "yotpo"), reviews().shown())
+    assertEquals(listOf("trustpilotStatus", "trustpilot"), reviews(apiAvailable = false).shown())
+    assertEquals(listOf("trustpilotStatus", "trustpilot", "trustpilotManage", "yotpoStatus", "yotpo", "yotpoManage"), reviews(apiConnected = true, yotpoConnected = true).shown())
+    val model = reviews("bcc")
+    fun shown(model: ScreenModel, form: String) = model.spec.blocks.first { it.id == "trustpilot" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json(form))) }.map { it.key }
+    assertEquals(listOf("mode"), shown(model, """{"mode":"off"}"""))
+    assertEquals(listOf("mode", "sendOn", "bccAddress"), shown(model, """{"mode":"bcc"}"""))
+    assertEquals(listOf("mode", "sendOn", "apiKey", "apiSecret", "businessUnitId", "businessUserId", "locale", "templateId"), shown(model, """{"mode":"api"}"""))
+    val modes = model.spec.blocks.first { it.id == "trustpilot" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }.first { it.key == "mode" && ScreenValues.condition(it.whenCondition, model.context) }
+    assertEquals(listOf("off", "bcc", "api"), modes.choices(model.context).map { it.first })
+    val basic = reviews("bcc", apiAvailable = false)
+    val basicModes = basic.spec.blocks.first { it.id == "trustpilot" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }.first { it.key == "mode" && ScreenValues.condition(it.whenCondition, basic.context) }
+    assertEquals(listOf("off", "bcc"), basicModes.choices(basic.context).map { it.first })
+    assertEquals(
+      json("""{"hostId":"h1","change":{"platform":"trustpilot","mode":"bcc","sendOn":"delivered","bccAddress":"shop+9@invite.trustpilot.com"}}"""),
+      model.body(model.form("trustpilot"), """{"mode":"bcc","sendOn":"delivered","bccAddress":"shop+9@invite.trustpilot.com"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","change":{"platform":"yotpo","appKey":"abc","secretKey":"s","enabled":true}}"""),
+      model.body(model.form("yotpo"), """{"appKey":"abc","secretKey":"s","enabled":true}"""),
+    )
+    val manage = reviews(apiConnected = true, yotpoConnected = true)
+    assertEquals(json("""{"hostId":"h1","change":{"platform":"trustpilot","disconnect":true}}"""), manage.body(manage.action("trustpilotManage", "trustpilotDisconnect")))
+    assertEquals(json("""{"hostId":"h1","change":{"platform":"yotpo","disconnect":true}}"""), manage.body(manage.action("yotpoManage", "yotpoDisconnect")))
+  }
+
+  @Test
+  fun aFieldTheFormHidesIsNeverSent() {
+    // Etsy has no marketplace menu: its form still holds an empty marketplaceId, which the route would refuse.
+    val etsy = marketplace("etsy", "[${marketplaceConn("etsy", "active")}]")
+    val fields = etsy.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+    val everything = ScreenContext.with(etsy.context, "form", json("""{"marketplaceId":"","importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":2,"untrackedQuantity":10,"syncPrices":true,"priceAdjustPercent":5}"""))
+    val sent = visibleOnly(everything, fields)
+    assertEquals(
+      json("""{"hostId":"h1","marketplace":"etsy","importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":2,"untrackedQuantity":10,"syncPrices":true,"priceAdjustPercent":5}"""),
+      ScreenValues.resolveBody(ActionSpec.parse(etsy.spec.blocks.first { it.id == "settings" }.raw.jsonObject["submit"])!!.body!!, sent),
+    )
+    val ads = ads("meta")
+    val prompt = ads.action("manage", "connect").prompt
+    val typed = ScreenContext.with(ads.context, "form", json("""{"accessToken":"tok","adAccountId":"","testEventCode":"TEST1"}"""))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"meta","accessToken":"tok","testEventCode":"TEST1"}"""),
+      ScreenValues.resolveBody(ads.action("manage", "connect").body!!, visibleOnly(typed, prompt)),
+      "Meta has no ad account, so an empty one is not sent",
+    )
   }
 }

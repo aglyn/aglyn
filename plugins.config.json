@@ -3039,6 +3039,22 @@
     },
     {
       "id": "review-platforms",
+      "mobile": {
+        "$comment": "AGL-3652: review platforms natively (Trustpilot invitations, Yotpo Reviews), from the spec in src/android/screens/review-platforms.screens.json. It sits in Commerce settings' commerceSettings zone. The per-order widget (whether each service was asked to invite one buyer) is the order screen's.",
+        "ios": {
+          "module": "AglynReviewPlatformsPlugin",
+          "register": "registerReviewPlatformsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.reviewplatforms",
+          "register": "registerReviewPlatformsNative"
+        },
+        "contributes": {
+          "screens": [
+            "review-platforms.service"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-review-platforms",
       "register": {
         "console": "registerReviewPlatformsConsole",

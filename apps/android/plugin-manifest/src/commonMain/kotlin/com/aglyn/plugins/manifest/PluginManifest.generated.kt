@@ -31,6 +31,7 @@ import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.postpurchase.registerPostPurchaseNative
 import com.aglyn.plugins.printondemand.registerPrintOnDemandNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
+import com.aglyn.plugins.reviewplatforms.registerReviewPlatformsNative
 import com.aglyn.plugins.saleschannels.registerSalesChannelsNative
 import com.aglyn.plugins.sms.registerSmsNative
 import com.aglyn.plugins.taxengines.registerTaxEnginesNative
@@ -163,6 +164,11 @@ object NativePluginManifest {
             id = "redirects",
             contributes = mapOf("screens" to listOf("redirects.list"), "widgets" to listOf("redirects.summary"), "quickActions" to listOf("redirects.open"), "deepLinks" to listOf("redirects.page")),
             register = ::registerRedirectsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "review-platforms",
+            contributes = mapOf("screens" to listOf("review-platforms.service")),
+            register = ::registerReviewPlatformsNative,
         ),
         NativePluginManifestEntry(
             id = "sales-channels",

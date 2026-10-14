@@ -26,6 +26,7 @@ import AglynOutreachPlugin
 import AglynPostPurchasePlugin
 import AglynPrintOnDemandPlugin
 import AglynRedirectsPlugin
+import AglynReviewPlatformsPlugin
 import AglynSalesChannelsPlugin
 import AglynSmsPlugin
 import AglynTaxEnginesPlugin
@@ -143,6 +144,11 @@ public enum NativePluginManifest {
       id: "redirects",
       contributes: ["screens": ["redirects.list"], "widgets": ["redirects.summary"], "quickActions": ["redirects.open"], "deepLinks": ["redirects.page"]],
       register: AglynRedirectsPlugin.registerRedirectsNative
+    ),
+    NativePluginManifestEntry(
+      id: "review-platforms",
+      contributes: ["screens": ["review-platforms.service"]],
+      register: AglynReviewPlatformsPlugin.registerReviewPlatformsNative
     ),
     NativePluginManifestEntry(
       id: "sales-channels",

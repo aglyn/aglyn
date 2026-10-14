@@ -430,7 +430,7 @@
               "help": "Where stock is counted and orders ship from."
             },
             {
-              "key": "productSyncAll",
+              "key": "productSync",
               "label": "Products",
               "kind": "select",
               "initial": "{data.conn.connection.productSync}",
@@ -451,7 +451,7 @@
               ]
             },
             {
-              "key": "productSyncImport",
+              "key": "productSync",
               "label": "Products",
               "kind": "select",
               "initial": "{data.conn.connection.productSync}",
@@ -468,7 +468,7 @@
               ]
             },
             {
-              "key": "productSyncExport",
+              "key": "productSync",
               "label": "Products",
               "kind": "select",
               "initial": "{data.conn.connection.productSync}",
@@ -485,7 +485,7 @@
               ]
             },
             {
-              "key": "productSyncOff",
+              "key": "productSync",
               "label": "Products",
               "kind": "select",
               "initial": "{data.conn.connection.productSync}",
@@ -527,7 +527,7 @@
               "hostId": "{site.id}",
               "stockSource": "{form.stockSource}",
               "locationId": "{form.locationId}",
-              "productSync": "{form.productSyncAll|form.productSyncImport|form.productSyncExport|form.productSyncOff}",
+              "productSync": "{form.productSync}",
               "sendOrders": "{form.sendOrders}",
               "orderCustomer": "{form.orderCustomer}",
               "taxRule": "{form.taxRule}"
