@@ -116,6 +116,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
   /** A follow-up the action makes once it succeeds (best effort, like the console's). */
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
+  /** `{ when, title, text }`: when the route's answer meets `when`, `text` (a template over `response`) is shown in place of the success message. */
+  val instead: JsonElement? = json.obj("instead")
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
 

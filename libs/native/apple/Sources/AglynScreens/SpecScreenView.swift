@@ -412,7 +412,14 @@ struct SpecScreenBody: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
       let after = ScreenContext.with(scope, "response", response ?? .null)
-      if let message, !message.isEmpty { show(message, .success) }
+      if let instead = action.instead, ScreenValues.condition(instead["when"]?.stringValue, in: after) {
+        revealed = (
+          instead["title"]?.stringValue.map { ScreenValues.render($0, in: after) } ?? action.label,
+          ScreenValues.render(instead["text"]?.stringValue ?? "", in: after)
+        )
+      } else if let message, !message.isEmpty {
+        show(message, .success)
+      }
       if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) {
         revealed = (action.label, ScreenValues.text(value))
       }
