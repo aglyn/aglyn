@@ -2754,7 +2754,9 @@
             "ai.member",
             "ai.staffOrg",
             "ai.staffUser",
-            "ai.signals"
+            "ai.signals",
+            "ai.hostMember",
+            "ai.allotment"
           ],
           "quickActions": [
             "ai.open"
