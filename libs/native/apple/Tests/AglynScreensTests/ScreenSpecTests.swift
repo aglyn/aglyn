@@ -235,6 +235,15 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertTrue(try XCTUnwrap(ActionSpec(["label": "Set", "siteWide": true, "write": ["doc": "hosts/h"]])).siteWide)
   }
 
+  func testARouteActionNamesAConsolePathToFollowLikeANotificationsLink() throws {
+    let action = try XCTUnwrap(ActionSpec(["label": "Update payment method", "route": "{item.href}"]))
+    XCTAssertEqual(action.route, "{item.href}")
+    XCTAssertNil(action.url)
+    let scope: JSONValue = ["item": ["href": "/acme/billing/settings"]]
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(action.route), in: scope), "/acme/billing/settings")
+    XCTAssertNil(try XCTUnwrap(ActionSpec(["label": "Go", "url": "/api/x"])).route)
+  }
+
   func testAnActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() throws {
     let action = try XCTUnwrap(
       ActionSpec([

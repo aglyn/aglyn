@@ -24188,6 +24188,222 @@
         }
       ]
     },
+    "ssoEnforcementAccounts": {
+      "module": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
+      "cases": [
+        {
+          "args": [
+            [],
+            "saml.acme",
+            []
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            null,
+            null,
+            null
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              {
+                "uid": "u1",
+                "email": "a@acme.com",
+                "unlinked": [
+                  "password"
+                ],
+                "kept": [
+                  "saml.acme"
+                ]
+              }
+            ],
+            "saml.acme",
+            []
+          ],
+          "result": [
+            {
+              "designated": false,
+              "eligible": true,
+              "keeps": "saml.acme",
+              "label": "a@acme.com",
+              "uid": "u1",
+              "wouldLose": "password"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "uid": "u1",
+                "email": "a@acme.com",
+                "unlinked": [
+                  "password"
+                ],
+                "kept": [
+                  "saml.acme"
+                ]
+              },
+              {
+                "uid": "u2",
+                "email": null,
+                "unlinked": [],
+                "kept": [
+                  "saml.acme"
+                ],
+                "skipped": "no-other-way-in"
+              },
+              {
+                "uid": "u3",
+                "email": "c@acme.com",
+                "unlinked": [],
+                "kept": [
+                  "password"
+                ],
+                "skipped": "break-glass"
+              }
+            ],
+            "saml.acme",
+            [
+              "u3"
+            ]
+          ],
+          "result": [
+            {
+              "designated": false,
+              "eligible": true,
+              "keeps": "saml.acme",
+              "label": "a@acme.com",
+              "uid": "u1",
+              "wouldLose": "password"
+            },
+            {
+              "designated": false,
+              "eligible": false,
+              "keeps": "saml.acme",
+              "label": "u2",
+              "uid": "u2",
+              "wouldLose": "Nothing — it would be left with no way in"
+            },
+            {
+              "designated": true,
+              "eligible": true,
+              "keeps": "password",
+              "label": "c@acme.com",
+              "uid": "u3",
+              "wouldLose": "Nothing — designated break-glass"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "uid": "u4",
+                "email": "d@acme.com",
+                "unlinked": [
+                  "password",
+                  "google.com"
+                ],
+                "kept": []
+              },
+              {
+                "uid": "u5",
+                "email": "e@acme.com",
+                "unlinked": [
+                  "saml.acme"
+                ],
+                "kept": [
+                  "saml.acme"
+                ]
+              }
+            ],
+            "saml.acme",
+            [
+              "u4",
+              "gone"
+            ]
+          ],
+          "result": [
+            {
+              "designated": true,
+              "eligible": true,
+              "keeps": "—",
+              "label": "d@acme.com",
+              "uid": "u4",
+              "wouldLose": "password, google.com"
+            },
+            {
+              "designated": false,
+              "eligible": false,
+              "keeps": "saml.acme",
+              "label": "e@acme.com",
+              "uid": "u5",
+              "wouldLose": "saml.acme"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "uid": "u6",
+                "email": "f@acme.com",
+                "unlinked": [],
+                "kept": []
+              }
+            ],
+            "other",
+            null
+          ],
+          "result": [
+            {
+              "designated": false,
+              "eligible": false,
+              "keeps": "—",
+              "label": "f@acme.com",
+              "uid": "u6",
+              "wouldLose": "—"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "uid": "u7",
+                "email": "g@acme.com",
+                "unlinked": [
+                  "google.com"
+                ],
+                "kept": [
+                  "google.com",
+                  "saml.acme"
+                ]
+              }
+            ],
+            null,
+            [
+              "u7"
+            ]
+          ],
+          "result": [
+            {
+              "designated": true,
+              "eligible": true,
+              "keeps": "google.com, saml.acme",
+              "label": "g@acme.com",
+              "uid": "u7",
+              "wouldLose": "google.com"
+            }
+          ]
+        }
+      ]
+    },
     "stepInventoryProblem": {
       "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
       "cases": [

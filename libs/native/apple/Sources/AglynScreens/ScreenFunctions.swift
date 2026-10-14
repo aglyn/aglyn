@@ -22,6 +22,9 @@ public enum ScreenFunctions {
       return itemChanges(args.first ?? nil, args.count > 1 ? args[1] : nil, limit: limit ?? 200, recordLimit: recordLimit)
     case "aiProductsImportJob":
       return aiProductsImportJob(args.first ?? nil)
+    case "ssoEnforcementAccounts":
+      return ssoEnforcementAccounts(
+        args.first ?? nil, args.count > 1 ? args[1]?.stringValue : nil, args.count > 2 ? args[2] : nil)
     default:
       return nil
     }
@@ -194,6 +197,38 @@ public enum ScreenFunctions {
     result["recordField"] = .string(field)
     result["records"] = ["summary": .string(summary), "changes": .array(changes), "more": .number(Double(more))]
     return .object(result)
+  }
+
+  /// The single sign-on rehearsal's rows, one per account (the console's `ssoEnforcementAccounts`): the address, what
+  /// enforcing would remove from it, what it keeps, whether it can be designated break-glass (it holds a way in that is
+  /// not the identity provider) and whether it is designated now.
+  static func ssoEnforcementAccounts(_ accounts: JSONValue?, _ providerID: String?, _ designated: JSONValue?) -> JSONValue {
+    let chosen = Set(designated.array.compactMap(\.stringValue))
+    let dash = "\u{2014}"
+    func methods(_ value: JSONValue?) -> [String] { value.array.compactMap(\.stringValue) }
+    return .array(
+      accounts.array.compactMap { (account: JSONValue) -> JSONValue? in
+        guard let uid = account["uid"]?.stringValue else { return nil }
+        let unlinked = methods(account["unlinked"])
+        let kept = methods(account["kept"])
+        let skipped = account["skipped"]?.stringValue
+        let wouldLose: String
+        if skipped == "break-glass" {
+          wouldLose = "Nothing \(dash) designated break-glass"
+        } else if let skipped, !skipped.isEmpty {
+          wouldLose = "Nothing \(dash) it would be left with no way in"
+        } else {
+          wouldLose = unlinked.isEmpty ? dash : unlinked.joined(separator: ", ")
+        }
+        return [
+          "uid": .string(uid),
+          "label": .string(account["email"]?.stringValue ?? uid),
+          "wouldLose": .string(wouldLose),
+          "keeps": .string(kept.isEmpty ? dash : kept.joined(separator: ", ")),
+          "eligible": .bool((unlinked + kept).contains { $0 != providerID }),
+          "designated": .bool(chosen.contains(uid)),
+        ]
+      })
   }
 
   /// The copy job a landed product import starts (the AI plugin's `aiProductsImportJob`): the brief and the `inputs`

@@ -341,7 +341,7 @@ final class ScreenImportTests: XCTestCase {
   func testTheItemDiffAndMergeKeysReplayTheConsolesCases() throws {
     let url = ScreenSpecTests.screensDir.appendingPathComponent("../contracts/function-cases.generated.json").standardizedFileURL
     let file = try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url)))
-    for name in ["packageJsonDiff", "packageMergeKeys", "packageItemChanges", "aiProductsImportJob"] {
+    for name in ["packageJsonDiff", "packageMergeKeys", "packageItemChanges", "aiProductsImportJob", "ssoEnforcementAccounts"] {
       let cases = try XCTUnwrap(file["functions"]?[name]?["cases"]).array
       XCTAssertGreaterThan(cases.count, 5, name)
       for one in cases {

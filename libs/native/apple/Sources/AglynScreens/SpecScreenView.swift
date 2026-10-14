@@ -445,6 +445,11 @@ struct SpecScreenBody: View {
       }
       return
     }
+    if let route = action.route {
+      let path = ScreenValues.render(route, in: scope)
+      if path.isEmpty || !plugin.openLink(path) { show("That page does not open in the app.", .warning) }
+      return
+    }
     if let link = action.link {
       let rendered = ScreenValues.render(link, in: scope)
       guard let url = URL(string: rendered.hasPrefix("/") ? session.origin + rendered : rendered) else { return }

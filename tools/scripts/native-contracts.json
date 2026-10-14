@@ -14791,6 +14791,132 @@
           null
         ]
       ]
+    },
+    "ssoEnforcementAccounts": {
+      "module": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
+      "args": [
+        [
+          [],
+          "saml.acme",
+          []
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          [
+            {
+              "uid": "u1",
+              "email": "a@acme.com",
+              "unlinked": [
+                "password"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            }
+          ],
+          "saml.acme",
+          []
+        ],
+        [
+          [
+            {
+              "uid": "u1",
+              "email": "a@acme.com",
+              "unlinked": [
+                "password"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            },
+            {
+              "uid": "u2",
+              "email": null,
+              "unlinked": [],
+              "kept": [
+                "saml.acme"
+              ],
+              "skipped": "no-other-way-in"
+            },
+            {
+              "uid": "u3",
+              "email": "c@acme.com",
+              "unlinked": [],
+              "kept": [
+                "password"
+              ],
+              "skipped": "break-glass"
+            }
+          ],
+          "saml.acme",
+          [
+            "u3"
+          ]
+        ],
+        [
+          [
+            {
+              "uid": "u4",
+              "email": "d@acme.com",
+              "unlinked": [
+                "password",
+                "google.com"
+              ],
+              "kept": []
+            },
+            {
+              "uid": "u5",
+              "email": "e@acme.com",
+              "unlinked": [
+                "saml.acme"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            }
+          ],
+          "saml.acme",
+          [
+            "u4",
+            "gone"
+          ]
+        ],
+        [
+          [
+            {
+              "uid": "u6",
+              "email": "f@acme.com",
+              "unlinked": [],
+              "kept": []
+            }
+          ],
+          "other",
+          null
+        ],
+        [
+          [
+            {
+              "uid": "u7",
+              "email": "g@acme.com",
+              "unlinked": [
+                "google.com"
+              ],
+              "kept": [
+                "google.com",
+                "saml.acme"
+              ]
+            }
+          ],
+          null,
+          [
+            "u7"
+          ]
+        ]
+      ]
     }
   }
 }

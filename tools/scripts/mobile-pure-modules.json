@@ -624,6 +624,10 @@
     {
       "path": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
       "why": "The copy job a landed product import starts: its brief, inputs and the created ids read from the import's results; no imports, so the native apps replay it (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
+      "why": "The single sign-on rehearsal table's rows and the break-glass eligibility rule, no imports: the native workspace settings replay them (AGL-3671)."
     }
   ]
 }

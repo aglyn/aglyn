@@ -867,4 +867,14 @@ class ScreenSpecTest {
     assertEquals("redirects", inSite.resource)
     assertNull(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Go","url":"/api/x"}"""))!!.exportRequest(JsonObject(emptyMap())))
   }
+
+  @Test
+  fun aRouteActionNamesAConsolePathToFollowLikeANotificationsLink() {
+    val action = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Update payment method","route":"{item.href}"}"""))!!
+    assertEquals("{item.href}", action.route)
+    assertNull(action.url)
+    val scope = Json.parseToJsonElement("""{"item":{"href":"/acme/billing/settings"}}""")
+    assertEquals("/acme/billing/settings", ScreenValues.render(action.route!!, scope))
+    assertNull(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Go","url":"/api/x"}"""))!!.route)
+  }
 }

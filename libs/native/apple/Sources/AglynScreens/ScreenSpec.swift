@@ -182,6 +182,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let link: String?
   /// A Besigner path (whole, from the console root) opened in the app's web view.
   public let besigner: String?
+  /// A console path (a route's `href`, `/acme/billing/settings`) followed the way a notification's link is: the native
+  /// screen that claims it, else a Besigner page, else a note that the app has no screen for it.
+  public let route: String?
   /// `copy`: the rendered template goes to the clipboard.
   public let copy: String?
   /// A response field shown once, to be copied (a new API key's secret).
@@ -283,6 +286,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.when = json["when"]?.stringValue
     self.link = json["link"]?.stringValue
     self.besigner = json["besigner"]?.stringValue
+    self.route = json["route"]?.stringValue
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]

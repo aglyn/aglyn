@@ -201,7 +201,11 @@ final class AppModel {
         guard let navigation else { return }
         _ = navigation.paths[navigation.section]?.popLast()
       },
-      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) })
+      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) },
+      openLink: { [weak self, weak navigation] link in
+        guard let self, let navigation else { return }
+        self.open(link, in: navigation)
+      })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's

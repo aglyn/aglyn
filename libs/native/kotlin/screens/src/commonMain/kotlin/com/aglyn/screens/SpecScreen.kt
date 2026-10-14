@@ -216,6 +216,11 @@ private fun SpecBody(
       }
       return
     }
+    action.route?.let {
+      val path = ScreenValues.render(it, actionScope)
+      if (path.isEmpty() || !plugin.openLink(path)) show("That page does not open in the app.", StatusTone.WARNING)
+      return
+    }
     action.link?.let {
       val rendered = ScreenValues.render(it, actionScope)
       session.openHostedPage(if (rendered.startsWith("/")) session.origin + rendered else rendered)

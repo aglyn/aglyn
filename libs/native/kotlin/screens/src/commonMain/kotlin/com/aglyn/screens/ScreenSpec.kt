@@ -132,6 +132,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val link: String? = json.str("link")
   /** A Besigner path (whole, from the console root) opened in the app's web view. */
   val besigner: String? = json.str("besigner")
+  /** A console path (a route's `href`) followed the way a notification's link is: the native screen that claims it. */
+  val route: String? = json.str("route")
   val copy: String? = json.str("copy")
   val reveal: String? = json.str("reveal")
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }

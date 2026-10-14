@@ -73,6 +73,7 @@ public struct NativePluginContext {
   private let selectSiteAction: (@MainActor (String) -> Void)?
   private let backAction: (@MainActor () -> Void)?
   private let slotWidgetsAction: (@MainActor (String) -> [NativeWidget])?
+  private let openLinkAction: (@MainActor (String) -> Void)?
 
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
@@ -83,7 +84,8 @@ public struct NativePluginContext {
     siteRole: String? = nil, orgRole: String? = nil,
     selectSite: (@MainActor (String) -> Void)? = nil,
     back: (@MainActor () -> Void)? = nil,
-    slotWidgets: (@MainActor (String) -> [NativeWidget])? = nil
+    slotWidgets: (@MainActor (String) -> [NativeWidget])? = nil,
+    openLink: (@MainActor (String) -> Void)? = nil
   ) {
     self.uid = uid
     self.orgID = orgID
@@ -101,6 +103,7 @@ public struct NativePluginContext {
     self.selectSiteAction = selectSite
     self.backAction = back
     self.slotWidgetsAction = slotWidgets
+    self.openLinkAction = openLink
   }
 
   /// The widgets other plugins put in a core page's named slot
@@ -118,6 +121,16 @@ public struct NativePluginContext {
   /// Leaves the current screen, as the back button does.
   @MainActor public func back() {
     backAction?()
+  }
+
+  /// Opens a console link (`/acme/billing/settings`, a path a notice or a route answers) the way a notification's
+  /// link opens: the native screen that claims it, else a Besigner page. Returns false where this context has no
+  /// way to follow one.
+  @MainActor @discardableResult
+  public func openLink(_ link: String) -> Bool {
+    guard let openLinkAction else { return false }
+    openLinkAction(link)
+    return true
   }
 
   /// Opens a registered screen by id.

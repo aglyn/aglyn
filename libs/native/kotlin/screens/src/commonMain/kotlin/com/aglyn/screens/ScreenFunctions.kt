@@ -22,6 +22,7 @@ object ScreenFunctions {
       (args.getOrNull(3) as? JsonPrimitive)?.doubleOrNull?.toInt(),
     )
     "aiProductsImportJob" -> aiProductsImportJob(args.getOrNull(0))
+    "ssoEnforcementAccounts" -> ssoEnforcementAccounts(args.getOrNull(0), (args.getOrNull(1) as? JsonPrimitive)?.takeIf { it.isString }?.content, args.getOrNull(2))
     else -> null
   }
 
@@ -195,6 +196,41 @@ object ScreenFunctions {
     values["recordField"] = JsonPrimitive(field)
     values["records"] = JsonObject(mapOf("summary" to JsonPrimitive(summary), "changes" to JsonArray(changes), "more" to JsonPrimitive(more)))
     return JsonObject(values)
+  }
+
+  /**
+   * The single sign-on rehearsal's rows, one per account (the console's `ssoEnforcementAccounts`): the address, what
+   * enforcing would remove from it, what it keeps, whether it can be designated break-glass (it holds a way in that is
+   * not the identity provider) and whether it is designated now.
+   */
+  internal fun ssoEnforcementAccounts(accounts: JsonElement?, providerId: String?, designated: JsonElement?): JsonElement {
+    fun strings(list: JsonElement?): List<String> =
+      (list as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { primitive -> primitive.isString }?.content }
+    val chosen = strings(designated).toSet()
+    val dash = "\u2014"
+    return JsonArray(
+      (accounts as? JsonArray).orEmpty().mapNotNull { account ->
+        val uid = (account.obj("uid") as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
+        val unlinked = strings(account.obj("unlinked"))
+        val kept = strings(account.obj("kept"))
+        val skipped = account.str("skipped")
+        val wouldLose = when {
+          skipped == "break-glass" -> "Nothing $dash designated break-glass"
+          !skipped.isNullOrEmpty() -> "Nothing $dash it would be left with no way in"
+          else -> unlinked.joinToString(", ").ifEmpty { dash }
+        }
+        JsonObject(
+          mapOf(
+            "uid" to JsonPrimitive(uid),
+            "label" to JsonPrimitive(account.str("email") ?: uid),
+            "wouldLose" to JsonPrimitive(wouldLose),
+            "keeps" to JsonPrimitive(kept.joinToString(", ").ifEmpty { dash }),
+            "eligible" to JsonPrimitive((unlinked + kept).any { it != providerId }),
+            "designated" to JsonPrimitive(uid in chosen),
+          ),
+        )
+      },
+    )
   }
 
   private val productId = Regex("^[A-Za-z0-9_-]{1,64}$")

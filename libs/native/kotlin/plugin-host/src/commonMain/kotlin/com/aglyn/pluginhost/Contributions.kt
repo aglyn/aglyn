@@ -112,6 +112,13 @@ interface NativePluginContext {
    * (`/screens/{id}/versions/{v}/besigner`).
    */
   fun openBesigner(path: String, scope: ConsoleScope = ConsoleScope.SITE): Boolean
+
+  /**
+   * Follows a console link (`/acme/billing/settings`, a path a notice or a route answers) the way a notification's
+   * link is followed: the native screen that claims it, else a Besigner page. Returns false where this context has no
+   * way to follow one.
+   */
+  fun openLink(link: String): Boolean = false
 }
 
 /** How a screen lays out on wide windows. */
