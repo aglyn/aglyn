@@ -247,6 +247,28 @@ class ScreenSpecTest {
     assertEquals("/api/x?pageSize=50", bare.url(load))
   }
 
+  /** A `late` load reads what the others found, and a query can ask for the server's count of what it matches. */
+  @Test
+  fun aLateLoadReadsTheAnswersOfTheOthersAndACountIsAskedOfTheServer() = runTest {
+    val reader = CountingReader()
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{
+           "host":{"doc":"hosts/{params.hostId}"},
+           "media":{"late":true,"query":{"collection":"orgs/{data.host.orgId}/media","count":true}},
+           "members":{"late":true,"query":{"collection":"orgs/{data.host.orgId}/members","where":[["role","==","owner"]],"count":true}},
+           "orphan":{"late":true,"when":"!data.host.orgId","query":{"collection":"hosts/{params.hostId}/media","count":true}}}}""",
+      ),
+    )!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"params":{"hostId":"h1"},"data":{}}"""), client(sent = mutableListOf()), reader)
+    model.load()
+    assertEquals(ScreenModel.Phase.Ready, model.phase)
+    assertEquals(JsonPrimitive(42.0), ScreenValues.lookup("data.media.count", model.context))
+    assertEquals(JsonPrimitive("o9"), ScreenValues.lookup("data.host.orgId", model.context))
+    assertEquals(listOf("orgs/o9/media", "orgs/o9/members"), reader.counted.sorted())
+    assertEquals(listOf("role"), reader.equalities)
+  }
+
   /** A list can walk down into the lists inside its rows; each row found knows the row it came from. */
   @Test
   fun flattenWalksDownAndKeepsTheParent() {
@@ -320,5 +342,21 @@ class ScreenSpecTest {
     assertEquals(2, (ScreenValues.lookup("data.list.rows", model.context) as JsonArray).size)
     assertFalse("list" in model.cursors)
     assertEquals("orgId=o%201&cursor=a", sent.last().url.encodedQuery)
+  }
+}
+
+/** A reader that holds one site document and counts whatever it is asked to. */
+private class CountingReader : com.aglyn.core.FirestoreReader {
+  val counted = mutableListOf<String>()
+  val equalities = mutableListOf<String>()
+
+  override suspend fun get(path: String) = com.aglyn.core.FirestoreDoc(path.substringAfterLast('/'), path, mapOf("orgId" to "o9"))
+  override suspend fun page(query: com.aglyn.core.FirestoreQuery) = com.aglyn.core.FirestorePage(emptyList(), null)
+  override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+  override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
+  override suspend fun count(query: com.aglyn.core.FirestoreQuery): Long? {
+    counted += query.collectionPath
+    equalities += query.filters.map { it.field }
+    return 42L
   }
 }

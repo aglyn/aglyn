@@ -1952,11 +1952,108 @@
         "/admin/orgs/:orgId/host/:hostId"
       ],
       "load": {
-        "site": "/api/admin/sites?hostId={params.hostId}",
-        "transfer": {
-          "url": "/api/admin/site-transfer?hostId={params.hostId}",
-          "optional": true,
-          "when": "staff.super"
+        "site": {
+          "url": "/api/admin/sites?pageSize=1",
+          "items": "sites",
+          "filters": [
+            {
+              "field": "$id",
+              "op": "equals",
+              "value": "{params.hostId}"
+            }
+          ]
+        },
+        "host": {
+          "doc": "hosts/{params.hostId}",
+          "optional": true
+        },
+        "domain": {
+          "url": "/api/domains/status?hostId={params.hostId}",
+          "optional": true
+        },
+        "screens": {
+          "query": {
+            "collection": "hosts/{params.hostId}/screens",
+            "limit": 200
+          },
+          "optional": true
+        },
+        "layouts": {
+          "query": {
+            "collection": "hosts/{params.hostId}/layouts",
+            "limit": 200
+          },
+          "optional": true
+        },
+        "components": {
+          "query": {
+            "collection": "hosts/{params.hostId}/components",
+            "limit": 200
+          },
+          "optional": true
+        },
+        "templates": {
+          "query": {
+            "collection": "hosts/{params.hostId}/templates",
+            "limit": 200
+          },
+          "optional": true
+        },
+        "forms": {
+          "query": {
+            "collection": "hosts/{params.hostId}/forms",
+            "limit": 200
+          },
+          "optional": true
+        },
+        "screensCount": {
+          "query": {
+            "collection": "hosts/{params.hostId}/screens",
+            "count": true
+          },
+          "optional": true
+        },
+        "membersCount": {
+          "query": {
+            "collection": "hosts/{params.hostId}/members",
+            "count": true
+          },
+          "optional": true
+        },
+        "mediaCount": {
+          "late": true,
+          "when": "data.site.sites.0.orgId",
+          "query": {
+            "collection": "orgs/{data.site.sites.0.orgId}/media",
+            "count": true
+          },
+          "optional": true
+        },
+        "siteMediaCount": {
+          "late": true,
+          "when": "!data.site.sites.0.orgId",
+          "query": {
+            "collection": "hosts/{params.hostId}/media",
+            "count": true
+          },
+          "optional": true
+        },
+        "orgMembers": {
+          "late": true,
+          "when": "data.site.sites.0.orgId",
+          "query": {
+            "collection": "orgs/{data.site.sites.0.orgId}/members",
+            "limit": 200
+          },
+          "optional": true
+        },
+        "activity": {
+          "query": {
+            "collection": "hosts/{params.hostId}/activity",
+            "orderBy": "createdAt desc",
+            "limit": 50
+          },
+          "optional": true
         },
         "deliveries": {
           "url": "/api/admin/email-deliveries?hostId={params.hostId}&pageSize=20",
@@ -1965,40 +2062,686 @@
       },
       "blocks": [
         {
+          "type": "notice",
+          "tone": "warning",
+          "text": "No site with this ID was found.",
+          "when": "!data.site.sites.0.$id"
+        },
+        {
           "type": "fields",
-          "object": "data.site.sites[$id=params.hostId]",
+          "title": "Site",
+          "object": "data.site.sites.0",
           "rows": [
             {
-              "label": "Site",
-              "value": "{item.displayName}"
+              "label": "Name",
+              "value": "{item.displayName|item.subdomain}"
+            },
+            {
+              "label": "Live address",
+              "value": "https://{item.liveDomain}",
+              "when": "item.liveDomain",
+              "empty": "Not published"
             },
             {
               "label": "Site ID",
               "value": "{params.hostId}"
             },
             {
-              "label": "Address",
-              "value": "{item.subdomain}"
+              "label": "Pages",
+              "value": "Published",
+              "chip": true,
+              "tone": "success",
+              "when": "item.$id && item.publishedPages != 0"
             },
             {
-              "label": "Domain",
-              "value": "{item.cname}"
+              "label": "Pages",
+              "value": "Unpublished",
+              "chip": true,
+              "tone": "neutral",
+              "when": "item.$id && item.publishedPages == 0"
             },
             {
-              "label": "Workspace",
-              "value": "{item.org.name|item.orgId}"
+              "label": "Suspended",
+              "value": "Suspended",
+              "chip": true,
+              "tone": "error",
+              "when": "item.suspended"
             },
             {
-              "label": "Owner",
-              "value": "{item.owner.email|item.owner}"
+              "label": "Maintenance",
+              "value": "Maintenance",
+              "chip": true,
+              "tone": "warning",
+              "when": "item.maintenance"
             },
             {
-              "label": "Published pages",
-              "value": "{item.publishedPages}"
+              "label": "Leaving notice",
+              "value": "on until {item.org.leavingNoticeUntil:datetime} — links to other domains open a “You’re leaving” page first",
+              "when": "item.org.leavingNoticeUntil"
+            },
+            {
+              "label": "Leaving notice",
+              "value": "off — links to other domains open directly",
+              "when": "item.$id && !item.org.leavingNoticeUntil"
             },
             {
               "label": "Created",
-              "value": "{item.createdAt:date}"
+              "value": "{item.createdAt:datetime}"
+            },
+            {
+              "label": "Last updated",
+              "value": "{item.updatedAt:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "This site",
+          "items": [
+            {
+              "id": "visit",
+              "label": "Visit the live site",
+              "icon": "safari|open_in_new",
+              "when": "data.site.sites.0.liveDomain",
+              "link": "https://{data.site.sites.0.liveDomain}"
+            },
+            {
+              "id": "preview",
+              "label": "Open the preview",
+              "icon": "eye|visibility",
+              "when": "data.site.sites.0.homeScreenId",
+              "besigner": "/admin/sites/{params.hostId}/preview/screen/{data.site.sites.0.homeScreenId}"
+            },
+            {
+              "id": "subdomain",
+              "label": "Change the subdomain",
+              "icon": "pencil|edit",
+              "when": "staff.super",
+              "url": "/api/admin/host",
+              "prompt": [
+                {
+                  "key": "subdomain",
+                  "label": "Subdomain",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{data.site.sites.0.subdomain}",
+                  "help": "The site answers at <name>.{const.tenantApex} once it is saved. The change is audited and takes effect within a minute."
+                }
+              ],
+              "body": {
+                "hostId": "{params.hostId}",
+                "action": "set-subdomain",
+                "subdomain": "{form.subdomain}"
+              },
+              "success": "Subdomain updated",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Custom domain",
+          "footer": "The live verdict, read from the hosting platform each time this opens: the same words the customer sees on their own setup card, plus the attachment flags only staff see.",
+          "object": "data.site.sites.0",
+          "rows": [
+            {
+              "label": "Domain",
+              "value": "{item.cname}",
+              "empty": "No custom domain on this site."
+            },
+            {
+              "label": "Verdict",
+              "value": "{const.domain.verdicts[state=data.domain.state].label}",
+              "chip": true,
+              "tone": "{const.domain.verdicts[state=data.domain.state].tone}",
+              "when": "item.cname",
+              "empty": "Not checked"
+            },
+            {
+              "label": "Attachment",
+              "value": "Attachment pending",
+              "chip": true,
+              "tone": "warning",
+              "when": "item.cnameAttachmentPending"
+            },
+            {
+              "label": "Detachment",
+              "value": "Detachment pending",
+              "chip": true,
+              "tone": "warning",
+              "when": "data.host.cnameDetachmentPending"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "{const.domain.verdicts[state=data.domain.state].note}",
+          "when": "data.site.sites.0.cname && const.domain.verdicts[state=data.domain.state].severity == info"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "{const.domain.verdicts[state=data.domain.state].note}",
+          "when": "data.site.sites.0.cname && const.domain.verdicts[state=data.domain.state].severity == warning"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "{const.domain.verdicts[state=data.domain.state].note}",
+          "when": "data.site.sites.0.cname && const.domain.verdicts[state=data.domain.state].severity == error"
+        },
+        {
+          "type": "list",
+          "title": "The record to add",
+          "footer": "The record the platform is waiting for. The customer adds it at their registrar; Re-attach re-probes once they have.",
+          "when": "data.domain.state == ownership-pending",
+          "items": "data.domain.verification",
+          "primary": "{item.type}  {item.domain}",
+          "secondary": "{item.value}",
+          "icon": "network|dns",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Other records answering for this name",
+          "footer": "These are not ours, so the site loads intermittently. The customer has to remove them at their registrar. Shown even when the domain is serving, because that is the \"it works for me\" report.",
+          "when": "data.domain.conflicts.0",
+          "items": "data.domain.conflicts",
+          "primary": "{item.type} {item.name}",
+          "secondary": "{item.value}",
+          "icon": "exclamationmark.triangle|warning",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "actions",
+          "title": "Domain",
+          "when": "data.site.sites.0.cname",
+          "items": [
+            {
+              "id": "recheck",
+              "label": "Check the status",
+              "icon": "arrow.clockwise|refresh",
+              "reload": true
+            },
+            {
+              "id": "reattach",
+              "label": "Re-attach the domain",
+              "icon": "link|link",
+              "when": "staff.super",
+              "url": "/api/admin/host",
+              "body": {
+                "action": "reattach-domain",
+                "hostId": "{params.hostId}"
+              },
+              "success": "Re-attached",
+              "report": [
+                {
+                  "text": "{response.domain} is serving.",
+                  "when": "response.serving"
+                },
+                {
+                  "text": "{response.domain} is attached but not serving yet. See the verdict above.",
+                  "when": "!response.serving"
+                }
+              ],
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Ownership",
+          "footer": "Ownership moves with the workspace: transferring it here hands every site of the workspace to the new owner.",
+          "object": "data.site.sites.0",
+          "rows": [
+            {
+              "label": "Workspace",
+              "value": "{item.org.name|item.orgId}",
+              "empty": "This site belongs to no workspace"
+            },
+            {
+              "label": "Stored plan",
+              "value": "{item.org.plan:title}",
+              "when": "item.org.plan"
+            },
+            {
+              "label": "Owner",
+              "value": "{item.owner.email|item.owner.displayName|item.owner.uid}",
+              "empty": "The workspace records no owner"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Upgrade proposal",
+          "when": "data.site.sites.0.org.upgradeProposal.plan",
+          "rows": [
+            {
+              "label": "Proposed plan",
+              "value": "{data.site.sites.0.org.upgradeProposal.plan:title}"
+            },
+            {
+              "label": "Proposed by",
+              "value": "{data.site.sites.0.org.upgradeProposal.proposedBy}"
+            },
+            {
+              "label": "Note",
+              "value": "{data.site.sites.0.org.upgradeProposal.note|'—'}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Ownership actions",
+          "items": [
+            {
+              "id": "org",
+              "label": "Open the workspace",
+              "icon": "building.2|business",
+              "navigate": {
+                "screen": "core.staff.org",
+                "params": {
+                  "orgId": "{data.site.sites.0.orgId}"
+                }
+              },
+              "when": "data.site.sites.0.orgId"
+            },
+            {
+              "id": "owner",
+              "label": "Open the owner",
+              "icon": "person|person",
+              "when": "data.site.sites.0.owner.uid",
+              "navigate": {
+                "screen": "core.staff.user",
+                "params": {
+                  "uid": "{data.site.sites.0.owner.uid}"
+                }
+              }
+            },
+            {
+              "id": "transferOwnership",
+              "label": "Transfer ownership to a member",
+              "icon": "arrow.left.arrow.right|swap_horiz",
+              "url": "/api/orgs/settings",
+              "prompt": [
+                {
+                  "key": "target",
+                  "label": "New owner",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.orgMembers.items",
+                    "value": "{item.$id}",
+                    "label": "{item.displayName|item.email|item.$id}"
+                  }
+                }
+              ],
+              "confirm": "The member becomes the owner. Billing and every site go with the workspace.",
+              "body": {
+                "orgId": "{data.site.sites.0.orgId}",
+                "action": "transfer-ownership",
+                "targetUid": "{form.target}"
+              },
+              "success": "Ownership transferred",
+              "when": "data.site.sites.0.orgId"
+            },
+            {
+              "id": "handoff",
+              "label": "Hand off to a new owner",
+              "icon": "person.badge.plus|person_add",
+              "url": "/api/orgs/invites",
+              "prompt": [
+                {
+                  "key": "email",
+                  "label": "New owner's email",
+                  "kind": "email",
+                  "required": true
+                },
+                {
+                  "key": "previousOwner",
+                  "label": "Current owner",
+                  "kind": "select",
+                  "initial": "stay",
+                  "options": [
+                    {
+                      "value": "stay",
+                      "label": "Stay on as an admin after the handoff"
+                    },
+                    {
+                      "value": "leave",
+                      "label": "Leave after the handoff"
+                    }
+                  ]
+                }
+              ],
+              "confirm": "They become the owner once they accept. Nothing changes until then, and the invitation reserves no seat.",
+              "body": {
+                "orgId": "{data.site.sites.0.orgId}",
+                "action": "create",
+                "email": "{form.email}",
+                "role": "owner",
+                "handoff": {
+                  "previousOwner": "{form.previousOwner}"
+                }
+              },
+              "success": "Handoff sent to {form.email}",
+              "when": "data.site.sites.0.orgId"
+            },
+            {
+              "id": "propose",
+              "label": "Propose a plan",
+              "icon": "sparkles|workspace_premium",
+              "url": "/api/admin/org-upgrade-proposal",
+              "prompt": [
+                {
+                  "key": "plan",
+                  "label": "Plan",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    }
+                  ]
+                },
+                {
+                  "key": "note",
+                  "label": "Note to the owner (optional)",
+                  "kind": "multiline"
+                }
+              ],
+              "body": {
+                "orgId": "{data.site.sites.0.orgId}",
+                "action": "propose",
+                "plan": "{form.plan}",
+                "note": "{form.note}"
+              },
+              "success": "Proposed; the owner is told",
+              "reload": true,
+              "when": "data.site.sites.0.orgId"
+            },
+            {
+              "id": "withdraw",
+              "label": "Withdraw the proposal",
+              "icon": "xmark.circle|cancel",
+              "when": "data.site.sites.0.orgId && data.site.sites.0.org.upgradeProposal.plan",
+              "confirm": "Withdraw the plan proposed to this workspace?",
+              "url": "/api/admin/org-upgrade-proposal",
+              "body": {
+                "orgId": "{data.site.sites.0.orgId}",
+                "action": "withdraw"
+              },
+              "success": "Withdrawn",
+              "reload": true
+            },
+            {
+              "id": "reviewMove",
+              "label": "Review moving this site",
+              "icon": "doc.text.magnifyingglass|fact_check",
+              "when": "staff.super",
+              "method": "GET",
+              "url": "/api/admin/site-transfer?hostId={params.hostId}&toOrgId={form.toOrgId}&overrideSiteLimit={form.override}",
+              "prompt": [
+                {
+                  "key": "toOrgId",
+                  "label": "Destination workspace ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "override",
+                  "label": "Place it past the destination's site limit",
+                  "kind": "toggle"
+                }
+              ],
+              "success": "{response.plan.siteName|params.hostId} moves from {response.plan.fromOrgName|response.plan.fromOrgId|'no workspace'} to {response.plan.toOrgName|response.plan.toOrgId}. Its pages, forms, members and orders go with it; its access list becomes the new workspace's roster.",
+              "report": [
+                {
+                  "each": "response.plan.holds",
+                  "text": "Held: {item.message}"
+                },
+                {
+                  "each": "response.plan.warnings",
+                  "text": "Note: {item}"
+                },
+                {
+                  "text": "Nothing holds it. Move it with \"Move to another workspace\".",
+                  "when": "!response.plan.holds.0"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Usage",
+          "rows": [
+            {
+              "label": "Published pages",
+              "value": "{data.site.sites.0.publishedPages}"
+            },
+            {
+              "label": "All pages",
+              "value": "{data.screensCount.count}"
+            },
+            {
+              "label": "Media files (workspace)",
+              "value": "{data.mediaCount.count|data.siteMediaCount.count}"
+            },
+            {
+              "label": "Site members",
+              "value": "{data.membersCount.count}"
+            },
+            {
+              "label": "Storage",
+              "value": "{data.host.storageBytes:bytes}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Pages",
+          "items": "data.screens.items",
+          "primary": "{item.displayName|item.name|item.templateKey|item.$id}",
+          "tertiary": "Updated {item.updatedAt:datetime}",
+          "icon": "doc.text|description",
+          "empty": "No pages on this site.",
+          "actions": [
+            {
+              "id": "preview-screen",
+              "label": "Open the preview",
+              "icon": "eye|visibility",
+              "when": "item.versionId",
+              "besigner": "/admin/sites/{params.hostId}/preview/screen/{item.$id}"
+            },
+            {
+              "id": "live-page",
+              "label": "Visit the live page",
+              "icon": "safari|open_in_new",
+              "when": "data.site.sites.0.liveDomain && data.host.screens[@item.$id] && data.host.screens[@item.$id] != /",
+              "link": "https://{data.site.sites.0.liveDomain}/{data.host.screens[@item.$id]}"
+            },
+            {
+              "id": "live-home",
+              "label": "Visit the live page",
+              "icon": "safari|open_in_new",
+              "when": "data.site.sites.0.liveDomain && data.host.screens[@item.$id] == /",
+              "link": "https://{data.site.sites.0.liveDomain}"
+            }
+          ],
+          "footer": "Up to 200, in the order the site stores them. A row opens its draft preview; no membership or impersonation is needed.",
+          "filter": "item.kind != email",
+          "badges": [
+            {
+              "text": "live /{data.host.screens[@item.$id]}",
+              "when": "data.host.screens[@item.$id] && data.host.screens[@item.$id] != /",
+              "tone": "success"
+            },
+            {
+              "text": "live /",
+              "when": "data.host.screens[@item.$id] == /",
+              "tone": "success"
+            },
+            {
+              "text": "draft",
+              "when": "!data.host.screens[@item.$id]",
+              "tone": "neutral"
+            },
+            {
+              "text": "trashed",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Email designs",
+          "items": "data.screens.items",
+          "primary": "{item.displayName|item.name|item.templateKey|item.$id}",
+          "tertiary": "Updated {item.updatedAt:datetime}",
+          "icon": "doc.text|description",
+          "empty": "No email designs on this site.",
+          "actions": [
+            {
+              "id": "preview-screen",
+              "label": "Open the preview",
+              "icon": "eye|visibility",
+              "when": "item.versionId",
+              "besigner": "/admin/sites/{params.hostId}/preview/screen/{item.$id}"
+            }
+          ],
+          "filter": "item.kind == email",
+          "badges": [
+            {
+              "text": "trashed",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Layouts",
+          "items": "data.layouts.items",
+          "primary": "{item.displayName|item.name|item.templateKey|item.$id}",
+          "tertiary": "Updated {item.updatedAt:datetime}",
+          "icon": "doc.text|description",
+          "empty": "No layouts on this site.",
+          "actions": [
+            {
+              "id": "preview-layout",
+              "label": "Open the preview",
+              "icon": "eye|visibility",
+              "when": "item.versionId",
+              "besigner": "/admin/sites/{params.hostId}/preview/layout/{item.$id}"
+            }
+          ],
+          "badges": [
+            {
+              "text": "trashed",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Components",
+          "items": "data.components.items",
+          "primary": "{item.displayName|item.name|item.templateKey|item.$id}",
+          "tertiary": "Updated {item.updatedAt:datetime}",
+          "icon": "doc.text|description",
+          "empty": "No components on this site.",
+          "actions": [
+            {
+              "id": "preview-component",
+              "label": "Open the preview",
+              "icon": "eye|visibility",
+              "when": "item.versionId",
+              "besigner": "/admin/sites/{params.hostId}/preview/component/{item.$id}"
+            }
+          ],
+          "badges": [
+            {
+              "text": "trashed",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Templates",
+          "items": "data.templates.items",
+          "primary": "{item.displayName|item.name|item.templateKey|item.$id}",
+          "tertiary": "Updated {item.updatedAt:datetime}",
+          "icon": "doc.text|description",
+          "empty": "No templates on this site.",
+          "actions": [
+            {
+              "id": "preview-template",
+              "label": "Open the preview",
+              "icon": "eye|visibility",
+              "when": "item.$id",
+              "besigner": "/admin/sites/{params.hostId}/preview/template/{item.$id}"
+            }
+          ],
+          "badges": [
+            {
+              "text": "trashed",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Forms",
+          "items": "data.forms.items",
+          "primary": "{item.displayName|item.name|item.templateKey|item.$id}",
+          "tertiary": "Updated {item.updatedAt:datetime}",
+          "icon": "doc.text|description",
+          "empty": "No forms on this site.",
+          "actions": [
+            {
+              "id": "preview-form",
+              "label": "Open the preview",
+              "icon": "eye|visibility",
+              "when": "item.versionId",
+              "besigner": "/admin/sites/{params.hostId}/preview/form/{item.$id}"
+            }
+          ],
+          "badges": [
+            {
+              "text": "trashed",
+              "when": "item.deletedAt",
+              "tone": "error"
             }
           ]
         },
@@ -2042,34 +2785,47 @@
           }
         },
         {
+          "type": "fields",
+          "title": "Settings snapshot",
+          "rows": [
+            {
+              "label": "Locales",
+              "value": "{data.host.locales}"
+            },
+            {
+              "label": "GA measurement ID",
+              "value": "{data.host.analytics.gaMeasurementId}"
+            },
+            {
+              "label": "Password protected",
+              "value": "{data.host.protectPassword:yesno}"
+            },
+            {
+              "label": "Product page template",
+              "value": "{data.host.settings.store.pdpScreenId}"
+            },
+            {
+              "label": "Collection template",
+              "value": "{data.host.settings.store.collectionScreenId}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Activity",
+          "footer": "Every change made to this site in the console: who did what, and when. The address is the one the account had when the entry was written.",
+          "items": "data.activity.items",
+          "primary": "{item.action}",
+          "secondary": "{item.target.name|item.target.type:title}",
+          "tertiary": "{item.actorEmail|item.actorId|'System'} · {item.createdAt:datetime}",
+          "icon": "clock|schedule",
+          "count": false,
+          "empty": "No activity yet. Changes made in the console appear here."
+        },
+        {
           "type": "actions",
           "title": "Staff actions",
           "items": [
-            {
-              "id": "org",
-              "label": "Open the workspace",
-              "icon": "building.2|business",
-              "navigate": {
-                "screen": "core.staff.org",
-                "params": {
-                  "orgId": "{data.site.sites.0.orgId}"
-                }
-              }
-            },
-            {
-              "id": "reattach",
-              "label": "Reattach the domain",
-              "icon": "link|link",
-              "when": "staff.super && data.site.sites.0.cname",
-              "url": "/api/admin/host",
-              "reason": true,
-              "body": {
-                "action": "reattach-domain",
-                "hostId": "{params.hostId}",
-                "reason": "{form.reason}"
-              },
-              "success": "Reattached"
-            },
             {
               "id": "transfer",
               "label": "Move to another workspace",
@@ -2191,7 +2947,61 @@
             "value": "manual",
             "label": "Manual"
           }
-        ]
+        ],
+        "tenantApex": "aglyn.app",
+        "domain": {
+          "verdicts": [
+            {
+              "state": "serving",
+              "label": "live",
+              "tone": "success",
+              "severity": "",
+              "note": ""
+            },
+            {
+              "state": "certificate-pending",
+              "label": "issuing certificate",
+              "tone": "info",
+              "severity": "info",
+              "note": "DNS resolves here and the domain is attached; the certificate is still issuing. Nobody needs to do anything — the completer cron clears the pending flag once it lands. Until then the domain may show a security warning and visitors are still sent to the platform subdomain."
+            },
+            {
+              "state": "ownership-pending",
+              "label": "ownership check needed",
+              "tone": "warning",
+              "severity": "warning",
+              "note": "The apex is registered to another account on the hosting platform, so it will not serve until a TXT challenge is answered. The record below is the one the customer has to add at their registrar; Re-attach re-probes once they have."
+            },
+            {
+              "state": "dns-misconfigured",
+              "label": "DNS not pointing here",
+              "tone": "warning",
+              "severity": "warning",
+              "note": "The domain is attached but no longer resolves here — the customer changed the record at their registrar, or another record is answering for the same name. Nothing on our side fixes this; the conflicting records below, if any, are the usual cause."
+            },
+            {
+              "state": "not-attached",
+              "label": "not attached",
+              "tone": "error",
+              "severity": "error",
+              "note": "Saved on the site but not attached to the hosting platform, so it serves nothing. Try Re-attach. If it keeps failing the name is held by another account on the platform and needs a support escalation with the domain name."
+            },
+            {
+              "state": "skipped",
+              "label": "",
+              "tone": "success",
+              "severity": "info",
+              "note": "The hosting platform could not be asked for this domain, so there is no verdict — this is not evidence of a problem. On a self-hosted deployment there is no platform to ask at all."
+            },
+            {
+              "state": "unknown",
+              "label": "",
+              "tone": "success",
+              "severity": "info",
+              "note": "The hosting platform could not be asked for this domain, so there is no verdict — this is not evidence of a problem. On a self-hosted deployment there is no platform to ask at all."
+            }
+          ]
+        }
       }
     },
     {

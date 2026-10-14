@@ -211,6 +211,31 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(bare.url(for: load), "/api/x?pageSize=50")
   }
 
+  /// A `late` load reads what the others found, and a query can ask for the server's count of what it matches.
+  @MainActor
+  func testALateLoadReadsTheAnswersOfTheOthersAndACountIsAskedOfTheServer() async throws {
+    let reader = CountingReader()
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: RecordingTransport(responses: []))
+    let spec = try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": [
+          "host": ["doc": "hosts/{params.hostId}"],
+          "media": ["late": true, "query": ["collection": "orgs/{data.host.orgId}/media", "count": true]],
+          "members": ["late": true, "query": ["collection": "orgs/{data.host.orgId}/members", "where": [["role", "==", "owner"]], "count": true]],
+          // A late load's own condition reads the answers too: this one is for a site with no workspace.
+          "orphan": ["late": true, "when": "!data.host.orgId", "query": ["collection": "hosts/{params.hostId}/media", "count": true]],
+        ],
+      ]))
+    let model = ScreenModel(spec: spec, context: ["params": ["hostId": "h1"], "data": [:]], api: api, reader: reader)
+    await model.load()
+    XCTAssertEqual(model.phase, .ready)
+    XCTAssertEqual(ScreenValues.lookup("data.media.count", in: model.context), 42)
+    XCTAssertEqual(ScreenValues.lookup("data.host.orgId", in: model.context), "o9")
+    XCTAssertEqual(reader.counted.sorted(), ["orgs/o9/media", "orgs/o9/members"])
+    XCTAssertEqual(reader.equalities, ["role"])
+  }
+
   /// A list can walk down into the lists inside its rows; each row found knows the row it came from.
   func testFlattenWalksDownAndKeepsTheParent() {
     let sources: [JSONValue] = [
@@ -294,6 +319,33 @@ final class ScreenSpecTests: XCTestCase {
     case .array(let items): return items.flatMap(targets)
     default: return []
     }
+  }
+}
+
+/// A reader that holds one site document and counts whatever it is asked to.
+final class CountingReader: FirestoreReader, @unchecked Sendable {
+  private(set) var counted: [String] = []
+  private(set) var equalities: [String] = []
+
+  @MainActor
+  func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void) -> FirestoreListening {
+    onChange(.success([]))
+    return NoListener()
+  }
+
+  @MainActor
+  func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void) -> FirestoreListening {
+    onChange(.success(FirestoreDocument(id: path.last ?? "", data: ["orgId": "o9"])))
+    return NoListener()
+  }
+
+  func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
+  func deleteDocument(_ path: [String]) async throws {}
+
+  func count(_ query: FirestoreQuery) async throws -> Int? {
+    counted.append(query.path)
+    equalities += query.equals.map(\.field)
+    return 42
   }
 }
 

@@ -45,6 +45,8 @@ function aliases() {
 
 /** What the console modules say: the probes the Health screen reads as `const`, and the jobs the Maintenance screen is drawn from. */
 export async function staffSources() {
+  // The platform address is the default one, whatever this machine's environment says.
+  delete process.env.NEXT_PUBLIC_TENANT_DOMAIN
   const { createJiti } = require('jiti')
   const jiti = createJiti(join(ROOT, 'package.json'), { interopDefault: true, fsCache: false, alias: aliases() })
   const health = await jiti.import(join(ROOT, 'apps/console/utils/platform-health.ts'))
@@ -59,6 +61,9 @@ export async function staffSources() {
   const plans = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'))
   const revenue = await jiti.import(join(ROOT, 'apps/console/utils/revenue-view.ts'))
   const overrides = await jiti.import(join(ROOT, 'apps/console/utils/org-override-fields.ts'))
+  const domain = await jiti.import(join(ROOT, 'apps/console/utils/domain-status.ts'))
+  const leaving = await jiti.import(join(ROOT, 'apps/console/utils/staff-leaving-notice.ts'))
+  const apex = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/tenant-apex.ts'))
   const overrideReasons = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/org-override-reason.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
   const model = (file) => jiti.import(join(ROOT, `libs/plugins/marketplace/src/lib/model/${file}.ts`))
@@ -67,6 +72,30 @@ export async function staffSources() {
   const statuses = await model('plugin-review-status')
   const attestation = await model('publisher-attestation')
   return {
+    site: {
+      tenantApex: apex.TENANT_APEX,
+      // What the console's domain card says for each verdict the hosting platform can give.
+      domain: {
+        verdicts: ['serving', 'certificate-pending', 'ownership-pending', 'dns-misconfigured', 'not-attached', 'skipped', 'unknown'].map(
+          (state) => {
+            const chip = domain.domainChipFor('@', { state }, false)
+            const note = domain.staffDomainNoteFor({ state })
+            return {
+              state,
+              label: chip.label.replace(/^@( — )?/, ''),
+              tone: chip.color,
+              severity: note?.severity ?? '',
+              note: note?.text ?? '',
+            }
+          },
+        ),
+      },
+      // The leaving-notice line, both ways it reads, as value templates over a site row.
+      leavingNotice: {
+        on: leaving.staffLeavingNoticeLabel(0, () => '{item.org.leavingNoticeUntil:datetime}').replace(/^Leaving notice: /, ''),
+        off: leaving.staffLeavingNoticeLabel(null).replace(/^Leaving notice: /, ''),
+      },
+    },
     emails: {
       templates: emails.SYSTEM_EMAIL_TEMPLATES.map(({ key, name, description, deliveredBy }) => ({
         key,
@@ -420,7 +449,22 @@ replace('core.staff.abuse', (screen) => ({ ...screen, constants: sources.abuse }
 replace('core.staff.lockdown', (screen) => ({ ...screen, constants: sources.lockdown }))
 replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons } }))
 replace('core.staff.pluginReview', (screen) => ({ ...screen, constants: sources.pluginReview }))
-replace('core.staff.site', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons } }))
+replace('core.staff.site', (screen) => ({
+  ...screen,
+  constants: { lockReasons: sources.lockReasons, tenantApex: sources.site.tenantApex, domain: sources.site.domain },
+  blocks: screen.blocks.map((block) => ({
+    ...block,
+    ...(block.rows
+      ? {
+          rows: block.rows.map((row) =>
+            row.label === 'Leaving notice'
+              ? { ...row, value: row.when === 'item.org.leavingNoticeUntil' ? sources.site.leavingNotice.on : sources.site.leavingNotice.off }
+              : row,
+          ),
+        }
+      : {}),
+  })),
+}))
 replace('core.staff.maintenance', () => maintenanceScreen(sources.jobs, sources.reasonMin))
 replace('core.staff.orgOverride', () => orgOverrideScreen(sources.override))
 

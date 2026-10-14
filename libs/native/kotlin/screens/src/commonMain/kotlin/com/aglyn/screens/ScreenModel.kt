@@ -131,7 +131,8 @@ class ScreenModel(
     phase = Phase.Ready
   }
 
-  internal fun url(load: LoadSpec, cursor: String? = null): String {
+  internal fun url(load: LoadSpec, cursor: String? = null, scope: JsonElement = context): String {
+    val context = scope
     var url = ScreenValues.renderUrl(load.url, context)
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
       url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
@@ -153,20 +154,26 @@ class ScreenModel(
       phase = Phase.Failed("Sign in to continue.")
       return
     }
-    val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
-    val results = try {
-      coroutineScope {
-        loads.map { load ->
-          async {
-            try {
-              fetch(client, load)
-            } catch (error: CancellationException) {
-              throw error
-            } catch (error: Throwable) {
-              if (load.optional) Triple(load.key, JsonNull, null) else throw error
+    val results = mutableListOf<Triple<String, JsonElement, String?>>()
+    try {
+      // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too.
+      for (late in listOf(false, true)) {
+        val scope = if (results.isEmpty()) context else ScreenContext.with(context, "data", JsonObject(results.associate { it.first to it.second }))
+        val wave = spec.loads.filter { it.late == late && ScreenValues.condition(it.whenCondition, scope) }
+        if (wave.isEmpty()) continue
+        results += coroutineScope {
+          wave.map { load ->
+            async {
+              try {
+                fetch(client, load, scope)
+              } catch (error: CancellationException) {
+                throw error
+              } catch (error: Throwable) {
+                if (load.optional) Triple(load.key, JsonNull, null) else throw error
+              }
             }
-          }
-        }.awaitAll()
+          }.awaitAll()
+        }
       }
     } catch (error: CancellationException) {
       throw error
@@ -183,7 +190,7 @@ class ScreenModel(
     phase = Phase.Ready
   }
 
-  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec): Triple<String, JsonElement, String?> {
+  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec, context: JsonElement): Triple<String, JsonElement, String?> {
     load.doc?.let { doc ->
       return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
     }
@@ -198,7 +205,7 @@ class ScreenModel(
       return Triple(load.key, SwitchboardRows.site(org, host), null)
     }
     val value = try {
-      client.request(url(load), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
+      client.request(url(load, scope = context), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
     } catch (error: ConsoleApiError) {
       // A probe that answers 503 is reporting, and the report is the body.
       error.body?.takeIf { error.status in load.accept } ?: throw error

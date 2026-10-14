@@ -35,7 +35,7 @@ internal object FirestoreLoads {
   suspend fun document(reader: FirestoreReader, path: String): JsonElement = reader.get(path)?.let { json(it) } ?: JsonNull
 
   /**
-   * `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. A clause may end in
+   * `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit, count }`. A clause may end in
    * `"optional"`, and is then left out when its value is empty (a filter the screen was not asked for).
    */
   suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement): JsonElement {
@@ -58,6 +58,12 @@ internal object FirestoreLoads {
     }
     val order = spec.str("orderBy")?.split(' ')?.let { listOf(FirestoreOrder(it[0], it.getOrNull(1) == "desc")) } ?: emptyList()
     val limit = ScreenValues.number(spec.obj("limit"))?.toInt() ?: 50
+    // `count: true` asks the server how many documents match, as the console's `getCountFromServer` does; the answer
+    // is `{ "count": n }`, or null where the reader cannot count.
+    if (spec.isTrue("count")) {
+      val total = reader.count(FirestoreQuery(collection, filters))
+      return JsonObject(mapOf("count" to (total?.let { JsonPrimitive(it.toDouble()) } ?: JsonNull)))
+    }
     val page = reader.page(FirestoreQuery(collection, filters, order, limit))
     return JsonObject(mapOf("items" to JsonArray(page.docs.map { json(it) })))
   }

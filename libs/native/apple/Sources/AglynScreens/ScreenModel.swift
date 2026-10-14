@@ -156,7 +156,8 @@ public final class ScreenModel {
 
   public var data: JSONValue { context["data"] ?? [:] }
 
-  func url(for load: LoadSpec, cursor: String? = nil) -> String {
+  func url(for load: LoadSpec, cursor: String? = nil, in scope: JSONValue? = nil) -> String {
+    let context = scope ?? self.context
     var url = ScreenValues.renderURL(load.url, in: context)
     if let words = search[load.key], !words.trimmingCharacters(in: .whitespaces).isEmpty {
       url += (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(words)
@@ -183,26 +184,30 @@ public final class ScreenModel {
       phase = .failed("Sign in to continue.")
       return
     }
-    let loads = spec.loads.filter { ScreenValues.condition($0.when, in: context) }
     var results: [String: JSONValue] = [:]
     var nextCursors: [String: String] = [:]
     do {
-      try await withThrowingTaskGroup(of: (String, JSONValue, String?).self) { group in
-        let reader = reader
-        let context = context
-        for load in loads {
-          let path = url(for: load)
-          group.addTask {
-            do {
-              return try await Self.fetch(load, path: path, api: api, reader: reader, context: context)
-            } catch where load.optional && !(error is CancellationError) {
-              return (load.key, .null, nil)
+      // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too.
+      for late in [false, true] {
+        let scope = results.isEmpty ? context : ScreenContext.with(context, "data", .object(results))
+        let wave = spec.loads.filter { $0.late == late && ScreenValues.condition($0.when, in: scope) }
+        if wave.isEmpty { continue }
+        try await withThrowingTaskGroup(of: (String, JSONValue, String?).self) { group in
+          let reader = reader
+          for load in wave {
+            let path = url(for: load, in: scope)
+            group.addTask {
+              do {
+                return try await Self.fetch(load, path: path, api: api, reader: reader, context: scope)
+              } catch where load.optional && !(error is CancellationError) {
+                return (load.key, .null, nil)
+              }
             }
           }
-        }
-        for try await (key, value, cursor) in group {
-          results[key] = value
-          if let cursor, !cursor.isEmpty { nextCursors[key] = cursor }
+          for try await (key, value, cursor) in group {
+            results[key] = value
+            if let cursor, !cursor.isEmpty { nextCursors[key] = cursor }
+          }
         }
       }
     } catch is CancellationError {

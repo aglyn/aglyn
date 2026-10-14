@@ -83,6 +83,9 @@ public struct LoadSpec: Sendable, Hashable {
   public let query: JSONValue?
   /// `org` or `site`: the plugin switchboard's rows (SwitchboardRows).
   public let switchboard: String?
+  /// Runs once the other loads have answered, with their answers under `data`: a read keyed by
+  /// something another read found (a site's workspace id).
+  public let late: Bool
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -100,6 +103,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.optional = false
       self.accept = []
       self.filters = []
+      self.late = false
     } else {
       self.url = json["url"]?.stringValue ?? ""
       self.when = json["when"]?.stringValue
@@ -114,6 +118,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.optional = json["optional"] == .bool(true)
       self.accept = json["accept"].array.compactMap { value in value.numberValue.map { Int($0) } }
       self.filters = json["filters"].array
+      self.late = json["late"] == .bool(true)
     }
   }
 }

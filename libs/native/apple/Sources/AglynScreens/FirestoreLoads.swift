@@ -66,7 +66,7 @@ enum FirestoreLoads {
   }
 
   /// A collection query, read once: `{ "items": [...] }`.
-  /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. A clause may end in
+  /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit, count }`. A clause may end in
   /// `"optional"`, and is then left out when its value is empty (a filter the screen was not asked for).
   @MainActor
   static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue) async throws -> JSONValue {
@@ -88,6 +88,12 @@ enum FirestoreLoads {
     }
     let limit = ScreenValues.number(spec["limit"]).map { Int($0) } ?? 50
     let query = FirestoreQuery(segments(collection), equals: equals, order: order, limit: limit)
+    // `count: true` asks the server how many documents match, as the console's `getCountFromServer` does;
+    // the answer is `{ "count": n }`, or null where the reader cannot count.
+    if spec["count"] == .bool(true) {
+      let total = try await reader.count(FirestoreQuery(segments(collection), equals: equals))
+      return ["count": total.map { .number(Double($0)) } ?? .null]
+    }
     let docs: [FirestoreDocument] = try await withCheckedThrowingContinuation { continuation in
       var listener: FirestoreListening?
       var finished = false

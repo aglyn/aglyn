@@ -64,9 +64,9 @@ class LoadSpec(val key: String, json: JsonElement) {
   val body: JsonElement? = json.obj("body")
   /** A load whose failure leaves its key null instead of failing the screen. */
   val optional: Boolean = json.isTrue("optional")
-  /** Statuses whose body is the answer, not a failure: a health probe answers 503 when it reports degraded. */
   /** The staff list routes' `filters`: `{ field, op, value }` clauses, each kept when its value template is not empty. */
   val filters: List<JsonElement> = json.arr("filters")
+  /** Statuses whose body is the answer, not a failure: a health probe answers 503 when it reports degraded. */
   val accept: List<Int> = json.arr("accept").mapNotNull { (it as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() }
   /** A Firestore document path to read instead of a route. */
   val doc: String? = json.str("doc")
@@ -74,6 +74,8 @@ class LoadSpec(val key: String, json: JsonElement) {
   val query: JsonElement? = json.obj("query")
   /** `org` or `site`: the plugin switchboard's rows ([SwitchboardRows]). */
   val switchboard: String? = json.str("switchboard")
+  /** Runs once the other loads have answered, with their answers under `data`: a read keyed by something another read found. */
+  val late: Boolean = json.isTrue("late")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
