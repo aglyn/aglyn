@@ -12205,6 +12205,1638 @@
           "C"
         ]
       ]
+    },
+    "parseStructuredValue": {
+      "module": "libs/plugins/logic/src/lib/model/structured-value.ts",
+      "args": [
+        [
+          "",
+          "dictionary"
+        ],
+        [
+          "   ",
+          "collection"
+        ],
+        [
+          "{\"name\":\"Ada\",\"age\":36,\"admin\":true,\"gone\":null,\"tags\":[\"a\",\"b\"],\"box\":{\"k\":1}}",
+          "dictionary"
+        ],
+        [
+          "[\"a\",2,false,null,{\"k\":1},[1]]",
+          "collection"
+        ],
+        [
+          "{bad",
+          "dictionary"
+        ],
+        [
+          "[1,2]",
+          "dictionary"
+        ],
+        [
+          "{\"a\":1}",
+          "collection"
+        ],
+        [
+          "\"text\"",
+          "dictionary"
+        ],
+        [
+          "null",
+          "dictionary"
+        ],
+        [
+          "{\"a\":1.5e3,\"b\":-0.25}",
+          "dictionary"
+        ]
+      ]
+    },
+    "serializeStructuredValue": {
+      "module": "libs/plugins/logic/src/lib/model/structured-value.ts",
+      "args": [
+        [
+          [],
+          "dictionary"
+        ],
+        [
+          [],
+          "collection"
+        ],
+        [
+          [
+            {
+              "key": "a",
+              "kind": "text",
+              "value": "x"
+            },
+            {
+              "key": " b ",
+              "kind": "number",
+              "value": " 2.5 "
+            },
+            {
+              "key": "c",
+              "kind": "boolean",
+              "value": "true"
+            },
+            {
+              "key": "d",
+              "kind": "boolean",
+              "value": "no"
+            }
+          ],
+          "dictionary"
+        ],
+        [
+          [
+            {
+              "key": "",
+              "kind": "text",
+              "value": "dropped"
+            },
+            {
+              "key": "a",
+              "kind": "text",
+              "value": "first"
+            },
+            {
+              "key": "a",
+              "kind": "text",
+              "value": "last"
+            }
+          ],
+          "dictionary"
+        ],
+        [
+          [
+            {
+              "key": "n",
+              "kind": "number",
+              "value": ""
+            },
+            {
+              "key": "m",
+              "kind": "number",
+              "value": "abc"
+            },
+            {
+              "key": "k",
+              "kind": "kept",
+              "value": "{}",
+              "kept": {
+                "z": [
+                  1,
+                  2
+                ]
+              }
+            }
+          ],
+          "dictionary"
+        ],
+        [
+          [
+            {
+              "key": "ignored",
+              "kind": "text",
+              "value": "one"
+            },
+            {
+              "key": "",
+              "kind": "number",
+              "value": "2"
+            },
+            {
+              "key": "",
+              "kind": "boolean",
+              "value": "true"
+            },
+            {
+              "key": "",
+              "kind": "kept",
+              "value": "[1]",
+              "kept": [
+                1
+              ]
+            }
+          ],
+          "collection"
+        ]
+      ]
+    },
+    "buildFormula": {
+      "module": "libs/plugins/logic/src/lib/model/formula.ts",
+      "args": [
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "name",
+                "name": ""
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "number",
+                "value": " 4 "
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "number",
+                "value": "abc"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "text",
+                "value": "it's"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "text",
+                "value": "say \"hi\""
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "text",
+                "value": "both ' and \""
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "current"
+              }
+            ]
+          },
+          "P1 + P2"
+        ],
+        [
+          {
+            "operation": "value",
+            "operands": [
+              {
+                "source": "current"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              },
+              {
+                "source": "number",
+                "value": "3"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "current"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              }
+            ]
+          },
+          "P1 * 2"
+        ],
+        [
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "current"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              }
+            ]
+          },
+          "P1"
+        ],
+        [
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "current"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              }
+            ]
+          },
+          "-1.5"
+        ],
+        [
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "subtract",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              },
+              {
+                "source": "name",
+                "name": "P3"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "multiply",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "number",
+                "value": "2"
+              },
+              {
+                "source": "number",
+                "value": "0.5"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "divide",
+            "operands": [
+              {
+                "source": "name",
+                "name": "a.b"
+              },
+              {
+                "source": "number",
+                "value": "4"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "min",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "max",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "number",
+                "value": "10"
+              },
+              {
+                "source": "name",
+                "name": "P3"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "min",
+            "operands": [
+              {
+                "source": "current"
+              },
+              {
+                "source": "number",
+                "value": "5"
+              }
+            ]
+          },
+          "P1 + P2"
+        ],
+        [
+          {
+            "operation": "round",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "round",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ],
+            "places": 2
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "round",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ],
+            "places": 9
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "round",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ],
+            "places": -1
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "round",
+            "operands": [
+              {
+                "source": "current"
+              }
+            ]
+          },
+          "P1 + P2"
+        ],
+        [
+          {
+            "operation": "roundDown",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "roundUp",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "absolute",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "currency",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "currency",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ],
+            "symbol": "€",
+            "places": 0
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "currency",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ],
+            "symbol": "",
+            "places": 3
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "currency",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ],
+            "symbol": "'"
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "number",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "number",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ],
+            "places": 2
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "join",
+            "operands": [
+              {
+                "source": "name",
+                "name": "A"
+              },
+              {
+                "source": "text",
+                "value": "x"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "join",
+            "operands": [
+              {
+                "source": "text",
+                "value": "a"
+              },
+              {
+                "source": "text",
+                "value": "b"
+              },
+              {
+                "source": "text",
+                "value": "c"
+              }
+            ],
+            "separator": ", "
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "join",
+            "operands": [
+              {
+                "source": "text",
+                "value": "a"
+              },
+              {
+                "source": "name",
+                "name": "B"
+              }
+            ],
+            "separator": ""
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "join",
+            "operands": [
+              {
+                "source": "text",
+                "value": "a"
+              },
+              {
+                "source": "text",
+                "value": "b"
+              }
+            ],
+            "separator": "'"
+          },
+          ""
+        ],
+        [
+          {
+            "operation": "join",
+            "operands": [
+              {
+                "source": "name",
+                "name": "A"
+              },
+              {
+                "source": "current"
+              }
+            ]
+          },
+          "A + B"
+        ]
+      ]
+    },
+    "formulaDraftFor": {
+      "module": "libs/plugins/logic/src/lib/model/formula.ts",
+      "args": [
+        [
+          "value",
+          null,
+          ""
+        ],
+        [
+          "add",
+          null,
+          ""
+        ],
+        [
+          "subtract",
+          null,
+          ""
+        ],
+        [
+          "multiply",
+          null,
+          ""
+        ],
+        [
+          "divide",
+          null,
+          ""
+        ],
+        [
+          "min",
+          null,
+          ""
+        ],
+        [
+          "max",
+          null,
+          ""
+        ],
+        [
+          "round",
+          null,
+          ""
+        ],
+        [
+          "roundDown",
+          null,
+          ""
+        ],
+        [
+          "roundUp",
+          null,
+          ""
+        ],
+        [
+          "absolute",
+          null,
+          ""
+        ],
+        [
+          "currency",
+          null,
+          ""
+        ],
+        [
+          "number",
+          null,
+          ""
+        ],
+        [
+          "join",
+          null,
+          ""
+        ],
+        [
+          "add",
+          {
+            "operation": "subtract",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "number",
+                "value": "2"
+              },
+              {
+                "source": "name",
+                "name": "P3"
+              }
+            ],
+            "places": 1,
+            "symbol": "€",
+            "separator": "-"
+          },
+          ""
+        ],
+        [
+          "join",
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              }
+            ]
+          },
+          ""
+        ],
+        [
+          "value",
+          null,
+          "P1 + 2"
+        ],
+        [
+          "add",
+          null,
+          "P1 + 2"
+        ],
+        [
+          "join",
+          null,
+          "x"
+        ],
+        [
+          "subtract",
+          {
+            "operation": "add",
+            "operands": [
+              {
+                "source": "name",
+                "name": "P1"
+              },
+              {
+                "source": "name",
+                "name": "P2"
+              },
+              {
+                "source": "name",
+                "name": "P3"
+              }
+            ]
+          },
+          "q"
+        ]
+      ]
+    },
+    "formulaOperandLabel": {
+      "module": "libs/plugins/logic/src/lib/model/formula.ts",
+      "args": [
+        [
+          "value",
+          0
+        ],
+        [
+          "value",
+          1
+        ],
+        [
+          "value",
+          3
+        ],
+        [
+          "add",
+          0
+        ],
+        [
+          "add",
+          1
+        ],
+        [
+          "add",
+          3
+        ],
+        [
+          "subtract",
+          0
+        ],
+        [
+          "subtract",
+          1
+        ],
+        [
+          "subtract",
+          3
+        ],
+        [
+          "multiply",
+          0
+        ],
+        [
+          "multiply",
+          1
+        ],
+        [
+          "multiply",
+          3
+        ],
+        [
+          "divide",
+          0
+        ],
+        [
+          "divide",
+          1
+        ],
+        [
+          "divide",
+          3
+        ],
+        [
+          "min",
+          0
+        ],
+        [
+          "min",
+          1
+        ],
+        [
+          "min",
+          3
+        ],
+        [
+          "max",
+          0
+        ],
+        [
+          "max",
+          1
+        ],
+        [
+          "max",
+          3
+        ],
+        [
+          "round",
+          0
+        ],
+        [
+          "round",
+          1
+        ],
+        [
+          "round",
+          3
+        ],
+        [
+          "roundDown",
+          0
+        ],
+        [
+          "roundDown",
+          1
+        ],
+        [
+          "roundDown",
+          3
+        ],
+        [
+          "roundUp",
+          0
+        ],
+        [
+          "roundUp",
+          1
+        ],
+        [
+          "roundUp",
+          3
+        ],
+        [
+          "absolute",
+          0
+        ],
+        [
+          "absolute",
+          1
+        ],
+        [
+          "absolute",
+          3
+        ],
+        [
+          "currency",
+          0
+        ],
+        [
+          "currency",
+          1
+        ],
+        [
+          "currency",
+          3
+        ],
+        [
+          "number",
+          0
+        ],
+        [
+          "number",
+          1
+        ],
+        [
+          "number",
+          3
+        ],
+        [
+          "join",
+          0
+        ],
+        [
+          "join",
+          1
+        ],
+        [
+          "join",
+          3
+        ]
+      ]
+    },
+    "formulaNames": {
+      "module": "libs/plugins/logic/src/lib/model/formula-names.ts",
+      "args": [
+        [
+          {
+            "parameters": [],
+            "locals": [],
+            "siteVariables": []
+          }
+        ],
+        [
+          {
+            "parameters": [
+              {
+                "name": "P1"
+              },
+              {
+                "name": "bad name"
+              },
+              {
+                "name": "P1"
+              }
+            ],
+            "locals": [
+              {
+                "name": "V1"
+              },
+              {
+                "name": "P1"
+              },
+              {
+                "name": "1x"
+              }
+            ],
+            "siteVariables": []
+          }
+        ],
+        [
+          {
+            "parameters": [
+              {
+                "name": "P1"
+              }
+            ],
+            "locals": [],
+            "siteVariables": [
+              {
+                "name": "zeta",
+                "type": "number",
+                "value": "1"
+              },
+              {
+                "name": "alpha",
+                "type": "text",
+                "value": "x"
+              },
+              {
+                "name": "P1",
+                "type": "text",
+                "value": "shadowed"
+              },
+              {
+                "name": "list",
+                "type": "collection",
+                "value": "[1,2]"
+              },
+              {
+                "name": "prices",
+                "type": "dictionary",
+                "value": "{\"small\":1,\"big\":2,\"nested\":{\"a\":1},\"ok\":\"x\",\"flag\":true,\"bad key\":1,\"nul\":null}"
+              },
+              {
+                "name": "broken",
+                "type": "dictionary",
+                "value": "{nope"
+              },
+              {
+                "name": "arr",
+                "type": "dictionary",
+                "value": "[1]"
+              },
+              {
+                "name": "nothing",
+                "type": "dictionary"
+              },
+              {
+                "name": "9bad",
+                "type": "text"
+              },
+              {
+                "type": "text"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "choiceRowsFromOptions": {
+      "module": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          []
+        ],
+        [
+          [
+            {
+              "value": "a"
+            },
+            {
+              "value": "b",
+              "label": "Bee"
+            }
+          ]
+        ]
+      ]
+    },
+    "optionsFromChoiceRows": {
+      "module": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "value": "a",
+              "label": ""
+            },
+            {
+              "value": " b ",
+              "label": " Bee "
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "value": "",
+              "label": "no value"
+            },
+            {
+              "value": "a",
+              "label": "a"
+            },
+            {
+              "value": "a",
+              "label": "again"
+            },
+            {
+              "value": "c",
+              "label": "C"
+            }
+          ]
+        ]
+      ]
+    },
+    "functionReferencedNames": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          {
+            "name": "f",
+            "parameters": [],
+            "variables": [],
+            "operations": [],
+            "returnValue": ""
+          }
+        ],
+        [
+          {
+            "name": "f",
+            "parameters": [
+              {
+                "name": "P1",
+                "type": "number"
+              },
+              {
+                "name": "P2",
+                "type": "number"
+              }
+            ],
+            "variables": [
+              {
+                "name": "V1",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "P1",
+                  "comparator": "<=",
+                  "right": "P2"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "P1 + rate"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "V1",
+                    "expression": "P2 * tax.rate + max(P1, floor)"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "V1"
+          }
+        ],
+        [
+          {
+            "name": "f",
+            "parameters": [
+              {
+                "name": "P1",
+                "type": "number"
+              }
+            ],
+            "variables": [
+              {
+                "name": "V1",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "shipping",
+                  "comparator": "<=",
+                  "right": "P1 + 1"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "P1"
+                  }
+                ],
+                "otherwise": []
+              },
+              {
+                "if": {
+                  "left": "P1",
+                  "comparator": "<=",
+                  "right": "0"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "tax.rate"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": ""
+          }
+        ]
+      ]
+    },
+    "functionGlobals": {
+      "module": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "args": [
+        [
+          {
+            "name": "f",
+            "parameters": [],
+            "variables": [],
+            "operations": [],
+            "returnValue": ""
+          },
+          {
+            "a": {
+              "name": "rate",
+              "type": "number",
+              "value": "0.07"
+            },
+            "b": {
+              "name": "floor",
+              "type": "number",
+              "value": "3"
+            },
+            "c": {
+              "name": "shipping",
+              "type": "text",
+              "value": "flat"
+            },
+            "d": {
+              "name": "tax",
+              "type": "dictionary",
+              "value": "{\"rate\":0.08}"
+            },
+            "e": {
+              "name": "unused",
+              "type": "boolean",
+              "value": "true"
+            },
+            "f": {
+              "name": "P1",
+              "type": "text",
+              "value": "shadowed"
+            },
+            "g": {
+              "type": "text",
+              "value": "nameless"
+            }
+          }
+        ],
+        [
+          {
+            "name": "f",
+            "parameters": [
+              {
+                "name": "P1",
+                "type": "number"
+              },
+              {
+                "name": "P2",
+                "type": "number"
+              }
+            ],
+            "variables": [
+              {
+                "name": "V1",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "P1",
+                  "comparator": "<=",
+                  "right": "P2"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "P1 + rate"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "V1",
+                    "expression": "P2 * tax.rate + max(P1, floor)"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "V1"
+          },
+          {
+            "a": {
+              "name": "rate",
+              "type": "number",
+              "value": "0.07"
+            },
+            "b": {
+              "name": "floor",
+              "type": "number",
+              "value": "3"
+            },
+            "c": {
+              "name": "shipping",
+              "type": "text",
+              "value": "flat"
+            },
+            "d": {
+              "name": "tax",
+              "type": "dictionary",
+              "value": "{\"rate\":0.08}"
+            },
+            "e": {
+              "name": "unused",
+              "type": "boolean",
+              "value": "true"
+            },
+            "f": {
+              "name": "P1",
+              "type": "text",
+              "value": "shadowed"
+            },
+            "g": {
+              "type": "text",
+              "value": "nameless"
+            }
+          }
+        ],
+        [
+          {
+            "name": "f",
+            "parameters": [
+              {
+                "name": "P1",
+                "type": "number"
+              }
+            ],
+            "variables": [
+              {
+                "name": "V1",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "shipping",
+                  "comparator": "<=",
+                  "right": "P1 + 1"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "P1"
+                  }
+                ],
+                "otherwise": []
+              },
+              {
+                "if": {
+                  "left": "P1",
+                  "comparator": "<=",
+                  "right": "0"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "tax.rate"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": ""
+          },
+          {
+            "a": {
+              "name": "rate",
+              "type": "number",
+              "value": "0.07"
+            },
+            "b": {
+              "name": "floor",
+              "type": "number",
+              "value": "3"
+            },
+            "c": {
+              "name": "shipping",
+              "type": "text",
+              "value": "flat"
+            },
+            "d": {
+              "name": "tax",
+              "type": "dictionary",
+              "value": "{\"rate\":0.08}"
+            },
+            "e": {
+              "name": "unused",
+              "type": "boolean",
+              "value": "true"
+            },
+            "f": {
+              "name": "P1",
+              "type": "text",
+              "value": "shadowed"
+            },
+            "g": {
+              "type": "text",
+              "value": "nameless"
+            }
+          }
+        ],
+        [
+          {
+            "name": "f",
+            "parameters": [
+              {
+                "name": "P1",
+                "type": "number"
+              },
+              {
+                "name": "P2",
+                "type": "number"
+              }
+            ],
+            "variables": [
+              {
+                "name": "V1",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "P1",
+                  "comparator": "<=",
+                  "right": "P2"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "P1 + rate"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "V1",
+                    "expression": "P2 * tax.rate + max(P1, floor)"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "V1"
+          },
+          {}
+        ],
+        [
+          {
+            "name": "f",
+            "parameters": [
+              {
+                "name": "P1",
+                "type": "number"
+              }
+            ],
+            "variables": [
+              {
+                "name": "V1",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "shipping",
+                  "comparator": "<=",
+                  "right": "P1 + 1"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "P1"
+                  }
+                ],
+                "otherwise": []
+              },
+              {
+                "if": {
+                  "left": "P1",
+                  "comparator": "<=",
+                  "right": "0"
+                },
+                "then": [
+                  {
+                    "set": "V1",
+                    "expression": "tax.rate"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": ""
+          },
+          {
+            "x": {
+              "name": "shipping",
+              "type": "boolean",
+              "value": "true"
+            },
+            "y": {
+              "name": "tax",
+              "type": "number",
+              "value": ""
+            }
+          }
+        ]
+      ]
     }
   }
 }
