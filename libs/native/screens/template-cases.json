@@ -74,7 +74,34 @@
           "hosts": 2
         }
       },
-      "kindKey": "hosts"
+      "kindKey": "hosts",
+      "groups": [
+        {
+          "label": "Sequences",
+          "items": [
+            {
+              "key": "outreach/a",
+              "name": "Welcome"
+            },
+            {
+              "key": "outreach/b"
+            }
+          ]
+        },
+        {
+          "label": "Campaigns",
+          "items": [
+            {
+              "key": "campaign/c"
+            }
+          ]
+        },
+        {
+          "label": "Empty",
+          "items": []
+        }
+      ],
+      "pick": "y"
     }
   },
   "render": [
@@ -209,6 +236,14 @@
     {
       "template": "{data.big - 1000000 + data.nothing:number}",
       "expect": ""
+    },
+    {
+      "template": "{data.groups.*.items.*.key}",
+      "expect": "outreach/a, outreach/b, campaign/c"
+    },
+    {
+      "template": "{data.groups.*.label}",
+      "expect": "Sequences, Campaigns, Empty"
     }
   ],
   "url": [
@@ -500,6 +535,18 @@
     },
     {
       "when": "data.list !~= x",
+      "expect": false
+    },
+    {
+      "when": "data.list ~= @data.pick",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= @data.pick",
+      "expect": false
+    },
+    {
+      "when": "data.groups.*.label ~= @data.missing",
       "expect": false
     }
   ]

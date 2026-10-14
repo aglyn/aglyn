@@ -426,4 +426,195 @@ class ScreenSpecTest {
     assertFalse("list" in model.cursors)
     assertEquals("orgId=o%201&cursor=a", sent.last().url.encodedQuery)
   }
+
+  private fun transfer(id: String) = ScreenSpec.parseFile(File(screensDir, "transfer.screens.json").readText()).first { it.id == id }
+
+  @Test
+  fun aPostLoadPagesByPuttingItsCursorInTheBody() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(
+      200 to """{"jobs":[{"id":"a"}],"next":1791385440000}""",
+      200 to """{"jobs":[{"id":"b"}],"next":null}""",
+      sent = sent,
+    )
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{"jobs":{"url":"/api/transfer/jobs","method":"POST","body":{"orgId":"{org.id}","limit":25},"cursor":"next","cursorParam":"after","items":"jobs"}}}""",
+      ),
+    )!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"org":{"id":"o1"},"data":{}}"""), api)
+    model.load()
+    // A number cursor (a job's createdAt) pages as text, and goes back as the number it was.
+    assertEquals("1791385440000", model.cursors["jobs"])
+    model.loadMore("jobs")
+    assertEquals(2, (ScreenValues.lookup("data.jobs.jobs", model.context) as JsonArray).size)
+    assertFalse("jobs" in model.cursors)
+    assertEquals(Json.parseToJsonElement("""{"orgId":"o1","limit":25,"after":1791385440000}"""), Json.parseToJsonElement((sent.last().body as TextContent).text))
+    assertEquals("/api/transfer/jobs", sent.last().url.encodedPath)
+    assertEquals("", sent.last().url.encodedQuery)
+  }
+
+  @Test
+  fun aListAndAnOptionSourceCanWalkTheListsInsideTheRows() {
+    val context = Json.parseToJsonElement(
+      """{"params":{},"data":{"resources":[
+          {"key":"outreach.sequences","label":"Sequences","items":[{"key":"outreach.sequences/a","name":"Welcome"},{"key":"outreach.sequences/b","id":"b"}]},
+          {"key":"marketing.campaigns","label":"Campaigns","items":[{"key":"marketing.campaigns/c","name":"Launch"}]},
+          {"key":"crm.email-templates","label":"Email templates","items":[]}]}}""",
+    )
+    val field = FieldSpec.parse(
+      Json.parseToJsonElement(
+        """{"key":"items","kind":"multiselect",
+           "initial":"{data.resources[key=params.resource].items.*.key|data.resources.*.items.*.key}",
+           "optionsFrom":{"items":"data.resources","within":"items","value":"{item.key}","label":"{parent.label}: {item.name|item.id}"}}""",
+      ),
+    )!!
+    assertEquals(
+      listOf("outreach.sequences/a=Sequences: Welcome", "outreach.sequences/b=Sequences: b", "marketing.campaigns/c=Campaigns: Launch"),
+      field.choices(context).map { "${it.first}=${it.second}" },
+    )
+    // Everything is picked until a resource is named, then only its items.
+    assertEquals(FieldValue.Text("outreach.sequences/a\noutreach.sequences/b\nmarketing.campaigns/c"), initialValue(field, context))
+    assertEquals(
+      FieldValue.Text("marketing.campaigns/c"),
+      initialValue(field, ScreenContext.with(context, "params", Json.parseToJsonElement("""{"resource":"marketing.campaigns"}"""))),
+    )
+    val rows = ScreenValues.scopes("data.resources", "items", "item.name", context)
+    assertEquals(2, rows.size)
+    assertEquals("Campaigns", ScreenValues.render("{parent.label}", rows[1]))
+  }
+
+  @Test
+  fun aMultiselectThatCoversAllIsUnfinishedUntilEveryChoiceIsChosen() {
+    val field = FieldSpec.parse(
+      Json.parseToJsonElement(
+        """{"key":"ack","kind":"multiselect","coversAll":true,"optionsFrom":{"items":"data.warnings","value":"{item}","label":"{item}"}}""",
+      ),
+    )!!
+    val context = Json.parseToJsonElement("""{"data":{"warnings":["replace","failed"]}}""")
+    assertTrue(field.unmet(JsonNull, context))
+    assertTrue(field.unmet(Json.parseToJsonElement("""["replace"]"""), context))
+    assertFalse(field.unmet(Json.parseToJsonElement("""["failed","replace"]"""), context))
+    assertFalse(field.unmet(JsonNull, Json.parseToJsonElement("""{"data":{"warnings":[]}}""")))
+  }
+
+  @Test
+  fun anActionCanSaveTheValueAtAPathOfTheRoutesAnswerAsTheFile() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"ok":true,"fileName":"aglyn-package-2026.json","package":{"name":"a/b","manifest":{"items":[]}}}""", sent = sent)
+    val spec = transfer("core.settings.data.packageExport")
+    val export = ActionSpec.parse(spec.blocks.first { it.type == "actions" }.raw.arr("items").first())!!
+    assertEquals("package", export.downloadAt)
+    val scope = Json.parseToJsonElement("""{"org":{"id":"o1"},"form":{"items":["outreach.sequences/a"],"dependencies":true}}""")
+    val file = ScreenModel(spec, JsonObject(emptyMap()), api).run(export, scope)
+    assertIs<ActionOutcome.File>(file)
+    assertEquals("aglyn-package-2026.json", file.name)
+    // The file is the package alone, indented, with no escaped slashes, and it reads back as it was.
+    val text = file.bytes.decodeToString()
+    assertTrue("\n  " in text)
+    assertTrue("\"a/b\"" in text)
+    assertEquals(Json.parseToJsonElement("""{"name":"a/b","manifest":{"items":[]}}"""), Json.parseToJsonElement(text))
+    assertEquals(
+      Json.parseToJsonElement("""{"orgId":"o1","action":"export","items":["outreach.sequences/a"],"dependencies":true}"""),
+      Json.parseToJsonElement((sent.last().body as TextContent).text),
+    )
+  }
+
+  @Test
+  fun thePackageReviewPlansAgainOnEveryChoiceAndAsksForEveryAcknowledgement() = runTest {
+    val plan = """{"job":{"id":"j1"},"items":[],"references":[],"summary":{"create":1},"blocking":[],"acknowledgementsRequired":["replace","failed"],"resources":{}}"""
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to plan, 200 to plan, sent = sent)
+    val review = transfer("core.settings.data.packageReview")
+    val model = ScreenModel(review, JsonObject(emptyMap()), api)
+    val chooseItem = ActionSpec.parse(review.blocks.first { it.type == "list" && it.title == "Items" }.raw.arr("actions").first())!!
+    ScreenStash.clear()
+    ScreenStash.set(
+      Json.parseToJsonElement("""{"plan":{"job":{"id":"j1"}},"decisions":{"page/x":"skip"},"dependencyChoices":{"mailbox/m":{"action":"dropReference"}}}"""),
+    )
+    val row = Json.parseToJsonElement("""{"key":"outreach.sequences/a","decision":"create","decisions":["create","replace","skip"]}""")
+    val picking = ScreenContext.with(
+      ScreenContext.withItem(Json.parseToJsonElement("""{"org":{"id":"o1"}}""").let { ScreenContext.with(it, "stash", ScreenStash.values) }, row),
+      "form", Json.parseToJsonElement("""{"decision":"replace"}"""),
+    )
+    assertTrue(ScreenValues.condition(chooseItem.whenCondition, picking))
+    assertFalse(ScreenValues.condition(chooseItem.whenCondition, ScreenContext.with(picking, "item", Json.parseToJsonElement("""{"decisions":["create"]}"""))))
+    model.run(chooseItem, picking)
+    // The new choice joins the earlier ones, and the other kind of choice is sent along unchanged.
+    assertEquals(
+      Json.parseToJsonElement(
+        """{"orgId":"o1","action":"plan","jobId":"j1","decisions":{"page/x":"skip","outreach.sequences/a":"replace"},"dependencyChoices":{"mailbox/m":{"action":"dropReference"}}}""",
+      ),
+      Json.parseToJsonElement((sent.last().body as TextContent).text),
+    )
+    assertEquals(Json.parseToJsonElement("""{"page/x":"skip","outreach.sequences/a":"replace"}"""), ScreenStash.values["decisions"])
+
+    // A reference mapped to one of yours carries that one; a leave-out carries no id.
+    val chooseReference = ActionSpec.parse(
+      review.blocks.first { it.type == "list" && it.title == "Things this workspace does not have" }.raw.arr("actions").first(),
+    )!!
+    val reference = Json.parseToJsonElement("""{"key":"mailbox/m2","choices":["import","mapTo","skipItem"],"targets":[]}""")
+    val mapping = ScreenContext.with(
+      ScreenContext.withItem(Json.parseToJsonElement("""{"org":{"id":"o1"}}""").let { ScreenContext.with(it, "stash", ScreenStash.values) }, reference),
+      "form", Json.parseToJsonElement("""{"action":"skipItem"}"""),
+    )
+    assertEquals(listOf("import", "skipItem"), chooseReference.prompt.first().choices(mapping).map { it.first }) // nothing of yours to map to
+    model.run(chooseReference, mapping)
+    val second = Json.parseToJsonElement((sent.last().body as TextContent).text)
+    assertEquals(
+      Json.parseToJsonElement("""{"mailbox/m":{"action":"dropReference"},"mailbox/m2":{"action":"skipItem"}}"""),
+      (second as JsonObject)["dependencyChoices"],
+    )
+
+    // Import asks for every acknowledgement the plan requires, and for none when it requires none.
+    val apply = ActionSpec.parse(review.blocks.last { it.type == "actions" }.raw.arr("items").first())!!
+    val ack = apply.prompt.first()
+    val waiting = ScreenContext.with(JsonObject(emptyMap()), "stash", ScreenStash.values)
+    assertEquals(listOf("replace", "failed"), ack.choices(waiting).map { it.first })
+    assertTrue(ack.unmet(Json.parseToJsonElement("""["replace"]"""), waiting))
+    assertFalse(ack.unmet(Json.parseToJsonElement("""["replace","failed"]"""), waiting))
+    val applyNow = ActionSpec.parse(review.blocks.last { it.type == "actions" }.raw.arr("items").last())!!
+    assertEquals("applyNow", applyNow.id)
+    fun offered(plan: String) =
+      listOf(apply, applyNow).filter { ScreenValues.condition(it.whenCondition, Json.parseToJsonElement("""{"stash":{"plan":$plan}}""")) }.map { it.id }
+    assertEquals(listOf("apply"), offered("""{"acknowledgementsRequired":["replace"],"blocking":[]}"""))
+    assertEquals(listOf("applyNow"), offered("""{"acknowledgementsRequired":[],"blocking":[]}"""))
+    assertEquals(emptyList(), offered("""{"acknowledgementsRequired":["replace"],"blocking":["Choose what happens to 1 item."]}"""))
+    assertEquals(emptyList(), offered("""{"acknowledgementsRequired":[],"blocking":["Choose what happens to 1 item."]}"""))
+    ScreenStash.clear()
+  }
+
+  @Test
+  fun theRulesListShowsOnlyTheResourcesTheFileHolds() {
+    val review = transfer("core.settings.data.packageReview")
+    val rules = review.blocks.first { it.type == "list" && it.title == "Rules every import keeps" }
+    val context = Json.parseToJsonElement(
+      """{"stash":{"plan":{
+          "items":[{"kind":"outreach.sequences"},{"kind":"outreach.sequences"}],
+          "resources":{
+            "outreach.sequences":{"label":"Sequences","rules":[{"label":"Imported as a draft","reason":"A sequence never sends from a file."}]},
+            "marketing.campaigns":{"label":"Campaigns","rules":[{"label":"Imported as a draft","reason":"x"}]},
+            "crm.email-templates":{"label":"Email templates","rules":[]}}}}}""",
+    )
+    val found = ScreenValues.scopes("stash.plan.resources", null, rules.string("filter"), context)
+    assertEquals(listOf("Sequences"), found.map { ScreenValues.render("{item.value.label}", it) })
+    assertEquals("Imported as a draft", ScreenValues.render(rules.string("secondary").orEmpty(), found[0]))
+  }
+
+  @Test
+  fun theHubPagesItsHistoryAndOffersTheConsolesRowActions() {
+    val hub = transfer("core.settings.data")
+    val jobs = hub.loads.first { it.key == "jobs" }
+    assertEquals(com.aglyn.core.ApiMethod.POST, jobs.method)
+    assertEquals("next", jobs.cursor)
+    assertEquals("after", jobs.cursorParam)
+    val history = hub.blocks.first { it.title == "History" }
+    assertEquals("jobs", history.string("load"))
+    val actions = history.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
+    val job = Json.parseToJsonElement("""{"org":{"id":"o1"},"item":{"id":"j9","kind":"package","resultFile":true,"undo":{"available":true}}}""")
+    assertEquals(listOf("results", "undo"), actions.filter { ScreenValues.condition(it.whenCondition, job) }.map { it.id })
+    val records = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","resultFile":false,"undo":{"available":true}}}""")
+    assertEquals(emptyList(), actions.filter { ScreenValues.condition(it.whenCondition, records) }.map { it.id })
+    assertEquals("import-j9-results.csv", ScreenValues.render(actions.first().download!!, job))
+  }
 }

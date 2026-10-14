@@ -218,6 +218,7 @@ private fun SpecBody(
           is ActionOutcome.Done -> confirming = Pending(action, ScreenContext.with(actionScope, "preview", checked.response ?: JsonObject(emptyMap())))
           is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, checked.message)
           is ActionOutcome.Failed -> show(checked.message, StatusTone.ERROR)
+          is ActionOutcome.File -> Unit // a check asks a question; it never answers with a file
         }
         return
       }
@@ -600,8 +601,7 @@ private fun ListBlock(
   trigger: (ActionSpec, JsonElement) -> Unit,
 ) {
   val scope = rememberCoroutineScope()
-  val rows = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
-    .filter { ScreenValues.condition(block.string("filter"), ScreenContext.withItem(context, it)) }
+  val rows = ScreenValues.scopes(block.string("items").orEmpty(), block.string("within"), block.string("filter"), context)
   val loadKey = block.string("load")
   SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {
     Column(Modifier.fillMaxWidth()) {
@@ -615,7 +615,7 @@ private fun ListBlock(
       }
       rows.forEachIndexed { index, row ->
         if (index > 0) HorizontalDivider()
-        ListRow(block, ScreenContext.withItem(context, row), selection, open, trigger)
+        ListRow(block, row, selection, open, trigger)
       }
       if (loadKey != null && model.cursors[loadKey] != null) {
         HorizontalDivider()

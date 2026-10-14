@@ -121,8 +121,9 @@ struct ListBlock: View {
   let trigger: (ActionSpec, JSONValue) -> Void
 
   var body: some View {
-    let rows = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
-      .filter { ScreenValues.condition(block["filter"]?.stringValue, in: ScreenContext.with(context, item: $0)) }
+    let rows = ScreenValues.scopes(
+      items: block["items"]?.stringValue ?? "", within: block["within"]?.stringValue,
+      filter: block["filter"]?.stringValue, in: context)
     let loadKey = block["load"]?.stringValue
     Section {
       if rows.isEmpty {
@@ -132,7 +133,7 @@ struct ListBlock: View {
           .padding(.vertical, AglynSpace.one)
       }
       ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-        ListRow(block: block, scope: ScreenContext.with(context, item: row), selection: selection, open: open, trigger: trigger)
+        ListRow(block: block, scope: row, selection: selection, open: open, trigger: trigger)
       }
       if let loadKey, model.cursors[loadKey] != nil {
         Button {

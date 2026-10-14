@@ -123,6 +123,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** The route answers with a file (an export), not JSON; the person saves it. Its value names the file when the route names none. */
   val download: String? = json.str("download") ?: if (json.isTrue("download")) "download" else null
+  /** The route answers with JSON, and the file is the value at this path of it (a workspace package export wraps its file as `{ fileName, package }`); `download` is then a template over `response` that names the file. */
+  val downloadAt: String? = json.str("downloadAt")
   /**
    * `{ when, title, text }` (or a list of them, the first that matches wins): when the route's answer
    * meets `when`, `text` (a template over `response`) is shown in place of the success message.
@@ -174,10 +176,16 @@ class FieldSpec private constructor(
   val mustMatch: String? = null,
   /** For a `file` field: `json` parses the chosen file and sends the value, else its text is sent. */
   val parse: String? = null,
+  /** For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an import must have acknowledged, each one). */
+  val coversAll: Boolean = false,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
     if (mustMatch != null && ScreenValues.text(value) != ScreenValues.render(mustMatch, context)) return true
+    if (coversAll && kind == "multiselect") {
+      val chosen = ((value as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
+      if (choices(context).any { it.first !in chosen }) return true
+    }
     return required && kind != "toggle" && !ScreenValues.truthy(value)
   }
 
@@ -186,11 +194,8 @@ class FieldSpec private constructor(
     val path = from.str("items") ?: return options
     val valueTemplate = from.str("value") ?: "{item.\$id}"
     val labelTemplate = from.str("label") ?: valueTemplate
-    val rows = ((ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()).filter {
-      ScreenValues.condition(from.str("filter"), ScreenContext.withItem(context, it))
-    }
-    return options + rows.map { row ->
-      val scope = ScreenContext.withItem(context, row)
+    val scopes = ScreenValues.scopes(path, from.str("within"), from.str("filter"), context)
+    return options + scopes.map { scope ->
       ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope)
     }
   }
@@ -216,6 +221,7 @@ class FieldSpec private constructor(
         whenCondition = json.str("when"),
         mustMatch = json.str("mustMatch"),
         parse = json.str("parse"),
+        coversAll = json.isTrue("coversAll"),
       )
     }
   }

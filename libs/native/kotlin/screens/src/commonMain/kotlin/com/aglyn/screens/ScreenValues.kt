@@ -47,10 +47,11 @@ object ScreenValues {
     var current: JsonElement? = context
     val parts = segments(trimmed)
     for ((position, raw) in parts.withIndex()) {
-      // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+      // `rows.*.field`: that field of every row, as a list (rows without it are left out; a field
+      // that is itself a list adds its members, so `resources.*.items` is every resource's items).
       if (raw == "*" && current is JsonArray) {
         val rest = parts.drop(position + 1).joinToString(".")
-        return JsonArray(current.mapNotNull { if (rest.isEmpty()) it else lookup(rest, it) })
+        return JsonArray(current.mapNotNull { if (rest.isEmpty()) it else lookup(rest, it) }.flatMap { if (it is JsonArray) it.toList() else listOf(it) })
       }
       val open = raw.indexOf('[')
       if (raw.endsWith("]") && open >= 0) {
@@ -80,6 +81,24 @@ object ScreenValues {
     is JsonArray -> value
     is JsonObject -> value.keys.sorted().map { JsonObject(mapOf("key" to JsonPrimitive(it), "value" to value.getValue(it))) }
     else -> emptyList()
+  }
+
+  /**
+   * The scopes a list or an option source walks: one per row of `items` that meets `filter`, with
+   * the row as `item`; or, given `within` (a path read from each row), one per row of that inner
+   * list, the outer row as `parent` (every resource's items, labeled by their resource).
+   */
+  fun scopes(path: String, within: String?, filter: String?, context: JsonElement): List<JsonElement> {
+    val found = mutableListOf<JsonElement>()
+    for (row in rows(lookup(path, context))) {
+      val outer = ScreenContext.withItem(context, row)
+      if (!within.isNullOrEmpty()) {
+        for (inner in rows(lookup(within, row))) found += ScreenContext.withItem(outer, inner)
+      } else {
+        found += outer
+      }
+    }
+    return found.filter { condition(filter, it) }
   }
 
   internal fun segments(path: String): List<String> {
@@ -318,7 +337,7 @@ object ScreenValues {
   private fun clause(raw: String, context: JsonElement): Boolean {
     val clause = raw.trim()
     val equality = "==" in clause || "!=" in clause
-    // `path ~= x`: a list holds x, or a text contains it.
+    // `path ~= x` (or `~= @path`): a list holds x, or a text contains it.
     if (!equality) {
       val at = clause.indexOf("~=")
       if (at >= 0) {
@@ -327,6 +346,8 @@ object ScreenValues {
         val left = lookup(clause.substring(0, at).trimEnd('!', ' '), context)
         var right = clause.substring(at + 2).trim()
         if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right = right.substring(1, right.length - 1)
+        // `a ~= @path`: what is wanted is read from the context (the kinds a file holds, against a row's own).
+        else if (right.startsWith("@")) right = text(lookup(right.substring(1), context))
         val holds = if (left is JsonArray) left.any { text(it) == right } else text(left).contains(right)
         return if (negated) !holds else holds
       }

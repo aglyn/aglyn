@@ -18,10 +18,14 @@ public enum ScreenValues {
     var current: JSONValue? = context
     let parts = segments(trimmed)
     for (position, raw) in parts.enumerated() {
-      // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+      // `rows.*.field`: that field of every row, as a list (rows without it are left out; a field
+      // that is itself a list adds its members, so `resources.*.items` is every resource's items).
       if raw == "*", case .array(let items)? = current {
         let rest = parts[(position + 1)...].joined(separator: ".")
-        return .array(items.compactMap { rest.isEmpty ? $0 : lookup(rest, in: $0) })
+        return .array(items.compactMap { rest.isEmpty ? $0 : lookup(rest, in: $0) }.flatMap { value -> [JSONValue] in
+          if case .array(let members) = value { return members }
+          return [value]
+        })
       }
       // `rows[field=other.path]`: the first row whose field reads as the text at other.path.
       var segment = raw
@@ -59,6 +63,22 @@ public enum ScreenValues {
     case .object(let record)?: return record.keys.sorted().map { ["key": .string($0), "value": record[$0]!] }
     default: return []
     }
+  }
+
+  /// The scopes a list or an option source walks: one per row of `items` that meets `filter`, with
+  /// the row as `item`; or, given `within` (a path read from each row), one per row of that inner
+  /// list, the outer row as `parent` (every resource's items, labeled by their resource).
+  public static func scopes(items path: String, within: String? = nil, filter: String? = nil, in context: JSONValue) -> [JSONValue] {
+    var found: [JSONValue] = []
+    for row in rows(lookup(path, in: context)) {
+      let outer = ScreenContext.with(context, item: row)
+      if let within, !within.isEmpty {
+        for inner in rows(lookup(within, in: row)) { found.append(ScreenContext.with(outer, item: inner)) }
+      } else {
+        found.append(outer)
+      }
+    }
+    return found.filter { condition(filter, in: $0) }
   }
 
   /// A path's segments, split on dots outside brackets.
@@ -326,7 +346,7 @@ public enum ScreenValues {
 
   private static func clause(_ raw: String, in context: JSONValue) -> Bool {
     let clause = raw.trimmingCharacters(in: .whitespaces)
-    // `path ~= x`: a list holds x, or a text contains it.
+    // `path ~= x` (or `~= @path`): a list holds x, or a text contains it.
     if !clause.contains("=="), !clause.contains("!="), let range = clause.range(of: "~=") {
       // `path !~= x` is the other way round.
       let negated = clause[..<range.lowerBound].hasSuffix("!")
@@ -334,6 +354,8 @@ public enum ScreenValues {
       let left = lookup(leftPath, in: context)
       var right = clause[range.upperBound...].trimmingCharacters(in: .whitespaces)
       if right.count >= 2, right.hasPrefix("'"), right.hasSuffix("'") { right = String(right.dropFirst().dropLast()) }
+      // `a ~= @path`: what is wanted is read from the context (the kinds a file holds, against a row's own).
+      else if right.hasPrefix("@") { right = text(lookup(String(right.dropFirst()), in: context)) }
       let holds: Bool
       if case .array(let items)? = left { holds = items.contains { text($0) == right } } else { holds = text(left).contains(right) }
       return negated ? !holds : holds

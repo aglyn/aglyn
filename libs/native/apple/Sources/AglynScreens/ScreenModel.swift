@@ -173,7 +173,8 @@ public final class ScreenModel {
     if let words = search[load.key], !words.trimmingCharacters(in: .whitespaces).isEmpty {
       url += (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(words)
     }
-    if let cursor {
+    // A GET route pages through the query string; a POST route reads it from the body (`pageBody`).
+    if let cursor, load.method == .get {
       url += (url.contains("?") ? "&" : "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     }
     return url
@@ -271,8 +272,27 @@ public final class ScreenModel {
     }
     let body = load.body.map { ScreenValues.resolveBody($0, in: context) }
     let value = try await api.request(path, method: load.method, body: body) ?? .null
-    let cursor = load.cursor.flatMap { ScreenValues.lookup($0, in: value)?.stringValue }
-    return (load.key, value, cursor)
+    return (load.key, value, Self.cursor(of: load, in: value))
+  }
+
+  /// A paged route's next cursor: the text at `cursor`, or a number (a job's `createdAt`) as text.
+  nonisolated static func cursor(of load: LoadSpec, in page: JSONValue) -> String? {
+    guard let at = load.cursor, let found = ScreenValues.lookup(at, in: page) else { return nil }
+    switch found {
+    case .string(let text): return text.isEmpty ? nil : text
+    case .number: return ScreenValues.text(found)
+    default: return nil
+    }
+  }
+
+  /// The body of a paged POST load's next page: its own body with the cursor under `cursorParam`
+  /// (a number when the cursor reads as one, since the route compares it as one).
+  func pageBody(_ load: LoadSpec, cursor: String) -> JSONValue? {
+    guard load.method != .get else { return nil }
+    var body: [String: JSONValue] = [:]
+    if case .object(let record)? = load.body.map({ ScreenValues.resolveBody($0, in: context) }) { body = record }
+    body[load.cursorParam] = Double(cursor).map(JSONValue.number) ?? .string(cursor)
+    return .object(body)
   }
 
   /// The next page of a paged load, appended to its rows.
@@ -283,14 +303,13 @@ public final class ScreenModel {
     loadingMore.insert(key)
     defer { loadingMore.remove(key) }
     do {
-      let page = try await api.request(url(for: load, cursor: cursor)) ?? .null
+      let page = try await api.request(url(for: load, cursor: cursor), method: load.method, body: pageBody(load, cursor: cursor)) ?? .null
       let more = ScreenValues.lookup(itemsPath, in: page).array
       guard case .object(var record) = data, var current = record[key] else { return }
       current = Self.appending(more, at: itemsPath, in: current)
       record[key] = current
       context = ScreenContext.with(context, "data", .object(record))
-      cursors[key] = load.cursor.flatMap { ScreenValues.lookup($0, in: page)?.stringValue }
-      if cursors[key]?.isEmpty ?? true { cursors[key] = nil }
+      cursors[key] = Self.cursor(of: load, in: page)
     } catch {}
   }
 
@@ -344,6 +363,21 @@ public final class ScreenModel {
     guard let api else { return .failed("Sign in to continue.") }
     let path = ScreenValues.renderURL(urlTemplate, in: scope)
     let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: scope) }
+    if let at = action.downloadAt, let name = action.download {
+      // The route answers with JSON; the file is the value at `at`, named from the answer.
+      do {
+        let answer = try await api.request(path, method: action.method, body: action.method == .get ? nil : (body ?? [:])) ?? .null
+        guard let value = ScreenValues.lookup(at, in: answer), value != .null else { return .failed("The route sent no file.") }
+        let named = ScreenValues.render(name, in: ScreenContext.with(scope, "response", answer))
+        let file = DownloadedFile(name: named, contentType: "application/json", data: try value.encoded(pretty: true))
+        return .file(file, name: named, message: action.success.map { ScreenValues.render($0, in: scope) })
+      } catch let error as ConsoleAPIError {
+        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        return .failed(error.message)
+      } catch {
+        return .failed(error.localizedDescription)
+      }
+    }
     if let fallback = action.download {
       do {
         let file = try await api.download(path, method: action.method, body: action.method == .get ? nil : (body ?? [:]))
