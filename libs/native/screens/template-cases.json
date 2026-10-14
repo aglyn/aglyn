@@ -180,6 +180,14 @@
     {
       "template": "{data.big - 1000000 + data.nothing:number}",
       "expect": ""
+    },
+    {
+      "template": "{data.bytes:megabytes}",
+      "expect": "1.5"
+    },
+    {
+      "template": "{data.nothing:megabytes}",
+      "expect": ""
     }
   ],
   "url": [

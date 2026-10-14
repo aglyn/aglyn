@@ -458,6 +458,10 @@
         "rollupBefore": {
           "doc": "orgs/{org.id}/usage/{now.prevMonth}",
           "optional": true
+        },
+        "band": {
+          "url": "/api/media/storage?orgId={org.id}",
+          "optional": true
         }
       },
       "blocks": [
@@ -493,6 +497,13 @@
               "limit": "{data.ent.quotas.datasetsPerOrg + data.org.seatAddons.datasets?}",
               "format": "number",
               "when": "data.ent && data.datasets"
+            },
+            {
+              "label": "Storage (organization), MB",
+              "used": "{data.band.usedBytes:megabytes}",
+              "limit": "{data.band.allowanceMb}",
+              "format": "number",
+              "when": "data.band && !data.band.unlimited"
             },
             {
               "label": "Data storage (organization), MB",
@@ -565,6 +576,42 @@
               "when": "data.ent.quotas.emailSendsPerMonth"
             }
           ]
+        },
+        {
+          "type": "fields",
+          "title": "Storage (organization)",
+          "when": "data.band",
+          "footer": "Every site's media library and the organization library share this one allowance.",
+          "rows": [
+            {
+              "label": "Used",
+              "value": "{data.band.usedBytes:bytes} (unlimited)",
+              "when": "data.band.unlimited"
+            },
+            {
+              "label": "In the organization library",
+              "value": "{data.band.scopeBytes:bytes}",
+              "when": "data.band.scopeBytes"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage && !data.storage.metered",
+          "text": "Uploads stop when your workspace reaches it. Free up space or upgrade to add more."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage.metered && !data.band.hardBand",
+          "text": "Past it, extra storage is billed on your invoice unless you set a storage cap."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage.metered && data.band.hardBand",
+          "text": "Past it, extra storage is billed on your invoice unless you set a storage cap. Uploads to the organization library stop at it for now, because its storage is not billed yet."
         },
         {
           "type": "fields",
