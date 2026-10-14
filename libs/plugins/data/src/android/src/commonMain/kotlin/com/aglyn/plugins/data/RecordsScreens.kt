@@ -224,7 +224,7 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
 
   when (val open = dialog) {
     null -> Unit
-    is RecordDialog.Edit -> RecordEditor(dataset, open, references, api, runner, onSaved = { model.refresh() }) { dialog = null }
+    is RecordDialog.Edit -> RecordEditor(context, dataset, open, references, api, runner, onSaved = { model.refresh() }) { dialog = null }
     is RecordDialog.Delete -> ActionDialog(
       title = "Delete this $noun?",
       body = "It stops showing on every page that repeats over ${dataset.name}. Records in other datasets that point at it lose the reference, unless one blocks the delete.",
@@ -328,6 +328,7 @@ internal fun recordValueText(field: DatasetFieldDefinition, value: Any?, choices
 /** The record editor: one typed input per field, as the console's record dialog draws them. */
 @Composable
 private fun RecordEditor(
+  context: NativePluginContext,
   dataset: DatasetRow,
   open: RecordDialog.Edit,
   references: Map<String, List<InputChoice>>,
@@ -365,6 +366,7 @@ private fun RecordEditor(
       if (errors.isNotEmpty()) NoticeBanner("Fix the highlighted fields.", StatusTone.ERROR)
       for ((id, field) in dataset.model.orderedFields()) {
         RecordInput(
+          context = context,
           id = id,
           field = field,
           value = inputs[id].orEmpty(),
@@ -378,11 +380,14 @@ private fun RecordEditor(
 }
 
 @Composable
-private fun RecordInput(id: String, field: DatasetFieldDefinition, value: String, error: String?, choices: List<InputChoice>, onChange: (String) -> Unit) {
+private fun RecordInput(context: NativePluginContext, id: String, field: DatasetFieldDefinition, value: String, error: String?, choices: List<InputChoice>, onChange: (String) -> Unit) {
   val label = field.label(id) + if (field.required == true) " *" else ""
   val hint = error ?: field.description
   val modifier = Modifier.fillMaxWidth().testTag("record-input-$id")
   when {
+    field.customType == DATASET_IMAGE_FIELD_TYPE -> DatasetImageInput(context, label, value, onChange, modifier)
+    field.customType == DATASET_PAGE_FIELD_TYPE -> DatasetPageInput(context, label, value, onChange, modifier)
+    field.customType == DATASET_RATING_FIELD_TYPE -> DatasetRatingInput(label, value, onChange, modifier, hint, error != null)
     field.customType != null -> OutlinedTextField(value, onChange, label = { Text(label) }, isError = error != null, supportingText = hint?.let { { Text(it) } }, singleLine = true, modifier = modifier)
     field.type == DatasetFieldType.BOOL -> ChoiceField(label, value, listOf(InputChoice("true", "Yes"), InputChoice("false", "No")), onChange, modifier, hint, error != null)
     field.type == DatasetFieldType.TEXT && !field.validation?.options.isNullOrEmpty() ->

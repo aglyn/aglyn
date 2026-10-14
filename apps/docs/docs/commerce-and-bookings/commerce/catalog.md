@@ -120,6 +120,23 @@ high otherwise.
 Shoppers rate a product from 1 to 5 and write a review in the **Product
 reviews** block on your product page template. Pro plan and above.
 
+### Show reviews on your site {#show-reviews}
+
+The **Product reviews** element, in Besigner's **Commerce** elements, shows
+published reviews with the average rating, and the form customers write theirs
+in.
+
+1. Open your product page template in Besigner and add **Product reviews**
+   below the product details.
+2. Leave **Product id** blank, so the block shows whichever product the page
+   is showing. Pick a product only to pin the block to that one product.
+3. Optionally change its **Heading**, which reads **Reviews** when blank.
+4. Publish the site.
+
+To show your store's latest published reviews across every product, on a home
+page for example, set **Show** to **Whole store** and choose **Max reviews**
+(6 by default, 12 at most). It shows nothing until a review is published.
+
 ### Review settings {#review-settings}
 
 The **Reviews** card in **Settings** decides who can review your products
