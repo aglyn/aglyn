@@ -16,15 +16,15 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { LOYALTY_API_ROUTES } from '@aglyn/plugins-loyalty/constants/api-routes'
+import { LOYALTY_API_ROUTES } from './constants/api-routes'
 import {
   LOYALTY_CONNECTOR_FIELDS,
   LOYALTY_CONNECTOR_LABELS,
   LOYALTY_DISCONNECT_EXPLANATION,
   LOYALTY_SYNC_STATUS_WORDS,
-} from '@aglyn/plugins-loyalty/model/loyalty-connectors'
-import { LOYALTY_LEDGER_LABELS } from '@aglyn/plugins-loyalty/model/loyalty-member'
-import { LOYALTY_PROGRAM_BOUNDS } from '@aglyn/plugins-loyalty/model/loyalty-program'
+} from './model/loyalty-connectors'
+import { LOYALTY_LEDGER_LABELS } from './model/loyalty-member'
+import { LOYALTY_PROGRAM_BOUNDS } from './model/loyalty-program'
 
 /**
  * The Rewards plugin's native screens restate what the console works out in code, because a screen spec has no tables of
@@ -33,7 +33,7 @@ import { LOYALTY_PROGRAM_BOUNDS } from '@aglyn/plugins-loyalty/model/loyalty-pro
  */
 const RESOURCES = join(
   __dirname,
-  '../../../libs/plugins/loyalty/src/ios/Sources/AglynLoyaltyPlugin/Resources',
+  '../ios/Sources/AglynLoyaltyPlugin/Resources',
 )
 
 const files = readdirSync(RESOURCES).filter((name) =>

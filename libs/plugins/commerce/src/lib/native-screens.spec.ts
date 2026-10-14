@@ -19,37 +19,37 @@ import { join } from 'node:path'
 import {
   BUYER_NOTIFICATION_EVENTS,
   BUYER_NOTIFICATION_LABELS,
-} from '@aglyn/plugins-commerce/model/buyer-notifications'
-import { STOREFRONT_PAYMENT_METHODS } from '@aglyn/plugins-commerce/model/commerce-payment-methods'
+} from './model/buyer-notifications'
+import { STOREFRONT_PAYMENT_METHODS } from './model/commerce-payment-methods'
 import {
   RETURN_REASON_LABELS,
   RETURN_STATUSES,
   RETURN_STATUS_LABELS,
-} from '@aglyn/plugins-commerce/model/commerce-returns'
-import { SHIPSTATION_STATUS_NAMES } from '@aglyn/plugins-commerce/model/shipstation'
+} from './model/commerce-returns'
+import { SHIPSTATION_STATUS_NAMES } from './model/shipstation'
 import {
   ORDER_WEBHOOK_DELIVERY_STATUS_LABELS,
   ORDER_WEBHOOK_MAX_ENDPOINTS,
-} from '@aglyn/plugins-commerce/model/order-webhooks'
+} from './model/order-webhooks'
 import {
   PICKUP_HOURS_MAX,
   PICKUP_INSTRUCTIONS_MAX,
-} from '@aglyn/plugins-commerce/model/local-fulfillment-settings'
+} from './model/local-fulfillment-settings'
 import {
   REVIEW_MODERATION_REASONS,
   REVIEW_MODERATION_REASON_LABELS,
   REVIEW_REQUEST_DELAY_DEFAULT_DAYS,
   REVIEW_REQUEST_DELAY_MAX_DAYS,
   REVIEW_REQUEST_DELAY_MIN_DAYS,
-} from '@aglyn/plugins-commerce/model/product-reviews'
+} from './model/product-reviews'
 import {
   LOCAL_FULFILLMENT_OPEN_STATUSES,
   LOCAL_FULFILLMENT_QUEUE_FIELDS,
   LOCAL_FULFILLMENT_QUEUE_LIMIT,
   LOCAL_FULFILLMENT_QUEUE_TABS,
-} from '@aglyn/plugins-commerce/constants/local-fulfillment-list-query'
-import { STOCK_MOVEMENT_REASON_LABEL } from '@aglyn/plugins-commerce/constants/stock-movement-query'
-import { COMMERCE_TRANSFER_RESOURCES } from '@aglyn/plugins-commerce/transfer/transfer-keys'
+} from './constants/local-fulfillment-list-query'
+import { STOCK_MOVEMENT_REASON_LABEL } from './constants/stock-movement-query'
+import { COMMERCE_TRANSFER_RESOURCES } from './transfer/transfer-keys'
 
 /**
  * The Commerce plugin's native screens restate some facts the console works out in code, because a screen spec has no
@@ -58,7 +58,7 @@ import { COMMERCE_TRANSFER_RESOURCES } from '@aglyn/plugins-commerce/transfer/tr
  */
 const RESOURCES = join(
   __dirname,
-  '../../../libs/plugins/commerce/src/ios/Sources/AglynCommercePlugin/Resources',
+  '../ios/Sources/AglynCommercePlugin/Resources',
 )
 
 const screens: Record<string, any> = {}
@@ -181,7 +181,7 @@ describe('native commerce screens', () => {
 
   it('export exactly the transfer resources the console declares, by their console names', () => {
     const config = JSON.parse(
-      readFileSync(join(__dirname, '../../../plugins.config.json'), 'utf8'),
+      readFileSync(join(__dirname, '../../../../../plugins.config.json'), 'utf8'),
     ).plugins.find((plugin: { id: string }) => plugin.id === 'commerce')
     const labels: Record<string, string> = Object.fromEntries(
       config.transferResources.map((resource: { key: string; label: string }) => [
