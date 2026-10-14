@@ -28,7 +28,7 @@ import {
   useHostSubdomain,
 } from '../../../../../../../components/host-id-provider'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
-import PluginWidgetSlot from '../../../../../../../components/plugin-widget-slot.component'
+import { useSlotHasWidgets } from '../../../../../../../components/plugin-widget-slot.component'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
@@ -42,9 +42,15 @@ const HostSetupSectionsLayout = ({ children }: { children: ReactNode }) => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
 
+  /*
+   * The `hostSettings` zone is a section of its own (AGL-3711), offered only
+   * while it has a card for this reader. Drawn here, below the rail, its cards
+   * ran full width under every section.
+   */
+  const { hasWidgets: integrations } = useSlotHasWidgets('hostSettings')
   const sections = useMemo(
-    () => setupSections(orgSlug, host),
-    [orgSlug, host],
+    () => setupSections(orgSlug, host, { integrations }),
+    [orgSlug, host, integrations],
   )
   /*
    * Resolved against the same list the rail draws, so the trail names the
@@ -97,8 +103,6 @@ const HostSetupSectionsLayout = ({ children }: { children: ReactNode }) => {
         <HostSettingsScopeProvider>
           <HubSections sections={sections}>{children}</HubSections>
         </HostSettingsScopeProvider>
-        {/* Plugin zone (AGL-433): hostSettings widgets. */}
-        <PluginWidgetSlot slot="hostSettings" hostId={hostId} />
       </Container>
     </DashboardLayout>
   )

@@ -30,7 +30,8 @@ import {
   type SpanBreakpoint,
 } from '@aglyn/shared-data-enums/breakpoint-span'
 import MuiGrid from '@mui/material/Grid'
-import { forwardRef, type ReactNode } from 'react'
+import type { Breakpoints, SxProps, Theme } from '@mui/material/styles'
+import { createContext, forwardRef, useContext, type ReactNode } from 'react'
 import {
   applySemanticElement,
   semanticElementAttribute,
@@ -79,7 +80,81 @@ export interface GridElementProps {
   direction?: 'row' | 'row-reverse'
   /** `flex-wrap` for the container; MUI's default is `wrap`. */
   wrap?: 'nowrap' | 'wrap' | 'wrap-reverse'
+  /**
+   * A cell that ends up alone on the last row spans the whole row instead
+   * of sitting in its first column. Read per breakpoint from the cell's own
+   * Span and its row's Columns, so a row of thirds that leaves one cell over
+   * widens it from the breakpoint the thirds start at, and a row that comes
+   * out even leaves every cell as it is. Set it on every cell of a row whose
+   * cells come and go (a hidden cell is not on the page), and whichever one
+   * is last takes it.
+   */
+  fillLastRow?: boolean
+  sx?: SxProps<Theme>
   children?: ReactNode
+}
+
+/** MUI's default column count, which a row with no Columns of its own uses. */
+const DEFAULT_COLUMNS = 12
+
+/**
+ * The column count of the row a cell sits in. MUI keeps it in a CSS
+ * variable, which a selector cannot count with, so the row hands it down.
+ */
+const GridColumnsContext = createContext<number>(DEFAULT_COLUMNS)
+
+type SpanBreakpointStyles = Record<string, Record<string, Record<string, string>>>
+
+/**
+ * The styles that widen a lone last cell to the full row (`fillLastRow`).
+ *
+ * At each breakpoint the cell's span gives how many cells share a row. A
+ * cell that is the last child AND the first of its row — `nth-child(kn+1)`
+ * for `k` per row — is alone there. Each breakpoint range gets its own
+ * bounded media query, so "two to a row" from `sm` stops at the `md` where
+ * three to a row starts, rather than still matching an odd cell that has
+ * company in a row of three. One to a row, `auto` and `grow` add nothing:
+ * the cell is already as wide as it is going to be.
+ */
+export function loneLastCellStyles(
+  size: ReturnType<typeof parseSpan>,
+  columns: number,
+  breakpoints: Pick<Breakpoints, 'keys' | 'up' | 'between'>,
+): SpanBreakpointStyles {
+  if (size === undefined) return {}
+  const keys = breakpoints.keys
+  const perRow: Array<number | undefined> = []
+  let current: number | 'auto' | 'grow' | undefined
+  for (const key of keys) {
+    if (typeof size === 'object') {
+      if (size[key] !== undefined) current = size[key]
+    } else {
+      current = size
+    }
+    perRow.push(
+      typeof current === 'number' && current > 0
+        ? Math.floor(columns / Math.min(current, columns))
+        : undefined,
+    )
+  }
+  const styles: SpanBreakpointStyles = {}
+  let start = 0
+  while (start < keys.length) {
+    let end = start
+    while (end + 1 < keys.length && perRow[end + 1] === perRow[start]) end += 1
+    const count = perRow[start]
+    if (count !== undefined && count > 1) {
+      const query =
+        end + 1 < keys.length
+          ? breakpoints.between(keys[start], keys[end + 1])
+          : breakpoints.up(keys[start])
+      styles[query] = {
+        [`&:last-child:nth-child(${count}n + 1)`]: { width: '100%' },
+      }
+    }
+    start = end + 1
+  }
+  return styles
 }
 
 /**
@@ -161,30 +236,50 @@ const GridElement = forwardRef<HTMLDivElement, GridElementProps>(
       columns,
       direction,
       wrap,
+      fillLastRow,
+      sx,
       children,
       ...rest
     } = props
-    return (
+    const parentColumns = useContext(GridColumnsContext)
+    const span = parseSpan(size)
+    const ownColumns = toNumber(columns)
+    const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
+    const grid = (
       <MuiGrid
         ref={ref}
         container={!!container}
-        size={parseSpan(size)}
+        size={span}
         offset={parseOffset(offset)}
         // Spacing props only apply to containers; MUI ignores them on
         // items, so no need to strip them here.
         spacing={toNumber(spacing)}
         rowSpacing={toNumber(rowSpacing)}
         columnSpacing={toNumber(columnSpacing)}
-        columns={toNumber(columns)}
+        columns={ownColumns}
         // A CLEARED select persists as `null`, and MUI resolves both of these
         // as responsive values — `null.xs` throws during SSR and 500s the
         // published page (the AGL-1226 shape). `undefined` is what "cleared"
         // has to mean by the time it reaches MUI.
         {...dropClearedProps({ direction, wrap })}
         {...applySemanticElement(dropClearedProps(rest) as Record<string, unknown>)}
+        sx={[
+          fillLastRow && !container
+            ? (theme: Theme) =>
+                loneLastCellStyles(span, parentColumns, theme.breakpoints)
+            : false,
+          ...nodeSx,
+        ]}
       >
         {children}
       </MuiGrid>
+    )
+    return container ? (
+      <GridColumnsContext.Provider value={ownColumns ?? DEFAULT_COLUMNS}>
+        {grid}
+      </GridColumnsContext.Provider>
+    ) : (
+      grid
     )
   },
 )
@@ -251,6 +346,16 @@ export const schema: Aglyn.ComponentSchema<GridElementProps> = {
       // choice, and `grow` is not one at all.
       allowGrow: false,
       minSpan: 0,
+      condition: ITEM_ONLY,
+    },
+    {
+      name: 'fillLastRow',
+      label: 'Fill the row when alone?',
+      description:
+        'If true, this cell spans the whole row whenever it ends up alone on ' +
+        'the last row, at every screen size. Turn it on for every cell of a ' +
+        'row whose cells can be hidden, so whichever cell is last fills in.',
+      component: Aglyn.FieldComponentType.SWITCH,
       condition: ITEM_ONLY,
     },
     {
