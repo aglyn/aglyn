@@ -126,8 +126,8 @@ class ScreenModel(
     phase = Phase.Ready
   }
 
-  internal fun url(load: LoadSpec, cursor: String? = null): String {
-    var url = ScreenValues.renderUrl(load.url, context)
+  internal fun url(load: LoadSpec, cursor: String? = null, scope: JsonElement = context): String {
+    var url = ScreenValues.renderUrl(load.url, scope)
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
       url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
     }
@@ -141,10 +141,11 @@ class ScreenModel(
       phase = Phase.Failed("Sign in to continue.")
       return
     }
+    context = ScreenContext.with(context, "now", ScreenValues.nowObject())
     val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
     val results = try {
-      coroutineScope {
-        loads.map { load ->
+      val first = coroutineScope {
+        loads.filter { it.each == null }.map { load ->
           async {
             try {
               fetch(client, load)
@@ -156,6 +157,27 @@ class ScreenModel(
           }
         }.awaitAll()
       }
+      // The per-row loads (`each`) follow once the rows they walk have arrived.
+      val seen = ScreenContext.with(context, "data", JsonObject(first.associate { it.first to it.second }))
+      val walked = loads.filter { it.each != null }.map { load ->
+        val rows = ((ScreenValues.lookup(load.each.orEmpty(), seen) as? JsonArray) ?: JsonArray(emptyList())).take(EACH_CEILING)
+        val answers = coroutineScope {
+          rows.map { row ->
+            async {
+              val scope = ScreenContext.withItem(seen, row)
+              try {
+                fetch(client, load, scope).second
+              } catch (error: CancellationException) {
+                throw error
+              } catch (_: Throwable) {
+                JsonNull
+              }
+            }
+          }.awaitAll()
+        }
+        Triple(load.key, JsonArray(answers) as JsonElement, null as String?)
+      }
+      first + walked
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {
@@ -171,21 +193,21 @@ class ScreenModel(
     phase = Phase.Ready
   }
 
-  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec): Triple<String, JsonElement, String?> {
+  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec, scope: JsonElement = context): Triple<String, JsonElement, String?> {
     load.doc?.let { doc ->
-      return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
+      return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, scope)) } ?: JsonNull, null)
     }
     load.query?.let { query ->
-      return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
+      return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, scope) } ?: JsonNull, null)
     }
-    load.switchboard?.let { scope ->
+    load.switchboard?.let { level ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
-      val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", context))
-      if (scope != "site") return Triple(load.key, SwitchboardRows.org(org), null)
-      val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", context))
+      val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", scope))
+      if (level != "site") return Triple(load.key, SwitchboardRows.org(org), null)
+      val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", scope))
       return Triple(load.key, SwitchboardRows.site(org, host), null)
     }
-    val value = client.request(url(load), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
+    val value = client.request(url(load, scope = scope), load.method, load.body?.let { ScreenValues.resolveBody(it, scope) }) ?: JsonNull
     return Triple(load.key, value, load.cursor?.let { (ScreenValues.lookup(it, value) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
   }
 
@@ -255,6 +277,9 @@ class ScreenModel(
   }
 
   companion object {
+    /** The most rows a per-row load (`each`) runs for. */
+    const val EACH_CEILING = 50
+
     /** JSON as the plain values a Firestore merge takes. */
     fun plain(value: JsonElement): Any? = when (value) {
       JsonNull -> null

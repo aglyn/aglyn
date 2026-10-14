@@ -913,6 +913,21 @@ whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
 in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
 
+The context also carries `now` (UTC): `now.month` (`2026-10`), `now.prevMonth`,
+`now.day` (`2026-10-13`) and `now.year`, the keys the console's monthly
+counters and daily documents are named by, so `data.counter[@now.month]` reads
+this month's figure. A path `rows.*.field` is that field of every row, as a
+list. `{a + b - c}` sums numbers (paths, literals, or a list, which adds up);
+a term that is missing makes the sum missing, and `x?` counts as zero where it
+is missing. `a ?? 'text'` keeps a real 0 or false.
+
+A Firestore `query` load takes `where` as `[field, op, value]` (any operator,
+a value may be `{"$date": ISO}`) and `count: true`, which answers
+`{ "count": N }` from the server's count (the web SDK's `getCountFromServer`).
+A load with `each: "data.sites.sites"` runs once per row of an earlier load,
+with the row as `item`, and its key holds the list of answers (a failed one is
+null); at most 50 rows.
+
 ### The plugin switchboard
 
 `{ "switchboard": "org" }` reads `orgs/{org}` and `{ "switchboard": "site" }`

@@ -24,6 +24,20 @@
         "usage": {
           "url": "/api/billing/host-usage?orgId={org.id}",
           "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "siteTraffic": {
+          "url": "/api/billing/host-usage?hostId={item.hostId}",
+          "each": "data.collab.sites",
+          "optional": true
         }
       },
       "blocks": [
@@ -77,20 +91,20 @@
         },
         {
           "type": "fields",
-          "title": "This month",
+          "title": "This month, all sites",
           "when": "data.usage",
           "rows": [
             {
               "label": "Page views",
-              "value": "{data.usage.monthPageViews:number}"
+              "value": "{data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?:number}"
             },
             {
               "label": "Bandwidth",
-              "value": "{data.usage.bandwidthGb:number} GB"
+              "value": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?:number} GB"
             },
             {
               "label": "Media delivered",
-              "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
+              "value": "{data.siteTraffic.*.monthMediaBandwidthBytes + data.usage.monthMediaBandwidthBytes?:bytes}"
             }
           ]
         },
@@ -378,26 +392,230 @@
         "ceiling": {
           "url": "/api/billing/email-ceiling?orgId={org.id}",
           "optional": true
+        },
+        "ent": {
+          "url": "/api/orgs/entitlements?orgId={org.id}",
+          "optional": true
+        },
+        "org": {
+          "doc": "orgs/{org.id}",
+          "optional": true
+        },
+        "seats": {
+          "url": "/api/orgs/members?orgId={org.id}&counts=1",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "siteTraffic": {
+          "url": "/api/billing/host-usage?hostId={item.hostId}",
+          "each": "data.collab.sites",
+          "optional": true
+        },
+        "datasets": {
+          "query": {
+            "collection": "orgs/{org.id}/datasets",
+            "count": true
+          },
+          "optional": true
+        },
+        "contacts": {
+          "query": {
+            "collection": "orgs/{org.id}/contacts",
+            "count": true
+          },
+          "optional": true
+        },
+        "companies": {
+          "query": {
+            "collection": "orgs/{org.id}/companies",
+            "count": true
+          },
+          "optional": true
+        },
+        "deals": {
+          "query": {
+            "collection": "orgs/{org.id}/deals",
+            "count": true
+          },
+          "optional": true
+        },
+        "api": {
+          "doc": "orgs/{org.id}/apiUsage/{now.month}",
+          "optional": true
+        },
+        "crmEmails": {
+          "doc": "orgs/{org.id}/crmEmailUsage/{now.day}",
+          "optional": true
+        },
+        "campaignCounter": {
+          "doc": "orgs/{org.id}/counters/campaignEmailSends",
+          "optional": true
+        },
+        "workflowCounter": {
+          "doc": "orgs/{org.id}/counters/workflowRuns",
+          "optional": true
+        },
+        "actionCounter": {
+          "doc": "orgs/{org.id}/counters/actionRuns",
+          "optional": true
+        },
+        "rollup": {
+          "doc": "orgs/{org.id}/usage/{now.month}",
+          "optional": true
+        },
+        "rollupBefore": {
+          "doc": "orgs/{org.id}/usage/{now.prevMonth}",
+          "optional": true
         }
       },
       "blocks": [
         {
+          "type": "meters",
+          "title": "Your plan",
+          "footer": "What this workspace uses of what its plan includes. Storage is shown under Storage over the plan.",
+          "meters": [
+            {
+              "label": "Sites",
+              "used": "{data.collab.sites:count}",
+              "limit": "{data.ent.quotas.hostLimit}",
+              "format": "number",
+              "when": "data.ent && data.collab"
+            },
+            {
+              "label": "Team seats (incl. you)",
+              "used": "{data.seats.managerSeats}",
+              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
+              "format": "number",
+              "when": "data.ent && data.seats && !data.seats.pendingManagerSeats"
+            },
+            {
+              "label": "Team seats (incl. you + {data.seats.pendingManagerSeats} invited)",
+              "used": "{data.seats.managerSeats}",
+              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
+              "format": "number",
+              "when": "data.ent && data.seats && data.seats.pendingManagerSeats"
+            },
+            {
+              "label": "Datasets (organization)",
+              "used": "{data.datasets.count}",
+              "limit": "{data.ent.quotas.datasetsPerOrg + data.org.seatAddons.datasets?}",
+              "format": "number",
+              "when": "data.ent && data.datasets"
+            },
+            {
+              "label": "Data storage (organization), MB",
+              "used": "{data.rollup.dataStorageMb}",
+              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
+              "format": "number",
+              "when": "data.ent && data.rollup.dataStorageMb"
+            },
+            {
+              "label": "Data storage (organization), MB",
+              "used": "{data.rollupBefore.dataStorageMb}",
+              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
+              "format": "number",
+              "when": "data.ent && !data.rollup.dataStorageMb && data.rollupBefore.dataStorageMb"
+            },
+            {
+              "label": "CRM records (organization)",
+              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
+              "limit": "{data.ent.quotas.contactsPerHost}",
+              "format": "number",
+              "when": "data.ent.features.crm && data.contacts && data.companies && data.deals"
+            },
+            {
+              "label": "Stored records (organization)",
+              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
+              "limit": "{data.ent.quotas.contactsPerHost}",
+              "format": "number",
+              "when": "data.ent && !data.ent.features.crm && data.contacts && data.companies && data.deals"
+            },
+            {
+              "label": "One-to-one emails (today)",
+              "used": "{data.crmEmails.count ?? '0'}",
+              "limit": "{data.ent.quotas.crmEmailsPerDay}",
+              "format": "number",
+              "when": "data.ent.quotas.crmEmailsPerDay"
+            },
+            {
+              "label": "API requests (this month)",
+              "used": "{data.api.count ?? '0'}",
+              "limit": "{data.ent.quotas.apiRequestsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.apiRequestsPerMonth"
+            },
+            {
+              "label": "Workflow runs (this month, organization)",
+              "used": "{data.workflowCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.workflowRunsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.workflowRunsPerMonth"
+            },
+            {
+              "label": "Action runs (this month, organization)",
+              "used": "{data.actionCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.actionRunsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.actionRunsPerMonth"
+            },
+            {
+              "label": "Bandwidth (this month, organization), GB",
+              "used": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?}",
+              "limit": "{data.ent.quotas.bandwidthGb}",
+              "format": "number",
+              "when": "data.ent && data.siteTraffic"
+            },
+            {
+              "label": "Campaign emails (this month, organization)",
+              "used": "{data.campaignCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.emailSendsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.emailSendsPerMonth"
+            }
+          ]
+        },
+        {
           "type": "fields",
-          "title": "This month",
+          "title": "This month, all sites",
           "rows": [
             {
               "label": "Page views",
-              "value": "{data.usage.monthPageViews:number}"
+              "value": "{data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?:number}"
             },
             {
               "label": "Bandwidth",
-              "value": "{data.usage.bandwidthGb:number} GB"
+              "value": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?:number} GB"
             },
             {
               "label": "Media delivered",
-              "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
+              "value": "{data.siteTraffic.*.monthMediaBandwidthBytes + data.usage.monthMediaBandwidthBytes?:bytes}"
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Usage by site",
+          "when": "data.collab.sites",
+          "items": "data.collab.sites",
+          "count": false,
+          "primary": "{item.displayName|item.hostId}",
+          "icon": "globe|language",
+          "empty": "No sites yet.",
+          "open": {
+            "screen": "core.billing.usage.site",
+            "params": {
+              "siteId": "{item.hostId}",
+              "siteName": "{item.displayName|item.hostId}"
+            }
+          }
         },
         {
           "type": "fields",
@@ -1550,6 +1768,163 @@
               },
               "success": "Subscription cancels {response.currentPeriodEnd|'at the end of the period':date}",
               "back": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.billing.usage.site",
+      "title": "{params.siteName|'Site usage'}",
+      "icon": "chart.bar|bar_chart",
+      "scope": "org",
+      "load": {
+        "ent": {
+          "url": "/api/orgs/entitlements?orgId={org.id}",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "pages": {
+          "url": "/api/hosts/usage?hostId={params.siteId}",
+          "optional": true
+        },
+        "layouts": {
+          "query": {
+            "collection": "hosts/{params.siteId}/layouts",
+            "count": true
+          },
+          "optional": true
+        },
+        "variables": {
+          "query": {
+            "collection": "hosts/{params.siteId}/variables",
+            "count": true
+          },
+          "optional": true
+        },
+        "functions": {
+          "query": {
+            "collection": "hosts/{params.siteId}/functions",
+            "count": true
+          },
+          "optional": true
+        },
+        "forms": {
+          "query": {
+            "collection": "hosts/{params.siteId}/forms",
+            "count": true
+          },
+          "optional": true
+        },
+        "componentsAll": {
+          "query": {
+            "collection": "hosts/{params.siteId}/components",
+            "count": true
+          },
+          "optional": true
+        },
+        "componentsGone": {
+          "query": {
+            "collection": "hosts/{params.siteId}/components",
+            "count": true,
+            "where": [
+              [
+                "deletedAt",
+                ">",
+                {
+                  "$date": "1970-01-01T00:00:00Z"
+                }
+              ]
+            ]
+          },
+          "optional": true
+        },
+        "media": {
+          "doc": "hosts/{params.siteId}/counters/media",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "meters",
+          "title": "This site",
+          "footer": "Per-site collaborators, not end-user accounts, which are never metered.",
+          "meters": [
+            {
+              "label": "Pages",
+              "used": "{data.pages.screens}",
+              "limit": "{data.ent.quotas.screensPerHost}",
+              "format": "number",
+              "when": "data.ent && data.pages"
+            },
+            {
+              "label": "Shared layouts",
+              "used": "{data.layouts.count}",
+              "limit": "{data.ent.quotas.sharedLayoutsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.layouts"
+            },
+            {
+              "label": "Site collaborators",
+              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
+              "limit": "{data.collab.sites[hostId=params.siteId].cap}",
+              "format": "number",
+              "when": "data.collab.sites[hostId=params.siteId] && !data.collab.sites[hostId=params.siteId].capUnlimited"
+            },
+            {
+              "label": "Site collaborators",
+              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
+              "limit": "",
+              "format": "number",
+              "when": "data.collab.sites[hostId=params.siteId].capUnlimited"
+            },
+            {
+              "label": "Saved forms",
+              "used": "{data.forms.count}",
+              "limit": "{data.ent.quotas.formsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.forms"
+            },
+            {
+              "label": "Reusable components",
+              "used": "{data.componentsAll.count - data.componentsGone.count}",
+              "limit": "{data.ent.quotas.componentsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.componentsAll && data.componentsGone"
+            },
+            {
+              "label": "Variables",
+              "used": "{data.variables.count}",
+              "limit": "{data.ent.quotas.variablesPerHost}",
+              "format": "number",
+              "when": "data.ent && data.variables"
+            },
+            {
+              "label": "Functions",
+              "used": "{data.functions.count}",
+              "limit": "{data.ent.quotas.functionsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.functions"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Storage on this site",
+          "footer": "A share of the workspace's storage, not a meter of its own.",
+          "rows": [
+            {
+              "label": "Media",
+              "value": "{data.media.bytes ?? '0':bytes}",
+              "when": "data.media || data.ent"
             }
           ]
         }

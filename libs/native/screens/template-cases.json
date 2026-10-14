@@ -181,6 +181,34 @@
     {
       "template": "{data.addons.quantities[@data.kindKey]|'0'} of {data.addons.catalog[@data.kindKey].max}",
       "expect": "2 of 20"
+    },
+    {
+      "template": "{data.missing + 1}",
+      "expect": ""
+    },
+    {
+      "template": "{data.money + data.bytes - 1:number}",
+      "expect": "1,696,319"
+    },
+    {
+      "template": "{data.big - 1000000:number}",
+      "expect": "234,567.89"
+    },
+    {
+      "template": "{data.members.*.count + 1}",
+      "expect": "1"
+    },
+    {
+      "template": "{data.members.*.joined}",
+      "expect": "1791331200"
+    },
+    {
+      "template": "{data.big - 1000000 + data.nothing?:number}",
+      "expect": "234,567.89"
+    },
+    {
+      "template": "{data.big - 1000000 + data.nothing:number}",
+      "expect": ""
     }
   ],
   "url": [
