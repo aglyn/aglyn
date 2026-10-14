@@ -131,6 +131,23 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(JSONValue.decode(sent[0].httpBody ?? Data()), ["orgId": "o1", "email": "a@b.c"])
   }
 
+  func testTheTokenSaysHowTheAccountSignsIn() {
+    func token(_ claims: String) -> TokenClaims {
+      let payload = Data(claims.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+      return TokenClaims(idToken: "h.\(payload).s")
+    }
+    let both = token(#"{"email_verified":true,"firebase":{"identities":{"google.com":["1"],"email":["a@b.c"]},"sign_in_provider":"password"}}"#)
+    XCTAssertEqual(both.signInMethods, ["password", "google.com"])
+    XCTAssertTrue(both.emailVerified)
+    XCTAssertEqual(token("{}").signInMethods, [])
+    XCTAssertFalse(token("{}").emailVerified)
+    let session = ScreenSession(email: "a@b.c", claims: both)
+    let context = session.context(nil, params: [:])
+    XCTAssertEqual(ScreenValues.lookup("user.providers", in: context), ["password", "google.com"])
+    XCTAssertEqual(ScreenValues.render("{user.emailVerified:yesno}", in: context), "Yes")
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])

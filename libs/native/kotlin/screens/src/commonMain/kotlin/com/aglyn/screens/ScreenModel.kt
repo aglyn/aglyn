@@ -66,6 +66,8 @@ data class ScreenSession(
         put("uid", plugin?.uid)
         put("email", email)
         put("name", displayName)
+        put("providers", kotlinx.serialization.json.JsonArray(claims.signInMethods.map { JsonPrimitive(it) }))
+        put("emailVerified", claims.emailVerified)
       })
       put("staff", buildJsonObject {
         put("is", claims.isStaff)

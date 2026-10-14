@@ -64,6 +64,8 @@ public struct ScreenSession: Sendable {
         "uid": plugin.map { JSONValue.string($0.uid) } ?? .null,
         "email": email.map(JSONValue.string) ?? .null,
         "name": displayName.map(JSONValue.string) ?? .null,
+        "providers": .array(claims.signInMethods.map(JSONValue.string)),
+        "emailVerified": .bool(claims.emailVerified),
       ],
       "staff": [
         "is": .bool(claims.isStaff),
