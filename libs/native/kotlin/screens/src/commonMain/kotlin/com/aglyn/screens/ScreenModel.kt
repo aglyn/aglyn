@@ -129,7 +129,7 @@ class ScreenModel(
   internal fun url(load: LoadSpec, cursor: String? = null): String {
     var url = ScreenValues.renderUrl(load.url, context)
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
-      url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
+      url += (if ('?' in url) "&" else "?") + load.searchParam + "=" + ScreenValues.encodeComponent(it)
     }
     if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     return url

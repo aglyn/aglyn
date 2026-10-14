@@ -58,6 +58,8 @@ class LoadSpec(val key: String, json: JsonElement) {
   val whenCondition: String? = json.str("when")
   val cursor: String? = json.str("cursor")
   val cursorParam: String = json.str("cursorParam") ?: "cursor"
+  /** The query parameter the route reads search words from (`search` unless the route names it otherwise). */
+  val searchParam: String = json.str("searchParam") ?: "search"
   val items: String? = json.str("items")
   /** `POST` for a route that answers reads by POST (with `body`); GET otherwise. */
   val method: ApiMethod = runCatching { ApiMethod.valueOf((json.str("method") ?: "GET").uppercase()) }.getOrDefault(ApiMethod.GET)

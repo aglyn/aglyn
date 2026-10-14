@@ -8,6 +8,7 @@ import AglynAiPlugin
 import AglynBookingsPlugin
 import AglynCommercePlugin
 import AglynCrmPlugin
+import AglynDeliveryAppsPlugin
 import AglynEmailPlugin
 import AglynEventsCalendarPlugin
 import AglynFormsPlugin
@@ -47,6 +48,11 @@ public enum NativePluginManifest {
       id: "crm",
       contributes: ["screens": ["crm.companies", "crm.company", "crm.contact", "crm.contacts", "crm.deal", "crm.deals", "crm.fields", "crm.lead", "crm.leads", "crm.reports", "crm.settings", "crm.tasks"], "widgets": ["crm.glance", "crm.tasks-due"], "quickActions": ["crm.deals-action", "crm.open", "crm.tasks-action"], "deepLinks": ["crm.companies-page", "crm.company-page", "crm.contact-page", "crm.contacts-page", "crm.deal-page", "crm.deals-page", "crm.fields-page", "crm.lead-page", "crm.leads-page", "crm.legacy-contacts", "crm.page", "crm.reports-page", "crm.settings-page", "crm.tasks-page"]],
       register: AglynCrmPlugin.registerCrmNative
+    ),
+    NativePluginManifestEntry(
+      id: "delivery-apps",
+      contributes: ["screens": ["delivery-apps.match", "delivery-apps.service", "delivery-apps.store"]],
+      register: AglynDeliveryAppsPlugin.registerDeliveryAppsNative
     ),
     NativePluginManifestEntry(
       id: "email",

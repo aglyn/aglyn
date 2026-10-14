@@ -633,10 +633,11 @@
               "prompt": [
                 {
                   "key": "targetId",
-                  "label": "{const.channels[id=params.channel].target}",
+                  "label": "Account or catalog",
                   "kind": "select",
                   "required": true,
                   "initial": "{data.state.connect.providers[provider=params.channel].connection.targetId}",
+                  "help": "The {const.channels[id=params.channel].target} products are sent to in {const.channels[id=params.channel].service}.",
                   "optionsFrom": {
                     "items": "data.state.connect.providers[provider=params.channel].connection.targets",
                     "value": "{item.id}",

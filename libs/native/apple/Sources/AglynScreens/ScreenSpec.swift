@@ -66,6 +66,8 @@ public struct LoadSpec: Sendable, Hashable {
   public let cursor: String?
   /// The query parameter the cursor goes back in.
   public let cursorParam: String
+  /// The query parameter the route reads search words from (`search` unless the route names it otherwise).
+  public let searchParam: String
   /// The response field holding the rows to append page after page.
   public let items: String?
   /// `POST` for a route that answers reads by POST (with `body`); GET otherwise.
@@ -87,6 +89,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.when = nil
       self.cursor = nil
       self.cursorParam = "cursor"
+      self.searchParam = "search"
       self.items = nil
       self.doc = nil
       self.query = nil
@@ -99,6 +102,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.when = json["when"]?.stringValue
       self.cursor = json["cursor"]?.stringValue
       self.cursorParam = json["cursorParam"]?.stringValue ?? "cursor"
+      self.searchParam = json["searchParam"]?.stringValue ?? "search"
       self.items = json["items"]?.stringValue
       self.doc = json["doc"]?.stringValue
       self.query = json["query"]

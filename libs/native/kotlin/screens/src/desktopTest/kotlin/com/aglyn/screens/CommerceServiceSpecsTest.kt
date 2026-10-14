@@ -505,4 +505,66 @@ class CommerceServiceSpecsTest {
     assertEquals("Mug", ScreenValues.render(orders.blocks.first { it.id == "parts" }.string("secondary")!!, part))
     assertEquals("In production", ScreenValues.render("{const.statuses[id=item.status].label}", part))
   }
+
+  // ---- delivery apps -----------------------------------------------------------------------------------------------
+
+  private fun deliveryStore(service: String) =
+    """{"service":"$service","externalStoreId":"ST-9","settings":{"autoAccept":true,"prepMinutes":20},"connectedAtMs":1760000000000,"menu":{"publishedAtMs":1760000000000,"items":12,"error":null},"unmatched":2}"""
+
+  private fun delivery(service: String, stores: String, items: String = "[]") =
+    screen(spec("delivery-apps", "delivery-apps.store"), mapOf("service" to service),
+      """{"stores":{"offered":[{"id":"doordash","sandbox":true},{"id":"grubhub","sandbox":false}],"stores":$stores},"items":{"items":$items}}""")
+
+  @Test
+  fun deliveryAppsListEachOfferedServiceWithItsState() {
+    val spec = spec("delivery-apps", "delivery-apps.service")
+    val model = screen(spec, emptyMap(), """{"stores":{"offered":[{"id":"doordash","sandbox":true}],"stores":[${deliveryStore("doordash")}]}}""")
+    assertEquals(listOf("services"), model.shown())
+    val item = ScreenContext.with(model.context, "item", json("""{"id":"doordash","sandbox":true}"""))
+    assertEquals("DoorDash", ScreenValues.render(spec.blocks.first { it.id == "services" }.string("primary")!!, item))
+    assertTrue(ScreenValues.condition("data.stores.stores[service=item.id]", item))
+    assertEquals(listOf("none"), screen(spec, emptyMap(), """{"stores":{"offered":[],"stores":[]}}""").shown())
+  }
+
+  @Test
+  fun aDeliveryAppConnectsWithAStoreIdThenSavesItsOrderSettingsAndSendsItsMenu() {
+    val bare = delivery("doordash", "[]")
+    assertEquals(listOf("hint", "sandbox", "manage"), bare.shown())
+    assertEquals(listOf("connect"), bare.actionsShown("manage"))
+    val connect = bare.action("manage", "connect")
+    assertEquals(json("""{"hostId":"h1","service":"doordash","externalStoreId":"S1","settings":{"autoAccept":false,"prepMinutes":15}}"""), bare.body(connect, """{"externalStoreId":"S1"}"""))
+    assertEquals("Your DoorDash store ID. The store ID in your DoorDash Merchant Portal, or the location ID DoorDash set up for this integration.", ScreenValues.render(connect.prompt.first().help!!, bare.context))
+    assertTrue("sandbox" !in delivery("grubhub", "[]").shown(), "Grubhub is not a sandbox here")
+
+    val connected = delivery("doordash", "[${deliveryStore("doordash")}]", """[{"externalItemId":"i1","name":"Latte","productId":null,"variantId":null,"title":null,"lastSeenAtMs":1},{"externalItemId":"i2","name":"Mocha","productId":"p2","variantId":"v2","title":"Mocha (12 oz)","lastSeenAtMs":1}]""")
+    assertEquals(listOf("menu", "disconnect"), connected.actionsShown("manage"))
+    assertEquals(listOf("status", "manage", "settings", "items"), connected.shown())
+    assertEquals(json("""{"hostId":"h1","service":"doordash","settings":{"autoAccept":false,"prepMinutes":25}}"""), connected.body(connected.form("settings"), """{"autoAccept":false,"prepMinutes":25}"""))
+    assertEquals("Menu sent to DoorDash: 12 items.", ScreenValues.render(connected.action("manage", "menu").success!!, ScreenContext.with(connected.context, "response", json("""{"items":12}"""))))
+    assertEquals("DELETE", connected.action("manage", "disconnect").method.name)
+    val items = connected.spec.blocks.first { it.id == "items" }
+    fun row(index: Int) = ScreenContext.with(connected.context, "item", connected.context.jsonObject["data"]!!.jsonObject["items"]!!.jsonObject["items"]!!.jsonArray[index])
+    assertEquals("Mocha (12 oz)", ScreenValues.render(items.string("secondary")!!, row(1)))
+    assertEquals("i1", ScreenValues.render(items.string("secondary")!!, row(0)))
+    val clear = items.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertTrue(ScreenValues.condition(clear.whenCondition, row(1)) && !ScreenValues.condition(clear.whenCondition, row(0)))
+    assertEquals(json("""{"hostId":"h1","service":"doordash","externalItemId":"i2","name":"Mocha","clear":true}"""), ScreenValues.resolveBody(clear.body!!, row(1)))
+    assertTrue(ScreenValues.condition(items.raw.jsonObject["open"]!!.jsonObject["when"]!!.let { (it as JsonPrimitive).content }, row(0)))
+  }
+
+  @Test
+  fun matchingAnItemSearchesTheCatalogByQAndPostsTheChoice() {
+    val spec = spec("delivery-apps", "delivery-apps.match")
+    val load = spec.loads.first()
+    assertEquals("q", load.searchParam)
+    val model = screen(spec, mapOf("service" to "doordash", "externalItemId" to "i1", "name" to "Latte"), """{"options":{"options":[{"productId":"p9","variantId":"v9","title":"Latte (12 oz)","sku":"LAT-12"}]}}""")
+    assertEquals("Match Latte", ScreenValues.render(spec.title, model.context))
+    val action = spec.blocks.first { it.id == "options" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    val row = ScreenContext.with(model.context, "item", json("""{"productId":"p9","variantId":"v9","title":"Latte (12 oz)","sku":"LAT-12"}"""))
+    assertEquals(
+      json("""{"hostId":"h1","service":"doordash","externalItemId":"i1","name":"Latte","productId":"p9","variantId":"v9","title":"Latte (12 oz)"}"""),
+      ScreenValues.resolveBody(action.body!!, row),
+    )
+    assertTrue(action.back)
+  }
 }

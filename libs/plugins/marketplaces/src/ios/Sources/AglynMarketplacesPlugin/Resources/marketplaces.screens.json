@@ -366,7 +366,7 @@
             },
             {
               "key": "importOrders",
-              "label": "Bring {const.marketplaces[id=params.marketplace].label} orders into the store",
+              "label": "Bring marketplace orders into the store",
               "kind": "toggle",
               "initial": "{data.conn.connections[marketplace=params.marketplace].settings.importOrders}"
             },

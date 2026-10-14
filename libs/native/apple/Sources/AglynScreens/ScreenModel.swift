@@ -153,7 +153,7 @@ public final class ScreenModel {
   func url(for load: LoadSpec, cursor: String? = nil) -> String {
     var url = ScreenValues.renderURL(load.url, in: context)
     if let words = search[load.key], !words.trimmingCharacters(in: .whitespaces).isEmpty {
-      url += (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(words)
+      url += (url.contains("?") ? "&" : "?") + load.searchParam + "=" + ScreenValues.encodeComponent(words)
     }
     if let cursor {
       url += (url.contains("?") ? "&" : "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
