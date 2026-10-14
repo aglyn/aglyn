@@ -652,10 +652,6 @@
     {
       "path": "libs/plugins/logic/src/lib/model/structured-value.ts",
       "why": "A dictionary or list variable as rows and back to the stored JSON string; the native Logic editors show and save the same rows (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
-      "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
     }
   ]
 }
