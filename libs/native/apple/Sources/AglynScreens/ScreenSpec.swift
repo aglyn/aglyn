@@ -186,6 +186,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// `{ doc, current, edited }`: the owner's save of a business profile. `edited` is the typed values,
+  /// `current` the path to the stored document; the write follows `BusinessProfile.ownerWrite`.
+  public let businessProfile: JSONValue?
   /// A change to the signed-in person's own sign-in, made through the
   /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
   public let account: String?
@@ -264,6 +267,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.businessProfile = json["businessProfile"]
     self.account = json["account"]?.stringValue
     self.stash = json["stash"]
     self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)

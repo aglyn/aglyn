@@ -360,6 +360,49 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(unlinked.providers, ["google.com"])
   }
 
+  func testTheBusinessProfileOwnerWriteReplaysTheConsolesAnswers() throws {
+    let url = Self.screensDir.deletingLastPathComponent().appendingPathComponent("contracts/function-cases.generated.json")
+    let file = try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url)))
+    let cases = file["functions"]?["businessProfileOwnerWrite"]?["cases"].array ?? []
+    XCTAssertFalse(cases.isEmpty)
+    for entry in cases {
+      let args = entry["args"].array
+      let current: JSONValue? = args.first == .null ? nil : args.first
+      let got = BusinessProfile.ownerWrite(current: current, edited: args.last ?? .null)
+      XCTAssertEqual(JSONValue.object(got), entry["result"], "\(args)")
+    }
+  }
+
+  @MainActor
+  func testSavingTheBusinessProfileWritesFieldsSourcesAndWhoSavedIt() async throws {
+    final class Recorder: FirestoreWriter, @unchecked Sendable {
+      var path: [String] = []
+      var fields: [String: Any] = [:]
+      func merge(_ path: [String], _ fields: [String: Any]) async throws { self.path = path; self.fields = fields }
+    }
+    let writer = Recorder()
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.profile" })
+    let form = try XCTUnwrap(spec.blocks.first { $0.id == "businessProfile" })
+    let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+    let model = ScreenModel(spec: spec, context: [:], api: nil, writer: writer)
+    let scope: JSONValue = [
+      "org": ["id": "o1"], "user": ["uid": "u1"],
+      "data": ["business": ["whatYouDo": "Grooming", "tone": "plain", "sources": ["whatYouDo": "start", "tone": "ai"]]],
+      "form": ["whatYouDo": "Grooming", "services": ["Bath", "bath", "Groom"], "serviceArea": "", "audience": "", "tone": "premium", "toneNotes": ""],
+    ]
+    let outcome = await model.run(submit, in: scope)
+    XCTAssertEqual(outcome, .done(message: "Saved", response: nil))
+    XCTAssertEqual(writer.path, ["orgs", "o1", "businessProfile", "defaults"])
+    XCTAssertEqual(writer.fields["services"] as? [String], ["Bath", "Groom"])
+    XCTAssertEqual(writer.fields["tone"] as? String, "premium")
+    XCTAssertEqual(writer.fields["updatedBy"] as? String, "u1")
+    let sources = try XCTUnwrap(writer.fields["sources"] as? [String: Any])
+    XCTAssertEqual(sources["whatYouDo"] as? String, "start")  // untouched keeps its source
+    XCTAssertEqual(sources["tone"] as? String, "owner")  // changed becomes the owner's
+    XCTAssertEqual(sources["services"] as? String, "owner")
+    XCTAssertTrue(sources["audience"] is FirestoreSentinel)  // no source: the key is removed
+  }
+
   @MainActor
   func testTheAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })

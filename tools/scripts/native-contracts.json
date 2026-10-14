@@ -13852,6 +13852,110 @@
         ]
       ]
     },
+    "businessProfileOwnerWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile-values.ts",
+      "args": [
+        [
+          null,
+          {
+            "whatYouDo": "  Grooming   for dogs ",
+            "services": [
+              "Full groom",
+              "full groom",
+              "Bath",
+              ""
+            ],
+            "tone": "friendly",
+            "serviceArea": "North Austin"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Grooming",
+            "sources": {
+              "whatYouDo": "start"
+            }
+          },
+          {
+            "whatYouDo": "Grooming"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Grooming",
+            "sources": {
+              "whatYouDo": "ai"
+            }
+          },
+          {
+            "whatYouDo": "Dog grooming"
+          }
+        ],
+        [
+          {
+            "audience": "Owners",
+            "sources": {
+              "audience": "ai"
+            }
+          },
+          {
+            "audience": ""
+          }
+        ],
+        [
+          {
+            "audience": "",
+            "sources": {
+              "audience": "owner"
+            }
+          },
+          {
+            "audience": ""
+          }
+        ],
+        [
+          {
+            "tone": "plain"
+          },
+          {
+            "tone": "loud"
+          }
+        ],
+        [
+          {
+            "serviceArea": "Austin"
+          },
+          {
+            "services": "a, b\nc"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Keep"
+          },
+          {
+            "toneNotes": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        ],
+        [
+          {
+            "services": [
+              "A",
+              "B"
+            ],
+            "sources": {
+              "services": "start"
+            }
+          },
+          {
+            "services": [
+              "A",
+              "B"
+            ]
+          }
+        ]
+      ]
+    },
     "packageJsonDiff": {
       "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
       "args": [

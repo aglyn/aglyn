@@ -508,6 +508,27 @@ public final class ScreenModel {
       }
     }
     if let passkey = action.passkey { return await registerPasskey(passkey, action: action, in: scope) }
+    if let profile = action.businessProfile {
+      guard let writer, let doc = profile["doc"]?.stringValue else { return .failed("Saving is not available here.") }
+      do {
+        let edited = ScreenValues.resolveBody(profile["edited"] ?? [:], in: scope)
+        let current = ScreenValues.lookup(profile["current"]?.stringValue ?? "", in: scope)
+        let next = BusinessProfile.ownerWrite(current: current, edited: edited)
+        var fields: [String: JSONValue] = [:]
+        for field in BusinessProfile.fields { fields[field] = next[field] ?? .null }
+        // `sources` replaces the stored map: a field with no source loses its key.
+        var sources: [String: JSONValue] = [:]
+        for field in BusinessProfile.fields { sources[field] = next["sources"]?[field] ?? ["$delete": true] }
+        fields["sources"] = .object(sources)
+        fields["updatedAt"] = ["$serverTimestamp": true]
+        fields["updatedBy"] = scope["user"]?["uid"] ?? .null
+        try await writer.merge(
+          FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(.object(fields)) as? [String: Any] ?? [:])
+        return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
+      } catch {
+        return .failed(error.localizedDescription)
+      }
+    }
     if let write = action.write {
       guard let writer, let doc = write["doc"]?.stringValue else { return .failed("Saving is not available here.") }
       do {

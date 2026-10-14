@@ -325,6 +325,9 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   case ("file", .text(let text)?), ("file", .file(_, let text)?):
     if text.isEmpty { return .null }
     return field.parse == "json" ? (JSONValue.decode(Data(text.utf8)) ?? .null) : .string(text)
+  case ("lines", .text(let text)?):
+    // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
+    return .array(text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map(JSONValue.string))
   case ("number", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
     return trimmed.isEmpty ? .null : Double(trimmed).map(JSONValue.number) ?? .string(trimmed)
@@ -340,6 +343,7 @@ func initialValue(_ field: FieldSpec, in context: JSONValue) -> FieldValue {
   let resolved = field.initial.map { ScreenValues.resolve($0, in: context) } ?? .null
   if field.kind == "toggle" { return .flag(ScreenValues.truthy(resolved)) }
   if field.kind == "multiselect" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
+  if field.kind == "lines" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
   if field.kind == "date", let millis = ScreenValues.epochMillis(resolved) {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
@@ -413,7 +417,7 @@ struct FieldInput: View {
           guard let file = files.first else { return }
           value = .file(name: file.name, text: ScreenValues.decodeFileText(file.data))
         }
-      case "multiline":
+      case "multiline", "lines":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)
       case "password":

@@ -616,6 +616,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/email-text.ts",
       "why": "Reached by sequence-validation: a thread's subject."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/business-profile-values.ts",
+      "why": "The business profile's fields, limits, sources and owner-write rule, no imports: the native workspace defaults replay them (AGL-3671)."
     }
   ]
 }
