@@ -150,20 +150,27 @@ object ScreenStash {
   fun clear() { values = JsonObject(emptyMap()) }
 }
 
+/** Set on a screen opened by another's `gate`: told when the person finished what the gate asked for, or closes it. */
+class ScreenGate(val resolve: () -> Unit, val close: () -> Unit)
+
+val LocalScreenGate = compositionLocalOf<ScreenGate?> { null }
+
 /** Makes a passkey through the platform; the app provides it where the device can (null elsewhere, and the desktop). */
 val LocalPasskeyCreator = compositionLocalOf<PasskeyCreator?> { null }
+
+/** Signs in with a passkey on this device; the app provides it where the device can (null elsewhere, and the desktop). */
+val LocalPasskeyAsserter = compositionLocalOf<PasskeyAsserter?> { null }
 
 /** Signs in to Google on this device for "Connect Google": the Credential Manager on Android, the browser on the desktop (null elsewhere). */
 val LocalGoogleCredentialSource = compositionLocalOf<com.aglyn.core.GoogleCredentialSource?> { null }
 
 sealed interface ActionOutcome {
   data class Done(val message: String?, val response: JsonElement?) : ActionOutcome
-/** Signs in with a passkey on this device; the app provides it where the device can (null elsewhere, and the desktop). */
-val LocalPasskeyAsserter = compositionLocalOf<PasskeyAsserter?> { null }
-
   /** A route answered with a file to save. */
   class File(val name: String, val mimeType: String, val bytes: ByteArray, val message: String?) : ActionOutcome
   data class NeedsReauth(val message: String) : ActionOutcome
+  /** The route refused for something another screen settles (`gate`): that screen, and the route's words. */
+  data class Gated(val screen: String, val message: String) : ActionOutcome
   data class Failed(val message: String) : ActionOutcome
 }
 
@@ -392,9 +399,53 @@ class ScreenModel(
     if (outcome is ActionOutcome.Done) action.after?.let { follow ->
       val seen = ScreenContext.with(ScreenContext.with(scope, "stash", ScreenStash.values), "response", outcome.response)
       val next = run(follow, seen)
-      if (next is ActionOutcome.Failed || next is ActionOutcome.NeedsReauth) return next
+      if (next is ActionOutcome.Failed || next is ActionOutcome.NeedsReauth || next is ActionOutcome.Gated) return next
+    }
+    // Plugins that asked to be heard once the action is done (`afterZone`) run their hooks; they never fail the action.
+    val after = action.afterZone
+    val zone = after.str("zone")
+    if (outcome is ActionOutcome.Done && zone != null) {
+      val seen = ScreenContext.with(ScreenContext.with(scope, "stash", ScreenStash.values), "response", outcome.response)
+      val said = runHooks(zone, seen)
+      after.str("stash")?.let { key ->
+        ScreenStash.set(JsonObject(mapOf(key to if (said.isEmpty()) JsonNull else JsonPrimitive(said.joinToString(" ")))))
+        context = ScreenContext.with(context, "stash", ScreenStash.values)
+      }
     }
     return outcome
+  }
+
+  /**
+   * The hook of each screen contributed to [zone] whose `requires` holds: its `load` read into `data`, then its action run
+   * over it. What each says (its success message, or why it failed) is returned; a hook that has nothing to do, or whose
+   * action's `when` does not hold once the data is read, says nothing.
+   */
+  private suspend fun runHooks(zone: String, scope: JsonElement): List<String> {
+    val said = mutableListOf<String>()
+    for (contributed in ScreenCatalog.zone(zone).filter { ScreenValues.condition(it.requires, scope) }) {
+      val hook = contributed.hook ?: continue
+      if (!ScreenValues.condition(hook.str("when"), scope)) continue
+      val action = hook.obj("action")?.let { ActionSpec.parse(it) } ?: continue
+      val reading = ScreenSpec.parse(
+        JsonObject(
+          mapOf(
+            "id" to JsonPrimitive("${contributed.id}.hook"), "title" to JsonPrimitive(contributed.title),
+            "load" to (hook.obj("load") ?: JsonObject(emptyMap())),
+          ),
+        ),
+      ) ?: continue
+      val sub = ScreenModel(reading, scope, api, reader, writer, account)
+      sub.load()
+      if (!ScreenValues.condition(action.whenCondition, sub.context)) continue
+      when (val result = sub.run(action, sub.context)) {
+        is ActionOutcome.Done -> result.message?.takeIf { it.isNotEmpty() }?.let { said += it }
+        is ActionOutcome.Failed -> said += result.message
+        is ActionOutcome.Gated -> said += result.message
+        is ActionOutcome.NeedsReauth -> said += result.message
+        is ActionOutcome.File -> Unit
+      }
+    }
+    return said
   }
 
   /** Keeps what an action's `stash` asks for from its outcome. */
@@ -513,6 +564,9 @@ class ScreenModel(
       when {
         wantsReauth(error) -> ActionOutcome.NeedsReauth(error.body.str("message") ?: error.message)
         error.status == 404 && action.otherwise != null -> perform(action.otherwise, scope)
+        action.gate?.str("screen") != null &&
+          ScreenValues.condition(action.gate.str("when"), JsonObject(mapOf("error" to (error.body ?: JsonNull)))) ->
+          ActionOutcome.Gated(action.gate.str("screen")!!, error.message)
         else -> ActionOutcome.Failed(error.message)
       }
     } catch (error: Throwable) {

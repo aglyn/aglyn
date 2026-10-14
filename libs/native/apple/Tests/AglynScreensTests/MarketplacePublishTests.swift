@@ -148,4 +148,31 @@ final class MarketplacePublishTests: XCTestCase {
     let sent = try XCTUnwrap(accepting.requests[0].httpBody.flatMap(JSONValue.decode))
     XCTAssertEqual(sent, ["action": "accept-agreement", "orgId": "o1", "version": version ?? .null])
   }
+
+  func testAPublishRefusedForTheAgreementOpensItAndAcceptingIsWhatSendsThePublishAgain() async throws {
+    let publish = try spec("marketplace.publishTemplate")
+    let submit = try XCTUnwrap(publish.blocks.first { $0.type == "form" }?["submit"].flatMap(ActionSpec.init))
+    let refusal =
+      #"{"error":"Accept the Marketplace Publisher Agreement before publishing.","agreement":{"required":"2026-08-24.1","accepted":null,"state":"none","orgId":"o1"}}"#
+    let transport = RecordingTransport(responses: [(412, refusal), (412, #"{"error":"Set up your publisher profile first."}"#), (200, #"{"ok":true,"version":2}"#)])
+    let model = ScreenModel(spec: publish, context: [:], api: api(transport))
+    let scope: JSONValue = ["site": ["id": "h1"], "form": ["name": "Studio"]]
+    // The route's structured refusal (not its prose) names the screen that settles it.
+    let first = await model.run(submit, in: scope)
+    XCTAssertEqual(
+      first, .gated(screen: "marketplace.publisherAgreement", message: "Accept the Marketplace Publisher Agreement before publishing."))
+    // Any other refusal is a failure, as it was.
+    let second = await model.run(submit, in: scope)
+    XCTAssertEqual(second, .failed("Set up your publisher profile first."))
+    // Sent again after the agreement is accepted, it is the same request.
+    _ = await model.run(submit, in: scope)
+    XCTAssertEqual(transport.requests[0].httpBody, transport.requests[2].httpBody)
+
+    let agreement = try spec("marketplace.publisherAgreement")
+    let block = try XCTUnwrap(agreement.blocks.first { $0.when == "is.canAccept" })
+    let accepts = block["items"].array.compactMap(ActionSpec.init)
+    XCTAssertEqual(accepts.map(\.id), ["accept", "acceptCurrent"])
+    XCTAssertTrue(accepts.allSatisfy(\.resume))
+    XCTAssertTrue(accepts.allSatisfy(\.back))
+  }
 }

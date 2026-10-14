@@ -105,6 +105,9 @@ private data class Selection(val screen: String, val params: NativeParams)
 
 private class Pending(val action: ActionSpec, val scope: JsonElement, val reauthMessage: String? = null)
 
+/** An action whose route refused for something another screen settles: that screen, drawn over this one. */
+private class Gated(val action: ActionSpec, val scope: JsonElement, val spec: ScreenSpec)
+
 /**
  * Draws a console screen from its spec: sections in cards, list and detail
  * side by side on a wide window when the spec asks, pull to refresh,
@@ -175,6 +178,8 @@ private fun SpecBody(
   var confirming by remember { mutableStateOf<Pending?>(null) }
   var prompting by remember { mutableStateOf<Pending?>(null) }
   var reauthing by remember { mutableStateOf<Pending?>(null) }
+  var gating by remember { mutableStateOf<Gated?>(null) }
+  val gate = LocalScreenGate.current
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
@@ -195,7 +200,7 @@ private fun SpecBody(
     if (splitting && ScreenCatalog.spec(screen) != null) onSelect(Selection(screen, params)) else plugin.navigate(screen, params)
   }
 
-  suspend fun execute(action: ActionSpec, actionScope: JsonElement) {
+  suspend fun execute(action: ActionSpec, actionScope: JsonElement, afterGate: Boolean = false) {
     action.exportRequest(actionScope)?.let {
       exportDialog = it
       return
@@ -226,6 +231,7 @@ private fun SpecBody(
           is ActionOutcome.Done -> confirming = Pending(action, ScreenContext.with(actionScope, "preview", checked.response ?: JsonObject(emptyMap())))
           is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, checked.message)
           is ActionOutcome.Failed -> show(checked.message, StatusTone.ERROR)
+          is ActionOutcome.Gated -> show(checked.message, StatusTone.ERROR)
           is ActionOutcome.File -> Unit // a check asks a question; it never answers with a file
         }
         return
@@ -237,6 +243,11 @@ private fun SpecBody(
     when (outcome) {
       is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, outcome.message)
       is ActionOutcome.Failed -> show(outcome.message, StatusTone.ERROR)
+      is ActionOutcome.Gated -> {
+        // Asked about once: a second refusal after the gate's screen is answered as it stands.
+        val gated = ScreenCatalog.spec(outcome.screen)
+        if (!afterGate && gated != null) gating = Gated(action, actionScope, gated) else show(outcome.message, StatusTone.ERROR)
+      }
       is ActionOutcome.File -> {
         val exporter = exporter
         when {
@@ -258,7 +269,8 @@ private fun SpecBody(
         action.reveal?.let { path -> ScreenValues.lookup(path, outcome.response ?: JsonNull)?.let { revealed = action.label to ScreenValues.text(it) } }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
-        if (action.back) session.back() else if (action.reload) model.load()
+        if (action.resume) gate?.resolve?.let { resolve -> resolve() }
+        if (action.back) { if (gate != null) gate.close() else session.back() } else if (action.reload) model.load()
       }
     }
   }
@@ -402,6 +414,29 @@ private fun SpecBody(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
       )
+    }
+  }
+  gating?.let { gated ->
+    // The screen the route's refusal named, over this one; when it reports `resume`, the same action goes again.
+    val resolved = remember(gated) { booleanArrayOf(false) }
+    androidx.compose.ui.window.Dialog(
+      onDismissRequest = { gating = null },
+      properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+      androidx.compose.material3.Surface(
+        Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f).testTag("gate-${gated.spec.id}"),
+        shape = MaterialTheme.shapes.large,
+      ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+          LocalScreenGate provides ScreenGate(
+            resolve = { resolved[0] = true },
+            close = {
+              gating = null
+              if (resolved[0]) scope.launch { execute(gated.action, gated.scope, afterGate = true) }
+            },
+          ),
+        ) { SpecScreen(gated.spec, plugin, emptyMap(), embedded = true) }
+      }
     }
   }
   revealed?.let { (title, value) ->
@@ -638,6 +673,10 @@ private fun ListBlock(
   val rows = ScreenValues.scopes(block.string("items").orEmpty(), block.string("within"), block.string("filter"), context)
     .filter { scope -> chipField == null || chosen.isEmpty() || ScreenValues.text(ScreenValues.lookup("item.$chipField", scope)) == chosen }
   val loadKey = block.string("load")
+  // `page: N`: the first N rows, then Show more for N more (a list the screen holds whole, such as a diff).
+  var revealed by remember { mutableStateOf(0) }
+  val page = (block["page"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+  val shown = if (page > 0) rows.take(page * (1 + revealed)) else rows
   SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {
     Column(Modifier.fillMaxWidth()) {
       if (chipValues.isNotEmpty()) {
@@ -661,9 +700,13 @@ private fun ListBlock(
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
-      rows.forEachIndexed { index, row ->
+      shown.forEachIndexed { index, row ->
         if (index > 0) HorizontalDivider()
         ListRow(block, row, selection, open, trigger)
+      }
+      if (page > 0 && rows.size > shown.size) {
+        HorizontalDivider()
+        TextButton(onClick = { revealed += 1 }, modifier = Modifier.fillMaxWidth().testTag("show-more")) { Text("Show more") }
       }
       if (loadKey != null && model.cursors[loadKey] != null) {
         HorizontalDivider()
@@ -786,6 +829,9 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
   // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
   field.kind == "multiselect" && value is FieldValue.Text ->
     value.value.split('\n').filter { it.isNotEmpty() }.let { chosen -> if (chosen.isEmpty()) JsonNull else JsonArray(chosen.map { JsonPrimitive(it) }) }
+  // What the upload step reads out of the chosen file or pasted rows, kept as JSON text while it is edited.
+  field.kind == "upload" && value is FieldValue.Text ->
+    runCatching { kotlinx.serialization.json.Json.parseToJsonElement(value.value) }.getOrDefault(JsonNull)
   field.kind == "file" && (value is FieldValue.Text || value is FieldValue.File) -> {
     val text = if (value is FieldValue.File) value.text else (value as FieldValue.Text).value
     if (text.isEmpty()) JsonNull else if (field.parse == "json") runCatching { kotlinx.serialization.json.Json.parseToJsonElement(text) }.getOrDefault(JsonNull) else JsonPrimitive(text)
@@ -844,6 +890,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         }
         help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       }
+      "upload" -> UploadFieldInput(field, context, text) { onChange(FieldValue.Text(it)) }
       "multiselect" -> {
         // Each choice a switch; the chosen ids are kept one per line. An id the list no longer offers is kept, not dropped.
         val choices = field.choices(context)
@@ -897,7 +944,10 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         modifier = Modifier.fillMaxWidth(),
       )
     }
-    if (help != null && field.kind != "toggle") {
+    val mismatch = field.mismatch?.takeIf { text.isNotEmpty() && field.mismatches(JsonPrimitive(text), context) }?.let { ScreenValues.render(it, context) }
+    if (mismatch != null) {
+      Text(mismatch, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    } else if (help != null && field.kind != "toggle") {
       Text(help, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }

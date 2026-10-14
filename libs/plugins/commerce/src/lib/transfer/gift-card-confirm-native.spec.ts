@@ -17,6 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { typedDollarsToCents } from './records-transfer'
 import { GIFT_CARD_CONFIRM_STEP_ID, COMMERCE_GIFT_CARDS_TRANSFER } from './transfer-keys'
 
 /**
@@ -33,7 +34,7 @@ interface Screen {
     id?: string
     type: string
     text?: string
-    fields?: Array<{ key: string; label: string; help?: string; mustMatch?: string }>
+    fields?: Array<{ key: string; label: string; help?: string; mustMatch?: string; mustMatchAs?: string; mismatch?: string }>
     submit?: { url: string; body: unknown; success?: string }
   }>
 }
@@ -81,5 +82,18 @@ describe('native gift card import step', () => {
     expect(flat(component).includes('Leave this off when the shoppers already hold these codes.')).toBe(true)
     expect(fields[1]?.help).toBe('Leave this off when the shoppers already hold these codes.')
     expect(flat(component).includes('No card in this file can be issued. The review lists every row with the reason.')).toBe(true)
+  })
+
+  it('reads the typed total as dollars, as the console does, and says what it says when it is not the total', () => {
+    const typed = (screen.blocks.find((block) => block.id === 'confirm')?.fields ?? [])[0]
+    expect(typed?.mustMatchAs).toBe('dollars')
+    expect(typed?.help).toBe('Type {data.cards.rows.rows.0.giftCard.totalCents:cents}.')
+    expect(typed?.mismatch).toBe('That is not the total. These cards add up to {data.cards.rows.rows.0.giftCard.totalCents:cents}.')
+    expect(flat(component).includes('That is not the total. These cards add up to ${giftCardMoney(totalCents)}.')).toBe(true)
+    expect(flat(component).includes('`Type ${giftCardMoney(totalCents)}.`')).toBe(true)
+    // Both renderers replay these cases against their own port (template-cases.json).
+    const cases = (JSON.parse(read('libs/native/screens/template-cases.json')) as { dollars: Array<{ typed: string; cents: number | null }> }).dollars
+    expect(cases.length).toBeGreaterThan(5)
+    for (const entry of cases) expect([entry.typed, typedDollarsToCents(entry.typed)]).toEqual([entry.typed, entry.cents])
   })
 })

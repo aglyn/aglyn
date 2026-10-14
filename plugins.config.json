@@ -1805,7 +1805,7 @@
         "ios": { "module": "AglynEmailPlugin", "register": "registerEmailNative" },
         "android": { "package": "com.aglyn.plugins.email", "register": "registerEmailNative" },
         "contributes": {
-          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions", "email.import.existing", "email.import.consent"],
+          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions", "email.import.existing", "email.import.consent", "email.list.transfer"],
           "quickActions": ["email.open"],
           "deepLinks": ["email.page", "email.messages-page", "email.templates-page", "email.audiences-page", "email.topics-page", "email.sending-page", "email.suppressions-page", "email.message-page", "email.list-page"]
         }
@@ -2758,7 +2758,8 @@
             "ai.staffUser",
             "ai.signals",
             "ai.hostMember",
-            "ai.allotment"
+            "ai.allotment",
+            "ai.import.productCopy"
           ],
           "quickActions": [
             "ai.open"

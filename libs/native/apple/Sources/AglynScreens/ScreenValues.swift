@@ -406,6 +406,27 @@ public enum ScreenValues {
     return out
   }
 
+  /// A total as a person types it (`1250`, `$1,250.00`, `1,250 USD`), in cents; nil for anything else
+  /// (the gift card import's `typedDollarsToCents`).
+  public static func dollarsToCents(_ typed: String) -> Int? {
+    var body = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+    if body.hasPrefix("$") {
+      body.removeFirst()
+    } else if body.lowercased().hasPrefix("usd") {
+      body.removeFirst(3)
+      body = String(body.drop(while: { $0.isWhitespace }))
+    }
+    if body.lowercased().hasSuffix("usd") {
+      body.removeLast(3)
+      while body.last?.isWhitespace == true { body.removeLast() }
+    }
+    body = body.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard body.range(of: #"^[0-9]+(\.[0-9]{1,2})?$"#, options: .regularExpression) != nil, let amount = Double(body) else {
+      return nil
+    }
+    return Int((amount * 100).rounded())
+  }
+
   /// A chosen file's text: UTF-8 (a byte-order mark dropped), UTF-16 where it carries its mark, else
   /// Windows-1252, the encoding a spreadsheet's "CSV" is saved in. Nothing is dropped silently.
   public static func decodeFileText(_ data: Data) -> String {

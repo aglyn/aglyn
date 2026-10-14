@@ -30,6 +30,9 @@ public struct ScreenSpec: Identifiable, Sendable {
   public let zones: [String]
   public let loads: [LoadSpec]
   public let blocks: [BlockSpec]
+  /// `{ when, load, action }`: what this contributed screen does once a core action that names its zone
+  /// (`afterZone`) has succeeded, and its `when` holds: the `load` is read, then the `action` runs over it.
+  public let hook: JSONValue?
   public let raw: JSONValue
 
   public var requiresSite: Bool { scope == "site" }
@@ -49,6 +52,7 @@ public struct ScreenSpec: Identifiable, Sendable {
     self.zones = json["zones"].arrayOfStrings
     self.loads = json["load"].objectEntries.map { LoadSpec(key: $0.key, $0.value) }
     self.blocks = json["blocks"].array.compactMap(BlockSpec.init)
+    self.hook = json["hook"]
     self.raw = json
   }
 
@@ -207,6 +211,15 @@ public struct ActionSpec: Sendable, Identifiable {
   public let passkey: JSONValue?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
+  /// `gate: { when, screen }`: when the route refuses with a body that meets `when` (read as `error`), `screen`
+  /// opens over this one and, once it reports `resume`, the very same action is sent again, as the console's
+  /// publisher agreement gate does (accepting the agreement sends the publish again).
+  public let gate: JSONValue?
+  /// This action, finishing inside a gate's screen, tells the screen below to send its action again.
+  public let resume: Bool
+  /// `afterZone: { zone, stash }`: once the action has succeeded, the `hook` of every screen contributed to `zone` whose
+  /// `requires` holds runs (best effort, in order); what they say is kept as `stash.<stash>` for the screen that follows.
+  public let afterZone: JSONValue?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
   /// `download`: the route answers with a file (an export), not JSON; the person saves or shares it.
@@ -259,6 +272,9 @@ public struct ActionSpec: Sendable, Identifiable {
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
+    self.gate = json["gate"]
+    self.resume = json["resume"] == .bool(true)
+    self.afterZone = json["afterZone"]
     self.reload = json["reload"] == .bool(true)
       || (json["reload"] != .bool(false)
         && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil || json["passkey"] != nil))
@@ -353,20 +369,39 @@ public struct FieldSpec: Sendable, Identifiable {
   public let when: String?
   /// A template the typed value must equal (type the workspace name to delete it).
   public let mustMatch: String?
+  /// `dollars`: the typed value and the template are both read as a dollar amount (`60`, `$60.00`,
+  /// `1,250 USD`) and compared in cents, as the gift card import's Confirm step reads a typed total.
+  public let mustMatchAs: String?
+  /// What to say under the field while something is typed that does not match.
+  public let mismatch: String?
   /// For a `file` field: `json` parses the chosen file and sends the value, else its text is sent.
   public let parse: String?
   /// For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an
   /// import must have acknowledged, each one).
   public let coversAll: Bool
+  /// The field's own JSON, for a kind that reads more than the common keys (`upload`'s limits).
+  public let config: JSONValue?
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
-    if let mustMatch, ScreenValues.text(value) != ScreenValues.render(mustMatch, in: context) { return true }
+    if mismatches(value, in: context) { return true }
     if coversAll, kind == "multiselect" {
       let chosen = Set(Optional(value).array.compactMap { $0.stringValue })
       if choices(in: context).contains(where: { !chosen.contains($0.value) }) { return true }
     }
     return required && kind != "toggle" && !ScreenValues.truthy(value)
+  }
+
+  /// Whether a value is not what the field must match (a field with nothing to match never mismatches).
+  public func mismatches(_ value: JSONValue, in context: JSONValue) -> Bool {
+    guard let mustMatch else { return false }
+    let typed = ScreenValues.text(value)
+    let expected = ScreenValues.render(mustMatch, in: context)
+    if mustMatchAs == "dollars" {
+      guard let cents = ScreenValues.dollarsToCents(typed) else { return true }
+      return cents != ScreenValues.dollarsToCents(expected)
+    }
+    return typed != expected
   }
 
   init(key: String, label: String, kind: String, required: Bool, help: String?) {
@@ -381,8 +416,11 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = nil
     self.when = nil
     self.mustMatch = nil
+    self.mustMatchAs = nil
+    self.mismatch = nil
     self.parse = nil
     self.coversAll = false
+    self.config = nil
   }
 
   init?(_ json: JSONValue) {
@@ -401,8 +439,11 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = json["optionsFrom"]
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
+    self.mustMatchAs = json["mustMatchAs"]?.stringValue
+    self.mismatch = json["mismatch"]?.stringValue
     self.parse = json["parse"]?.stringValue
     self.coversAll = json["coversAll"] == .bool(true)
+    self.config = json
   }
 
   /// The choices for a `select`: the static options, then any read from data.

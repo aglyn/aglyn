@@ -390,6 +390,19 @@ object ScreenValues {
     return out
   }
 
+  private val dollarAmount = Regex("^[0-9]+(\\.[0-9]{1,2})?$")
+
+  /** A total as a person types it (`1250`, `$1,250.00`, `1,250 USD`), in cents; null for anything else (the gift card import's `typedDollarsToCents`). */
+  fun dollarsToCents(typed: String): Int? {
+    var body = typed.trim()
+    if (body.startsWith("$")) body = body.substring(1)
+    else if (body.startsWith("usd", ignoreCase = true)) body = body.substring(3).trimStart()
+    if (body.endsWith("usd", ignoreCase = true)) body = body.substring(0, body.length - 3).trimEnd()
+    body = body.replace(",", "").trim()
+    if (!dollarAmount.matches(body)) return null
+    return floor(body.toDouble() * 100 + 0.5).toInt()
+  }
+
   /**
    * A chosen file's text: UTF-8 (a byte-order mark dropped), UTF-16 where it carries its mark, else
    * Windows-1252, the encoding a spreadsheet's "CSV" is saved in. Nothing is dropped silently.

@@ -125,6 +125,14 @@ struct PendingAction: Identifiable {
   var reauthMessage: String?
 }
 
+/// An action whose route refused for something another screen settles: that screen, drawn over this one.
+struct GatedAction: Identifiable {
+  let id = UUID()
+  let action: ActionSpec
+  let scope: JSONValue
+  let spec: ScreenSpec
+}
+
 struct SpecScreenBody: View {
   @Bindable var model: ScreenModel
   let plugin: NativePluginContext
@@ -135,9 +143,13 @@ struct SpecScreenBody: View {
   @Environment(\.webAuthenticationSession) private var webAuthentication
   @Environment(\.openURL) private var openURL
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.aglynGateResolve) private var gateResolve
   @State private var confirming: PendingAction?
   @State private var prompting: PendingAction?
   @State private var reauthing: PendingAction?
+  @State private var gating: GatedAction?
+  @State private var gatedAgain: GatedAction?
+  @State private var gateResolved = false
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
   @State private var exporting: ExportedDownload?
@@ -175,6 +187,21 @@ struct SpecScreenBody: View {
         ActionInputSheet(pending: pending, context: context) { filled in
           prompting = nil
           Task { await execute(pending.action, scope: filled) }
+        }
+      }
+      .sheet(
+        item: $gating,
+        onDismiss: {
+          // The gate's screen closed: if it did what the gate asked, send the same action again, once.
+          guard gateResolved, let again = gatedAgain else { return }
+          gateResolved = false
+          gatedAgain = nil
+          Task { await execute(again.action, scope: again.scope, afterGate: true) }
+        }
+      ) { gated in
+        NavigationStack {
+          SpecScreenView(spec: gated.spec, context: plugin, params: [:], embedded: true)
+            .environment(\.aglynGateResolve, { gateResolved = true })
         }
       }
       .sheet(item: $reauthing) { pending in
@@ -402,7 +429,7 @@ struct SpecScreenBody: View {
     }
   }
 
-  private func execute(_ action: ActionSpec, scope: JSONValue) async {
+  private func execute(_ action: ActionSpec, scope: JSONValue, afterGate: Bool = false) async {
     if let request = action.exportRequest(in: scope) {
       exportSheet = request
       return
@@ -438,7 +465,7 @@ struct SpecScreenBody: View {
         confirming = PendingAction(action: action, scope: ScreenContext.with(scope, "preview", response ?? .object([:])))
       case .needsReauth(let message):
         reauthing = PendingAction(action: action, scope: scope, reauthMessage: message)
-      case .failed(let message):
+      case .failed(let message), .gated(_, let message):
         show(message, .error)
       case .file:
         break  // a check asks a question; it never answers with a file
@@ -451,6 +478,16 @@ struct SpecScreenBody: View {
     switch outcome {
     case .needsReauth(let message):
       reauthing = PendingAction(action: action, scope: scope, reauthMessage: message)
+    case .gated(let screen, let message):
+      // Asked about once: a second refusal after the gate's screen is answered as it stands.
+      if !afterGate, let spec = ScreenCatalog.shared.spec(screen) {
+        let gated = GatedAction(action: action, scope: scope, spec: spec)
+        gatedAgain = gated
+        gateResolved = false
+        gating = gated
+      } else {
+        show(message, .error)
+      }
     case .failed(let message):
       show(message, .error)
       #if os(iOS)
@@ -489,6 +526,7 @@ struct SpecScreenBody: View {
       if let navigate = action.navigate {
         plugin.navigate(navigate.screen, navigate.params.mapValues { ScreenValues.render($0, in: after) })
       }
+      if action.resume { gateResolve?() }
       if action.back {
         dismiss()
         return

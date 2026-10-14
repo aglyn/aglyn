@@ -42,6 +42,8 @@ class ScreenSpec private constructor(val raw: JsonElement) {
   val loads: List<LoadSpec> = raw.entries("load").map { (key, value) -> LoadSpec(key, value) }
   val blocks: List<BlockSpec> = raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } }
   val actions: List<ActionSpec> = raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
+  /** `{ when, load, action }`: what this contributed screen does once a core action that names its zone (`afterZone`) has succeeded, and its `when` holds: the `load` is read, then the `action` runs over it. */
+  val hook: JsonElement? = raw.obj("hook")
   val requiresSite: Boolean get() = scope == "site"
 
   companion object {
@@ -133,6 +135,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val copy: String? = json.str("copy")
   val reveal: String? = json.str("reveal")
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
+  /** `gate: { when, screen }`: when the route refuses with a body that meets `when` (read as `error`), `screen` opens over this one and, once it reports `resume`, the very same action is sent again (the console's publisher agreement gate). */
+  val gate: JsonElement? = json.obj("gate")
+  /** This action, finishing inside a gate's screen, tells the screen below to send its action again. */
+  val resume: Boolean = json.isTrue("resume")
+  /** `afterZone: { zone, stash }`: once the action has succeeded, the `hook` of every screen contributed to `zone` whose `requires` holds runs (best effort, in order); what they say is kept as `stash.<stash>` for the screen that follows. */
+  val afterZone: JsonElement? = json.obj("afterZone")
   /** A follow-up the action makes once it succeeds (best effort, like the console's). */
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** A change to the signed-in person's own sign-in, made through the session (`changePassword`, `updateDisplayName`); its inputs are the body. */
@@ -222,19 +230,37 @@ class FieldSpec private constructor(
   val whenCondition: String?,
   /** A template the typed value must equal (type the workspace name to delete it). */
   val mustMatch: String? = null,
+  /** `dollars`: the typed value and the template are both read as a dollar amount (`60`, `$60.00`, `1,250 USD`) and compared in cents, as the gift card import's Confirm step reads a typed total. */
+  val mustMatchAs: String? = null,
+  /** What to say under the field while something is typed that does not match. */
+  val mismatch: String? = null,
   /** For a `file` field: `json` parses the chosen file and sends the value, else its text is sent. */
   val parse: String? = null,
   /** For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an import must have acknowledged, each one). */
   val coversAll: Boolean = false,
+  /** The field's own JSON, for a kind that reads more than the common keys (`upload`'s limits). */
+  val config: JsonElement? = null,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
-    if (mustMatch != null && ScreenValues.text(value) != ScreenValues.render(mustMatch, context)) return true
+    if (mismatches(value, context)) return true
     if (coversAll && kind == "multiselect") {
       val chosen = ((value as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
       if (choices(context).any { it.first !in chosen }) return true
     }
     return required && kind != "toggle" && !ScreenValues.truthy(value)
+  }
+
+  /** Whether a value is not what the field must match (a field with nothing to match never mismatches). */
+  fun mismatches(value: JsonElement, context: JsonElement): Boolean {
+    if (mustMatch == null) return false
+    val typed = ScreenValues.text(value)
+    val expected = ScreenValues.render(mustMatch, context)
+    if (mustMatchAs == "dollars") {
+      val cents = ScreenValues.dollarsToCents(typed) ?: return true
+      return cents != ScreenValues.dollarsToCents(expected)
+    }
+    return typed != expected
   }
 
   fun choices(context: JsonElement): List<Pair<String, String>> {
@@ -268,8 +294,11 @@ class FieldSpec private constructor(
         optionsFrom = json.obj("optionsFrom"),
         whenCondition = json.str("when"),
         mustMatch = json.str("mustMatch"),
+        mustMatchAs = json.str("mustMatchAs"),
+        mismatch = json.str("mismatch"),
         parse = json.str("parse"),
         coversAll = json.isTrue("coversAll"),
+        config = json,
       )
     }
   }

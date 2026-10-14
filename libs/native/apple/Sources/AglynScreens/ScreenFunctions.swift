@@ -17,7 +17,11 @@ public enum ScreenFunctions {
       return mergeKeys(args.first ?? nil, args.count > 1 ? args[1] : nil)
     case "packageItemChanges":
       let limit = args.count > 2 ? args[2]?.numberValue.map { Int($0) } : nil
-      return itemChanges(args.first ?? nil, args.count > 1 ? args[1] : nil, limit: limit ?? 200)
+      // A fourth argument lets the records run past the values' limit (the screen pages through them).
+      let recordLimit = args.count > 3 ? args[3]?.numberValue.map { Int($0) } : nil
+      return itemChanges(args.first ?? nil, args.count > 1 ? args[1] : nil, limit: limit ?? 200, recordLimit: recordLimit)
+    case "aiProductsImportJob":
+      return aiProductsImportJob(args.first ?? nil)
     default:
       return nil
     }
@@ -107,8 +111,9 @@ public enum ScreenFunctions {
 
   /// What importing an item changes (the console's `packageItemChanges`): the leaf-by-leaf diff of everything
   /// but its records and, for an item that holds records, a row per value of a record that differs (a whole
-  /// record for one only a side holds). At most `limit` rows of each; `more` counts the rest.
-  static func itemChanges(_ before: JSONValue?, _ incoming: JSONValue?, limit: Int) -> JSONValue {
+  /// record for one only a side holds). At most `limit` rows of each (`recordLimit` for the records, when
+  /// it differs); `more` counts the rest.
+  static func itemChanges(_ before: JSONValue?, _ incoming: JSONValue?, limit: Int, recordLimit: Int? = nil) -> JSONValue {
     var existing = before
     if existing == nil || existing == .null { existing = .object([:]) }
     let field = recordField([existing, incoming])
@@ -162,7 +167,7 @@ public enum ScreenFunctions {
     var changes: [JSONValue] = []
     var more = 0
     func add(_ change: [String: JSONValue]) {
-      if changes.count >= limit { more += 1 } else { changes.append(.object(change)) }
+      if changes.count >= (recordLimit ?? limit) { more += 1 } else { changes.append(.object(change)) }
     }
     for row in rows {
       if row.status == "changed" {
@@ -189,5 +194,25 @@ public enum ScreenFunctions {
     result["recordField"] = .string(field)
     result["records"] = ["summary": .string(summary), "changes": .array(changes), "more": .number(Double(more))]
     return .object(result)
+  }
+
+  /// The copy job a landed product import starts (the AI plugin's `aiProductsImportJob`): the brief and the `inputs`
+  /// the jobs route takes, for the first 50 products the import created; null when it created none.
+  static func aiProductsImportJob(_ rows: JSONValue?) -> JSONValue {
+    var ids: [String] = []
+    for row in rows.array {
+      guard row["outcome"]?.stringValue == "created", let id = row["recordId"]?.stringValue, !id.isEmpty, !ids.contains(id) else { continue }
+      ids.append(id)
+    }
+    ids = Array(ids.prefix(50))
+    guard !ids.isEmpty else { return .null }
+    var seen = Set<String>()
+    let readable = ids.filter { id in
+      id.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil && seen.insert(id).inserted
+    }
+    return [
+      "brief": .string("Write storefront copy for \(ids.count) \(ids.count == 1 ? "product" : "products")"),
+      "inputs": ["target": "bulk", "productIds": .string(readable.joined(separator: ","))],
+    ]
   }
 }

@@ -154,6 +154,8 @@ extension ScreenSession {
 
 extension EnvironmentValues {
   @Entry public var aglynScreenSession = ScreenSession()
+  /// Set on a screen opened by another's `gate`: told when the person finished what the gate asked for.
+  @Entry var aglynGateResolve: (() -> Void)?
 }
 
 /// What running an action came to.
@@ -179,6 +181,8 @@ public enum ActionOutcome: Equatable {
   case file(DownloadedFile, name: String, message: String?)
   /// The route wants a recent sign-in (`reauth-required`) before it acts.
   case needsReauth(String)
+  /// The route refused for something another screen settles (`gate`): that screen, and the route's words.
+  case gated(screen: String, message: String)
   case failed(String)
 }
 
@@ -455,11 +459,42 @@ public final class ScreenModel {
       let seen = ScreenContext.with(ScreenContext.with(scope, "stash", .object(ScreenStash.values)), "response", response ?? .null)
       let next = await run(follow, in: seen)
       switch next {
-      case .failed, .needsReauth: return next
+      case .failed, .needsReauth, .gated: return next
       default: break
       }
     }
+    // Plugins that asked to be heard once the action is done (`afterZone`) run their hooks; they never fail the action.
+    if case .done(_, let response) = outcome, let after = action.afterZone, let zone = after["zone"]?.stringValue {
+      let seen = ScreenContext.with(ScreenContext.with(scope, "stash", .object(ScreenStash.values)), "response", response ?? .null)
+      let said = await runHooks(zone: zone, in: seen)
+      if let key = after["stash"]?.stringValue {
+        ScreenStash.set([key: said.isEmpty ? .null : .string(said.joined(separator: " "))])
+        context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
+      }
+    }
     return outcome
+  }
+
+  /// The hook of each screen contributed to `zone` whose `requires` holds: its `load` read into `data`, then its action
+  /// run over it. What each says (its success message, or why it failed) is returned; a hook that has nothing to do, or
+  /// whose action's `when` does not hold once the data is read, says nothing.
+  private func runHooks(zone: String, in scope: JSONValue) async -> [String] {
+    var said: [String] = []
+    for contributed in ScreenCatalog.shared.zone(zone) where ScreenValues.condition(contributed.requires, in: scope) {
+      guard let hook = contributed.hook, ScreenValues.condition(hook["when"]?.stringValue, in: scope),
+        let action = hook["action"].flatMap(ActionSpec.init),
+        let reading = ScreenSpec(["id": .string("\(contributed.id).hook"), "title": .string(contributed.title), "load": hook["load"] ?? [:]])
+      else { continue }
+      let sub = ScreenModel(spec: reading, context: scope, api: api, reader: reader, writer: writer, account: account)
+      await sub.load()
+      guard ScreenValues.condition(action.when, in: sub.context) else { continue }
+      switch await sub.run(action, in: sub.context) {
+      case .done(let message, _): if let message, !message.isEmpty { said.append(message) }
+      case .failed(let message), .gated(_, let message), .needsReauth(let message): said.append(message)
+      case .file: break
+      }
+    }
+    return said
   }
 
   /// Keeps what an action's `stash` asks for from its outcome.
@@ -588,6 +623,11 @@ public final class ScreenModel {
     } catch let error as ConsoleAPIError {
       if Self.wantsReauth(error) { return .needsReauth(error.message) }
       if error.status == 404, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
+      if let gate = action.gate, let screen = gate["screen"]?.stringValue,
+        ScreenValues.condition(gate["when"]?.stringValue, in: ["error": error.body ?? .null])
+      {
+        return .gated(screen: screen, message: error.message)
+      }
       return .failed(error.message)
     } catch {
       return .failed(error.localizedDescription)

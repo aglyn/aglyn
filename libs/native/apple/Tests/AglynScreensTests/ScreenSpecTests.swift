@@ -57,6 +57,11 @@ final class ScreenSpecTests: XCTestCase {
         ScreenValues.condition(item["when"]?.stringValue, in: context), item["expect"] == .bool(true),
         item["when"]?.stringValue ?? "")
     }
+    for item in file["dollars"].array {
+      XCTAssertEqual(
+        ScreenValues.dollarsToCents(item["typed"]?.stringValue ?? ""), item["cents"]?.numberValue.map { Int($0) },
+        item["typed"]?.stringValue ?? "")
+    }
   }
 
   func testEverySpecParsesAndPointsAtRealScreens() throws {

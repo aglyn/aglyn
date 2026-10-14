@@ -887,5 +887,59 @@
       "when": "data.hundred + data.hundred > data.money / 1000",
       "expect": true
     }
+  ],
+  "dollars": [
+    {
+      "typed": "60",
+      "cents": 6000
+    },
+    {
+      "typed": "$60.00",
+      "cents": 6000
+    },
+    {
+      "typed": " $1,250.5 ",
+      "cents": 125050
+    },
+    {
+      "typed": "1,250 USD",
+      "cents": 125000
+    },
+    {
+      "typed": "usd 12.34",
+      "cents": 1234
+    },
+    {
+      "typed": "$ 7",
+      "cents": 700
+    },
+    {
+      "typed": "60.",
+      "cents": null
+    },
+    {
+      "typed": "60.123",
+      "cents": null
+    },
+    {
+      "typed": "six",
+      "cents": null
+    },
+    {
+      "typed": "",
+      "cents": null
+    },
+    {
+      "typed": "-5",
+      "cents": null
+    },
+    {
+      "typed": "$$5",
+      "cents": null
+    },
+    {
+      "typed": "0.05",
+      "cents": 5
+    }
   ]
 }

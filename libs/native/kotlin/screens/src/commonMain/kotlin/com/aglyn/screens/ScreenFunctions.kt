@@ -16,7 +16,12 @@ object ScreenFunctions {
   fun call(name: String, args: List<JsonElement?>): JsonElement? = when (name) {
     "packageJsonDiff" -> jsonDiff(args.getOrNull(0), args.getOrNull(1), (args.getOrNull(2) as? JsonPrimitive)?.doubleOrNull?.toInt() ?: 200)
     "packageMergeKeys" -> mergeKeys(args.getOrNull(0), args.getOrNull(1))
-    "packageItemChanges" -> itemChanges(args.getOrNull(0), args.getOrNull(1), (args.getOrNull(2) as? JsonPrimitive)?.doubleOrNull?.toInt() ?: 200)
+    // A fourth argument lets the records run past the values' limit (the screen pages through them).
+    "packageItemChanges" -> itemChanges(
+      args.getOrNull(0), args.getOrNull(1), (args.getOrNull(2) as? JsonPrimitive)?.doubleOrNull?.toInt() ?: 200,
+      (args.getOrNull(3) as? JsonPrimitive)?.doubleOrNull?.toInt(),
+    )
+    "aiProductsImportJob" -> aiProductsImportJob(args.getOrNull(0))
     else -> null
   }
 
@@ -105,9 +110,9 @@ object ScreenFunctions {
   /**
    * What importing an item changes (the console's `packageItemChanges`): the leaf-by-leaf diff of everything but
    * its records and, for an item that holds records, a row per value of a record that differs (a whole record
-   * for one only a side holds). At most [limit] rows of each; `more` counts the rest.
+   * for one only a side holds). At most [limit] rows of each ([recordLimit] for the records, when it differs); `more` counts the rest.
    */
-  internal fun itemChanges(before: JsonElement?, incoming: JsonElement?, limit: Int): JsonElement {
+  internal fun itemChanges(before: JsonElement?, incoming: JsonElement?, limit: Int, recordLimit: Int? = null): JsonElement {
     val existing: JsonElement = if (before == null || before is JsonNull) JsonObject(emptyMap()) else before
     val field = recordField(listOf(existing, incoming))
     fun without(content: JsonElement?): JsonElement? =
@@ -153,7 +158,7 @@ object ScreenFunctions {
     val changes = mutableListOf<JsonElement>()
     var more = 0
     fun add(change: Map<String, JsonElement>) {
-      if (changes.size >= limit) more += 1 else changes += JsonObject(change)
+      if (changes.size >= (recordLimit ?: limit)) more += 1 else changes += JsonObject(change)
     }
     for (row in rows) {
       if (row.status == "changed") {
@@ -190,5 +195,28 @@ object ScreenFunctions {
     values["recordField"] = JsonPrimitive(field)
     values["records"] = JsonObject(mapOf("summary" to JsonPrimitive(summary), "changes" to JsonArray(changes), "more" to JsonPrimitive(more)))
     return JsonObject(values)
+  }
+
+  private val productId = Regex("^[A-Za-z0-9_-]{1,64}$")
+
+  /**
+   * The copy job a landed product import starts (the AI plugin's `aiProductsImportJob`): the brief and the `inputs` the
+   * jobs route takes, for the first 50 products the import created; null when it created none.
+   */
+  internal fun aiProductsImportJob(rows: JsonElement?): JsonElement {
+    val ids = mutableListOf<String>()
+    for (row in (rows as? JsonArray).orEmpty()) {
+      val id = (row.obj("recordId") as? JsonPrimitive)?.takeIf { it.isString }?.content
+      if (row.str("outcome") == "created" && !id.isNullOrEmpty() && id !in ids) ids += id
+    }
+    val first = ids.take(50)
+    if (first.isEmpty()) return JsonNull
+    val readable = first.filter { productId.matches(it) }.distinct()
+    return JsonObject(
+      mapOf(
+        "brief" to JsonPrimitive("Write storefront copy for ${first.size} ${if (first.size == 1) "product" else "products"}"),
+        "inputs" to JsonObject(mapOf("target" to JsonPrimitive("bulk"), "productIds" to JsonPrimitive(readable.joinToString(",")))),
+      ),
+    )
   }
 }

@@ -13,6 +13,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -71,7 +72,7 @@ class ScreenImportStepsTest {
 
   @Test
   fun theReviewDrawsTheStepsOfThePluginThisImportBelongsTo() {
-    val steps = plugin(giftCards) + plugin(emailSteps)
+    val steps = (plugin(giftCards) + plugin(emailSteps)).filter { it.zones.isNotEmpty() }
     assertEquals(listOf(listOf("transferStep"), listOf("transferStep"), listOf("transferStep")), steps.map { it.zones })
     val zone = core("core.settings.data.import.review").blocks.first { it.type == "zone" }
     assertEquals("transferStep", zone.string("name"))
@@ -82,6 +83,111 @@ class ScreenImportStepsTest {
     assertEquals(listOf("email.import.existing", "email.import.consent"), offered("email.list-members:abc123"))
     assertEquals(emptyList(), offered("data.dataset:xyz"))
     assertEquals(emptyList(), offered("crm.contacts"))
+  }
+
+  @Test
+  fun aProductImportCanAskForAiCopyOfTheProductsItCreatesAndTheJobStartsOnceTheyLand() = runTest {
+    val step = plugin("ai/src/ios/Sources/AglynAiPlugin/Resources/ai.screens.json").first { it.id == "ai.import.productCopy" }
+    // The step belongs to a products import, in the zone the review draws; only a manager sees it.
+    assertEquals(listOf("transferStep"), step.zones)
+    fun offered(resource: String, manager: Boolean = true) =
+      ScreenValues.condition(step.requires, json("""{"stash":{"importResource":"$resource"},"org":{"manager":$manager}}"""))
+    assertTrue(offered("commerce.products"))
+    assertFalse(offered("commerce.gift-cards"))
+    assertFalse(offered("commerce.products", manager = false))
+    // The option is offered only where the AI feature is the workspace's (the jobs route answers), as the console's is.
+    val seen = mutableListOf<HttpRequestData>()
+    ScreenStash.set(json("""{"importPlan":{"summary":{"create":80}}}"""))
+    val create = """{"org":{"id":"o1"}}"""
+    val model = ScreenModel(step, json(create), client(200 to """{"jobs":[]}""", 404 to """{"error":"Not found"}""", sent = seen))
+    model.load()
+    assertEquals("/api/ai/jobs", seen[0].url.encodedPath)
+    assertEquals("orgId=o1&limit=20", seen[0].url.encodedQuery)
+    val shown = step.blocks.filter { ScreenValues.condition(it.whenCondition, model.context) }
+    assertEquals(listOf("notice", "form", "notice"), shown.map { it.type })
+    assertEquals("Copy is written for the first 50 of the 80 products.", ScreenValues.render(shown.last().string("text").orEmpty(), model.context))
+    val hidden = ScreenModel(step, json(create), client(404 to """{"error":"Not found"}""", sent = mutableListOf()))
+    hidden.load()
+    assertEquals(listOf("notice"), step.blocks.filter { ScreenValues.condition(it.whenCondition, hidden.context) }.map { it.type })
+
+    // Saving the choice keeps it for this import only.
+    ScreenStash.clear()
+    val save = ActionSpec.parse(step.blocks.first { it.id == "copy" }["submit"])!!
+    ScreenStash.set(json("""{"importJob":"j1"}"""))
+    model.run(save, ScreenContext.with(ScreenContext.with(model.context, "stash", ScreenStash.values), "form", json("""{"write":true}""")))
+    assertEquals(JsonPrimitive(true), ScreenStash.values["importAiCopy"])
+    assertEquals(JsonPrimitive("j1"), ScreenStash.values["importAiCopyFor"])
+
+    // Applying the import runs the hook once it is done: the created ids are read from its results and the console's
+    // copy job is started for them (the first 50, one brief, the ids as `inputs`).
+    ScreenCatalog.add(listOf(step))
+    val review = core("core.settings.data.import.review")
+    val apply = action(review, "applyNow")
+    assertEquals("transferStep", apply.afterZone.str("zone"))
+    val results = """{"rows":[{"outcome":"created","recordId":"p1"},{"outcome":"updated","recordId":"p9"},{"outcome":"created","recordId":"p2"},{"outcome":"created","recordId":"p1"}]}"""
+    val sent = mutableListOf<HttpRequestData>()
+    val applying = ScreenModel(review, json("""{"org":{"id":"o1"}}"""), client(200 to """{"done":true,"progress":{"done":4}}""", 200 to results, 200 to """{"job":{"id":"a1"}}""", sent = sent))
+    ScreenStash.set(json("""{"importResource":"commerce.products","importHost":"h1"}"""))
+    val outcome = applying.run(apply, ScreenContext.with(json("""{"org":{"id":"o1","manager":true}}"""), "stash", ScreenStash.values))
+    assertEquals(ActionOutcome.Done(null, json("""{"done":true,"progress":{"done":4}}""")), outcome)
+    assertEquals(listOf("/api/transfer/apply", "/api/transfer/status", "/api/ai/jobs"), sent.map { it.url.encodedPath })
+    assertEquals(json("""{"orgId":"o1","jobId":"j1","include":"results"}"""), body(sent, 1))
+    assertEquals(
+      json("""{"orgId":"o1","hostId":"h1","kind":"products","brief":"Write storefront copy for 2 products","inputs":{"target":"bulk","productIds":"p1,p2"}}"""),
+      body(sent, 2),
+    )
+    assertEquals(
+      JsonPrimitive("AI is writing descriptions, search listings and tags for the new products. You review them on the products page before any is saved."),
+      ScreenStash.values["importAfter"],
+    )
+
+    // An import that did not ask, or asked for another import, starts nothing.
+    ScreenStash.set(json("""{"importAiCopy":null,"importAfter":null}"""))
+    val quiet = mutableListOf<HttpRequestData>()
+    ScreenModel(review, JsonObject(emptyMap()), client(200 to """{"done":true}""", sent = quiet))
+      .run(apply, ScreenContext.with(json("""{"org":{"id":"o1","manager":true}}"""), "stash", ScreenStash.values))
+    assertEquals(1, quiet.size)
+    assertEquals(null, ScreenStash.values["importAfter"])
+    // The done screen says what the hooks said.
+    assertTrue(core("core.settings.data.import.done").blocks.any { it.whenCondition == "stash.importAfter" })
+  }
+
+  @Test
+  fun anAudienceImportsAndExportsItsMembersAndResumesAnImportItLeft() = runTest {
+    val transfer = plugin(emailSteps).first { it.id == "email.list.transfer" }
+    val jobs = """
+      {"unfinished":[
+        {"jobId":"j1","resource":"email.list-members:abc","fileName":"spring.csv","label":"Members","status":"analyzed","updatedAt":1791385440000},
+        {"jobId":"j2","resource":"email.list-members:other","fileName":"other.csv","label":"Members","status":"draft","updatedAt":1791385440000}]}
+    """.trimIndent()
+    val sent = mutableListOf<HttpRequestData>()
+    val model = ScreenModel(
+      transfer,
+      json("""{"org":{"id":"o1","manager":true},"site":{"id":"h1"},"params":{"list":"abc","name":"Spring sale","resource":"email.list-members:abc"}}"""),
+      client(200 to jobs, sent = sent),
+    )
+    model.load()
+    assertEquals(json("""{"orgId":"o1","unfinished":true}"""), (sent[0].body as TextContent).text.let { json(it) })
+    // Import runs the records wizard on this list, titled as the console titles it.
+    val scope = model.context
+    fun action(id: String) = transfer.blocks.flatMap { block -> (block.raw.obj("items") as? JsonArray).orEmpty() }.mapNotNull { ActionSpec.parse(it) }.first { it.id == id }
+    val navigate = action("import").navigate!!
+    assertEquals("core.settings.data.import", navigate.screen)
+    assertEquals(
+      mapOf("resource" to "email.list-members:abc", "hostId" to "h1", "title" to "Import into Spring sale"),
+      navigate.params.mapValues { ScreenValues.render(it.value, scope) },
+    )
+    // Export opens the shared export dialog on the same list.
+    val export = action("export").exportRequest(scope)!!
+    assertEquals(listOf("email.list-members:abc", "Export Spring sale", "h1"), listOf(export.resource, export.title, export.hostId))
+    // Only this list's unfinished imports are offered to resume.
+    val list = transfer.blocks.first { it.title == "Resume import" }
+    val rows = ScreenValues.scopes(list.string("items").orEmpty(), null, list.string("filter"), scope)
+    assertEquals(listOf("spring.csv"), rows.map { ScreenValues.render(list.string("primary").orEmpty(), it) })
+    // The audience's own menu opens this screen; the wizard's title is a parameter.
+    val wizard = core("core.settings.data.import")
+    assertEquals("Import into Spring sale", ScreenValues.render(wizard.title, json("""{"params":{"title":"Import into Spring sale"}}""")))
+    assertEquals("Import records", ScreenValues.render(wizard.title, json("""{"params":{}}""")))
   }
 
   @Test
@@ -124,6 +230,14 @@ class ScreenImportStepsTest {
     assertFalse(typed.unmet(json("\"${'$'}60.00\""), model.context))
     assertTrue(typed.unmet(json("\"${'$'}59.00\""), model.context))
     assertTrue(typed.unmet(json("\"\""), model.context))
+    // A total is read as dollars, as the console reads it: the sign and the cents are optional.
+    for (accepted in listOf("60", "${'$'}60", "60.00", "${'$'}60.00", " 60 ", "60 USD", "usd 60")) {
+      assertFalse(typed.unmet(JsonPrimitive(accepted), model.context), accepted)
+    }
+    for (refused in listOf("59.99", "sixty", "${'$'}60.001", "-60")) assertTrue(typed.unmet(JsonPrimitive(refused), model.context), refused)
+    assertTrue(typed.mismatches(JsonPrimitive("59"), model.context))
+    assertFalse(typed.mismatches(JsonPrimitive("60"), model.context))
+    assertEquals("That is not the total. These cards add up to ${'$'}60.00.", ScreenValues.render(typed.mismatch!!, model.context))
     // Confirming asks the same plan again with the answer under the step's id, and keeps it for the steps after.
     val submit = ActionSpec.parse(confirm["submit"])!!
     val scope = ScreenContext.with(ScreenContext.with(model.context, "form", json("""{"typed":"${'$'}60.00","email":true}""")), "stash", ScreenStash.values)

@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
 import java.io.File
 import java.util.Base64
 import kotlin.test.BeforeTest
@@ -65,6 +66,9 @@ class ScreenSpecTest {
     for (case in file.arr("body")) assertEquals(normalize(case.obj("expect")!!), normalize(ScreenValues.resolveBody(case.obj("body")!!, context)))
     for (case in file.arr("condition")) {
       assertEquals((case.obj("expect") as JsonPrimitive).booleanOrNull, ScreenValues.condition(case.str("when"), context), case.str("when"))
+    }
+    for (case in file.arr("dollars")) {
+      assertEquals((case.obj("cents") as? JsonPrimitive)?.takeIf { it !is JsonNull }?.intOrNull, ScreenValues.dollarsToCents(case.str("typed")!!), case.str("typed"))
     }
   }
 

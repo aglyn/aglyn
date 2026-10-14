@@ -110,7 +110,7 @@
           "items": [
             {
               "title": "Review the Marketplace Publisher Agreement",
-              "subtitle": "Accepting continues the publish",
+              "subtitle": "You can also accept it when Publish asks",
               "icon": "doc.text|description",
               "screen": "marketplace.publisherAgreement"
             }
@@ -157,7 +157,11 @@
               "priceUsd": "{form.price}"
             },
             "success": "Published v{response.version} to the marketplace",
-            "back": true
+            "back": true,
+            "gate": {
+              "when": "error.agreement.required && error.agreement.state == none,outdated",
+              "screen": "marketplace.publisherAgreement"
+            }
           }
         }
       ]
@@ -339,7 +343,8 @@
                 "version": "{const.agreement.version}"
               },
               "success": "Agreement accepted",
-              "back": true
+              "back": true,
+              "resume": true
             },
             {
               "id": "acceptCurrent",
@@ -353,7 +358,8 @@
                 "version": "{const.agreement.version}"
               },
               "success": "Agreement accepted",
-              "back": true
+              "back": true,
+              "resume": true
             }
           ]
         },

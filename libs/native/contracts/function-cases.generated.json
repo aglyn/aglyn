@@ -284,6 +284,373 @@
         }
       ]
     },
+    "aiProductsImportJob": {
+      "module": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "outcome": "created",
+                "recordId": "p1"
+              }
+            ]
+          ],
+          "result": {
+            "brief": "Write storefront copy for 1 product",
+            "inputs": {
+              "productIds": "p1",
+              "target": "bulk"
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "outcome": "created",
+                "recordId": "p1"
+              },
+              {
+                "outcome": "updated",
+                "recordId": "p9"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p2"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p1"
+              },
+              {
+                "outcome": "skipped",
+                "recordId": "p3"
+              },
+              {
+                "outcome": "created"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p3"
+              }
+            ]
+          ],
+          "result": {
+            "brief": "Write storefront copy for 3 products",
+            "inputs": {
+              "productIds": "p1,p2,p3",
+              "target": "bulk"
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "outcome": "created",
+                "recordId": "has space"
+              },
+              {
+                "outcome": "created",
+                "recordId": "ok_2"
+              },
+              {
+                "outcome": "created",
+                "recordId": "ok_2"
+              }
+            ]
+          ],
+          "result": {
+            "brief": "Write storefront copy for 2 products",
+            "inputs": {
+              "productIds": "ok_2",
+              "target": "bulk"
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "outcome": "created",
+                "recordId": "p0"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p1"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p2"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p3"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p4"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p5"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p6"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p7"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p8"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p9"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p10"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p11"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p12"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p13"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p14"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p15"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p16"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p17"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p18"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p19"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p20"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p21"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p22"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p23"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p24"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p25"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p26"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p27"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p28"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p29"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p30"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p31"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p32"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p33"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p34"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p35"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p36"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p37"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p38"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p39"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p40"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p41"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p42"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p43"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p44"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p45"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p46"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p47"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p48"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p49"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p50"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p51"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p52"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p53"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p54"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p55"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p56"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p57"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p58"
+              },
+              {
+                "outcome": "created",
+                "recordId": "p59"
+              }
+            ]
+          ],
+          "result": {
+            "brief": "Write storefront copy for 50 products",
+            "inputs": {
+              "productIds": "p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23,p24,p25,p26,p27,p28,p29,p30,p31,p32,p33,p34,p35,p36,p37,p38,p39,p40,p41,p42,p43,p44,p45,p46,p47,p48,p49",
+              "target": "bulk"
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "outcome": "updated",
+                "recordId": "p1"
+              },
+              {
+                "outcome": "failed",
+                "recordId": "p2"
+              }
+            ]
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        }
+      ]
+    },
     "apportionCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [

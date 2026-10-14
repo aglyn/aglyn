@@ -39,6 +39,8 @@ interface Screen {
     items?: Array<{ id: string; label: string; confirm?: string }>
     footer?: string
     submit?: unknown
+    title?: string
+    filter?: string
   }>
 }
 
@@ -51,11 +53,12 @@ const flat = (source: string) => source.replace(/\s+/g, ' ').replace(/[`'"] \+ [
 
 describe('native list import steps', () => {
   it('belong to the list members resource, in the zone the review draws', () => {
-    for (const one of screens) {
+    const steps = screens.filter((one) => one.id !== 'email.list.transfer')
+    for (const one of steps) {
       expect(one.zones).toEqual(['transferStep'])
       expect(one.requires).toBe(`stash.importResource ~= ${LIST_MEMBERS_RESOURCE}`)
     }
-    expect(screens.map((one) => one.id)).toEqual(['email.import.existing', 'email.import.consent'])
+    expect(steps.map((one) => one.id)).toEqual(['email.import.existing', 'email.import.consent'])
   })
 
   it('answer under the keys the server reads', () => {
@@ -110,5 +113,34 @@ describe('native list import steps', () => {
       expect(flat(steps).includes(sentence)).toBe(true)
       expect(existing).toContain(sentence)
     }
+  })
+
+  it('opens the records wizard and export on one list, and resumes its unfinished imports, as the list page does', () => {
+    const transfer = screen('email.list.transfer') as Screen & { scope?: string }
+    const card = read('libs/plugins/email/src/lib/components/list-detail-card.tsx')
+    const resume = read('libs/aglyn/src/lib/app-utils/transfer-resume-import.tsx')
+    const items = transfer.blocks.find((block) => block.type === 'actions')?.items as unknown as Array<{
+      id: string
+      label: string
+      navigate?: { screen: string; params: Record<string, string> }
+      export?: Record<string, string>
+    }>
+    // The wizard and the dialog are opened on `email.list-members:<listId>`, worked as the site, titled by the list's name.
+    expect(items.map((item) => [item.id, item.label])).toEqual([
+      ['import', 'Import'],
+      ['export', 'Export'],
+    ])
+    expect(items[0]?.navigate?.params['title']).toBe('Import into {params.name}')
+    expect(items[1]?.export?.['title']).toBe('Export {params.name}')
+    expect(flat(card).includes('`Import into ${listName}`')).toBe(true)
+    expect(flat(card).includes('`Export ${listName}`')).toBe(true)
+    expect(flat(card).includes("{'Import'}")).toBe(true)
+    expect(flat(card).includes("{'Export'}")).toBe(true)
+    // Resume: the unfinished imports of this resource, each reopened where it stopped, or thrown away.
+    const list = transfer.blocks.find((block) => block.title === 'Resume import')
+    expect(list?.filter).toBe('item.resource == @params.resource')
+    expect(flat(resume).includes("'Resume import'")).toBe(true)
+    expect(flat(resume).includes("{'Discard'}")).toBe(true)
+    expect(transfer.load).toBeDefined()
   })
 })

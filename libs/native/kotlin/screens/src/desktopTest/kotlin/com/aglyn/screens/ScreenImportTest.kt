@@ -366,7 +366,7 @@ class ScreenImportTest {
   fun theItemDiffAndMergeKeysReplayTheConsolesCases() {
     val file = json(File(root, "libs/native/contracts/function-cases.generated.json").readText()) as JsonObject
     val functions = file.getValue("functions") as JsonObject
-    for (name in listOf("packageJsonDiff", "packageMergeKeys", "packageItemChanges")) {
+    for (name in listOf("packageJsonDiff", "packageMergeKeys", "packageItemChanges", "aiProductsImportJob")) {
       val cases = ((functions.getValue(name) as JsonObject).getValue("cases") as kotlinx.serialization.json.JsonArray)
       assertTrue(cases.size > 5, name)
       for (one in cases) {
@@ -375,5 +375,48 @@ class ScreenImportTest {
       }
     }
     assertEquals(null, ScreenFunctions.call("nothing", emptyList()))
+  }
+
+  @Test
+  fun theUploadStepReadsTheFileAndSendsWhatItReadAsTheConsoleSendsIt() = runTest {
+    val wizard = spec("core.settings.data.import")
+    val form = wizard.blocks.first { it.id == "file" }
+    val field = (form.raw.obj("fields") as kotlinx.serialization.json.JsonArray).mapNotNull { FieldSpec.parse(it) }.first()
+    assertEquals("upload", field.kind)
+    assertTrue(field.required)
+    // What the import takes comes from the resource the screen loaded; without limits, the console's ceiling and a CSV.
+    val loaded = json("""{"data":{"info":{"resource":{"limits":{"maxBytes":1000000,"maxRows":500},"formats":["csv","json"]}}}}""")
+    assertEquals(
+      com.aglyn.core.TransferUploadLimits(1_000_000, 500, listOf(com.aglyn.core.TransferFormat.CSV, com.aglyn.core.TransferFormat.JSON)),
+      field.uploadLimits(loaded),
+    )
+    assertEquals(com.aglyn.core.TransferUploadLimits(8_000_000, null, listOf(com.aglyn.core.TransferFormat.CSV)), field.uploadLimits(json("""{"data":{"info":{"resource":{}}}}""")))
+    // Until a file reads cleanly the field is empty, so the form cannot be sent.
+    assertTrue(field.unmet(fieldJson(field, FieldValue.Text("")), loaded))
+    // The value the field holds once it reads: the console's upload says the format on every part, and a CSV its separator
+    // and header row on the first.
+    val draft = com.aglyn.core.TransferUploadDraft.file("people.csv", "name;city\nAna;Köln\n".encodeToByteArray(), 1_000_000)
+    val sentValue = draft.value(field.uploadLimits(loaded))!!
+    val held = FieldValue.Text(sentValue.toString())
+    assertEquals(sentValue, fieldJson(field, held))
+    assertFalse(field.unmet(fieldJson(field, held), loaded))
+    val upload = ActionSpec.parse(form["submit"])!!
+    val sent = mutableListOf<HttpRequestData>()
+    val model = ScreenModel(wizard, JsonObject(emptyMap()), client(200 to """{"job":{"id":"j1"},"complete":true}""", 200 to """{"match":{"mapping":{}}}""", sent = sent))
+    val scope = ScreenContext.with(json("""{"org":{"id":"o1"},"params":{"resource":"crm.contacts","hostId":"h1"}}"""), "form", JsonObject(mapOf("file" to fieldJson(field, held))))
+    model.run(upload, scope)
+    assertEquals("/api/transfer/upload", sent[0].url.encodedPath)
+    assertEquals(
+      json("""{"orgId":"o1","resource":"crm.contacts","hostId":"h1","fileName":"people.csv","format":"csv","content":"name;city\nAna;Köln\n","delimiter":";","headerRow":true}"""),
+      body(sent, 0),
+    )
+    assertEquals(JsonPrimitive("people.csv"), ScreenStash.values["importFile"])
+    // A JSON file carries neither a separator nor a header row, and pasted rows go up under their own name.
+    val jsonValue = com.aglyn.core.TransferUploadDraft.pasted("[{\"a\":1}]").value(field.uploadLimits(loaded))!!
+    model.run(upload, ScreenContext.with(scope, "form", JsonObject(mapOf("file" to jsonValue))))
+    val second = body(sent, 2) as JsonObject
+    assertNull(second["delimiter"])
+    assertNull(second["headerRow"])
+    assertEquals(listOf(JsonPrimitive("Pasted rows"), JsonPrimitive("json")), listOf(second["fileName"], second["format"]))
   }
 }

@@ -341,7 +341,7 @@ final class ScreenImportTests: XCTestCase {
   func testTheItemDiffAndMergeKeysReplayTheConsolesCases() throws {
     let url = ScreenSpecTests.screensDir.appendingPathComponent("../contracts/function-cases.generated.json").standardizedFileURL
     let file = try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url)))
-    for name in ["packageJsonDiff", "packageMergeKeys", "packageItemChanges"] {
+    for name in ["packageJsonDiff", "packageMergeKeys", "packageItemChanges", "aiProductsImportJob"] {
       let cases = try XCTUnwrap(file["functions"]?[name]?["cases"]).array
       XCTAssertGreaterThan(cases.count, 5, name)
       for one in cases {
@@ -350,5 +350,50 @@ final class ScreenImportTests: XCTestCase {
       }
     }
     XCTAssertNil(ScreenFunctions.call("nothing", []))
+  }
+
+  func testTheUploadStepReadsTheFileAndSendsWhatItReadAsTheConsoleSendsIt() async throws {
+    let wizard = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.import" })
+    let form = try XCTUnwrap(wizard.blocks.first { $0.id == "file" })
+    let field = try XCTUnwrap(form["fields"].array.compactMap(FieldSpec.init).first)
+    XCTAssertEqual(field.kind, "upload")
+    XCTAssertTrue(field.required)
+    // What the import takes comes from the resource the screen loaded; without limits, the console's ceiling and a CSV.
+    let loaded: JSONValue = ["data": ["info": ["resource": ["limits": ["maxBytes": 1_000_000, "maxRows": 500], "formats": ["csv", "json"]]]]]
+    XCTAssertEqual(field.uploadLimits(in: loaded), TransferUploadLimits(maxBytes: 1_000_000, maxRows: 500, formats: [.csv, .json]))
+    XCTAssertEqual(field.uploadLimits(in: ["data": ["info": ["resource": [:]]]]), TransferUploadLimits(maxBytes: 8_000_000, maxRows: nil, formats: [.csv]))
+    // Until a file reads cleanly the field is empty, so the form cannot be sent.
+    XCTAssertTrue(field.unmet(fieldJSON(field, .text("")), in: loaded))
+    // The value the field holds once it reads: the console's upload says the format on every part, and a CSV its separator
+    // and header row on the first.
+    let draft = TransferUploadDraft.file(name: "people.csv", data: Data("name;city\nAna;Köln\n".utf8), maxBytes: 1_000_000)
+    let sent = try XCTUnwrap(draft.value(field.uploadLimits(in: loaded)))
+    let held = FieldValue.text(String(data: try sent.encoded(), encoding: .utf8) ?? "")
+    XCTAssertEqual(fieldJSON(field, held), sent)
+    XCTAssertFalse(field.unmet(fieldJSON(field, held), in: loaded))
+    let upload = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+    let transport = RecordingTransport(responses: [(200, #"{"job":{"id":"j1"},"complete":true}"#), (200, #"{"match":{"mapping":{}}}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let model = ScreenModel(spec: wizard, context: [:], api: api)
+    ScreenStash.clear()
+    let scope: JSONValue = [
+      "org": ["id": "o1"], "params": ["resource": "crm.contacts", "hostId": "h1"], "form": ["file": fieldJSON(field, held)],
+    ]
+    _ = await model.run(upload, in: scope)
+    let body = try XCTUnwrap(transport.requests[0].httpBody.flatMap(JSONValue.decode))
+    XCTAssertEqual(transport.requests[0].url?.path, "/api/transfer/upload")
+    XCTAssertEqual(
+      body,
+      ["orgId": "o1", "resource": "crm.contacts", "hostId": "h1", "fileName": "people.csv", "format": "csv", "content": "name;city\nAna;Köln\n",
+        "delimiter": ";", "headerRow": true])
+    XCTAssertEqual(ScreenStash.values["importFile"], "people.csv")
+    // A JSON file carries neither a separator nor a header row, and pasted rows go up under their own name.
+    let json = try XCTUnwrap(TransferUploadDraft.pasted("[{\"a\":1}]").value(field.uploadLimits(in: loaded)))
+    _ = await model.run(upload, in: ScreenContext.with(scope, "form", ["file": json]))
+    let second = try XCTUnwrap(transport.requests[2].httpBody.flatMap(JSONValue.decode))
+    XCTAssertNil(second["delimiter"])
+    XCTAssertNil(second["headerRow"])
+    XCTAssertEqual([second["fileName"], second["format"]], ["Pasted rows", "json"])
+    ScreenStash.clear()
   }
 }

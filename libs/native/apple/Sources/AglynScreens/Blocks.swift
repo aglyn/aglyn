@@ -121,6 +121,8 @@ struct ListBlock: View {
   let trigger: (ActionSpec, JSONValue) -> Void
   /// The choice made in the list's `chips` filter; empty shows every row.
   @State private var chosen = ""
+  /// How many more pages of a `page`d list "Show more" has revealed.
+  @State private var revealed = 0
 
   var body: some View {
     // `chips: { field, from, label }`: a picker over the values in `from`, narrowing the rows to
@@ -136,6 +138,9 @@ struct ListBlock: View {
       return ScreenValues.text(ScreenValues.lookup("item.\(chipField)", in: scope)) == chosen
     }
     let loadKey = block["load"]?.stringValue
+    // `page: N`: the first N rows, then Show more for N more (a list the screen holds whole, such as a diff).
+    let page = block["page"]?.numberValue.map { Int($0) } ?? 0
+    let shown = page > 0 ? Array(rows.prefix(page * (1 + revealed))) : rows
     Section {
       if !chipValues.isEmpty {
         Picker(chips?["label"]?.stringValue ?? "Filter", selection: $chosen) {
@@ -150,8 +155,13 @@ struct ListBlock: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.vertical, AglynSpace.one)
       }
-      ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+      ForEach(Array(shown.enumerated()), id: \.offset) { _, row in
         ListRow(block: block, scope: row, selection: selection, open: open, trigger: trigger)
+      }
+      if page > 0, rows.count > shown.count {
+        Button("Show more") { revealed += 1 }
+          .frame(maxWidth: .infinity)
+          .accessibilityIdentifier("show-more")
       }
       if let loadKey, model.cursors[loadKey] != nil {
         Button {
@@ -343,6 +353,9 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   case ("file", .text(let text)?), ("file", .file(_, let text)?):
     if text.isEmpty { return .null }
     return field.parse == "json" ? (JSONValue.decode(Data(text.utf8)) ?? .null) : .string(text)
+  case ("upload", .text(let text)?):
+    // What the upload step reads out of the chosen file or pasted rows, kept as JSON text while it is edited.
+    return JSONValue.decode(Data(text.utf8)) ?? .null
   case ("lines", .text(let text)?):
     // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
     return .array(text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map(JSONValue.string))
@@ -435,6 +448,8 @@ struct FieldInput: View {
           guard let file = files.first else { return }
           value = .file(name: file.name, text: ScreenValues.decodeFileText(file.data))
         }
+      case "upload":
+        UploadFieldView(field: field, context: context, value: $value)
       case "multiline", "lines":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)
@@ -449,7 +464,9 @@ struct FieldInput: View {
           #endif
           .autocorrectionDisabled(field.kind != "text")
       }
-      if let help = field.help {
+      if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.mismatches(.string(text.wrappedValue), in: context) {
+        Text(ScreenValues.render(mismatch, in: context)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
+      } else if let help = field.help {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }
