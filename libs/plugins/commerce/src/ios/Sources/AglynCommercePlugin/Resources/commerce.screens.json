@@ -1,0 +1,24 @@
+{
+  "$comment": "The Commerce plugin's native screens, drawn by the shared spec renderer: Commerce settings, the store's settings hub, with the commerceSettings zone other plugins put their cards in (tax services, shipping labels, fulfillment networks and the rest, each its own spec in its own plugin). Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.settings",
+      "title": "Commerce settings",
+      "label": "Commerce settings",
+      "subtitle": "The services your store connects to",
+      "icon": "storefront|storefront",
+      "scope": "site",
+      "group": "site",
+      "order": 40,
+      "blocks": [
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commerceSettings",
+          "title": "Connected services",
+          "footer": "Tax services, shipping, fulfillment, accounting and the other services your store connects to."
+        }
+      ]
+    }
+  ]
+}
