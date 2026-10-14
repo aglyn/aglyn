@@ -292,6 +292,87 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testTheAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() throws {
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })
+    let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })
+    let set = try XCTUnwrap(list["actions"].array.first.flatMap(ActionSpec.init))
+    XCTAssertNotNil(set.check)
+    XCTAssertTrue(set.asksConfirmation)
+    let base: JSONValue = [
+      "data": ["addons": ["interval": "month", "catalog": ["hosts": ["unitUsd": 5]]]],
+      "item": ["kind": "hosts", "label": "Extra sites"],
+    ]
+    let now = ScreenContext.with(
+      ScreenContext.with(base, "form", ["quantity": 3]), "preview",
+      ["chargedNowCents": 1250, "currency": "usd", "taxCents": 100, "taxComplete": true])
+    XCTAssertEqual(
+      set.confirmText(in: now),
+      "Extra sites: 3? $12.50 will be charged to your card now, prorated for the rest of this period, including tax. Ongoing: 3 at $5.00/mo each.")
+    let later = ScreenContext.with(
+      ScreenContext.with(base, "form", ["quantity": 0]), "preview",
+      ["defersToPeriodEnd": true, "effectiveAt": "2026-11-01T00:00:00Z", "currency": "usd"])
+    XCTAssertEqual(
+      set.confirmText(in: later),
+      "Extra sites: 0? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.")
+    // The bank asking for confirmation opens the invoice; a decline says so; success shows the message.
+    let bank = ScreenContext.with(base, "response", ["paymentPending": true, "requiresAction": true, "hostedInvoiceUrl": "https://invoice.test/i"])
+    XCTAssertEqual(set.insteadEntry(in: bank)?["open"]?.stringValue, "hostedInvoiceUrl")
+    let declined = ScreenContext.with(base, "response", ["paymentPending": true, "declined": true])
+    XCTAssertEqual(set.insteadEntry(in: declined)?["title"]?.stringValue, "Card declined")
+    XCTAssertNil(set.insteadEntry(in: ScreenContext.with(base, "response", ["ok": true, "quantities": ["hosts": 3]])))
+  }
+
+  @MainActor
+  func testThePlanChangeQuotesWhatTheConsoleQuotes() throws {
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.plans" })
+    let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })
+    let actions = list["actions"].array.compactMap(ActionSpec.init)
+    let switchPlan = try XCTUnwrap(actions.first { $0.id == "switch" })
+    XCTAssertNotNil(switchPlan.check)
+    var base: JSONValue = [
+      "item": ["id": "business", "label": "Business"],
+      "const": spec.raw["constants"] ?? .null,
+      "data": [
+        "org": ["plan": "pro", "subscription": ["status": "active"]],
+        "billing": ["subscription": [:]],
+        "collab": ["sites": [["hostId": "a"], ["hostId": "b"]]],
+        "seats": ["managerSeats": 2], "datasets": ["count": 1],
+      ],
+    ]
+    func quote(_ preview: JSONValue, data: JSONValue? = nil) -> String {
+      var scope = ScreenContext.with(base, "preview", preview)
+      if let data { scope = ScreenContext.with(scope, "data", data) }
+      return switchPlan.confirmText(in: scope) ?? ""
+    }
+    // Charged now, tax included.
+    XCTAssertEqual(
+      quote(["downgrade": false, "chargesNow": true, "prorationCents": 1000, "chargedNowCents": 1100, "prorationTaxCents": 100, "taxComplete": true, "currency": "usd", "periodEnd": "2026-11-01T00:00:00Z"]),
+      "Switch to Business? You'll be charged $11.00 USD now for the rest of this period, and your plan changes as soon as the payment goes through. That includes $1.00 USD tax.")
+    // A credit, with tax the address cannot decide yet.
+    XCTAssertEqual(
+      quote(["downgrade": false, "prorationCents": -250, "taxComplete": false, "currency": "usd", "periodEnd": "2026-11-01T00:00:00Z"]),
+      "Switch to Business? Unused time credits $2.50 USD back on your next invoice on Nov 1, 2026. Tax is calculated once we have your billing address. This total does not include it yet.")
+    // A move down waits for the period end.
+    XCTAssertEqual(
+      quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z"]),
+      "Move down to Business? Nothing is charged today, and nothing changes yet. You keep Pro — and everything you've already paid for — until Nov 1, 2026, when this organization moves to Business. You can keep your current plan any time before then.")
+    // The AI add-on is dropped where the target does not sell it, and over-limit counts are named.
+    var data = base["data"] ?? .null
+    data = ScreenContext.with(data, "org", ["plan": "pro", "subscription": ["status": "active"], "seatAddons": ["aiAddon": 1]])
+    data = ScreenContext.with(data, "seats", ["managerSeats": 7])
+    base = ScreenContext.with(base, "item", ["id": "free", "label": "Free"])
+    let text = quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z", "droppedAddons": ["aiAddon"]], data: data)
+    XCTAssertTrue(text.contains("Your Aglyn AI add-on is not sold on Free, so it is removed"))
+    XCTAssertTrue(text.contains("over the Free plan on: 2 sites (Free includes 1)"))
+    XCTAssertTrue(text.contains("7 team members (Free includes 1)"))
+    XCTAssertTrue(text.contains("Nothing is deleted and these keep working"))
+    // Only a different plan is offered, and only to a workspace with a live subscription.
+    let scope = ScreenContext.with(base, "item", ["id": "pro"])
+    XCTAssertFalse(ScreenValues.condition(switchPlan.when, in: scope))
+    XCTAssertTrue(ScreenValues.condition(switchPlan.when, in: ScreenContext.with(scope, "item", ["id": "business"]).withManager()))
+  }
+
+  @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
     let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
@@ -364,4 +445,9 @@ final class RoutedTransport: HTTPTransport, @unchecked Sendable {
     let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
     return (Data(body.utf8), response)
   }
+}
+
+extension JSONValue {
+  /// A copy whose org is a manager, as `org.manager` reads.
+  fileprivate func withManager() -> JSONValue { ScreenContext.with(self, "org", ["manager": true]) }
 }
