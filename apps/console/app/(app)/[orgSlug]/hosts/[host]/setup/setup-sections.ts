@@ -17,7 +17,14 @@
 
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 
-export type SetupSectionId = 'details' | 'business' | 'seo' | 'tracking' | 'theme' | 'emails'
+export type SetupSectionId =
+  | 'details'
+  | 'business'
+  | 'seo'
+  | 'tracking'
+  | 'theme'
+  | 'emails'
+  | 'integrations'
 
 export interface SetupSection {
   id: SetupSectionId
@@ -25,6 +32,8 @@ export interface SetupSection {
   href: string
   /** The form schema this section renders, when it renders one. */
   schemaId?: 'hostSeo' | 'hostTracking'
+  /** `false` hides it from the rail (and the breadcrumb). */
+  visible?: boolean
 }
 
 /** Section metadata in rail order. Hrefs are added per site below. */
@@ -54,6 +63,14 @@ const SECTIONS: ReadonlyArray<{
   },
   { id: 'theme', label: 'Theme', route: Route.HOST_SETUP_THEME },
   { id: 'emails', label: 'Emails', route: Route.HOST_SETUP_EMAILS },
+  /*
+   * The `hostSettings` plugin zone (AGL-3711): email platforms, Zapier and
+   * whatever a plugin adds next. It used to be drawn by the LAYOUT, below the
+   * rail and outside the content column, so its cards ran full width under
+   * every section. A section of its own puts them in the column, and the rail
+   * offers it only while the zone has a card (`integrations` below).
+   */
+  { id: 'integrations', label: 'Integrations', route: Route.HOST_SETUP_INTEGRATIONS },
 ]
 
 /**
@@ -65,12 +82,24 @@ const SECTIONS: ReadonlyArray<{
  * Separate copies are how a section comes to be listed under one name, linked
  * under another, and missing from the trail entirely.
  */
-export function setupSections(orgSlug: string, host: string): SetupSection[] {
+export function setupSections(
+  orgSlug: string,
+  host: string,
+  options: {
+    /**
+     * Whether the `hostSettings` zone has a card for this reader. Only the
+     * rail needs to know; the index redirect never lands on Integrations, so
+     * it leaves this out and the section stays in the list for it to skip.
+     */
+    integrations?: boolean
+  } = {},
+): SetupSection[] {
   return SECTIONS.map(({ id, label, route, schemaId }) => ({
     id,
     label,
     schemaId,
     href: buildRoute(route as never, { orgSlug, host } as never),
+    ...(id === 'integrations' ? { visible: options.integrations === true } : {}),
   }))
 }
 

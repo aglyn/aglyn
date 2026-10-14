@@ -492,9 +492,25 @@ export function layoutBandWidths(
       }
     }
   }
-  // The image's own max width caps it; its own width is read as its own
-  // stated length, not as layout.
-  if (node) applySizing(node, false)
+  // The image's own max width caps it. Its own pixel or viewport width is read
+  // as its own stated length (`ownLengths`), not as layout — but a width given
+  // as a share of its slot is a share of what the layout below states, so it
+  // scales that slot. It is NOT clamped at 100% the way an ancestor's is: an
+  // image set wider than its cell (`118%`, pulled out with a negative margin)
+  // really paints that wide, and a `sizes` of the cell alone downloads a
+  // candidate the box then upscales (AGL-3715).
+  if (node) {
+    applySizing(node, false)
+    const sx = plainSx(node.sx)
+    const widths = bandValues(sx['width'] ?? propsOf(node)['width'])
+    for (const band of BANDS) {
+      const value = length(widths[band])
+      if (value?.kind === 'fraction' && value.value !== 1) {
+        step(band, value.value)
+        stated = true
+      }
+    }
+  }
   let child = node
   // Stored pages name the root as its own parent (`parentId: "_@_"`), so a
   // walk that only stops at a missing parent never ends (AGL-3565). Stop at

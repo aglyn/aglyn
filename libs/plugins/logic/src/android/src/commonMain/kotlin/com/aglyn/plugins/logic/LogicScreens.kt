@@ -20,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,7 +63,7 @@ const val LOGIC_FUNCTION_SCREEN = "logic.function"
 /** Roles the rules let change a site's logic: the publishing roles. */
 internal val LOGIC_WRITE_ROLES = setOf("admin", "editor")
 
-private enum class LogicTab(val label: String) { VARIABLES("Variables"), FUNCTIONS("Functions") }
+private enum class LogicTab(val label: String) { VARIABLES("Variables"), FUNCTIONS("Functions"), HEALTH("Reference health") }
 
 /** A variable being edited; [id] null for a new one. */
 internal data class VariableDraft(
@@ -92,7 +93,7 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
   val scope = rememberCoroutineScope()
   val api = remember(hostId, context.api, context.writer) { LogicApi(context.api, context.writer, hostId) }
   val runner = remember(hostId) { ActionRunner(scope) }
-  var tab by remember { mutableStateOf(if (initialTab == "functions") LogicTab.FUNCTIONS else LogicTab.VARIABLES) }
+  var tab by remember { mutableStateOf(if (initialTab == "functions") LogicTab.FUNCTIONS else if (initialTab == "health") LogicTab.HEALTH else LogicTab.VARIABLES) }
   var dialog by remember { mutableStateOf<LogicDialog?>(null) }
   val canEdit = context.siteRole in LOGIC_WRITE_ROLES
   val variablesLive by remember(hostId, context.firestore) { context.firestore.observe(ceilingQuery(variablesPath(hostId))) }.collectAsState(Live.Loading)
@@ -106,7 +107,7 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
 
   Column(Modifier.fillMaxSize()) {
     ListHeader("Functions & Variables") {
-      Button(
+      if (tab != LogicTab.HEALTH) Button(
         onClick = {
           if (tab == LogicTab.VARIABLES) dialog = LogicDialog.EditVariable(VariableDraft(null)) else context.navigate(LOGIC_FUNCTION_SCREEN)
         },
@@ -122,12 +123,13 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
         runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
         runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
       }
-      ChoiceChipRow(LogicTab.entries.map { ChipOption(it.name, it.label, if (it == LogicTab.VARIABLES) "data_object" else "functions") }, tab.name, { tab = LogicTab.valueOf(it) })
-      val window = if (tab == LogicTab.VARIABLES) variables?.second else functions?.second
+      ChoiceChipRow(LogicTab.entries.map { ChipOption(it.name, it.label, when (it) { LogicTab.VARIABLES -> "data_object"; LogicTab.FUNCTIONS -> "functions"; LogicTab.HEALTH -> "health_and_safety" }) }, tab.name, { tab = LogicTab.valueOf(it) })
+      val window = when (tab) { LogicTab.VARIABLES -> variables?.second; LogicTab.FUNCTIONS -> functions?.second; LogicTab.HEALTH -> null }
       if (window == true) NoticeBanner("Showing the first $LOGIC_CEILING. Delete ones you no longer use to see the rest.", StatusTone.INFO)
     }
-    val failed = (if (tab == LogicTab.VARIABLES) variablesLive else functionsLive) is Live.Failed
+    val failed = when (tab) { LogicTab.VARIABLES -> variablesLive; LogicTab.FUNCTIONS -> functionsLive; LogicTab.HEALTH -> null } is Live.Failed
     when {
+      tab == LogicTab.HEALTH -> ReferenceHealth(context)
       failed -> EmptyState("Could not load this list", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
       tab == LogicTab.VARIABLES && variables == null -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
       tab == LogicTab.FUNCTIONS && functions == null -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
@@ -352,8 +354,9 @@ private fun VariableValueInput(type: HostVariableType, value: String, onChange: 
       keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
       modifier = modifier,
     )
-    HostVariableType.DICTIONARY -> OutlinedTextField(value, onChange, label = { Text("Value") }, placeholder = { Text("{\"key\": \"value\"}") }, minLines = 3, modifier = modifier)
-    HostVariableType.COLLECTION -> OutlinedTextField(value, onChange, label = { Text("Value") }, placeholder = { Text("[\"a\", \"b\"]") }, minLines = 3, modifier = modifier)
+    // Rows, never typed JSON (AGL-3757). Keyed by the type so switching type reads its value afresh.
+    HostVariableType.DICTIONARY -> key(type) { StructuredValueEditor(StructuredShape.DICTIONARY, value, onChange) }
+    HostVariableType.COLLECTION -> key(type) { StructuredValueEditor(StructuredShape.COLLECTION, value, onChange) }
     else -> OutlinedTextField(value, onChange, label = { Text("Value") }, minLines = 2, modifier = modifier)
   }
 }
