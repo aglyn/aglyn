@@ -858,8 +858,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       plan: { prefixTokens: 2_984, minimum: 512, caches: true, toolsStable: true },
       // A site's plan says the language its brief is in (AGL-3750): the plain
       // plan's prefix and one nullable field, up 54. Its photo words in
-      // English (AGL-3760) took it up 55 more.
-      'site-plan': { prefixTokens: 3_094, minimum: 512, caches: true, toolsStable: true },
+      // English (AGL-3760) took it up 55 more, and saying they are required
+      // whenever the language is not English (AGL-3779) 15 more.
+      'site-plan': { prefixTokens: 3_109, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary
