@@ -70,7 +70,6 @@ function display(answer: Record<string, unknown> | null): PosDisplayControl {
     show: jest.fn(async () => undefined),
     ask: jest.fn(async () => answer as never),
     cancelAsk: jest.fn(),
-    pairingCode: jest.fn(),
   }
 }
 

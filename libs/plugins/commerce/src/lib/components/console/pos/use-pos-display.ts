@@ -56,11 +56,6 @@ export interface PosDisplayControl {
     state: Omit<CommerceModel.PosDisplayState, 'updatedAtMs' | 'promptId'>,
   ) => Promise<CommerceModel.PosDisplayResponse | null>
   cancelAsk: () => void
-  /**
-   * A fresh six-digit pairing code for a new customer display, or for a
-   * self-service kiosk (AGL-3623).
-   */
-  pairingCode: (mode?: CommerceModel.PosDeviceMode) => Promise<{ code: string; expiresAtMs: number }>
 }
 
 /**
@@ -161,16 +156,6 @@ export function usePosDisplay(
     [user, hostId, registerId],
   )
 
-  const pairingCode = useCallback(async (mode: CommerceModel.PosDeviceMode = 'display') => {
-    if (!user) throw new Error('Not signed in')
-    const result = await posDisplayCall<{ code: string; expiresAtMs: number }>(user, {
-      action: 'pairing-code',
-      hostId,
-      registerId,
-      mode,
-    })
-    return result
-  }, [user, hostId, registerId])
-
-  return { connected, asking, show, ask, cancelAsk, pairingCode }
+  // Pairing a new display is `usePosPairing` (AGL-3712), shared with the devices card.
+  return { connected, asking, show, ask, cancelAsk }
 }
