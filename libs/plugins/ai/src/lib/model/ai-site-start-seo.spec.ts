@@ -375,3 +375,45 @@ describe('every word of an answer whole, in any script (AGL-3791)', () => {
     expect(aiSiteSeoEmbedded('Ángel Café regulars')).toBe('Ángel Café regulars')
   })
 })
+
+describe('a listing in the site’s own language (AGL-3792)', () => {
+  /** The live Spanish guided start's answers (job 4v-nRPeKDH). */
+  const PANADERIA = {
+    businessName: 'Panadería Flor de Oaxaca',
+    businessType:
+      'Una panadería familiar de San Antonio con pan dulce, conchas y pasteles de tres leches al estilo de Oaxaca',
+    audience:
+      'Familias de San Antonio que buscan pan fresco cada mañana y pasteles para cumpleaños, bodas y quinceañeras',
+    city: '',
+  }
+
+  it('sets no English around a Spanish site’s answers', () => {
+    // Composed as English it read "Panadería Flor de Oaxaca is an una panadería familiar…".
+    expect(aiSiteSeoProposalForInputs(PANADERIA, 'es')?.values).toEqual({
+      'seo.title': 'Panadería Flor de Oaxaca',
+      'seo.description':
+        'Una panadería familiar de San Antonio con pan dulce, conchas y pasteles de tres leches al estilo de Oaxaca.',
+    })
+  })
+
+  it('adds no "in" before the city, and holds a long answer to its length at a word, in any language but English', () => {
+    expect(values({ about: 'Une pâtisserie de quartier', siteName: 'Chez Marie', city: 'Lyon', language: 'fr' })).toEqual({
+      'seo.title': 'Chez Marie — Une pâtisserie de quartier',
+      'seo.description': 'Une pâtisserie de quartier.',
+    })
+    const long = values({
+      about: `Uma padaria e confeitaria de bairro com ${'pão de queijo fresquinho, '.repeat(8)}e café`,
+      language: 'pt-BR',
+    })
+    expect(long?.['seo.description'].length).toBeLessThanOrEqual(AI_SITE_SEO_LIMITS.description)
+    expect(long?.['seo.description']).toMatch(/^Uma padaria e confeitaria de bairro com pão de queijo/)
+    expect(long?.['seo.description']).not.toMatch(/ for | is an? /)
+  })
+
+  it('keeps English as it was for a site in English, or with no language at all', () => {
+    expect(values({ ...ANSWERS, siteName: 'Waggle', language: 'en-US' })).toEqual(values({ ...ANSWERS, siteName: 'Waggle' }))
+    expect(aiSiteSeoProposalForInputs({ businessType: ANSWERS.about, audience: ANSWERS.audience }, null)?.values).toEqual(
+      values(ANSWERS),
+    )
+  })
+})

@@ -930,6 +930,31 @@ describe('the site’s own listing, from the answers', () => {
     })
   })
 
+  it('says it in the language the plan writes the site in, with no English around the answers (AGL-3792)', async () => {
+    const step = stepWith({
+      page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })),
+    })
+    const outcome = await step(
+      context(
+        siteJob({
+          inputs: {
+            businessType: 'Una panadería familiar de San Antonio con pan dulce y conchas',
+            audience: 'Familias de San Antonio',
+            businessName: 'Panadería Flor de Oaxaca',
+            pages: AI_SITE_PAGES.min,
+            welcomeEmail: false,
+          },
+          plan: { ...confirmedPlan(), language: 'es' },
+        }),
+      ),
+    )
+    // Composed as English, it read "Panadería Flor de Oaxaca is an una panadería familiar…".
+    expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
+      'seo.title': 'Panadería Flor de Oaxaca',
+      'seo.description': 'Una panadería familiar de San Antonio con pan dulce y conchas.',
+    })
+  })
+
   it('spends nothing to report it', async () => {
     const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })) })
     const outcome = await step(context(siteJob()))

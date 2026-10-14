@@ -16,6 +16,7 @@
  */
 
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import type { AiJobOutput } from './ai-jobs.types'
 import { aiSiteWords, type AiSiteWords } from './ai-site-job'
 
@@ -319,12 +320,21 @@ export interface AiSiteSeoInput extends Partial<AiSiteWords> {
   siteName?: string
   /** The city the person gave, where they gave one. */
   city?: string
+  /** The language the site's pages are written in, a code such as `es`; absent, English. */
+  language?: string | null
 }
 
 /**
  * The site's fallback listing from the answers, or `null` when the answers
  * describe no site at all — a job with no `businessType` has nothing to
  * propose, and an empty proposal is worse than none.
+ *
+ * In a language other than English the listing is the person's own words
+ * with no English set around them (AGL-3792): the title adds no "in" before
+ * the city, and the description is what the site is, as the sentence they
+ * wrote it in. Composed as English, a Spanish bakery's listing read
+ * "Panadería Flor de Oaxaca is an una panadería familiar de San Antonio…"
+ * (job 4v-nRPeKDH).
  */
 export function aiSiteSeoProposal(input: AiSiteSeoInput): AiSiteSeoProposal | null {
   // What the site is, up to a colon (AGL-3660): the list after one belongs to neither value.
@@ -334,8 +344,11 @@ export function aiSiteSeoProposal(input: AiSiteSeoInput): AiSiteSeoProposal | nu
   const name = (input.siteName ?? '').replace(/\s+/g, ' ').trim()
   const audience = (input.audience ?? '').replace(/\s+/g, ' ').trim()
   const city = (input.city ?? '').replace(/\s+/g, ' ').trim()
-  const title = aiSiteSeoTitle({ name, subject, city })
-  const description = aiSiteSeoDescription({ name, subject, about, audience, ...(city ? { city } : {}) })
+  const english = !aiLayoutSpeaksOtherThanEnglish(input.language)
+  const title = aiSiteSeoTitle({ name, subject, city: english ? city : '' })
+  const description = english
+    ? aiSiteSeoDescription({ name, subject, about, audience, ...(city ? { city } : {}) })
+    : clip(sentence(subject.replace(/[.!?]+$/, '')), AI_SITE_SEO_LIMITS.description)
   return {
     kind: AI_SITE_SEO_PROPOSAL_KIND,
     values: {
@@ -346,9 +359,10 @@ export function aiSiteSeoProposal(input: AiSiteSeoInput): AiSiteSeoProposal | nu
   }
 }
 
-/** The proposal a job's inputs imply, for the step that reports it. */
+/** The proposal a job's inputs imply, in the language its plan writes the site in, for the step that reports it. */
 export function aiSiteSeoProposalForInputs(
   inputs: Readonly<Record<string, unknown>> | null | undefined,
+  language?: string | null,
 ): AiSiteSeoProposal | null {
   const words = aiSiteWords(inputs)
   const businessName = inputs?.['businessName']
@@ -357,6 +371,7 @@ export function aiSiteSeoProposalForInputs(
     ...words,
     ...(typeof businessName === 'string' ? { siteName: businessName } : {}),
     ...(typeof city === 'string' ? { city } : {}),
+    ...(language ? { language } : {}),
   })
 }
 
