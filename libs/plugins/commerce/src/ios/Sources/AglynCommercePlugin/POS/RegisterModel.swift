@@ -75,6 +75,7 @@ final class RegisterModel {
   @ObservationIgnored private var tillOffline: PosOfflineModel!
   @ObservationIgnored private var tillReturns: PosReturnModel!
   @ObservationIgnored private var tillDisplay: PosDisplayControl!
+  @ObservationIgnored private var tillKioskQueue: PosKioskQueueModel!
   /// The display is showing the basket (so an emptied basket tells it to go idle).
   @ObservationIgnored private var displayShowsBasket = false
   @ObservationIgnored private var displayShowsProcessing = false
@@ -88,12 +89,14 @@ final class RegisterModel {
   var returns: PosReturnModel { tillReturns }
   /// The paired customer display and kiosks.
   var display: PosDisplayControl { tillDisplay }
+  /// "Pay at counter" orders from this register's kiosks.
+  var kioskQueue: PosKioskQueueModel { tillKioskQueue }
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
     uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil,
-    displayAPI: PosDisplayAPI? = nil
+    displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
@@ -119,6 +122,8 @@ final class RegisterModel {
     tillOffline = offline
     tillDisplay = PosDisplayControl(
       api: displayAPI ?? ConsolePosDisplayAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id })
+    tillKioskQueue = PosKioskQueueModel(
+      api: kioskQueueAPI ?? ConsolePosKioskQueueAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id })
     tillReturns = PosReturnModel(
       api: returnsAPI ?? ConsolePosReturnsAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id },
       assertion: { [weak cashier] in cashier?.assertion })
@@ -414,6 +419,25 @@ final class RegisterModel {
       default:
         store.savePendingSale(current.id, nil)
       }
+    }
+  }
+
+  /// Loads a kiosk's "pay at counter" order into checkout, where the cashier takes payment as on any sale. Needs a free register.
+  func takeKioskOrder(_ entry: PosKioskQueueEntry) async {
+    guard checkout == nil, !charging else {
+      toast = CheckoutNotice(tone: .warning, message: "Finish or cancel the open sale first.")
+      return
+    }
+    switch await kioskQueue.take(entry) {
+    case .success(let taken):
+      let sale = taken.sale
+      startCheckout(
+        PosOpenedSale(
+          orderID: sale.orderID, subtotalCents: nil, discountCents: nil, taxCents: nil, totalCents: sale.totalCents,
+          dueCents: sale.dueCents, stockWarnings: []))
+      if let register { store.savePendingSale(register.id, PendingSale(orderID: sale.orderID, totalCents: sale.totalCents, openedAtMs: nowMs())) }
+    case .failure(let failure):
+      toast = CheckoutNotice(tone: .error, message: failure.message)
     }
   }
 

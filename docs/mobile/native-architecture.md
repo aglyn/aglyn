@@ -233,7 +233,10 @@ Native-only fields are kept to the minimum:
   (the customer display, the self-service kiosk): the POS sign-in offers it, it
   is remembered across launches, and it is handed a context with no member, no
   workspace and no site, whose `api` it calls anonymously with its own pairing
-  token (`headers`), and whose `back()` returns the tablet to sign-in.
+  token (`headers`), and whose `back()` returns the tablet to sign-in. A kiosk
+  takes Tap to Pay on the tablet's own card reader (Kotlin: the context's
+  `peripherals`; Apple: the device reader it makes itself) with a connection
+  token from the kiosk route, never a staff session.
 
 ```swift
 // libs/plugins/redirects/src/ios/Sources/AglynRedirectsPlugin/Register.swift

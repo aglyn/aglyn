@@ -143,6 +143,7 @@ fun RegisterScreen(context: NativePluginContext) {
       offlineApi = ConsolePosOfflineApi(context.api, hostId),
       returnsApi = ConsolePosReturnsApi(context.api, hostId),
       displayApi = ConsolePosDisplayApi(context.api, hostId),
+      kioskQueueApi = ConsolePosKioskQueueApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
@@ -379,6 +380,7 @@ private fun CatalogPane(
       RegisterPicker(model)
     }
     RegisterOfflineBanner(model)
+    KioskQueueCard(model)
     val selected = when {
       model.args.search.isNotBlank() -> null
       model.args.quickKeys -> "quick"

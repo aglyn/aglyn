@@ -118,11 +118,11 @@ private fun DisplayBody(model: PosCustomerDisplayModel) {
       busy = true,
     )
     PosDisplayScreen.Answered -> PosDeviceBrandScreen(model.branding, title = "Thanks — the cashier will finish up", message = null)
-    is PosDisplayScreen.Cart -> DeviceScroll(model) { DisplayCartView(screen.cart, model.currency) }
-    is PosDisplayScreen.Tip -> DeviceScroll(model) {
+    is PosDisplayScreen.Cart -> DeviceScroll(model.branding, model.notice) { DisplayCartView(screen.cart, model.currency) }
+    is PosDisplayScreen.Tip -> DeviceScroll(model.branding, model.notice) {
       DisplayTipView(screen.tip, model.currency, model.busy) { answer -> scope.launch { model.answer(answer.copy(promptId = screen.promptId)) } }
     }
-    is PosDisplayScreen.Receipt -> DeviceScroll(model) {
+    is PosDisplayScreen.Receipt -> DeviceScroll(model.branding, model.notice) {
       DisplayReceiptView(screen.receipt, model.busy) { answer -> scope.launch { model.answer(answer.copy(promptId = screen.promptId)) } }
     }
   }
@@ -130,15 +130,15 @@ private fun DisplayBody(model: PosCustomerDisplayModel) {
 
 /** A prompt's layout: the store's mark, the cashier-side notice, then the screen. */
 @Composable
-private fun DeviceScroll(model: PosCustomerDisplayModel, content: @Composable () -> Unit) {
+fun DeviceScroll(branding: PosDeviceBranding?, notice: String?, content: @Composable () -> Unit) {
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
       Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(4f)),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(space(4f)),
     ) {
-      PosDeviceBrandMark(model.branding)
-      model.notice?.let { NoticeBanner(it, StatusTone.INFO, Modifier.fillMaxWidth()) }
+      PosDeviceBrandMark(branding)
+      notice?.let { NoticeBanner(it, StatusTone.INFO, Modifier.fillMaxWidth()) }
       content()
     }
   }
@@ -157,7 +157,7 @@ fun PosDeviceBrandMark(branding: PosDeviceBranding?, modifier: Modifier = Modifi
 
 /** The idle, thank-you and processing screens: the store's mark and one line. */
 @Composable
-fun PosDeviceBrandScreen(branding: PosDeviceBranding?, title: String?, message: String?, busy: Boolean = false) {
+fun PosDeviceBrandScreen(branding: PosDeviceBranding?, title: String?, message: String?, busy: Boolean = false, extra: @Composable () -> Unit = {}) {
   Column(
     Modifier.fillMaxSize().padding(space(4f)),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -167,6 +167,7 @@ fun PosDeviceBrandScreen(branding: PosDeviceBranding?, title: String?, message: 
     title?.let { Text(it, style = MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center) }
     if (busy) CircularProgressIndicator()
     message?.let { Text(it, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center) }
+    extra()
   }
 }
 
@@ -225,7 +226,7 @@ fun DisplayCartView(cart: PosDisplayCart, currency: String?) {
 
 /** A tall, full-width touch target. */
 @Composable
-private fun DeviceButton(label: String, modifier: Modifier = Modifier, prominent: Boolean = true, enabled: Boolean = true, sub: String? = null, onClick: () -> Unit) {
+internal fun DeviceButton(label: String, modifier: Modifier = Modifier, prominent: Boolean = true, enabled: Boolean = true, sub: String? = null, onClick: () -> Unit) {
   val content: @Composable () -> Unit = {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
       Text(label, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)

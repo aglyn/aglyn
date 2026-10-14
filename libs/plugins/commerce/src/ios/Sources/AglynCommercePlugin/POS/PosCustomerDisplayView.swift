@@ -83,25 +83,29 @@ private struct DisplayBody: View {
     case .answered:
       PosDeviceBrandScreen(branding: model.branding, title: "Thanks — the cashier will finish up", message: nil)
     case .cart(let cart):
-      DeviceScroll(model: model) { DisplayCartView(cart: cart, currency: model.currency) }
+      DeviceScroll(branding: model.branding, notice: model.notice) { DisplayCartView(cart: cart, currency: model.currency) }
     case .tip(let tip, let promptID):
-      DeviceScroll(model: model) { DisplayTipView(model: model, tip: tip, promptID: promptID) }
+      DeviceScroll(branding: model.branding, notice: model.notice) { DisplayTipView(
+          tip: tip, currency: model.currency, busy: model.busy, promptID: promptID,
+          onAnswer: { answer in Task { await model.answer(answer) } }) }
     case .receipt(let receipt, let promptID):
-      DeviceScroll(model: model) { DisplayReceiptView(model: model, receipt: receipt, promptID: promptID) }
+      DeviceScroll(branding: model.branding, notice: model.notice) { DisplayReceiptView(
+          receipt: receipt, busy: model.busy, promptID: promptID, onAnswer: { answer in Task { await model.answer(answer) } }) }
     }
   }
 }
 
 /// A prompt's layout: the store's mark, the cashier-side notice, then the screen.
-private struct DeviceScroll<Content: View>: View {
-  let model: PosCustomerDisplayModel
+struct DeviceScroll<Content: View>: View {
+  let branding: PosDeviceBranding?
+  let notice: String?
   @ViewBuilder let content: Content
 
   var body: some View {
     ScrollView {
       VStack(spacing: AglynSpace.four) {
-        PosDeviceBrandMark(branding: model.branding)
-        if let notice = model.notice { AglynNotice(notice, tone: .info) }
+        PosDeviceBrandMark(branding: branding)
+        if let notice { AglynNotice(notice, tone: .info) }
         content
       }
       .padding(AglynSpace.four)
@@ -127,11 +131,22 @@ struct PosDeviceBrandMark: View {
 }
 
 /// The idle, thank-you and processing screens: the store's mark and one line.
-struct PosDeviceBrandScreen: View {
+struct PosDeviceBrandScreen<Extra: View>: View {
   let branding: PosDeviceBranding?
   let title: String?
   let message: String?
   var busy = false
+  @ViewBuilder let extra: Extra
+
+  init(
+    branding: PosDeviceBranding?, title: String?, message: String?, busy: Bool = false, @ViewBuilder extra: () -> Extra
+  ) {
+    self.branding = branding
+    self.title = title
+    self.message = message
+    self.busy = busy
+    self.extra = extra()
+  }
 
   var body: some View {
     VStack(spacing: AglynSpace.three) {
@@ -139,10 +154,17 @@ struct PosDeviceBrandScreen: View {
       if let title { Text(title).font(AglynFont.largeTitle).multilineTextAlignment(.center) }
       if busy { ProgressView().controlSize(.large) }
       if let message { Text(message).font(AglynFont.title2).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+      extra
     }
     .padding(AglynSpace.four)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityElement(children: .combine)
+  }
+}
+
+extension PosDeviceBrandScreen where Extra == EmptyView {
+  init(branding: PosDeviceBranding?, title: String?, message: String?, busy: Bool = false) {
+    self.init(branding: branding, title: title, message: message, busy: busy) { EmptyView() }
   }
 }
 
@@ -208,7 +230,7 @@ struct DisplayCartView: View {
 }
 
 /// A tall, full-width touch target.
-private struct DeviceButtonStyle: ButtonStyle {
+struct DeviceButtonStyle: ButtonStyle {
   var prominent = true
 
   func makeBody(configuration: Configuration) -> some View {
@@ -224,13 +246,15 @@ private struct DeviceButtonStyle: ButtonStyle {
 /// The tip prompt: the merchant's presets, each with the amount it comes to, a custom amount and no tip. The
 /// server recomputes a percentage from the prompt it sent, so what is shown here is never what is charged.
 struct DisplayTipView: View {
-  let model: PosCustomerDisplayModel
   let tip: PosDisplayStateTip
+  let currency: String?
+  let busy: Bool
   let promptID: String
+  let onAnswer: (PosDisplayAnswer) -> Void
   @State private var custom: String?
   @State private var problem: String?
 
-  private func money(_ cents: Double) -> String { posMoney(Int(cents), currency: model.currency) }
+  private func money(_ cents: Double) -> String { posMoney(Int(cents), currency: currency) }
 
   var body: some View {
     if custom != nil {
@@ -247,10 +271,10 @@ struct DisplayTipView: View {
         Text(problem ?? "Up to \(money(tip.baseCents))")
           .font(AglynFont.body).foregroundStyle(problem == nil ? Color.secondary : AglynColor.error)
         HStack(spacing: AglynSpace.two) {
-          Button("Back") { custom = nil; problem = nil }.buttonStyle(DeviceButtonStyle(prominent: false)).disabled(model.busy)
+          Button("Back") { custom = nil; problem = nil }.buttonStyle(DeviceButtonStyle(prominent: false)).disabled(busy)
           Button("Add tip") { submitCustom() }
             .buttonStyle(DeviceButtonStyle())
-            .disabled(model.busy || (custom ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(busy || (custom ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
             .accessibilityIdentifier("display-tip-add")
         }
       }
@@ -261,7 +285,7 @@ struct DisplayTipView: View {
         HStack(spacing: AglynSpace.two) {
           ForEach(tip.percentages, id: \.self) { percent in
             Button {
-              Task { await model.answer(PosDisplayAnswer(promptID: promptID, tipChoice: .percent, tipPercent: percent)) }
+              onAnswer(PosDisplayAnswer(promptID: promptID, tipChoice: .percent, tipPercent: percent))
             } label: {
               VStack(spacing: 2) {
                 Text("\(Int(percent))%")
@@ -269,18 +293,18 @@ struct DisplayTipView: View {
               }
             }
             .buttonStyle(DeviceButtonStyle())
-            .disabled(model.busy)
+            .disabled(busy)
             .accessibilityIdentifier("display-tip-\(Int(percent))")
           }
         }
         HStack(spacing: AglynSpace.two) {
           if tip.allowCustom {
-            Button("Custom amount") { custom = "" }.buttonStyle(DeviceButtonStyle(prominent: false)).disabled(model.busy)
+            Button("Custom amount") { custom = "" }.buttonStyle(DeviceButtonStyle(prominent: false)).disabled(busy)
           }
           Button("No tip") {
-            Task { await model.answer(PosDisplayAnswer(promptID: promptID, tipChoice: PosDisplayResponseTipChoice.none)) }
+            onAnswer(PosDisplayAnswer(promptID: promptID, tipChoice: PosDisplayResponseTipChoice.none))
           }
-          .buttonStyle(DeviceButtonStyle(prominent: false)).disabled(model.busy)
+          .buttonStyle(DeviceButtonStyle(prominent: false)).disabled(busy)
           .accessibilityIdentifier("display-tip-none")
         }
       }
@@ -298,16 +322,17 @@ struct DisplayTipView: View {
     }
     custom = nil
     problem = nil
-    Task { await model.answer(PosDisplayAnswer(promptID: promptID, tipChoice: .custom, tipCents: cents)) }
+    onAnswer(PosDisplayAnswer(promptID: promptID, tipChoice: .custom, tipCents: cents))
   }
 }
 
 /// The receipt prompt. The channels are the register's offer; email and text ask for an address on this screen, and the
 /// marketing box is shown only when the store turned it on, unticked.
 struct DisplayReceiptView: View {
-  let model: PosCustomerDisplayModel
   let receipt: PosDisplayStateReceipt
+  let busy: Bool
   let promptID: String
+  let onAnswer: (PosDisplayAnswer) -> Void
   @State private var entry: PosReceiptChannel?
   @State private var value = ""
   @State private var optIn = false
@@ -340,10 +365,10 @@ struct DisplayReceiptView: View {
           Toggle("Email me news and offers", isOn: $optIn).font(AglynFont.title2)
         }
         HStack(spacing: AglynSpace.two) {
-          Button("Back") { reset() }.buttonStyle(DeviceButtonStyle(prominent: false)).disabled(model.busy)
+          Button("Back") { reset() }.buttonStyle(DeviceButtonStyle(prominent: false)).disabled(busy)
           Button("Send") { submit(email: email) }
             .buttonStyle(DeviceButtonStyle())
-            .disabled(model.busy || value.trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(busy || value.trimmingCharacters(in: .whitespaces).isEmpty)
             .accessibilityIdentifier("display-receipt-send")
         }
       }
@@ -355,11 +380,11 @@ struct DisplayReceiptView: View {
             if channel == .email || channel == .sms {
               entry = channel
             } else {
-              Task { await model.answer(PosDisplayAnswer(promptID: promptID, receiptChannel: channel)) }
+              onAnswer(PosDisplayAnswer(promptID: promptID, receiptChannel: channel))
             }
           }
           .buttonStyle(DeviceButtonStyle(prominent: channel != .none))
-          .disabled(model.busy)
+          .disabled(busy)
           .accessibilityIdentifier("display-receipt-\(channel.rawValue)")
         }
       }
@@ -382,10 +407,7 @@ struct DisplayReceiptView: View {
       }
       let marketing = receipt.offerMarketing && optIn
       reset()
-      Task {
-        await model.answer(
-          PosDisplayAnswer(promptID: promptID, receiptChannel: .email, email: address, marketingOptIn: marketing ? true : nil))
-      }
+      onAnswer(PosDisplayAnswer(promptID: promptID, receiptChannel: .email, email: address, marketingOptIn: marketing ? true : nil))
     } else {
       let phone = posDisplayPhone(value)
       guard !phone.isEmpty else {
@@ -393,7 +415,7 @@ struct DisplayReceiptView: View {
         return
       }
       reset()
-      Task { await model.answer(PosDisplayAnswer(promptID: promptID, receiptChannel: .sms, phone: phone)) }
+      onAnswer(PosDisplayAnswer(promptID: promptID, receiptChannel: .sms, phone: phone))
     }
   }
 }

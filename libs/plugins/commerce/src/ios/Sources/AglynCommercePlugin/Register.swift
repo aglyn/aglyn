@@ -52,6 +52,13 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   ) { context, _ in
     PosCustomerDisplayScreen(context: context)
   }
+  // A tablet customers order from: no one signs in; a register's kiosk code pairs it.
+  r.screen(
+    commerceKioskScreen, title: "Self-service kiosk", requiresSite: false, apps: [.pos], icon: "cart.badge.plus",
+    placement: .device
+  ) { context, _ in
+    PosKioskScreen(context: context)
+  }
 
   r.screen(commerceOrdersScreen, title: "Orders", requiresSite: true, icon: "bag") { context, params in
     OrdersScreen(context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all)

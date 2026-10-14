@@ -58,7 +58,10 @@ struct RegisterScreen: View {
     }
     .background(AglynColor.page)
     .safeAreaInset(edge: .top, spacing: 0) {
-      RegisterOfflineBanner(model: model)
+      VStack(spacing: 0) {
+        RegisterOfflineBanner(model: model)
+        KioskQueueCard(model: model)
+      }
     }
     .navigationTitle(model.storeName)
     .toolbar { toolbar }

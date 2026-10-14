@@ -67,6 +67,8 @@ class RegisterModel(
   returnsApi: PosReturnsApi = OfflinePosReturns,
   /** The customer display route. */
   displayApi: PosDisplayApi = OfflinePosDisplay,
+  /** The kiosks' "pay at counter" queue. */
+  kioskQueueApi: PosKioskQueueApi = OfflinePosKioskQueue,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -94,6 +96,9 @@ class RegisterModel(
 
   /** The paired customer display and kiosks. */
   val display = PosDisplayControl(displayApi, scope, { register?.id })
+
+  /** "Pay at counter" orders from this register's kiosks. */
+  val kioskQueue = PosKioskQueueModel(kioskQueueApi, { register?.id })
 
   /** The display is showing the basket (so an emptied basket tells it to go idle). */
   private var displayShowsBasket = false
@@ -518,6 +523,22 @@ class RegisterModel(
         }
         else -> store.savePendingSale(current.id, null)
       }
+    }
+  }
+
+  /** Loads a kiosk's "pay at counter" order into checkout, where the cashier takes payment as on any sale. Needs a free register. */
+  suspend fun takeKioskOrder(entry: PosKioskQueueEntry) {
+    if (checkout != null || charging) {
+      toast = Notice(NoticeTone.WARNING, "Finish or cancel the open sale first.")
+      return
+    }
+    when (val result = kioskQueue.take(entry)) {
+      is PosKioskTake.Taken -> {
+        val sale = result.taken.sale
+        startCheckout(PosOpenedSale(sale.orderId, null, null, null, sale.totalCents, sale.dueCents, emptyList()))
+        register?.let { store.savePendingSale(it.id, PendingSale(sale.orderId, sale.totalCents, nowMs())) }
+      }
+      is PosKioskTake.Refused -> toast = Notice(NoticeTone.ERROR, result.message)
     }
   }
 

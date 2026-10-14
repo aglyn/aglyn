@@ -131,6 +131,9 @@ internal class DeviceContext(
   override val api get() = services.api
   override val deviceStore get() = services.prefs
 
+  // This tablet's own card reader, for a kiosk's Tap to Pay. A device screen holds no site, so nothing here is scoped to one.
+  override val peripherals get() = services.peripherals
+
   override fun navigate(screenId: String, params: NativeParams) = Unit
 
   override fun back() = leave()
