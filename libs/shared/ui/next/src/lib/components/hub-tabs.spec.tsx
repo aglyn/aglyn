@@ -252,3 +252,78 @@ describe('HubSections for a page that needs the whole row (AGL-3332)', () => {
     expect([...bodyCell.classList].sort()).not.toEqual([...(cellOf(strip) as HTMLElement).classList].sort())
   })
 })
+
+/*
+ * Rail groups (AGL-3713): a run of sections naming one group is set apart by
+ * a divider and the group's name as an overline, the way MUI divides a
+ * list's sections — and the dividers are never tabs, so the tab list, the
+ * selection and the keyboard's roving focus see exactly the sections.
+ */
+describe('HubSections with groups (AGL-3713)', () => {
+  const GROUPED: readonly HubSection[] = [
+    { href: '/acme/crm/contacts', label: 'Contacts' },
+    { href: '/acme/crm/leads', label: 'Leads' },
+    { href: '/acme/crm/payments', label: 'Payments', group: 'Settings' },
+    { href: '/acme/crm/taxes', label: 'Taxes', group: 'Settings' },
+    { href: '/acme/crm/delete', label: 'Delete', group: 'Danger zone' },
+  ]
+
+  it('draws a divider and the group’s name where each group starts, on a desktop', () => {
+    const { container } = renderRail(GROUPED, 'desktop')
+    const starts = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-hub-section-group]'),
+    )
+    expect(starts.map((start) => start.dataset['hubSectionGroup'])).toEqual([
+      'Settings',
+      'Danger zone',
+    ])
+    for (const start of starts) {
+      expect(start.querySelector('.MuiDivider-root')).not.toBeNull()
+      expect(start.getAttribute('role')).toBe('presentation')
+    }
+    expect(screen.getByText('Settings').className).toContain('MuiTypography-overline')
+    expect(screen.getByText('Danger zone')).toBeTruthy()
+  })
+
+  it('keeps every section a tab, and nothing else one', () => {
+    renderRail(GROUPED, 'desktop')
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Contacts',
+      'Leads',
+      'Payments',
+      'Taxes',
+      'Delete',
+    ])
+    // The section being read is still the selected one.
+    expect(
+      screen.getByRole('tab', { name: 'Contacts' }).getAttribute('aria-selected'),
+    ).toBe('true')
+  })
+
+  it('draws an upright divider and no words in the stacked strip', () => {
+    const { container } = renderRail(GROUPED, 'phone')
+    expect(container.querySelectorAll('[data-hub-section-group]')).toHaveLength(0)
+    expect(screen.queryByText('Settings')).toBeNull()
+    expect(container.querySelectorAll('.MuiDivider-vertical')).toHaveLength(2)
+  })
+
+  it('names a first section’s group without a divider above it', () => {
+    const { container } = renderRail(
+      [
+        { href: '/acme/crm/contacts', label: 'Contacts', group: 'People' },
+        { href: '/acme/crm/leads', label: 'Leads', group: 'People' },
+      ],
+      'desktop',
+    )
+    const starts = container.querySelectorAll<HTMLElement>('[data-hub-section-group]')
+    expect(starts).toHaveLength(1)
+    expect(starts[0]?.querySelector('.MuiDivider-root')).toBeNull()
+    expect(screen.getByText('People')).toBeTruthy()
+  })
+
+  it('draws a rail that names no group exactly as before', () => {
+    const { container } = renderRail(SECTIONS, 'desktop')
+    expect(container.querySelectorAll('[data-hub-section-group]')).toHaveLength(0)
+    expect(container.querySelectorAll('.MuiDivider-root')).toHaveLength(0)
+  })
+})

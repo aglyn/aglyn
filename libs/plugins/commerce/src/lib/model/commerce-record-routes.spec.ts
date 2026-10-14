@@ -60,7 +60,13 @@ describe('the commerce record routes', () => {
 
   it('answers the store settings, where payments, shipping and tax are set (AGL-3676)', () => {
     expect(pluginRecordRoute('store-settings')?.pluginId).toBe('commerce')
-    expect(pluginRecordListHref('store-settings', SITE)).toBe('/acme/hosts/shop/products/settings')
+    // A page each since AGL-3713: the list is Payments, a record its page.
+    expect(pluginRecordListHref('store-settings', SITE)).toBe('/acme/hosts/shop/products/payments')
+    expect(pluginRecordHref('store-settings', SITE, 'shipping')).toBe('/acme/hosts/shop/products/shipping')
+    expect(pluginRecordHref('store-settings', SITE, 'taxes')).toBe('/acme/hosts/shop/products/taxes')
+    // An id that names no settings page opens the list, not a 404.
+    expect(pluginRecordHref('store-settings', SITE, 'nope')).toBe('/acme/hosts/shop/products/payments')
+    expect(pluginRecordHref('store-settings', SITE, 'toString')).toBe('/acme/hosts/shop/products/payments')
     expect(pluginRecordListHref('store-settings', ORG)).toBeNull()
   })
 

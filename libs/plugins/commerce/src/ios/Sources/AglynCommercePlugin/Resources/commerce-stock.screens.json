@@ -1,0 +1,701 @@
+{
+  "$comment": "The Commerce plugin's stock movements, natively: the ledger of every change to a tracked count (newest first, 100 at a time), narrowed by reason, product, location or order, read from the store's inventoryAdjustments as the console reads them. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.stockMovements",
+      "title": "Stock movements",
+      "label": "Stock movements",
+      "subtitle": "Every change to a tracked count, with the reason",
+      "icon": "arrow.up.arrow.down|swap_horiz",
+      "scope": "site",
+      "order": 45,
+      "load": {
+        "movements": {
+          "query": {
+            "collection": "hosts/{site.id}/inventoryAdjustments",
+            "limit": 100,
+            "orderBy": "atMs desc"
+          }
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 500
+          }
+        }
+      },
+      "constants": {
+        "reasons": [
+          {
+            "id": "sale",
+            "label": "Sale"
+          },
+          {
+            "id": "refund",
+            "label": "Refund return"
+          },
+          {
+            "id": "restock",
+            "label": "Restock"
+          },
+          {
+            "id": "correction",
+            "label": "Correction"
+          },
+          {
+            "id": "damage",
+            "label": "Damaged"
+          },
+          {
+            "id": "cancellation",
+            "label": "Order canceled"
+          },
+          {
+            "id": "sync",
+            "label": "Count synced"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "links",
+          "id": "filters",
+          "items": [
+            {
+              "title": "Sale",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.stockMovementsReason",
+              "params": {
+                "reason": "sale"
+              }
+            },
+            {
+              "title": "Refund return",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.stockMovementsReason",
+              "params": {
+                "reason": "refund"
+              }
+            },
+            {
+              "title": "Restock",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.stockMovementsReason",
+              "params": {
+                "reason": "restock"
+              }
+            },
+            {
+              "title": "Correction",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.stockMovementsReason",
+              "params": {
+                "reason": "correction"
+              }
+            },
+            {
+              "title": "Damaged",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.stockMovementsReason",
+              "params": {
+                "reason": "damage"
+              }
+            },
+            {
+              "title": "Order canceled",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.stockMovementsReason",
+              "params": {
+                "reason": "cancellation"
+              }
+            },
+            {
+              "title": "Count synced",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.stockMovementsReason",
+              "params": {
+                "reason": "sync"
+              }
+            },
+            {
+              "title": "By product",
+              "icon": "shippingbox|inventory_2",
+              "screen": "commerce.stockMovementsProducts"
+            },
+            {
+              "title": "By location",
+              "icon": "mappin.and.ellipse|location_on",
+              "screen": "commerce.stockMovementsLocations"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "byOrder",
+          "items": [
+            {
+              "id": "order",
+              "label": "Find an order’s movements",
+              "icon": "magnifyingglass|search",
+              "prompt": [
+                {
+                  "key": "orderId",
+                  "label": "Order id",
+                  "kind": "text",
+                  "required": true,
+                  "help": "The id from the order’s address, matched whole."
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.stockMovementsOrder",
+                "params": {
+                  "orderId": "{form.orderId}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "movements",
+          "title": "Latest 100 movements",
+          "items": "data.movements.items",
+          "primary": "{data.products.items[$id=item.productId].name|item.productId} {item.variantId}",
+          "secondary": "{const.reasons[id=item.reason].label|item.reason} · {item.atMs:datetime}",
+          "trailing": "{item.delta}",
+          "icon": "arrow.up.arrow.down|swap_horiz",
+          "badges": [
+            {
+              "text": "Added",
+              "tone": "success",
+              "when": "item.delta > 0"
+            },
+            {
+              "text": "Removed",
+              "tone": "error",
+              "when": "item.delta < 0"
+            },
+            {
+              "text": "Only {item.appliedDelta} applied",
+              "tone": "warning",
+              "when": "item.appliedDelta != @item.delta && item.appliedDelta >= 0 || item.appliedDelta != @item.delta && item.appliedDelta < 0"
+            },
+            {
+              "text": "Order {item.orderId}",
+              "tone": "neutral",
+              "when": "item.orderId"
+            },
+            {
+              "text": "At {item.locationId}",
+              "tone": "neutral",
+              "when": "item.locationId"
+            },
+            {
+              "text": "Counted by {item.source}",
+              "tone": "neutral",
+              "when": "item.source"
+            }
+          ],
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
+        }
+      ]
+    },
+    {
+      "id": "commerce.stockMovementsReason",
+      "title": "{const.reasons[id=params.reason].label|'Stock movements'}",
+      "label": "Stock movements",
+      "icon": "arrow.up.arrow.down|swap_horiz",
+      "scope": "site",
+      "load": {
+        "movements": {
+          "query": {
+            "collection": "hosts/{site.id}/inventoryAdjustments",
+            "limit": 100,
+            "orderBy": "atMs desc",
+            "where": [
+              [
+                "reason",
+                "==",
+                "{params.reason}"
+              ]
+            ]
+          }
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 500
+          }
+        }
+      },
+      "constants": {
+        "reasons": [
+          {
+            "id": "sale",
+            "label": "Sale"
+          },
+          {
+            "id": "refund",
+            "label": "Refund return"
+          },
+          {
+            "id": "restock",
+            "label": "Restock"
+          },
+          {
+            "id": "correction",
+            "label": "Correction"
+          },
+          {
+            "id": "damage",
+            "label": "Damaged"
+          },
+          {
+            "id": "cancellation",
+            "label": "Order canceled"
+          },
+          {
+            "id": "sync",
+            "label": "Count synced"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "movements",
+          "title": "Movements",
+          "items": "data.movements.items",
+          "primary": "{data.products.items[$id=item.productId].name|item.productId} {item.variantId}",
+          "secondary": "{const.reasons[id=item.reason].label|item.reason} · {item.atMs:datetime}",
+          "trailing": "{item.delta}",
+          "icon": "arrow.up.arrow.down|swap_horiz",
+          "badges": [
+            {
+              "text": "Added",
+              "tone": "success",
+              "when": "item.delta > 0"
+            },
+            {
+              "text": "Removed",
+              "tone": "error",
+              "when": "item.delta < 0"
+            },
+            {
+              "text": "Only {item.appliedDelta} applied",
+              "tone": "warning",
+              "when": "item.appliedDelta != @item.delta && item.appliedDelta >= 0 || item.appliedDelta != @item.delta && item.appliedDelta < 0"
+            },
+            {
+              "text": "Order {item.orderId}",
+              "tone": "neutral",
+              "when": "item.orderId"
+            },
+            {
+              "text": "At {item.locationId}",
+              "tone": "neutral",
+              "when": "item.locationId"
+            },
+            {
+              "text": "Counted by {item.source}",
+              "tone": "neutral",
+              "when": "item.source"
+            }
+          ],
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
+        }
+      ]
+    },
+    {
+      "id": "commerce.stockMovementsProduct",
+      "title": "Stock movements",
+      "label": "Stock movements",
+      "icon": "arrow.up.arrow.down|swap_horiz",
+      "scope": "site",
+      "load": {
+        "movements": {
+          "query": {
+            "collection": "hosts/{site.id}/inventoryAdjustments",
+            "limit": 100,
+            "orderBy": "atMs desc",
+            "where": [
+              [
+                "productId",
+                "==",
+                "{params.productId}"
+              ]
+            ]
+          }
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 500
+          }
+        }
+      },
+      "constants": {
+        "reasons": [
+          {
+            "id": "sale",
+            "label": "Sale"
+          },
+          {
+            "id": "refund",
+            "label": "Refund return"
+          },
+          {
+            "id": "restock",
+            "label": "Restock"
+          },
+          {
+            "id": "correction",
+            "label": "Correction"
+          },
+          {
+            "id": "damage",
+            "label": "Damaged"
+          },
+          {
+            "id": "cancellation",
+            "label": "Order canceled"
+          },
+          {
+            "id": "sync",
+            "label": "Count synced"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "movements",
+          "title": "Movements",
+          "items": "data.movements.items",
+          "primary": "{data.products.items[$id=item.productId].name|item.productId} {item.variantId}",
+          "secondary": "{const.reasons[id=item.reason].label|item.reason} · {item.atMs:datetime}",
+          "trailing": "{item.delta}",
+          "icon": "arrow.up.arrow.down|swap_horiz",
+          "badges": [
+            {
+              "text": "Added",
+              "tone": "success",
+              "when": "item.delta > 0"
+            },
+            {
+              "text": "Removed",
+              "tone": "error",
+              "when": "item.delta < 0"
+            },
+            {
+              "text": "Only {item.appliedDelta} applied",
+              "tone": "warning",
+              "when": "item.appliedDelta != @item.delta && item.appliedDelta >= 0 || item.appliedDelta != @item.delta && item.appliedDelta < 0"
+            },
+            {
+              "text": "Order {item.orderId}",
+              "tone": "neutral",
+              "when": "item.orderId"
+            },
+            {
+              "text": "At {item.locationId}",
+              "tone": "neutral",
+              "when": "item.locationId"
+            },
+            {
+              "text": "Counted by {item.source}",
+              "tone": "neutral",
+              "when": "item.source"
+            }
+          ],
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
+        }
+      ]
+    },
+    {
+      "id": "commerce.stockMovementsOrder",
+      "title": "Order {params.orderId}",
+      "label": "Stock movements",
+      "icon": "arrow.up.arrow.down|swap_horiz",
+      "scope": "site",
+      "load": {
+        "movements": {
+          "query": {
+            "collection": "hosts/{site.id}/inventoryAdjustments",
+            "limit": 100,
+            "orderBy": "atMs desc",
+            "where": [
+              [
+                "orderId",
+                "==",
+                "{params.orderId}"
+              ]
+            ]
+          }
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 500
+          }
+        }
+      },
+      "constants": {
+        "reasons": [
+          {
+            "id": "sale",
+            "label": "Sale"
+          },
+          {
+            "id": "refund",
+            "label": "Refund return"
+          },
+          {
+            "id": "restock",
+            "label": "Restock"
+          },
+          {
+            "id": "correction",
+            "label": "Correction"
+          },
+          {
+            "id": "damage",
+            "label": "Damaged"
+          },
+          {
+            "id": "cancellation",
+            "label": "Order canceled"
+          },
+          {
+            "id": "sync",
+            "label": "Count synced"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "movements",
+          "title": "Movements",
+          "items": "data.movements.items",
+          "primary": "{data.products.items[$id=item.productId].name|item.productId} {item.variantId}",
+          "secondary": "{const.reasons[id=item.reason].label|item.reason} · {item.atMs:datetime}",
+          "trailing": "{item.delta}",
+          "icon": "arrow.up.arrow.down|swap_horiz",
+          "badges": [
+            {
+              "text": "Added",
+              "tone": "success",
+              "when": "item.delta > 0"
+            },
+            {
+              "text": "Removed",
+              "tone": "error",
+              "when": "item.delta < 0"
+            },
+            {
+              "text": "Only {item.appliedDelta} applied",
+              "tone": "warning",
+              "when": "item.appliedDelta != @item.delta && item.appliedDelta >= 0 || item.appliedDelta != @item.delta && item.appliedDelta < 0"
+            },
+            {
+              "text": "Order {item.orderId}",
+              "tone": "neutral",
+              "when": "item.orderId"
+            },
+            {
+              "text": "At {item.locationId}",
+              "tone": "neutral",
+              "when": "item.locationId"
+            },
+            {
+              "text": "Counted by {item.source}",
+              "tone": "neutral",
+              "when": "item.source"
+            }
+          ],
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
+        }
+      ]
+    },
+    {
+      "id": "commerce.stockMovementsLocation",
+      "title": "Stock movements",
+      "label": "Stock movements",
+      "icon": "arrow.up.arrow.down|swap_horiz",
+      "scope": "site",
+      "load": {
+        "movements": {
+          "query": {
+            "collection": "hosts/{site.id}/inventoryAdjustments",
+            "limit": 100,
+            "orderBy": "atMs desc",
+            "where": [
+              [
+                "locationId",
+                "==",
+                "{params.locationId}"
+              ]
+            ]
+          }
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 500
+          }
+        }
+      },
+      "constants": {
+        "reasons": [
+          {
+            "id": "sale",
+            "label": "Sale"
+          },
+          {
+            "id": "refund",
+            "label": "Refund return"
+          },
+          {
+            "id": "restock",
+            "label": "Restock"
+          },
+          {
+            "id": "correction",
+            "label": "Correction"
+          },
+          {
+            "id": "damage",
+            "label": "Damaged"
+          },
+          {
+            "id": "cancellation",
+            "label": "Order canceled"
+          },
+          {
+            "id": "sync",
+            "label": "Count synced"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "movements",
+          "title": "Movements",
+          "items": "data.movements.items",
+          "primary": "{data.products.items[$id=item.productId].name|item.productId} {item.variantId}",
+          "secondary": "{const.reasons[id=item.reason].label|item.reason} · {item.atMs:datetime}",
+          "trailing": "{item.delta}",
+          "icon": "arrow.up.arrow.down|swap_horiz",
+          "badges": [
+            {
+              "text": "Added",
+              "tone": "success",
+              "when": "item.delta > 0"
+            },
+            {
+              "text": "Removed",
+              "tone": "error",
+              "when": "item.delta < 0"
+            },
+            {
+              "text": "Only {item.appliedDelta} applied",
+              "tone": "warning",
+              "when": "item.appliedDelta != @item.delta && item.appliedDelta >= 0 || item.appliedDelta != @item.delta && item.appliedDelta < 0"
+            },
+            {
+              "text": "Order {item.orderId}",
+              "tone": "neutral",
+              "when": "item.orderId"
+            },
+            {
+              "text": "At {item.locationId}",
+              "tone": "neutral",
+              "when": "item.locationId"
+            },
+            {
+              "text": "Counted by {item.source}",
+              "tone": "neutral",
+              "when": "item.source"
+            }
+          ],
+          "empty": "No stock movements here yet. Sales, returns, cancellations and hand adjustments all land in this list.",
+          "load": "movements"
+        }
+      ]
+    },
+    {
+      "id": "commerce.stockMovementsProducts",
+      "title": "Movements by product",
+      "label": "By product",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "load": {
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 500,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "products",
+          "title": "Products",
+          "items": "data.products.items",
+          "primary": "{item.name|item.$id}",
+          "icon": "shippingbox|inventory_2",
+          "count": false,
+          "open": {
+            "screen": "commerce.stockMovementsProduct",
+            "params": {
+              "productId": "{item.$id}"
+            }
+          },
+          "empty": "No products yet."
+        }
+      ]
+    },
+    {
+      "id": "commerce.stockMovementsLocations",
+      "title": "Movements by location",
+      "label": "By location",
+      "icon": "mappin.and.ellipse|location_on",
+      "scope": "site",
+      "load": {
+        "locations": {
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "limit": 25,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "locations",
+          "title": "Locations",
+          "items": "data.locations.items",
+          "primary": "{item.name|item.$id}",
+          "icon": "mappin.and.ellipse|location_on",
+          "count": false,
+          "open": {
+            "screen": "commerce.stockMovementsLocation",
+            "params": {
+              "locationId": "{item.$id}"
+            }
+          },
+          "empty": "No locations yet."
+        }
+      ]
+    }
+  ]
+}

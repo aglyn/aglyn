@@ -105,6 +105,9 @@ private data class Selection(val screen: String, val params: NativeParams)
 
 private class Pending(val action: ActionSpec, val scope: JsonElement, val reauthMessage: String? = null)
 
+/** An export the person asked for, resolved against the screen: what to export, narrowed how, and the file's name. */
+private class ExportRequest(val resource: String, val title: String, val scope: Map<String, Any?>, val fileStem: String, val filter: Map<String, Any?>?)
+
 /**
  * Draws a console screen from its spec: sections in cards, list and detail
  * side by side on a wide window when the spec asks, pull to refresh,
@@ -174,6 +177,7 @@ private fun SpecBody(
   var reauthing by remember { mutableStateOf<Pending?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
+  var exporting by remember { mutableStateOf<ExportRequest?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
@@ -194,6 +198,19 @@ private fun SpecBody(
     action.copy?.let {
       clipboard.setText(AnnotatedString(ScreenValues.render(it, actionScope)))
       show("Copied", StatusTone.SUCCESS)
+      return
+    }
+    action.export?.let { spec ->
+      @Suppress("UNCHECKED_CAST")
+      fun plainMap(key: String) = spec.obj(key)?.let { ScreenModel.plain(ScreenValues.resolveBody(it, actionScope)) } as? Map<String, Any?>
+      val resource = spec.str("resource").orEmpty()
+      exporting = ExportRequest(
+        resource = resource,
+        title = ScreenValues.render(spec.str("title") ?: action.label, actionScope),
+        scope = plainMap("scope") ?: mapOf("kind" to "all"),
+        fileStem = ScreenValues.render(spec.str("fileStem") ?: resource, actionScope),
+        filter = plainMap("filter"),
+      )
       return
     }
     action.besigner?.let {
@@ -237,9 +254,11 @@ private fun SpecBody(
         } else {
           outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
         }
-        action.reveal?.let { path -> ScreenValues.lookup(path, outcome.response ?: JsonNull)?.let { revealed = action.label to ScreenValues.text(it) } }
+        // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
+        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = action.label to ScreenValues.text(it) } }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
+        model.followUp?.let { follow -> model.followUp = null; prompting = Pending(follow.action, follow.scope) }
         if (action.back) session.back() else if (action.reload) model.load()
       }
     }
@@ -247,7 +266,7 @@ private fun SpecBody(
 
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
-      action.inputs.isNotEmpty() -> prompting = Pending(action, actionScope)
+      action.asksInputs -> prompting = Pending(action, actionScope)
       action.asksConfirmation && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
@@ -377,6 +396,14 @@ private fun SpecBody(
       )
     }
   }
+  exporting?.let { request ->
+    com.aglyn.pluginhost.TransferExportDialog(
+      plugin, request.resource, request.title, plugin.hostId, request.scope, request.fileStem, request.filter,
+    ) { message ->
+      exporting = null
+      message?.let { show(it, StatusTone.SUCCESS) }
+    }
+  }
   revealed?.let { (title, value) ->
     ActionDialog(
       title = title,
@@ -392,7 +419,7 @@ private fun SpecBody(
 @Composable
 private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
   val values = remember(pending) { mutableStateMapOf<String, FieldValue>() }
-  val inputs = pending.action.inputs
+  val inputs = pending.action.inputsFor(pending.scope)
   fun filled(): JsonElement = ScreenContext.with(
     pending.scope, "form",
     JsonObject(inputs.associate { it.key to fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)) }),
@@ -407,7 +434,7 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
     destructive = pending.action.destructive,
     confirmEnabled = !missing,
     dismissLabel = "Cancel",
-    onConfirm = { onRun(filled()) },
+    onConfirm = { onRun(visibleOnly(filled(), inputs)) },
     onDismiss = onDismiss,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -442,6 +469,8 @@ private fun Block(
       val contributions = ScreenCatalog.zone(name).filter { ScreenValues.condition(it.requires, context) }
       // Native widgets other plugins put in the same slot sit beside the spec screens.
       val widgets = plugin.slotWidgets(name)
+      // `empty`: what to say when no plugin has put anything in the zone.
+      if (contributions.isEmpty() && widgets.isEmpty()) block.string("empty")?.let { NoticeBanner(ScreenValues.render(it, context), StatusTone.INFO) }
       if (contributions.isNotEmpty() || widgets.isNotEmpty()) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
           if (contributions.isNotEmpty()) {
@@ -724,10 +753,20 @@ internal sealed interface FieldValue {
 
 internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when {
   field.kind == "toggle" && value is FieldValue.Flag -> JsonPrimitive(value.value)
-  field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
+  field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(if (field.integer) kotlin.math.round(it) else it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
   else -> if (field.kind == "toggle") JsonPrimitive(false) else JsonNull
+}
+
+/**
+ * The scope a form or prompt runs its action with: `form` holds only the fields the person could see (their `when`
+ * holds), so a field the screen hid is never sent, as a console form that never drew it would not send it.
+ */
+internal fun visibleOnly(filled: JsonElement, fields: List<FieldSpec>): JsonElement {
+  val all = (filled as? JsonObject)?.get("form") as? JsonObject ?: return filled
+  val keep = fields.filter { ScreenValues.condition(it.whenCondition, filled) }.map { it.key }.toSet()
+  return ScreenContext.with(filled, "form", JsonObject(all.filterKeys { it in keep }))
 }
 
 internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
@@ -748,6 +787,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
       "toggle" -> SwitchRow(field.label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
+      "hours" -> HoursInput(field, text) { onChange(FieldValue.Text(it)) }
       "select" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }
@@ -779,7 +819,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
           keyboardType = when (field.kind) {
             "email" -> KeyboardType.Email
             "url" -> KeyboardType.Uri
-            "number" -> KeyboardType.Decimal
+            "number" -> if (field.integer) KeyboardType.Number else KeyboardType.Decimal
             "password" -> KeyboardType.Password
             else -> KeyboardType.Text
           },
@@ -795,7 +835,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
 
 @Composable
 private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, submit: (ActionSpec, JsonElement) -> Unit) {
-  val fields = block.raw.arr("fields").mapNotNull { FieldSpec.parse(it) }
+  val fields = FieldSpec.parseAll(block.raw.arr("fields"), context)
   val base = block.string("object")?.let { ScreenValues.lookup(it, context) }
   val scope = base?.let { ScreenContext.withItem(context, it) } ?: context
   // Re-seeded whenever the loaded data changes, as after a save.
@@ -808,13 +848,92 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
     }
     ActionSpec.parse(block["submit"])?.takeIf { ScreenValues.condition(it.whenCondition, scope) }?.let { action ->
       FilledTonalButton(
-        onClick = { submit(action, filled) },
+        onClick = { submit(action, visibleOnly(filled, fields)) },
         enabled = !busy && !missing,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
         if (busy) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)
         Text(ScreenValues.render(action.label, scope), maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
+    }
+  }
+}
+
+/**
+ * A week of hours chosen by touch, as the console's picker does: a switch for each day and, for an open day, a From and a
+ * To time from a menu, with another interval on request. It reads and writes the stored text lines (`Mo-Fr 09:00-17:00`),
+ * so nobody types them.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HoursInput(field: FieldSpec, text: String, onChange: (String) -> Unit) {
+  val noun = field.hours.str("noun") ?: "hours"
+  val sameDay = field.hours.isTrue("sameDay")
+  val defaultStart = ScreenValues.number(field.hours.obj("start"))?.toInt() ?: (9 * 60)
+  val defaultEnd = ScreenValues.number(field.hours.obj("end"))?.toInt() ?: (17 * 60)
+  val (week, unread) = remember(text) { WeeklyHours.fromText(text) }
+  fun set(day: Int, intervals: List<HoursInterval>) = onChange(WeeklyHours.toText(week.mapIndexed { index, existing -> if (index == day) intervals else existing }))
+
+  @Composable
+  fun TimeMenu(label: String, minutes: Int, after: Int?, modifier: Modifier, onPick: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = (if (minutes in WeeklyHours.times) WeeklyHours.times else (WeeklyHours.times + minutes).sorted())
+      .filter { after == null || it > after || it == minutes }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
+      OutlinedTextField(
+        value = WeeklyHours.label(minutes),
+        onValueChange = {},
+        readOnly = true,
+        label = { Text(label) },
+        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+        modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+      )
+      ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        for (option in options) DropdownMenuItem(text = { Text(WeeklyHours.label(option)) }, onClick = { onPick(option); expanded = false })
+      }
+    }
+  }
+
+  Column(Modifier.fillMaxWidth().testTag("hours-${field.key}"), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+    Text(field.label, style = MaterialTheme.typography.titleSmall)
+    for ((index, name, _) in WeeklyHours.days) {
+      val intervals = week[index]
+      SwitchRow(
+        name, intervals.isNotEmpty(),
+        { open -> set(index, if (open) listOf(HoursInterval(defaultStart, defaultEnd)) else emptyList()) },
+        modifier = Modifier.testTag("hours-day-$index"),
+      )
+      intervals.forEachIndexed { position, interval ->
+        Row(Modifier.fillMaxWidth().padding(start = space(2f)), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          TimeMenu("From", interval.start, null, Modifier.weight(1f)) { picked ->
+            var next = interval.copy(start = picked)
+            // A From moved past its To drags the To along, keeping the length.
+            if (sameDay && next.end <= next.start) next = next.copy(end = minOf(next.start + maxOf(interval.end - interval.start, 60), WeeklyHours.LAST_MINUTE))
+            set(index, intervals.mapIndexed { i, existing -> if (i == position) next else existing })
+          }
+          TimeMenu("To", interval.end, if (sameDay) interval.start else null, Modifier.weight(1f)) { picked ->
+            set(index, intervals.mapIndexed { i, existing -> if (i == position) interval.copy(end = picked) else existing })
+          }
+          TextButton(onClick = { set(index, intervals.filterIndexed { i, _ -> i != position }) }) { Text("Remove") }
+        }
+      }
+      if (intervals.isNotEmpty()) {
+        TextButton(
+          onClick = {
+            // A second interval starts an hour after the first ends, the usual shape of a lunch break.
+            val start = minOf(intervals.last().end + 60, 22 * 60)
+            set(index, intervals + HoursInterval(start, minOf(start + 4 * 60, WeeklyHours.LAST_MINUTE)))
+          },
+          modifier = Modifier.padding(start = space(1f)),
+        ) { Text("Add $noun") }
+      }
+    }
+    if (unread.isNotEmpty()) {
+      Text(
+        "Some saved hours could not be read (line ${unread.joinToString(", ")}) and are not shown. Set the days again here and save to replace them.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+      )
     }
   }
 }

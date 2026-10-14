@@ -172,11 +172,11 @@ export function usePosPairing({ user, hostId, onError }: UsePosPairingOptions): 
 export const POS_REGISTERS_ANCHOR = 'pos-registers'
 
 /**
- * Where a register is created — the POS registers card, under Products →
- * Settings — from the register page's own console path (`…/pos`). Undefined
- * when that path is not the register's.
+ * Where a register is created — the POS registers card, on Products → Point
+ * of sale (`…/products/pos`, AGL-3713) — from the register page's own console
+ * path (`…/pos`). Undefined when that path is not the register's.
  */
 export function posRegistersSettingsHref(posBasePath: string | undefined): string | undefined {
   if (!posBasePath || !/\/pos\/?$/.test(posBasePath)) return undefined
-  return `${posBasePath.replace(/\/pos\/?$/, '/products/settings')}#${POS_REGISTERS_ANCHOR}`
+  return `${posBasePath.replace(/\/pos\/?$/, '/products/pos')}#${POS_REGISTERS_ANCHOR}`
 }

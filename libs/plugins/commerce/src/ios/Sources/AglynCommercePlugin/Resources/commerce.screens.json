@@ -1,6 +1,576 @@
 {
-  "$comment": "The Commerce plugin's native screens, drawn by the shared spec renderer: Commerce settings, the store's settings hub, with the commerceSettings zone other plugins put their cards in (tax services, shipping labels, fulfillment networks and the rest, each its own spec in its own plugin). Grammar: docs/mobile/native-architecture.md section 13.",
+  "$comment": "The Commerce plugin's hub screens, drawn by the shared spec renderer: Store (every area the console's Commerce page has), Promotions, and Commerce settings, the store's settings hub, with the commerceSettings zone other plugins put their cards in (tax services, shipping labels, fulfillment networks and the rest, each its own spec in its own plugin). Grammar: docs/mobile/native-architecture.md section 13.",
   "screens": [
+    {
+      "id": "commerce.manage",
+      "title": "Store",
+      "label": "Store",
+      "subtitle": "Catalog, orders, promotions, settings and reports",
+      "icon": "storefront|storefront",
+      "scope": "site",
+      "group": "site",
+      "order": 39,
+      "blocks": [
+        {
+          "type": "links",
+          "id": "catalog",
+          "title": "Catalog",
+          "items": [
+            {
+              "title": "Products",
+              "icon": "inventory_2|inventory_2",
+              "screen": "commerce.products",
+              "subtitle": "Add, edit and count stock"
+            },
+            {
+              "title": "Categories",
+              "icon": "category|category",
+              "screen": "commerce.categories",
+              "subtitle": "Group products"
+            },
+            {
+              "title": "Collections",
+              "icon": "view_agenda|view_agenda",
+              "screen": "commerce.collections",
+              "subtitle": "Hand-picked and smart collections"
+            },
+            {
+              "title": "Stock movements",
+              "icon": "swap_horiz|swap_horiz",
+              "screen": "commerce.stockMovements",
+              "subtitle": "Why a count changed"
+            },
+            {
+              "title": "Member updates",
+              "icon": "forum|forum",
+              "screen": "commerce.memberPosts",
+              "subtitle": "Posts only your subscribers can see"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "orders",
+          "title": "Orders",
+          "items": [
+            {
+              "title": "Orders",
+              "icon": "shopping_basket|shopping_basket",
+              "screen": "commerce.orders",
+              "subtitle": "Fulfill, refund and print"
+            },
+            {
+              "title": "Pickup & delivery",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.fulfillmentQueue",
+              "subtitle": "What to prepare, hand over and drive out"
+            },
+            {
+              "title": "Recovery & alerts",
+              "icon": "undo|undo",
+              "screen": "commerce.recovery",
+              "subtitle": "Checkouts shoppers left and sold-out alerts"
+            },
+            {
+              "title": "Returns",
+              "icon": "restore|restore",
+              "screen": "commerce.returns",
+              "subtitle": "Requests, receiving and refunds"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "sell",
+          "title": "Sell",
+          "items": [
+            {
+              "title": "Promotions",
+              "icon": "local_offer|local_offer",
+              "screen": "commerce.promotions",
+              "subtitle": "Discounts, coupons, gift cards and reviews"
+            },
+            {
+              "title": "Reservations",
+              "icon": "event|event",
+              "screen": "commerce.reservations",
+              "subtitle": "Resources and the stays booked against them"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "configure",
+          "title": "Settings",
+          "items": [
+            {
+              "title": "Commerce settings",
+              "icon": "settings|settings",
+              "screen": "commerce.settings",
+              "subtitle": "Payments, taxes, shipping and connected services"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "data",
+          "title": "Data",
+          "items": [
+            {
+              "title": "Export records",
+              "icon": "download|download",
+              "screen": "commerce.transfer",
+              "subtitle": "Products, orders, promotions and more as a file"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "reports",
+          "title": "Reports",
+          "items": [
+            {
+              "title": "Sales",
+              "icon": "insights|insights",
+              "screen": "commerce.sales",
+              "subtitle": "Sales and traffic"
+            },
+            {
+              "title": "Storefront sales tax",
+              "icon": "receipt_long|receipt_long",
+              "screen": "commerce.taxSummary",
+              "subtitle": "What your storefront collected, by how it was calculated"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.promotions",
+      "title": "Promotions",
+      "label": "Promotions",
+      "subtitle": "Discounts, coupons, gift cards and reviews",
+      "icon": "local_offer|local_offer",
+      "scope": "site",
+      "order": 38,
+      "blocks": [
+        {
+          "type": "links",
+          "id": "money",
+          "items": [
+            {
+              "title": "Discounts",
+              "icon": "tag|sell",
+              "screen": "commerce.discounts",
+              "subtitle": "Codes and automatic promotions"
+            },
+            {
+              "title": "Coupons",
+              "icon": "ticket|local_offer",
+              "screen": "commerce.coupons",
+              "subtitle": "Percent-off codes buyers enter at checkout"
+            },
+            {
+              "title": "Gift cards",
+              "icon": "gift|card_giftcard",
+              "screen": "commerce.giftCards",
+              "subtitle": "Issued cards and what is left on them"
+            },
+            {
+              "title": "Review moderation",
+              "icon": "star|star",
+              "screen": "commerce.reviews",
+              "subtitle": "Approve, hide and reply to reviews"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commercePromotions",
+          "title": "Rewards",
+          "footer": "Rewards programs and other money-off tools that plugins add."
+        }
+      ]
+    },
+    {
+      "id": "commerce.orderServices",
+      "title": "Order {data.order.number}",
+      "label": "More for this order",
+      "subtitle": "Pickup and delivery, returns, labels and connected services",
+      "icon": "extension|extension",
+      "scope": "site",
+      "constants": {
+        "pickup": [
+          {
+            "id": "preparing",
+            "label": "Preparing"
+          },
+          {
+            "id": "ready",
+            "label": "Ready for pickup"
+          },
+          {
+            "id": "picked_up",
+            "label": "Picked up"
+          }
+        ],
+        "delivery": [
+          {
+            "id": "scheduled",
+            "label": "Scheduled"
+          },
+          {
+            "id": "out_for_delivery",
+            "label": "Out for delivery"
+          },
+          {
+            "id": "delivered",
+            "label": "Delivered"
+          },
+          {
+            "id": "failed",
+            "label": "Delivery failed"
+          }
+        ],
+        "flags": [
+          {
+            "id": "price-changed",
+            "label": "A price changed after the register cached it; the sale kept the price it was rung at"
+          },
+          {
+            "id": "unknown-product",
+            "label": "A product was deleted before the sale synced; the line kept what the receipt printed"
+          },
+          {
+            "id": "tax-differs",
+            "label": "The tax rung differs from the store’s rate now; the sale kept the tax it collected"
+          },
+          {
+            "id": "totals-restated",
+            "label": "The register’s totals did not add up; the server restated them from the lines"
+          },
+          {
+            "id": "discount-over-limit",
+            "label": "The discount is above this register’s limit"
+          },
+          {
+            "id": "cash-short",
+            "label": "The cash recorded is less than the total"
+          },
+          {
+            "id": "stock-short",
+            "label": "Stock went short: more was sold than the shelf held"
+          },
+          {
+            "id": "shift-closed",
+            "label": "Rung in a shift that closed before the sale synced; its Z report does not include it"
+          },
+          {
+            "id": "no-shift",
+            "label": "Rung with no shift open, on a site that requires one"
+          },
+          {
+            "id": "unknown-register",
+            "label": "The register it was rung on no longer exists"
+          },
+          {
+            "id": "register-over-cap",
+            "label": "The register it was rung on is over the plan’s register limit"
+          },
+          {
+            "id": "late-sync",
+            "label": "Synced more than a day after it was rung"
+          },
+          {
+            "id": "clock-adjusted",
+            "label": "The device clock was off; the sale is dated when it synced"
+          },
+          {
+            "id": "cashier-unverified",
+            "label": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member"
+          }
+        ],
+        "returnStatuses": [
+          {
+            "id": "requested",
+            "label": "Requested"
+          },
+          {
+            "id": "approved",
+            "label": "Approved"
+          },
+          {
+            "id": "declined",
+            "label": "Declined"
+          },
+          {
+            "id": "received",
+            "label": "Received"
+          },
+          {
+            "id": "refunded",
+            "label": "Refunded"
+          },
+          {
+            "id": "closed",
+            "label": "Closed"
+          }
+        ]
+      },
+      "load": {
+        "order": {
+          "orderZone": "{params.orderId}"
+        },
+        "returns": {
+          "query": {
+            "collection": "hosts/{site.id}/returns",
+            "where": [
+              [
+                "orderId",
+                "==",
+                "{params.orderId}"
+              ]
+            ],
+            "limit": 50
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "offline",
+          "tone": "info",
+          "when": "data.order.offline",
+          "text": "Rung while the register was offline. Rung {data.order.offline.soldAtMs:datetime}, synced {data.order.offline.syncedAtMs:datetime}."
+        },
+        {
+          "type": "list",
+          "id": "offlineStock",
+          "when": "data.order.offline.stockConflicts.0",
+          "title": "Checks",
+          "items": "data.order.offline.stockConflicts",
+          "icon": "warning|warning",
+          "primary": "{item.shortUnits} of {item.requested}× {item.name} not in stock"
+        },
+        {
+          "type": "list",
+          "id": "offlineFlags",
+          "when": "data.order.offline.flags.0",
+          "items": "data.order.offline.flags",
+          "filter": "item != stock-short",
+          "icon": "warning|warning",
+          "primary": "{const.flags[id=item].label|item}"
+        },
+        {
+          "type": "fields",
+          "id": "pickup",
+          "when": "data.order.fulfillmentMethod == pickup && data.order.pickup",
+          "title": "Pickup",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.pickup[id=data.order.pickupStatus].label}",
+              "chip": true
+            },
+            {
+              "label": "Where",
+              "value": "{data.order.pickup.locationName} {data.order.pickup.address}"
+            },
+            {
+              "label": "Collected by",
+              "value": "{data.order.pickup.pickedUpBy}",
+              "when": "data.order.pickup.pickedUpBy"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "delivery",
+          "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery",
+          "title": "Local delivery",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.delivery[id=data.order.deliveryStatus].label}",
+              "chip": true
+            },
+            {
+              "label": "Window",
+              "value": "{data.order.localDelivery.windowLabel}",
+              "when": "data.order.localDelivery.windowLabel"
+            },
+            {
+              "label": "Zone",
+              "value": "{data.order.localDelivery.zoneName}",
+              "when": "data.order.localDelivery.zoneName"
+            },
+            {
+              "label": "Postal code",
+              "value": "{data.order.localDelivery.postalCode}",
+              "when": "data.order.localDelivery.postalCode"
+            },
+            {
+              "label": "Last attempt",
+              "value": "{data.order.localDelivery.failedReason}",
+              "when": "data.order.localDelivery.failedReason"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "outside",
+          "tone": "warning",
+          "when": "data.order.localDelivery.addressOutsideZone",
+          "text": "The address entered at payment is outside your delivery zones. Contact the buyer, or refund the delivery."
+        },
+        {
+          "type": "actions",
+          "id": "steps",
+          "items": [
+            {
+              "id": "ready",
+              "label": "Mark ready",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == pickup && data.order.pickup && data.order.status != cancelled,refunded,pending && data.order.pickupStatus == preparing",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "ready"
+              },
+              "success": "Marked ready — the buyer has been told"
+            },
+            {
+              "id": "pickedUp",
+              "label": "Picked up",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == pickup && data.order.pickup && data.order.status != cancelled,refunded,pending && data.order.pickupStatus == preparing,ready",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "picked_up"
+              },
+              "success": "Marked picked up"
+            },
+            {
+              "id": "notReady",
+              "label": "Not ready yet",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == pickup && data.order.pickup && data.order.status != cancelled,refunded,pending && data.order.pickupStatus == ready",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "preparing"
+              },
+              "success": "Back to preparing"
+            },
+            {
+              "id": "out",
+              "label": "Out for delivery",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery && data.order.status != cancelled,refunded,pending && data.order.deliveryStatus == scheduled,failed",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "out_for_delivery"
+              },
+              "success": "Out for delivery — the buyer has been told"
+            },
+            {
+              "id": "delivered",
+              "label": "Delivered",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery && data.order.status != cancelled,refunded,pending && data.order.deliveryStatus == scheduled,failed,out_for_delivery",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "delivered"
+              },
+              "success": "Marked delivered"
+            },
+            {
+              "id": "failed",
+              "label": "Couldn’t deliver",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery && data.order.status != cancelled,refunded,pending && data.order.deliveryStatus == out_for_delivery",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "delivery_failed",
+                "reason": {
+                  "$orNull": "{form.reason:take/200}"
+                }
+              },
+              "success": "Delivery marked failed",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "What happened (optional)",
+                  "kind": "text"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "returns",
+          "title": "Returns",
+          "items": "data.returns.items",
+          "empty": "No returns on this order.",
+          "icon": "restore|restore",
+          "primary": "{item.lines.*.name}",
+          "secondary": "{item.createdAtMs:date}",
+          "badges": [
+            {
+              "text": "{const.returnStatuses[id=item.status].label|item.status}",
+              "tone": "neutral"
+            }
+          ],
+          "open": {
+            "screen": "commerce.return",
+            "params": {
+              "returnId": "{item.$id}"
+            }
+          }
+        },
+        {
+          "type": "actions",
+          "id": "startReturn",
+          "when": "data.order.status == paid,partially_fulfilled,fulfilled,delivered",
+          "items": [
+            {
+              "id": "start",
+              "label": "Start return",
+              "icon": "plus|add",
+              "navigate": {
+                "screen": "commerce.startReturn",
+                "params": {
+                  "orderId": "{params.orderId}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "orderDetail",
+          "params": {
+            "orderId": "{params.orderId}"
+          },
+          "title": "Services",
+          "footer": "Shipping labels, couriers, fulfillment networks and the other services you have connected, for this order.",
+          "empty": "No service is connected for this order. Connect shipping, couriers and other services in Commerce settings."
+        }
+      ]
+    },
     {
       "id": "commerce.settings",
       "title": "Commerce settings",
@@ -12,11 +582,217 @@
       "order": 40,
       "blocks": [
         {
+          "type": "links",
+          "id": "store",
+          "title": "Store",
+          "items": [
+            {
+              "title": "Payments",
+              "icon": "payments|payments",
+              "screen": "commerce.payments",
+              "subtitle": "Your Stripe account and the fee on each sale"
+            },
+            {
+              "title": "Payment methods",
+              "icon": "credit_card|credit_card",
+              "screen": "commerce.paymentMethods",
+              "subtitle": "What shoppers may pay with"
+            },
+            {
+              "title": "Store settings",
+              "icon": "storefront|storefront",
+              "screen": "commerce.storeSettings",
+              "subtitle": "Templates, checkout and receipts"
+            },
+            {
+              "title": "Return settings",
+              "icon": "settings|settings",
+              "screen": "commerce.returnSettings",
+              "subtitle": "Online requests, the window and which products"
+            },
+            {
+              "title": "Customer notifications",
+              "icon": "mail|mail",
+              "screen": "commerce.notifications",
+              "subtitle": "The emails customers get about their orders"
+            },
+            {
+              "title": "Reviews",
+              "icon": "star|star",
+              "screen": "commerce.reviewSettings",
+              "subtitle": "Who may review, and the request email"
+            },
+            {
+              "title": "Taxes",
+              "icon": "percent|percent",
+              "screen": "commerce.tax",
+              "subtitle": "Sales tax rates, lodging and service tax"
+            },
+            {
+              "title": "Inventory locations",
+              "icon": "location_on|location_on",
+              "screen": "commerce.locations",
+              "subtitle": "Stock per warehouse or storefront, and pickup"
+            },
+            {
+              "title": "Shipping",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.shipping",
+              "subtitle": "Zones, rates and local pickup"
+            },
+            {
+              "title": "Local delivery",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.localDelivery",
+              "subtitle": "Deliver orders yourself"
+            },
+            {
+              "title": "Dropship suppliers",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.suppliers",
+              "subtitle": "Route paid orders to a fulfillment partner"
+            },
+            {
+              "title": "ShipStation",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.shipstation",
+              "subtitle": "Import orders and take shipments back"
+            },
+            {
+              "title": "ShippingEasy",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.shippingeasy",
+              "subtitle": "Send orders and take shipments back"
+            },
+            {
+              "title": "Order webhooks",
+              "icon": "webhook|webhook",
+              "screen": "commerce.orderWebhooks",
+              "subtitle": "Order and return events sent to your own systems"
+            }
+          ]
+        },
+        {
           "type": "zone",
           "id": "zone",
           "name": "commerceSettings",
           "title": "Connected services",
           "footer": "Tax services, shipping, fulfillment, accounting and the other services your store connects to."
+        }
+      ]
+    },
+    {
+      "id": "commerce.transfer",
+      "title": "Export records",
+      "label": "Export records",
+      "subtitle": "Products, orders, promotions and more as a file",
+      "icon": "download|download",
+      "scope": "site",
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "about",
+          "tone": "info",
+          "text": "Pick what to export. You choose the columns and the file type next, and the file is handed to your device. The site’s own roles and plan decide what each export allows."
+        },
+        {
+          "type": "actions",
+          "id": "export",
+          "title": "Export",
+          "items": [
+            {
+              "id": "products",
+              "label": "Export products",
+              "icon": "inventory_2|inventory_2",
+              "export": {
+                "resource": "commerce.products",
+                "title": "Export products",
+                "fileStem": "products"
+              }
+            },
+            {
+              "id": "categories",
+              "label": "Export product categories",
+              "icon": "category|category",
+              "export": {
+                "resource": "commerce.categories",
+                "title": "Export product categories",
+                "fileStem": "categories"
+              }
+            },
+            {
+              "id": "orders",
+              "label": "Export orders",
+              "icon": "shopping_basket|shopping_basket",
+              "export": {
+                "resource": "commerce.orders",
+                "title": "Export orders",
+                "fileStem": "orders"
+              }
+            },
+            {
+              "id": "discounts",
+              "label": "Export discounts",
+              "icon": "tag|sell",
+              "export": {
+                "resource": "commerce.discounts",
+                "title": "Export discounts",
+                "fileStem": "discounts"
+              }
+            },
+            {
+              "id": "coupons",
+              "label": "Export coupons",
+              "icon": "ticket|local_offer",
+              "export": {
+                "resource": "commerce.coupons",
+                "title": "Export coupons",
+                "fileStem": "coupons"
+              }
+            },
+            {
+              "id": "gift-cards",
+              "label": "Export gift cards",
+              "icon": "gift|card_giftcard",
+              "export": {
+                "resource": "commerce.gift-cards",
+                "title": "Export gift cards",
+                "fileStem": "gift-cards"
+              }
+            },
+            {
+              "id": "tracking",
+              "label": "Export tracking numbers",
+              "icon": "local_shipping|local_shipping",
+              "export": {
+                "resource": "commerce.tracking",
+                "title": "Export tracking numbers",
+                "fileStem": "tracking-numbers"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.ordersBulk",
+      "title": "Selected orders",
+      "label": "Selected orders",
+      "subtitle": "What can be done to the orders ticked in the list",
+      "icon": "done_all|done_all",
+      "scope": "site",
+      "blocks": [
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "ordersBulk",
+          "params": {
+            "orderIds": "{params.orderIds}",
+            "run": "{params.run}"
+          },
+          "title": "Services",
+          "footer": "Shipping labels and the other services you have connected, for the orders you ticked.",
+          "empty": "No service is connected for these orders. Connect shipping in Commerce settings."
         }
       ]
     }

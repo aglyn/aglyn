@@ -96,6 +96,35 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(themeEdits(from: before, to: cleared), [.color(scheme: "light", token: "primary", value: nil)])
   }
 
+  func testListsTheRoutedPagesForTheKeywordPickerAndReadsTheReportTheRouteAnswers() throws {
+    let pages = seoKeywordPages(host: ["screens": ["s2": "pricing", "s1": "/", "s3": 5]], names: ["s1": "Home", "s2": ""])
+    XCTAssertEqual(pages.map(\.path), ["/", "/pricing"])
+    XCTAssertEqual(pages.map(\.name), ["Home", "/pricing"])
+    let report = try JSONDecoder().decode(
+      SeoAuditReport.self,
+      from: Data(
+        """
+        {"pages":[{"screenId":"s1","path":"/","name":"Home","versionId":null,"score":85,"findings":[{"code":"title-missing","severity":"high","message":"No title."},{"code":"keyword-missing","severity":"low","message":"Say it.","keyword":"pricing"}],"keywords":[]}],"skipped":2,"site":[{"code":"search-discouraged","severity":"high","message":"Hidden."}],"score":85,"notes":["A note"]}
+        """.utf8))
+    XCTAssertEqual(seoAuditFindingCount(report), 3)
+    XCTAssertEqual(report.skipped, 2)
+    XCTAssertNil(report.pages[0].versionId)
+  }
+
+  func testSaysWhereABusinessProfileValueComesFrom() {
+    let host: [String: Any] = ["seo": ["entity": ["description": "Dog grooming with a calm hand.", "areaServed": ["Austin"]]]]
+    let stored: [String: Any] = ["services": ["Bath"], "audience": "Owners", "sources": ["audience": "ai"]]
+    let resolved = resolveBusinessProfile(host: host, site: stored)
+    XCTAssertEqual(
+      businessOriginLine("whatYouDo", stored: stored, resolved: resolved, fallback: "One sentence"),
+      "Empty here, so Aglyn AI uses “Dog grooming with a calm hand.” from your SEO settings.")
+    XCTAssertEqual(
+      businessOriginLine("audience", stored: stored, resolved: resolved, fallback: "x"), "Suggested by Aglyn AI. Edit it and it becomes yours.")
+    XCTAssertEqual(businessOriginLine("services", stored: stored, resolved: resolved, fallback: "One per line"), "One per line")
+    XCTAssertEqual(SetupSection.allCases.map(\.rawValue), ["details", "business", "seo", "tracking", "theme", "emails"])
+    XCTAssertEqual(SetupSection.of("business"), .business)
+  }
+
   func testReadsTheStyleComponentsCatalogAndSendsOnlyTheLooksThatChanged() throws {
     let answer = try JSONDecoder().decode(
       JSONValue.self,

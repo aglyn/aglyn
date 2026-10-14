@@ -57,7 +57,10 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'free' }, ready: true }),
 }))
-jest.mock('../hooks/use-org-plans', () => ({ useOrgPlans: () => ({}) }))
+jest.mock('../hooks/use-org-plans', () => ({
+  useOrgPlans: () => ({}),
+  useOrgRows: () => ({}),
+}))
 jest.mock('../components/create-org-dialog.component', () => ({
   __esModule: true,
   default: () => null,

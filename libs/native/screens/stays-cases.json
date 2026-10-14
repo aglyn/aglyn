@@ -1,0 +1,1035 @@
+{
+  "$comment": "Reservation pricing and availability from libs/plugins/commerce/src/lib/model/commerce-reservations.ts (the console). Replayed by Swift and Kotlin; libs/plugins/commerce/src/lib/native-stays-cases.spec.ts keeps it equal to the TypeScript.",
+  "nowMs": 1790856000000,
+  "blocks": [
+    {
+      "fromDayMs": 1798070400000,
+      "toDayMs": 1798329600000
+    }
+  ],
+  "stays": [
+    {
+      "checkInDayMs": 1791590400000,
+      "checkOutDayMs": 1791849600000,
+      "status": "confirmed"
+    },
+    {
+      "checkInDayMs": 1792454400000,
+      "checkOutDayMs": 1792627200000,
+      "status": "cancelled"
+    },
+    {
+      "checkInDayMs": 1792886400000,
+      "checkOutDayMs": 1793059200000,
+      "status": "no_show"
+    },
+    {
+      "checkInDayMs": 1793491200000,
+      "checkOutDayMs": 1793664000000,
+      "status": "pending",
+      "createdAtMs": 1790855400000
+    },
+    {
+      "checkInDayMs": 1794268800000,
+      "checkOutDayMs": 1794441600000,
+      "status": "pending",
+      "createdAtMs": 1790854140000
+    },
+    {
+      "checkInDayMs": 1795132800000,
+      "checkOutDayMs": 1795305600000,
+      "status": "pending"
+    },
+    {
+      "checkInDayMs": 1796083200000,
+      "checkOutDayMs": 1796342400000,
+      "status": "checked_in"
+    }
+  ],
+  "quotes": [
+    {
+      "resource": "plain",
+      "spec": {
+        "nightlyRateUsd": 100
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-04",
+      "quote": {
+        "nights": 3,
+        "subtotalCents": 30000,
+        "depositCents": 30000,
+        "totalCents": 30000,
+        "nightlyCents": [
+          10000,
+          10000,
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "plain",
+      "spec": {
+        "nightlyRateUsd": 100
+      },
+      "checkIn": "2026-10-08",
+      "checkOut": "2026-10-12",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 40000,
+        "depositCents": 40000,
+        "totalCents": 40000,
+        "nightlyCents": [
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "plain",
+      "spec": {
+        "nightlyRateUsd": 100
+      },
+      "checkIn": "2026-06-29",
+      "checkOut": "2026-07-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 40000,
+        "depositCents": 40000,
+        "totalCents": 40000,
+        "nightlyCents": [
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "plain",
+      "spec": {
+        "nightlyRateUsd": 100
+      },
+      "checkIn": "2026-12-30",
+      "checkOut": "2027-01-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 40000,
+        "depositCents": 40000,
+        "totalCents": 40000,
+        "nightlyCents": [
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "plain",
+      "spec": {
+        "nightlyRateUsd": 100
+      },
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "plain",
+      "spec": {
+        "nightlyRateUsd": 100
+      },
+      "checkIn": "2026-10-06",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "plain",
+      "spec": {
+        "nightlyRateUsd": 100
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-02",
+      "quote": {
+        "nights": 1,
+        "subtotalCents": 10000,
+        "depositCents": 10000,
+        "totalCents": 10000,
+        "nightlyCents": [
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "weekend",
+      "spec": {
+        "nightlyRateUsd": 100,
+        "weekendMultiplier": 1.25
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-04",
+      "quote": {
+        "nights": 3,
+        "subtotalCents": 35000,
+        "depositCents": 35000,
+        "totalCents": 35000,
+        "nightlyCents": [
+          10000,
+          12500,
+          12500
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "weekend",
+      "spec": {
+        "nightlyRateUsd": 100,
+        "weekendMultiplier": 1.25
+      },
+      "checkIn": "2026-10-08",
+      "checkOut": "2026-10-12",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 45000,
+        "depositCents": 45000,
+        "totalCents": 45000,
+        "nightlyCents": [
+          10000,
+          12500,
+          12500,
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "weekend",
+      "spec": {
+        "nightlyRateUsd": 100,
+        "weekendMultiplier": 1.25
+      },
+      "checkIn": "2026-06-29",
+      "checkOut": "2026-07-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 40000,
+        "depositCents": 40000,
+        "totalCents": 40000,
+        "nightlyCents": [
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "weekend",
+      "spec": {
+        "nightlyRateUsd": 100,
+        "weekendMultiplier": 1.25
+      },
+      "checkIn": "2026-12-30",
+      "checkOut": "2027-01-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 45000,
+        "depositCents": 45000,
+        "totalCents": 45000,
+        "nightlyCents": [
+          10000,
+          10000,
+          12500,
+          12500
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "weekend",
+      "spec": {
+        "nightlyRateUsd": 100,
+        "weekendMultiplier": 1.25
+      },
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "weekend",
+      "spec": {
+        "nightlyRateUsd": 100,
+        "weekendMultiplier": 1.25
+      },
+      "checkIn": "2026-10-06",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "weekend",
+      "spec": {
+        "nightlyRateUsd": 100,
+        "weekendMultiplier": 1.25
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-02",
+      "quote": {
+        "nights": 1,
+        "subtotalCents": 10000,
+        "depositCents": 10000,
+        "totalCents": 10000,
+        "nightlyCents": [
+          10000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "seasonal",
+      "spec": {
+        "nightlyRateUsd": 80.5,
+        "weekendMultiplier": 1.1,
+        "seasons": [
+          {
+            "from": "06-01",
+            "to": "08-31",
+            "multiplier": 1.5
+          },
+          {
+            "from": "12-15",
+            "to": "01-05",
+            "multiplier": 2
+          }
+        ]
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-04",
+      "quote": {
+        "nights": 3,
+        "subtotalCents": 25760,
+        "depositCents": 25760,
+        "totalCents": 25760,
+        "nightlyCents": [
+          8050,
+          8855,
+          8855
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "seasonal",
+      "spec": {
+        "nightlyRateUsd": 80.5,
+        "weekendMultiplier": 1.1,
+        "seasons": [
+          {
+            "from": "06-01",
+            "to": "08-31",
+            "multiplier": 1.5
+          },
+          {
+            "from": "12-15",
+            "to": "01-05",
+            "multiplier": 2
+          }
+        ]
+      },
+      "checkIn": "2026-10-08",
+      "checkOut": "2026-10-12",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 33810,
+        "depositCents": 33810,
+        "totalCents": 33810,
+        "nightlyCents": [
+          8050,
+          8855,
+          8855,
+          8050
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "seasonal",
+      "spec": {
+        "nightlyRateUsd": 80.5,
+        "weekendMultiplier": 1.1,
+        "seasons": [
+          {
+            "from": "06-01",
+            "to": "08-31",
+            "multiplier": 1.5
+          },
+          {
+            "from": "12-15",
+            "to": "01-05",
+            "multiplier": 2
+          }
+        ]
+      },
+      "checkIn": "2026-06-29",
+      "checkOut": "2026-07-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 48300,
+        "depositCents": 48300,
+        "totalCents": 48300,
+        "nightlyCents": [
+          12075,
+          12075,
+          12075,
+          12075
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "seasonal",
+      "spec": {
+        "nightlyRateUsd": 80.5,
+        "weekendMultiplier": 1.1,
+        "seasons": [
+          {
+            "from": "06-01",
+            "to": "08-31",
+            "multiplier": 1.5
+          },
+          {
+            "from": "12-15",
+            "to": "01-05",
+            "multiplier": 2
+          }
+        ]
+      },
+      "checkIn": "2026-12-30",
+      "checkOut": "2027-01-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 67620,
+        "depositCents": 67620,
+        "totalCents": 67620,
+        "nightlyCents": [
+          16100,
+          16100,
+          17710,
+          17710
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "seasonal",
+      "spec": {
+        "nightlyRateUsd": 80.5,
+        "weekendMultiplier": 1.1,
+        "seasons": [
+          {
+            "from": "06-01",
+            "to": "08-31",
+            "multiplier": 1.5
+          },
+          {
+            "from": "12-15",
+            "to": "01-05",
+            "multiplier": 2
+          }
+        ]
+      },
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "seasonal",
+      "spec": {
+        "nightlyRateUsd": 80.5,
+        "weekendMultiplier": 1.1,
+        "seasons": [
+          {
+            "from": "06-01",
+            "to": "08-31",
+            "multiplier": 1.5
+          },
+          {
+            "from": "12-15",
+            "to": "01-05",
+            "multiplier": 2
+          }
+        ]
+      },
+      "checkIn": "2026-10-06",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "seasonal",
+      "spec": {
+        "nightlyRateUsd": 80.5,
+        "weekendMultiplier": 1.1,
+        "seasons": [
+          {
+            "from": "06-01",
+            "to": "08-31",
+            "multiplier": 1.5
+          },
+          {
+            "from": "12-15",
+            "to": "01-05",
+            "multiplier": 2
+          }
+        ]
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-02",
+      "quote": {
+        "nights": 1,
+        "subtotalCents": 8050,
+        "depositCents": 8050,
+        "totalCents": 8050,
+        "nightlyCents": [
+          8050
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "stayMin",
+      "spec": {
+        "nightlyRateUsd": 120,
+        "minNights": 3,
+        "depositPct": 30
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-04",
+      "quote": {
+        "nights": 3,
+        "subtotalCents": 36000,
+        "depositCents": 10800,
+        "totalCents": 36000,
+        "nightlyCents": [
+          12000,
+          12000,
+          12000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "stayMin",
+      "spec": {
+        "nightlyRateUsd": 120,
+        "minNights": 3,
+        "depositPct": 30
+      },
+      "checkIn": "2026-10-08",
+      "checkOut": "2026-10-12",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 48000,
+        "depositCents": 14400,
+        "totalCents": 48000,
+        "nightlyCents": [
+          12000,
+          12000,
+          12000,
+          12000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "stayMin",
+      "spec": {
+        "nightlyRateUsd": 120,
+        "minNights": 3,
+        "depositPct": 30
+      },
+      "checkIn": "2026-06-29",
+      "checkOut": "2026-07-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 48000,
+        "depositCents": 14400,
+        "totalCents": 48000,
+        "nightlyCents": [
+          12000,
+          12000,
+          12000,
+          12000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "stayMin",
+      "spec": {
+        "nightlyRateUsd": 120,
+        "minNights": 3,
+        "depositPct": 30
+      },
+      "checkIn": "2026-12-30",
+      "checkOut": "2027-01-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 48000,
+        "depositCents": 14400,
+        "totalCents": 48000,
+        "nightlyCents": [
+          12000,
+          12000,
+          12000,
+          12000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "stayMin",
+      "spec": {
+        "nightlyRateUsd": 120,
+        "minNights": 3,
+        "depositPct": 30
+      },
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "stayMin",
+      "spec": {
+        "nightlyRateUsd": 120,
+        "minNights": 3,
+        "depositPct": 30
+      },
+      "checkIn": "2026-10-06",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "stayMin",
+      "spec": {
+        "nightlyRateUsd": 120,
+        "minNights": 3,
+        "depositPct": 30
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-02",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Minimum stay is 3 nights"
+      }
+    },
+    {
+      "resource": "deposit",
+      "spec": {
+        "nightlyRateUsd": 99.99,
+        "depositPct": 33.3
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-04",
+      "quote": {
+        "nights": 3,
+        "subtotalCents": 29997,
+        "depositCents": 9989,
+        "totalCents": 29997,
+        "nightlyCents": [
+          9999,
+          9999,
+          9999
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "deposit",
+      "spec": {
+        "nightlyRateUsd": 99.99,
+        "depositPct": 33.3
+      },
+      "checkIn": "2026-10-08",
+      "checkOut": "2026-10-12",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 39996,
+        "depositCents": 13319,
+        "totalCents": 39996,
+        "nightlyCents": [
+          9999,
+          9999,
+          9999,
+          9999
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "deposit",
+      "spec": {
+        "nightlyRateUsd": 99.99,
+        "depositPct": 33.3
+      },
+      "checkIn": "2026-06-29",
+      "checkOut": "2026-07-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 39996,
+        "depositCents": 13319,
+        "totalCents": 39996,
+        "nightlyCents": [
+          9999,
+          9999,
+          9999,
+          9999
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "deposit",
+      "spec": {
+        "nightlyRateUsd": 99.99,
+        "depositPct": 33.3
+      },
+      "checkIn": "2026-12-30",
+      "checkOut": "2027-01-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 39996,
+        "depositCents": 13319,
+        "totalCents": 39996,
+        "nightlyCents": [
+          9999,
+          9999,
+          9999,
+          9999
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "deposit",
+      "spec": {
+        "nightlyRateUsd": 99.99,
+        "depositPct": 33.3
+      },
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "deposit",
+      "spec": {
+        "nightlyRateUsd": 99.99,
+        "depositPct": 33.3
+      },
+      "checkIn": "2026-10-06",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "deposit",
+      "spec": {
+        "nightlyRateUsd": 99.99,
+        "depositPct": 33.3
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-02",
+      "quote": {
+        "nights": 1,
+        "subtotalCents": 9999,
+        "depositCents": 3330,
+        "totalCents": 9999,
+        "nightlyCents": [
+          9999
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "overDeposit",
+      "spec": {
+        "nightlyRateUsd": 50,
+        "depositPct": 400
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-04",
+      "quote": {
+        "nights": 3,
+        "subtotalCents": 15000,
+        "depositCents": 15000,
+        "totalCents": 15000,
+        "nightlyCents": [
+          5000,
+          5000,
+          5000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "overDeposit",
+      "spec": {
+        "nightlyRateUsd": 50,
+        "depositPct": 400
+      },
+      "checkIn": "2026-10-08",
+      "checkOut": "2026-10-12",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 20000,
+        "depositCents": 20000,
+        "totalCents": 20000,
+        "nightlyCents": [
+          5000,
+          5000,
+          5000,
+          5000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "overDeposit",
+      "spec": {
+        "nightlyRateUsd": 50,
+        "depositPct": 400
+      },
+      "checkIn": "2026-06-29",
+      "checkOut": "2026-07-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 20000,
+        "depositCents": 20000,
+        "totalCents": 20000,
+        "nightlyCents": [
+          5000,
+          5000,
+          5000,
+          5000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "overDeposit",
+      "spec": {
+        "nightlyRateUsd": 50,
+        "depositPct": 400
+      },
+      "checkIn": "2026-12-30",
+      "checkOut": "2027-01-03",
+      "quote": {
+        "nights": 4,
+        "subtotalCents": 20000,
+        "depositCents": 20000,
+        "totalCents": 20000,
+        "nightlyCents": [
+          5000,
+          5000,
+          5000,
+          5000
+        ],
+        "problem": null
+      }
+    },
+    {
+      "resource": "overDeposit",
+      "spec": {
+        "nightlyRateUsd": 50,
+        "depositPct": 400
+      },
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "overDeposit",
+      "spec": {
+        "nightlyRateUsd": 50,
+        "depositPct": 400
+      },
+      "checkIn": "2026-10-06",
+      "checkOut": "2026-10-05",
+      "quote": {
+        "nights": 0,
+        "subtotalCents": 0,
+        "depositCents": 0,
+        "totalCents": 0,
+        "nightlyCents": [],
+        "problem": "Choose at least one night"
+      }
+    },
+    {
+      "resource": "overDeposit",
+      "spec": {
+        "nightlyRateUsd": 50,
+        "depositPct": 400
+      },
+      "checkIn": "2026-10-01",
+      "checkOut": "2026-10-02",
+      "quote": {
+        "nights": 1,
+        "subtotalCents": 5000,
+        "depositCents": 5000,
+        "totalCents": 5000,
+        "nightlyCents": [
+          5000
+        ],
+        "problem": null
+      }
+    }
+  ],
+  "availability": [
+    {
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-10",
+      "available": true
+    },
+    {
+      "checkIn": "2026-10-13",
+      "checkOut": "2026-10-15",
+      "available": true
+    },
+    {
+      "checkIn": "2026-10-12",
+      "checkOut": "2026-10-14",
+      "available": false
+    },
+    {
+      "checkIn": "2026-10-19",
+      "checkOut": "2026-10-23",
+      "available": true
+    },
+    {
+      "checkIn": "2026-10-24",
+      "checkOut": "2026-10-26",
+      "available": true
+    },
+    {
+      "checkIn": "2026-10-31",
+      "checkOut": "2026-11-02",
+      "available": false
+    },
+    {
+      "checkIn": "2026-11-09",
+      "checkOut": "2026-11-11",
+      "available": true
+    },
+    {
+      "checkIn": "2026-11-19",
+      "checkOut": "2026-11-21",
+      "available": true
+    },
+    {
+      "checkIn": "2026-11-30",
+      "checkOut": "2026-12-02",
+      "available": false
+    },
+    {
+      "checkIn": "2026-12-23",
+      "checkOut": "2026-12-25",
+      "available": false
+    },
+    {
+      "checkIn": "2026-12-27",
+      "checkOut": "2026-12-29",
+      "available": true
+    },
+    {
+      "checkIn": "2026-10-05",
+      "checkOut": "2026-10-05",
+      "available": false
+    }
+  ]
+}

@@ -300,12 +300,20 @@ enum FieldValue: Equatable {
   }
 }
 
+/// The scope a form or prompt runs its action with: `form` holds only the fields the person could see (their
+/// `when` holds), so a field the screen hid is never sent, as a console form that never drew it would not send it.
+func visibleOnly(_ filled: JSONValue, _ fields: [FieldSpec]) -> JSONValue {
+  guard case .object(let form)? = filled["form"] else { return filled }
+  let keep = Set(fields.filter { ScreenValues.condition($0.when, in: filled) }.map(\.key))
+  return ScreenContext.with(filled, "form", .object(form.filter { keep.contains($0.key) }))
+}
+
 func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   switch (field.kind, value) {
   case ("toggle", .flag(let flag)?): return .bool(flag)
   case ("number", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
-    return trimmed.isEmpty ? .null : Double(trimmed).map(JSONValue.number) ?? .string(trimmed)
+    return trimmed.isEmpty ? .null : Double(trimmed).map { .number(field.integer ? $0.rounded() : $0) } ?? .string(trimmed)
   case (_, .text(let text)?):
     return .string(field.kind == "multiline" || field.kind == "password" ? text : text.trimmingCharacters(in: .whitespaces))
   case (_, .flag(let flag)?): return .bool(flag)
@@ -347,6 +355,8 @@ struct FieldInput: View {
         Picker(field.label, selection: text) {
           ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
         }
+      case "hours":
+        HoursInput(field: field, text: text)
       case "multiline":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)
@@ -373,7 +383,7 @@ struct FieldInput: View {
       switch field.kind {
       case "email": .emailAddress
       case "url": .URL
-      case "number": .decimalPad
+      case "number": field.integer ? .numberPad : .decimalPad
       default: .default
       }
     }
@@ -391,7 +401,7 @@ struct FormBlock: View {
   @State private var seededFrom: JSONValue?
 
   private var fields: [FieldSpec] {
-    block["fields"].array.compactMap(FieldSpec.init)
+    FieldSpec.parseAll(block["fields"].array, in: scope)
   }
 
   private var scope: JSONValue {
@@ -420,7 +430,7 @@ struct FormBlock: View {
       }
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         Button {
-          submit(action, filled)
+          submit(action, visibleOnly(filled, fields))
         } label: {
           HStack {
             Spacer()
@@ -459,7 +469,7 @@ struct ActionInputSheet: View {
   @Environment(\.dismiss) private var dismiss
   @State private var values: [String: FieldValue] = [:]
 
-  private var inputs: [FieldSpec] { pending.action.inputs }
+  private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
 
   private var filled: JSONValue {
     var form: [String: JSONValue] = [:]
@@ -500,7 +510,7 @@ struct ActionInputSheet: View {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
           Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
-            run(filled)
+            run(visibleOnly(filled, inputs))
           }
           .disabled(missing)
           .accessibilityIdentifier("prompt-submit")
@@ -554,5 +564,108 @@ struct ReauthSheet: View {
       }
     }
     .frame(minWidth: 360, minHeight: 260)
+  }
+}
+
+/// A week of hours chosen by touch, as the console's picker does: a switch for each day and, for an open day, a From and a
+/// To time from a menu, with another interval on request. It reads and writes the stored text lines (`Mo-Fr 09:00-17:00`),
+/// so nobody types them.
+struct HoursInput: View {
+  let field: FieldSpec
+  @Binding var text: String
+
+  private var noun: String { field.hours?["noun"]?.stringValue ?? "hours" }
+  private var sameDay: Bool { field.hours?["sameDay"] == .bool(true) }
+  private var defaultInterval: HoursInterval {
+    HoursInterval(
+      start: field.hours.flatMap { ScreenValues.number($0["start"]) }.map { Int($0) } ?? 9 * 60,
+      end: field.hours.flatMap { ScreenValues.number($0["end"]) }.map { Int($0) } ?? 17 * 60)
+  }
+
+  private func set(_ week: [[HoursInterval]], day: Int, _ intervals: [HoursInterval]) {
+    var next = week
+    next[day] = intervals
+    text = WeeklyHours.toText(next)
+  }
+
+  private func options(_ current: Int, after: Int?) -> [Int] {
+    let all = WeeklyHours.times.contains(current) ? WeeklyHours.times : (WeeklyHours.times + [current]).sorted()
+    guard let after else { return all }
+    return all.filter { $0 > after || $0 == current }
+  }
+
+  var body: some View {
+    let read = WeeklyHours.fromText(text)
+    let week = read.week
+    VStack(alignment: .leading, spacing: 6) {
+      Text(field.label).font(.subheadline.weight(.semibold))
+      ForEach(WeeklyHours.days, id: \.index) { day in
+        let intervals = week[day.index]
+        Toggle(
+          day.name,
+          isOn: Binding(
+            get: { !intervals.isEmpty },
+            set: { open in set(week, day: day.index, open ? [defaultInterval] : []) })
+        )
+        .accessibilityIdentifier("hours-day-\(day.index)")
+        ForEach(Array(intervals.enumerated()), id: \.offset) { position, interval in
+          HStack {
+            Picker(
+              "From",
+              selection: Binding(
+                get: { interval.start },
+                set: { picked in
+                  var next = interval
+                  next.start = picked
+                  // A From moved past its To drags the To along, keeping the length.
+                  if sameDay, next.end <= next.start {
+                    next.end = Swift.min(next.start + Swift.max(interval.end - interval.start, 60), WeeklyHours.lastMinute)
+                  }
+                  var changed = intervals
+                  changed[position] = next
+                  set(week, day: day.index, changed)
+                })
+            ) {
+              ForEach(options(interval.start, after: nil), id: \.self) { Text(WeeklyHours.label($0)).tag($0) }
+            }
+            Picker(
+              "To",
+              selection: Binding(
+                get: { interval.end },
+                set: { picked in
+                  var changed = intervals
+                  changed[position].end = picked
+                  set(week, day: day.index, changed)
+                })
+            ) {
+              ForEach(options(interval.end, after: sameDay ? interval.start : nil), id: \.self) {
+                Text(WeeklyHours.label($0)).tag($0)
+              }
+            }
+            Button("Remove", role: .destructive) {
+              var changed = intervals
+              changed.remove(at: position)
+              set(week, day: day.index, changed)
+            }
+            .buttonStyle(.borderless)
+          }
+        }
+        if let last = intervals.last {
+          Button("Add \(noun)") {
+            // A second interval starts an hour after the first ends, the usual shape of a lunch break.
+            let start = Swift.min(last.end + 60, 22 * 60)
+            set(week, day: day.index, intervals + [HoursInterval(start: start, end: Swift.min(start + 4 * 60, WeeklyHours.lastMinute))])
+          }
+          .buttonStyle(.borderless)
+        }
+      }
+      if !read.unread.isEmpty {
+        Text(
+          "Some saved hours could not be read (line \(read.unread.map(String.init).joined(separator: ", "))) and are not shown. "
+            + "Set the days again here and save to replace them."
+        )
+        .font(AglynFont.caption).foregroundStyle(.orange)
+      }
+    }
   }
 }

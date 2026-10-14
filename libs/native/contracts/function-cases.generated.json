@@ -2213,6 +2213,387 @@
         }
       ]
     },
+    "businessProfileOwnerWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            {
+              "whatYouDo": "Hi",
+              "services": "a\nb",
+              "tone": "plain"
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [
+              "a",
+              "b"
+            ],
+            "sources": {
+              "services": "owner",
+              "tone": "owner",
+              "whatYouDo": "owner"
+            },
+            "tone": "plain",
+            "toneNotes": "",
+            "whatYouDo": "Hi"
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks"
+            }
+          ],
+          "result": {
+            "audience": "Owners",
+            "serviceArea": "",
+            "services": [
+              "Bath",
+              "Nail trim"
+            ],
+            "sources": {
+              "audience": "ai",
+              "services": "owner",
+              "tone": "start",
+              "toneNotes": "owner",
+              "whatYouDo": "owner"
+            },
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "whatYouDo": "Mobile grooming"
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            {
+              "whatYouDo": "Changed",
+              "audience": "",
+              "tone": null
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [
+              "Bath",
+              "Nail trim"
+            ],
+            "sources": {
+              "audience": "owner",
+              "services": "owner",
+              "tone": "owner",
+              "toneNotes": "owner",
+              "whatYouDo": "owner"
+            },
+            "tone": null,
+            "toneNotes": "No exclamation marks",
+            "whatYouDo": "Changed"
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "A guess",
+              "services": [
+                "Full groom"
+              ],
+              "sources": {
+                "whatYouDo": "ai",
+                "services": "ai"
+              }
+            },
+            {
+              "whatYouDo": "A guess",
+              "services": [
+                "Full groom",
+                "New"
+              ]
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [
+              "Full groom",
+              "New"
+            ],
+            "sources": {
+              "services": "owner",
+              "whatYouDo": "ai"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": "A guess"
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "",
+              "sources": {
+                "whatYouDo": "owner"
+              }
+            },
+            {
+              "whatYouDo": ""
+            }
+          ],
+          "result": {
+            "audience": "",
+            "serviceArea": "",
+            "services": [],
+            "sources": {
+              "whatYouDo": "owner"
+            },
+            "tone": null,
+            "toneNotes": "",
+            "whatYouDo": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            {}
+          ],
+          "result": {
+            "audience": "Owners",
+            "serviceArea": "",
+            "services": [
+              "Bath",
+              "Nail trim"
+            ],
+            "sources": {
+              "audience": "ai",
+              "services": "owner",
+              "tone": "start",
+              "toneNotes": "owner",
+              "whatYouDo": "owner"
+            },
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "whatYouDo": "Mobile grooming"
+          }
+        }
+      ]
+    },
+    "businessProfileSourceOf": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "whatYouDo"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "whatYouDo"
+          ],
+          "result": "owner"
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "services"
+          ],
+          "result": "owner"
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "audience"
+          ],
+          "result": "ai"
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "tone"
+          ],
+          "result": "start"
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "serviceArea"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "x"
+            },
+            "whatYouDo"
+          ],
+          "result": "owner"
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "x",
+              "sources": {
+                "whatYouDo": "junk"
+              }
+            },
+            "whatYouDo"
+          ],
+          "result": "owner"
+        },
+        {
+          "args": [
+            {
+              "tone": "loud"
+            },
+            "tone"
+          ],
+          "result": null
+        }
+      ]
+    },
     "buyerNotificationEnabled": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "cases": [
@@ -3505,6 +3886,59 @@
               "value": "b"
             }
           ]
+        }
+      ]
+    },
+    "clockLabel": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "cases": [
+        {
+          "args": [
+            0
+          ],
+          "result": "12:00 AM"
+        },
+        {
+          "args": [
+            60
+          ],
+          "result": "1:00 AM"
+        },
+        {
+          "args": [
+            540
+          ],
+          "result": "9:00 AM"
+        },
+        {
+          "args": [
+            720
+          ],
+          "result": "12:00 PM"
+        },
+        {
+          "args": [
+            725
+          ],
+          "result": "12:05 PM"
+        },
+        {
+          "args": [
+            780
+          ],
+          "result": "1:00 PM"
+        },
+        {
+          "args": [
+            1425
+          ],
+          "result": "11:45 PM"
+        },
+        {
+          "args": [
+            1439
+          ],
+          "result": "11:59 PM"
         }
       ]
     },
@@ -8461,6 +8895,41 @@
         }
       ]
     },
+    "formatClockMinutes": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "cases": [
+        {
+          "args": [
+            0
+          ],
+          "result": "00:00"
+        },
+        {
+          "args": [
+            5
+          ],
+          "result": "00:05"
+        },
+        {
+          "args": [
+            540
+          ],
+          "result": "09:00"
+        },
+        {
+          "args": [
+            725
+          ],
+          "result": "12:05"
+        },
+        {
+          "args": [
+            1439
+          ],
+          "result": "23:59"
+        }
+      ]
+    },
     "formatDatasetValue": {
       "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
       "cases": [
@@ -10718,6 +11187,210 @@
         }
       ]
     },
+    "hostQualifiedCdnPath": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1:h1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "org"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "org",
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1:h2/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1:h2/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/h1/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1/abc123",
+            [
+              "host:h1",
+              "host:h2"
+            ],
+            "h2"
+          ],
+          "result": "/api/media/cdn/org:o1:h2/m1/abc123"
+        },
+        {
+          "args": [
+            "https://console.aglyn.com/api/media/cdn/org:o1/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "https://console.aglyn.com/api/media/cdn/org:o1:h1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "host:h1"
+            ],
+            null
+          ],
+          "result": "/api/media/cdn/org:o1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            null,
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1:h1/m1"
+        },
+        {
+          "args": [
+            "/somewhere/else.png",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/somewhere/else.png"
+        },
+        {
+          "args": [
+            "",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null,
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": null
+        }
+      ]
+    },
+    "inheritedMediaAlt": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": "A red door"
+        },
+        {
+          "args": [
+            {
+              "placementAlt": "My own words",
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "placementAlt": "   ",
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": "A red door"
+        },
+        {
+          "args": [
+            {
+              "placementAlt": "",
+              "assetAlt": "  spaced out  "
+            }
+          ],
+          "result": "spaced out"
+        },
+        {
+          "args": [
+            {
+              "decorative": true,
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": "   "
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": 5
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "result": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
     "isBookingReminderDue": {
       "module": "libs/plugins/bookings/src/lib/model/bookings.ts",
       "cases": [
@@ -12095,6 +12768,261 @@
         }
       ]
     },
+    "mediaNodeSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/h1/m1",
+              "url": "https://example.com/a.png"
+            }
+          ],
+          "result": "media:h1/m1"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/org:o1/m2"
+            }
+          ],
+          "result": "media:org:o1/m2"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/org:o1:h1/m3",
+              "url": "https://example.com/b.png",
+              "private": false
+            }
+          ],
+          "result": "media:org:o1:h1/m3"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "https://console.aglyn.com/api/media/cdn/h1/m4?w=320",
+              "url": "https://example.com/c.png"
+            }
+          ],
+          "result": "https://example.com/c.png"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/bad scope/m",
+              "url": "https://example.com/d.png"
+            }
+          ],
+          "result": "https://example.com/d.png"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+            }
+          ],
+          "result": "media:h1/m5"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+              "private": false
+            }
+          ],
+          "result": "media:org:o1/m6"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media",
+              "private": true
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://example.com/photo.jpg"
+            }
+          ],
+          "result": "https://example.com/photo.jpg"
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cdnPath": null,
+              "url": null,
+              "private": null
+            }
+          ],
+          "result": null
+        }
+      ]
+    },
+    "mediaQueryRequest": {
+      "module": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": "2.5"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "2621440"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": "<=",
+              "value": "10"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": "<=",
+            "value": "10485760"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">",
+              "value": " 0.001 "
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">",
+            "value": "1049"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": "<",
+              "value": "1e2"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": "<",
+            "value": "104857600"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": ""
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": "  "
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "  "
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "sizeMb",
+              "op": ">=",
+              "value": "abc"
+            }
+          ],
+          "result": {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "abc"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "type",
+              "op": "equals",
+              "value": "image"
+            }
+          ],
+          "result": {
+            "field": "type",
+            "op": "equals",
+            "value": "image"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "orientation",
+              "op": "equals",
+              "value": "landscape"
+            }
+          ],
+          "result": {
+            "field": "orientation",
+            "op": "equals",
+            "value": "landscape"
+          }
+        }
+      ]
+    },
     "mediaSearchToken": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "cases": [
@@ -12415,6 +13343,108 @@
               ""
             ]
           }
+        }
+      ]
+    },
+    "normalizeAreaServed": {
+      "module": "libs/aglyn/src/lib/app-utils/local-business.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "A\nB\r\na"
+          ],
+          "result": [
+            "A",
+            "B"
+          ]
+        },
+        {
+          "args": [
+            [
+              "x",
+              " y ",
+              "x",
+              4
+            ]
+          ],
+          "result": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "args": [
+            [
+              "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+            ]
+          ],
+          "result": [
+            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+          ]
+        },
+        {
+          "args": [
+            [
+              "c0",
+              "c1",
+              "c2",
+              "c3",
+              "c4",
+              "c5",
+              "c6",
+              "c7",
+              "c8",
+              "c9",
+              "c10",
+              "c11",
+              "c12",
+              "c13",
+              "c14",
+              "c15",
+              "c16",
+              "c17",
+              "c18",
+              "c19",
+              "c20",
+              "c21",
+              "c22",
+              "c23",
+              "c24",
+              "c25",
+              "c26",
+              "c27",
+              "c28",
+              "c29"
+            ]
+          ],
+          "result": [
+            "c0",
+            "c1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10",
+            "c11",
+            "c12",
+            "c13",
+            "c14",
+            "c15",
+            "c16",
+            "c17",
+            "c18",
+            "c19"
+          ]
         }
       ]
     },
@@ -19297,6 +20327,140 @@
         }
       ]
     },
+    "readSeoKeywordLines": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/pricing: plans, pricing"
+          ],
+          "result": {
+            "keywords": {
+              "/pricing": [
+                "plans",
+                "pricing"
+              ]
+            },
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/pricing: plans\n/pricing: pricing, plans"
+          ],
+          "result": {
+            "keywords": {
+              "/pricing": [
+                "plans",
+                "pricing"
+              ]
+            },
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "no colon here"
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            ": noPath"
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/: home, welcome\nabout: team, story, crew, staff, owners, founders"
+          ],
+          "result": {
+            "keywords": {
+              "/": [
+                "home",
+                "welcome"
+              ],
+              "/about": [
+                "team",
+                "story",
+                "crew",
+                "staff",
+                "owners"
+              ]
+            },
+            "unchecked": {
+              "/about": [
+                "founders"
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            "/x: a, , A, b"
+          ],
+          "result": {
+            "keywords": {
+              "/x": [
+                "a",
+                "b"
+              ]
+            },
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/x: ,  ,"
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/a: one\n/b: two, three"
+          ],
+          "result": {
+            "keywords": {
+              "/a": [
+                "one"
+              ],
+              "/b": [
+                "two",
+                "three"
+              ]
+            },
+            "unchecked": {}
+          }
+        }
+      ]
+    },
     "renameProductOptions": {
       "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
       "cases": [
@@ -20464,6 +21628,517 @@
         }
       ]
     },
+    "resolveBusinessProfile": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "host": null
+            }
+          ],
+          "result": {
+            "audience": null,
+            "businessType": null,
+            "contact": {
+              "address": null,
+              "email": null,
+              "hours": null,
+              "phone": null
+            },
+            "logo": null,
+            "name": null,
+            "profiles": [],
+            "serviceArea": null,
+            "services": null,
+            "tone": null,
+            "toneNotes": null,
+            "whatYouDo": null
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {}
+            }
+          ],
+          "result": {
+            "audience": null,
+            "businessType": null,
+            "contact": {
+              "address": null,
+              "email": null,
+              "hours": null,
+              "phone": null
+            },
+            "logo": null,
+            "name": null,
+            "profiles": [],
+            "serviceArea": null,
+            "services": null,
+            "tone": null,
+            "toneNotes": null,
+            "whatYouDo": null
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {
+                "displayName": "Paws & Co",
+                "logoUrl": "https://cdn.example/logo.png",
+                "seo": {
+                  "entity": {
+                    "name": "Paws and Company Grooming",
+                    "description": "Dog grooming with a calm, gentle hand.",
+                    "telephone": "(512) 555-0100",
+                    "email": "hello@paws.example",
+                    "openingHours": "Mo-Fr 09:00-17:00",
+                    "address": {
+                      "streetAddress": "1 Main St",
+                      "addressLocality": "Austin",
+                      "addressRegion": "TX"
+                    },
+                    "areaServed": [
+                      "Austin",
+                      "Round Rock"
+                    ],
+                    "businessType": "PetStore",
+                    "sameAs": [
+                      "https://facebook.com/paws",
+                      "http://nope.example",
+                      "https://facebook.com/paws"
+                    ]
+                  }
+                },
+                "business": {
+                  "supportEmail": "support@paws.example",
+                  "address": "2 Side St\nAustin",
+                  "socialLinks": [
+                    {
+                      "label": "Instagram",
+                      "url": "https://instagram.com/paws"
+                    },
+                    {
+                      "url": "http://insecure.example"
+                    },
+                    null
+                  ]
+                }
+              }
+            }
+          ],
+          "result": {
+            "audience": null,
+            "businessType": "PetStore",
+            "contact": {
+              "address": "1 Main St, Austin, TX",
+              "email": "hello@paws.example",
+              "hours": "Mo-Fr 09:00-17:00",
+              "phone": "(512) 555-0100"
+            },
+            "logo": "https://cdn.example/logo.png",
+            "name": {
+              "origin": "site",
+              "value": "Paws and Company Grooming"
+            },
+            "profiles": [
+              "https://facebook.com/paws",
+              "https://instagram.com/paws"
+            ],
+            "serviceArea": {
+              "origin": "site",
+              "value": "Austin, Round Rock"
+            },
+            "services": null,
+            "tone": null,
+            "toneNotes": null,
+            "whatYouDo": {
+              "origin": "site",
+              "value": "Dog grooming with a calm, gentle hand."
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {
+                "displayName": "Bare Site",
+                "business": {
+                  "address": "9 Lane"
+                }
+              }
+            }
+          ],
+          "result": {
+            "audience": null,
+            "businessType": null,
+            "contact": {
+              "address": "9 Lane",
+              "email": null,
+              "hours": null,
+              "phone": null
+            },
+            "logo": null,
+            "name": {
+              "origin": "site",
+              "value": "Bare Site"
+            },
+            "profiles": [],
+            "serviceArea": null,
+            "services": null,
+            "tone": null,
+            "toneNotes": null,
+            "whatYouDo": null
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {
+                "displayName": "Paws & Co",
+                "logoUrl": "https://cdn.example/logo.png",
+                "seo": {
+                  "entity": {
+                    "name": "Paws and Company Grooming",
+                    "description": "Dog grooming with a calm, gentle hand.",
+                    "telephone": "(512) 555-0100",
+                    "email": "hello@paws.example",
+                    "openingHours": "Mo-Fr 09:00-17:00",
+                    "address": {
+                      "streetAddress": "1 Main St",
+                      "addressLocality": "Austin",
+                      "addressRegion": "TX"
+                    },
+                    "areaServed": [
+                      "Austin",
+                      "Round Rock"
+                    ],
+                    "businessType": "PetStore",
+                    "sameAs": [
+                      "https://facebook.com/paws",
+                      "http://nope.example",
+                      "https://facebook.com/paws"
+                    ]
+                  }
+                },
+                "business": {
+                  "supportEmail": "support@paws.example",
+                  "address": "2 Side St\nAustin",
+                  "socialLinks": [
+                    {
+                      "label": "Instagram",
+                      "url": "https://instagram.com/paws"
+                    },
+                    {
+                      "url": "http://insecure.example"
+                    },
+                    null
+                  ]
+                }
+              },
+              "site": {
+                "whatYouDo": "Mobile grooming",
+                "services": [
+                  "Bath",
+                  "Nail trim",
+                  "bath"
+                ],
+                "audience": "Owners",
+                "tone": "friendly",
+                "toneNotes": "No exclamation marks",
+                "sources": {
+                  "whatYouDo": "owner",
+                  "services": "owner",
+                  "audience": "ai",
+                  "tone": "start"
+                }
+              }
+            }
+          ],
+          "result": {
+            "audience": {
+              "origin": "ai",
+              "value": "Owners"
+            },
+            "businessType": "PetStore",
+            "contact": {
+              "address": "1 Main St, Austin, TX",
+              "email": "hello@paws.example",
+              "hours": "Mo-Fr 09:00-17:00",
+              "phone": "(512) 555-0100"
+            },
+            "logo": "https://cdn.example/logo.png",
+            "name": {
+              "origin": "site",
+              "value": "Paws and Company Grooming"
+            },
+            "profiles": [
+              "https://facebook.com/paws",
+              "https://instagram.com/paws"
+            ],
+            "serviceArea": {
+              "origin": "site",
+              "value": "Austin, Round Rock"
+            },
+            "services": {
+              "origin": "owner",
+              "value": [
+                "Bath",
+                "Nail trim"
+              ]
+            },
+            "tone": {
+              "origin": "start",
+              "value": "friendly"
+            },
+            "toneNotes": {
+              "origin": "owner",
+              "value": "No exclamation marks"
+            },
+            "whatYouDo": {
+              "origin": "owner",
+              "value": "Mobile grooming"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {
+                "displayName": "Bare Site",
+                "business": {
+                  "address": "9 Lane"
+                }
+              },
+              "site": {
+                "whatYouDo": "Mobile grooming",
+                "services": [
+                  "Bath",
+                  "Nail trim",
+                  "bath"
+                ],
+                "audience": "Owners",
+                "tone": "friendly",
+                "toneNotes": "No exclamation marks",
+                "sources": {
+                  "whatYouDo": "owner",
+                  "services": "owner",
+                  "audience": "ai",
+                  "tone": "start"
+                }
+              },
+              "workspace": {
+                "whatYouDo": "Workspace line",
+                "services": [
+                  "Default service"
+                ],
+                "audience": "Everyone",
+                "tone": "professional"
+              }
+            }
+          ],
+          "result": {
+            "audience": {
+              "origin": "ai",
+              "value": "Owners"
+            },
+            "businessType": null,
+            "contact": {
+              "address": "9 Lane",
+              "email": null,
+              "hours": null,
+              "phone": null
+            },
+            "logo": null,
+            "name": {
+              "origin": "site",
+              "value": "Bare Site"
+            },
+            "profiles": [],
+            "serviceArea": null,
+            "services": {
+              "origin": "owner",
+              "value": [
+                "Bath",
+                "Nail trim"
+              ]
+            },
+            "tone": {
+              "origin": "start",
+              "value": "friendly"
+            },
+            "toneNotes": {
+              "origin": "owner",
+              "value": "No exclamation marks"
+            },
+            "whatYouDo": {
+              "origin": "owner",
+              "value": "Mobile grooming"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {
+                "displayName": "Bare Site",
+                "business": {
+                  "address": "9 Lane"
+                }
+              },
+              "site": {
+                "whatYouDo": "A guess",
+                "services": [
+                  "Full groom"
+                ],
+                "sources": {
+                  "whatYouDo": "ai",
+                  "services": "ai"
+                }
+              },
+              "workspace": {
+                "whatYouDo": "Workspace line",
+                "services": [
+                  "Default service"
+                ],
+                "audience": "Everyone",
+                "tone": "professional"
+              }
+            }
+          ],
+          "result": {
+            "audience": {
+              "origin": "workspace",
+              "value": "Everyone"
+            },
+            "businessType": null,
+            "contact": {
+              "address": "9 Lane",
+              "email": null,
+              "hours": null,
+              "phone": null
+            },
+            "logo": null,
+            "name": {
+              "origin": "site",
+              "value": "Bare Site"
+            },
+            "profiles": [],
+            "serviceArea": null,
+            "services": {
+              "origin": "ai",
+              "value": [
+                "Full groom"
+              ]
+            },
+            "tone": {
+              "origin": "workspace",
+              "value": "professional"
+            },
+            "toneNotes": null,
+            "whatYouDo": {
+              "origin": "ai",
+              "value": "A guess"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {
+                "displayName": "Bare Site",
+                "business": {
+                  "address": "9 Lane"
+                }
+              },
+              "workspace": {
+                "whatYouDo": "Workspace line",
+                "services": [
+                  "Default service"
+                ],
+                "audience": "Everyone",
+                "tone": "professional"
+              }
+            }
+          ],
+          "result": {
+            "audience": {
+              "origin": "workspace",
+              "value": "Everyone"
+            },
+            "businessType": null,
+            "contact": {
+              "address": "9 Lane",
+              "email": null,
+              "hours": null,
+              "phone": null
+            },
+            "logo": null,
+            "name": {
+              "origin": "site",
+              "value": "Bare Site"
+            },
+            "profiles": [],
+            "serviceArea": null,
+            "services": {
+              "origin": "workspace",
+              "value": [
+                "Default service"
+              ]
+            },
+            "tone": {
+              "origin": "workspace",
+              "value": "professional"
+            },
+            "toneNotes": null,
+            "whatYouDo": {
+              "origin": "workspace",
+              "value": "Workspace line"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "host": {
+                "seo": {
+                  "entity": {
+                    "areaServed": "A\nB\nA"
+                  }
+                },
+                "logoUrl": "  ",
+                "displayName": " x "
+              }
+            }
+          ],
+          "result": {
+            "audience": null,
+            "businessType": null,
+            "contact": {
+              "address": null,
+              "email": null,
+              "hours": null,
+              "phone": null
+            },
+            "logo": null,
+            "name": {
+              "origin": "site",
+              "value": "x"
+            },
+            "profiles": [],
+            "serviceArea": {
+              "origin": "site",
+              "value": "A, B"
+            },
+            "services": null,
+            "tone": null,
+            "toneNotes": null,
+            "whatYouDo": null
+          }
+        }
+      ]
+    },
     "resolveDisableCascade": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "cases": [
@@ -20942,6 +22617,125 @@
             "music",
             "ad-conversions"
           ]
+        }
+      ]
+    },
+    "resolveMediaSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "cases": [
+        {
+          "args": [
+            "media:h1/m1"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:h1/m1",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:org:o1/m2",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1:h9/m2"
+        },
+        {
+          "args": [
+            "media:org:o1:h1/m2",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1:h9/m2"
+        },
+        {
+          "args": [
+            "media:org:o1/m2",
+            {
+              "hostId": "bad host"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1/m2"
+        },
+        {
+          "args": [
+            "media:h1/m1@abc123"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:h1/m1@bad hash"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:bad scope/m1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "media:h1/"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "media:"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "/api/media/cdn/h1/m1"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "https://example.com/photo.jpg",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "https://example.com/photo.jpg"
+        },
+        {
+          "args": [
+            "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+          ],
+          "result": "/api/media/cdn/h1/m5"
+        },
+        {
+          "args": [
+            "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+            {
+              "hostId": "h2"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1:h2/m6"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
         }
       ]
     },
@@ -23426,6 +25220,107 @@
         }
       ]
     },
+    "sanitizeBusinessProfileValues": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "  one   sentence  ",
+              "services": "a, b\nc, A",
+              "tone": "plain",
+              "toneNotes": "x"
+            }
+          ],
+          "result": {
+            "services": [
+              "a",
+              "b",
+              "c"
+            ],
+            "tone": "plain",
+            "toneNotes": "x",
+            "whatYouDo": "one sentence"
+          }
+        },
+        {
+          "args": [
+            {
+              "services": [
+                "  Bath  ",
+                "",
+                "bath",
+                "B"
+              ],
+              "tone": "loud",
+              "audience": 42
+            }
+          ],
+          "result": {
+            "audience": "",
+            "services": [
+              "Bath",
+              "B"
+            ],
+            "tone": null
+          }
+        },
+        {
+          "args": [
+            {
+              "whatYouDo": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "services": [
+                "s0",
+                "s1",
+                "s2",
+                "s3",
+                "s4",
+                "s5",
+                "s6",
+                "s7",
+                "s8",
+                "s9",
+                "s10",
+                "s11",
+                "s12",
+                "s13",
+                "s14",
+                "s15",
+                "s16",
+                "s17",
+                "s18",
+                "s19"
+              ],
+              "serviceArea": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+            }
+          ],
+          "result": {
+            "serviceArea": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "services": [
+              "s0",
+              "s1",
+              "s2",
+              "s3",
+              "s4",
+              "s5",
+              "s6",
+              "s7",
+              "s8",
+              "s9",
+              "s10",
+              "s11"
+            ],
+            "whatYouDo": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        }
+      ]
+    },
     "scopeToStore": {
       "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "cases": [
@@ -23693,6 +25588,183 @@
         }
       ]
     },
+    "seoAuditFindingCount": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "pages": [],
+              "site": []
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "pages": [
+                {
+                  "findings": [
+                    {
+                      "code": "orphan"
+                    }
+                  ]
+                },
+                {
+                  "findings": []
+                },
+                {
+                  "findings": [
+                    {
+                      "code": "orphan"
+                    },
+                    {
+                      "code": "title-missing"
+                    }
+                  ]
+                }
+              ],
+              "site": [
+                {
+                  "code": "search-discouraged"
+                }
+              ]
+            }
+          ],
+          "result": 4
+        }
+      ]
+    },
+    "seoKeywordSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": {
+            "keywords": [],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            "a, b\nc"
+          ],
+          "result": {
+            "keywords": [
+              "a",
+              "b",
+              "c"
+            ],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            "a, A, b, c, d, e, f, g"
+          ],
+          "result": {
+            "keywords": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "unchecked": [
+              "f",
+              "g"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "x",
+              " y ",
+              "x"
+            ]
+          ],
+          "result": {
+            "keywords": [
+              "x",
+              "y"
+            ],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "keywords": [],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            "  spaced   out ,word"
+          ],
+          "result": {
+            "keywords": [
+              "spaced out",
+              "word"
+            ],
+            "unchecked": []
+          }
+        }
+      ]
+    },
+    "seoNormalizePath": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": "/"
+        },
+        {
+          "args": [
+            "/"
+          ],
+          "result": "/"
+        },
+        {
+          "args": [
+            "pricing"
+          ],
+          "result": "/pricing"
+        },
+        {
+          "args": [
+            "/pricing/"
+          ],
+          "result": "/pricing"
+        },
+        {
+          "args": [
+            "//a//"
+          ],
+          "result": "/a"
+        },
+        {
+          "args": [
+            "  /about  "
+          ],
+          "result": "/about"
+        },
+        {
+          "args": [
+            "/a/b/"
+          ],
+          "result": "/a/b"
+        }
+      ]
+    },
     "serializeStructuredValue": {
       "module": "libs/plugins/logic/src/lib/model/structured-value.ts",
       "cases": [
@@ -23820,6 +25892,132 @@
             "collection"
           ],
           "result": "[\"one\",2,true,[1]]"
+        }
+      ]
+    },
+    "siteProfileUrls": {
+      "module": "libs/aglyn/src/lib/app-utils/content-authors.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "displayName": "Paws & Co",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": "Paws and Company Grooming",
+                  "description": "Dog grooming with a calm, gentle hand.",
+                  "telephone": "(512) 555-0100",
+                  "email": "hello@paws.example",
+                  "openingHours": "Mo-Fr 09:00-17:00",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX"
+                  },
+                  "areaServed": [
+                    "Austin",
+                    "Round Rock"
+                  ],
+                  "businessType": "PetStore",
+                  "sameAs": [
+                    "https://facebook.com/paws",
+                    "http://nope.example",
+                    "https://facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "support@paws.example",
+                "address": "2 Side St\nAustin",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "url": "http://insecure.example"
+                  },
+                  null
+                ]
+              }
+            }
+          ],
+          "result": [
+            "https://facebook.com/paws",
+            "https://instagram.com/paws"
+          ]
+        },
+        {
+          "args": [
+            {
+              "business": {
+                "socialLinks": [
+                  {
+                    "url": "https://a.example"
+                  },
+                  {
+                    "url": "https://a.example"
+                  }
+                ]
+              }
+            }
+          ],
+          "result": [
+            "https://a.example"
+          ]
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "sameAs": [
+                    "https://s0.example",
+                    "https://s1.example",
+                    "https://s2.example",
+                    "https://s3.example",
+                    "https://s4.example",
+                    "https://s5.example",
+                    "https://s6.example",
+                    "https://s7.example",
+                    "https://s8.example",
+                    "https://s9.example",
+                    "https://s10.example",
+                    "https://s11.example",
+                    "https://s12.example",
+                    "https://s13.example",
+                    "https://s14.example",
+                    "https://s15.example",
+                    "https://s16.example",
+                    "https://s17.example",
+                    "https://s18.example",
+                    "https://s19.example"
+                  ]
+                }
+              }
+            }
+          ],
+          "result": [
+            "https://s0.example",
+            "https://s1.example",
+            "https://s2.example",
+            "https://s3.example",
+            "https://s4.example",
+            "https://s5.example",
+            "https://s6.example",
+            "https://s7.example",
+            "https://s8.example",
+            "https://s9.example",
+            "https://s10.example",
+            "https://s11.example"
+          ]
         }
       ]
     },
@@ -25888,6 +28086,229 @@
         }
       ]
     },
+    "videoMediaProps": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 63400,
+                "width": 1920,
+                "height": 1080
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 63,
+            "intrinsicHeight": 1080,
+            "intrinsicWidth": 1920
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 400,
+                "width": 640,
+                "height": 360
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 1,
+            "intrinsicHeight": 360,
+            "intrinsicWidth": 640
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 90500,
+                "width": 640,
+                "height": 360,
+                "codec": "avc1.640028"
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 91,
+            "intrinsicHeight": 360,
+            "intrinsicWidth": 640
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": "61000",
+                "width": "640",
+                "height": "360"
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 61,
+            "intrinsicHeight": 360,
+            "intrinsicWidth": 640
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 86400000,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 86400,
+            "intrinsicHeight": 720,
+            "intrinsicWidth": 1280
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 86400001,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 0,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": -5,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": 1280
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": 0,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": 16385,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": "wide",
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {}
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": null
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": "video"
+            }
+          ],
+          "result": {}
+        }
+      ]
+    },
     "waitLabel": {
       "module": "libs/plugins/funnels/src/lib/model/drop-off.ts",
       "cases": [
@@ -25932,6 +28353,899 @@
             36
           ],
           "result": "36 hours"
+        }
+      ]
+    },
+    "weeklyHoursFromText": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": {
+            "hours": [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "hours": [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "   \n  "
+          ],
+          "result": {
+            "hours": [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Mo-Fr 09:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Mo-Fr 09:00-17:00\nSa 10:00-14:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 840,
+                  "start": 600
+                }
+              ]
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Mo-Fr 09:00-12:00\nMo-Fr 13:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 720,
+                  "start": 540
+                },
+                {
+                  "end": 1020,
+                  "start": 780
+                }
+              ],
+              [
+                {
+                  "end": 720,
+                  "start": 540
+                },
+                {
+                  "end": 1020,
+                  "start": 780
+                }
+              ],
+              [
+                {
+                  "end": 720,
+                  "start": 540
+                },
+                {
+                  "end": 1020,
+                  "start": 780
+                }
+              ],
+              [
+                {
+                  "end": 720,
+                  "start": 540
+                },
+                {
+                  "end": 1020,
+                  "start": 780
+                }
+              ],
+              [
+                {
+                  "end": 720,
+                  "start": 540
+                },
+                {
+                  "end": 1020,
+                  "start": 780
+                }
+              ],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Mo,We,Fr 08:30-11:45"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 705,
+                  "start": 510
+                }
+              ],
+              [],
+              [
+                {
+                  "end": 705,
+                  "start": 510
+                }
+              ],
+              [],
+              [
+                {
+                  "end": 705,
+                  "start": 510
+                }
+              ],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Fr-Mo 10:00-14:00"
+          ],
+          "result": {
+            "hours": [
+              [
+                {
+                  "end": 840,
+                  "start": 600
+                }
+              ],
+              [
+                {
+                  "end": 840,
+                  "start": 600
+                }
+              ],
+              [],
+              [],
+              [],
+              [
+                {
+                  "end": 840,
+                  "start": 600
+                }
+              ],
+              [
+                {
+                  "end": 840,
+                  "start": 600
+                }
+              ]
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Sa-Su 10:00-16:00\nSu 18:00-22:00"
+          ],
+          "result": {
+            "hours": [
+              [
+                {
+                  "end": 960,
+                  "start": 600
+                },
+                {
+                  "end": 1320,
+                  "start": 1080
+                }
+              ],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [
+                {
+                  "end": 960,
+                  "start": 600
+                }
+              ]
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Mon-Fri 9:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Monday–Friday 09:00—17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Mo-Fr 22:00-02:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 120,
+                  "start": 1320
+                }
+              ],
+              [
+                {
+                  "end": 120,
+                  "start": 1320
+                }
+              ],
+              [
+                {
+                  "end": 120,
+                  "start": 1320
+                }
+              ],
+              [
+                {
+                  "end": 120,
+                  "start": 1320
+                }
+              ],
+              [
+                {
+                  "end": 120,
+                  "start": 1320
+                }
+              ],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "Mo-Fr 09:00-17:00\nclosed on holidays\nSa 25:00-26:00\nTu 09:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              []
+            ],
+            "unreadLines": [
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "args": [
+            "Mo 09:00-17:00\nMo 09:00-17:00\nMo 08:00-09:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [
+                {
+                  "end": 540,
+                  "start": 480
+                },
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            "M 09:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": [
+              1
+            ]
+          }
+        },
+        {
+          "args": [
+            "Mo-Tu-We 09:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": [
+              1
+            ]
+          }
+        },
+        {
+          "args": [
+            "Xx 09:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": [
+              1
+            ]
+          }
+        },
+        {
+          "args": [
+            "Su 00:00-23:59\r\nMo 09:00-17:00"
+          ],
+          "result": {
+            "hours": [
+              [
+                {
+                  "end": 1439,
+                  "start": 0
+                }
+              ],
+              [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": []
+          }
+        },
+        {
+          "args": [
+            42
+          ],
+          "result": {
+            "hours": [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ],
+            "unreadLines": []
+          }
+        }
+      ]
+    },
+    "weeklyHoursToText": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              [],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            [
+              [],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              []
+            ]
+          ],
+          "result": "Mo-Fr 09:00-17:00"
+        },
+        {
+          "args": [
+            [
+              [],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 600,
+                  "end": 840
+                }
+              ]
+            ]
+          ],
+          "result": "Mo-Fr 09:00-17:00\nSa 10:00-14:00"
+        },
+        {
+          "args": [
+            [
+              [],
+              [
+                {
+                  "start": 540,
+                  "end": 720
+                },
+                {
+                  "start": 780,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 780,
+                  "end": 1020
+                },
+                {
+                  "start": 540,
+                  "end": 720
+                }
+              ],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          "result": "Mo,Tu 09:00-12:00\nMo,Tu 13:00-17:00"
+        },
+        {
+          "args": [
+            [
+              [],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              []
+            ]
+          ],
+          "result": "Mo,We,Fr 09:00-17:00"
+        },
+        {
+          "args": [
+            [
+              [
+                {
+                  "start": 600,
+                  "end": 960
+                }
+              ],
+              [],
+              [],
+              [],
+              [],
+              [],
+              [
+                {
+                  "start": 600,
+                  "end": 960
+                }
+              ]
+            ]
+          ],
+          "result": "Sa,Su 10:00-16:00"
+        },
+        {
+          "args": [
+            [
+              [
+                {
+                  "start": 600,
+                  "end": 840
+                }
+              ],
+              [
+                {
+                  "start": 600,
+                  "end": 840
+                }
+              ],
+              [],
+              [],
+              [],
+              [
+                {
+                  "start": 600,
+                  "end": 840
+                }
+              ],
+              [
+                {
+                  "start": 600,
+                  "end": 840
+                }
+              ]
+            ]
+          ],
+          "result": "Mo,Fr-Su 10:00-14:00"
+        },
+        {
+          "args": [
+            [
+              [],
+              [
+                {
+                  "start": 1320,
+                  "end": 120
+                }
+              ],
+              [],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          "result": "Mo 22:00-02:00"
+        },
+        {
+          "args": [
+            [
+              [],
+              [],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 540,
+                  "end": 1020
+                }
+              ],
+              [
+                {
+                  "start": 480,
+                  "end": 1020
+                }
+              ],
+              [],
+              []
+            ]
+          ],
+          "result": "Tu,We 09:00-17:00\nTh 08:00-17:00"
+        },
+        {
+          "args": [
+            [
+              [
+                {
+                  "start": 0,
+                  "end": 1439
+                }
+              ],
+              [],
+              [],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          "result": "Su 00:00-23:59"
         }
       ]
     },

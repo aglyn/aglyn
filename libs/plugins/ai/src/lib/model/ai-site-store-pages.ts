@@ -385,6 +385,11 @@ export interface AiStoreFinishStep {
    * the layout version a build drafted its store's links into (AGL-3676).
    */
   opens: 'store-settings' | 'product' | 'pages' | 'layouts' | 'layout'
+  /**
+   * The record of `opens` to land on rather than its list: the store's
+   * settings are a page each (AGL-3713), and a step opens the one it names.
+   */
+  record?: string
   action: string
 }
 
@@ -400,6 +405,7 @@ export const AI_STORE_FINISH_STEPS: readonly AiStoreFinishStep[] = [
     title: 'Connect payments',
     text: 'Connect Stripe so your store can take payments and pay you out.',
     opens: 'store-settings',
+    record: 'payments',
     action: 'Set up payments',
   },
   {
@@ -414,6 +420,7 @@ export const AI_STORE_FINISH_STEPS: readonly AiStoreFinishStep[] = [
     title: 'Set shipping and tax',
     text: 'Choose your shipping rates and how tax is charged at checkout.',
     opens: 'store-settings',
+    record: 'shipping',
     action: 'Open store settings',
   },
   {

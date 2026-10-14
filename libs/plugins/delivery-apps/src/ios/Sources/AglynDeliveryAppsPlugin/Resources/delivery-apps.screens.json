@@ -1,0 +1,371 @@
+{
+  "$comment": "The Delivery apps plugin's native screens: the DoorDash, Uber Eats and Grubhub stores a site can link (by store id), each one's auto-accept and prep time, sending the menu, and matching the service's items to the products that take their stock. The register's delivery queue is the POS register's. Routes: GET /api/delivery-apps/stores, items and catalog, POST store, menu and items, DELETE store. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "delivery-apps.service",
+      "title": "Delivery apps",
+      "label": "Delivery apps",
+      "subtitle": "DoorDash, Uber Eats and Grubhub orders at your register",
+      "icon": "bicycle|local_shipping",
+      "scope": "site",
+      "order": 75,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "stores": "/api/delivery-apps/stores?hostId={site.id}"
+      },
+      "constants": {
+        "services": [
+          {
+            "id": "doordash",
+            "label": "DoorDash",
+            "storeIdLabel": "DoorDash store ID",
+            "storeIdHelp": "The store ID in your DoorDash Merchant Portal, or the location ID DoorDash set up for this integration."
+          },
+          {
+            "id": "uber-eats",
+            "label": "Uber Eats",
+            "storeIdLabel": "Uber Eats store ID",
+            "storeIdHelp": "The store UUID in Uber Eats Manager."
+          },
+          {
+            "id": "grubhub",
+            "label": "Grubhub",
+            "storeIdLabel": "Grubhub merchant ID",
+            "storeIdHelp": "The merchant ID in Grubhub for Restaurants."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.stores.offered",
+          "text": "No delivery app is available for this site yet."
+        },
+        {
+          "type": "list",
+          "id": "services",
+          "title": "Services",
+          "when": "data.stores.offered",
+          "items": "data.stores.offered",
+          "primary": "{const.services[id=item.id].label}",
+          "secondary": "{const.services[id=item.id].label} orders come to your register to accept, and take their items off the same shelf.",
+          "icon": "bicycle|local_shipping",
+          "badges": [
+            {
+              "text": "Connected",
+              "tone": "success",
+              "when": "data.stores.stores[service=item.id]"
+            },
+            {
+              "text": "Not connected",
+              "tone": "neutral",
+              "when": "!data.stores.stores[service=item.id]"
+            },
+            {
+              "text": "Sandbox",
+              "tone": "info",
+              "when": "item.sandbox"
+            }
+          ],
+          "open": {
+            "screen": "delivery-apps.store",
+            "params": {
+              "service": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "delivery-apps.store",
+      "title": "{const.services[id=params.service].label|'Delivery app'}",
+      "label": "Delivery app",
+      "icon": "bicycle|local_shipping",
+      "scope": "site",
+      "load": {
+        "stores": "/api/delivery-apps/stores?hostId={site.id}",
+        "items": {
+          "url": "/api/delivery-apps/items?hostId={site.id}&service={params.service}",
+          "optional": true
+        }
+      },
+      "constants": {
+        "services": [
+          {
+            "id": "doordash",
+            "label": "DoorDash",
+            "storeIdLabel": "DoorDash store ID",
+            "storeIdHelp": "The store ID in your DoorDash Merchant Portal, or the location ID DoorDash set up for this integration."
+          },
+          {
+            "id": "uber-eats",
+            "label": "Uber Eats",
+            "storeIdLabel": "Uber Eats store ID",
+            "storeIdHelp": "The store UUID in Uber Eats Manager."
+          },
+          {
+            "id": "grubhub",
+            "label": "Grubhub",
+            "storeIdLabel": "Grubhub merchant ID",
+            "storeIdHelp": "The merchant ID in Grubhub for Restaurants."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "when": "!data.stores.stores[service=params.service]",
+          "text": "Not connected. Enter your {const.services[id=params.service].storeIdLabel} to send its orders to your register."
+        },
+        {
+          "type": "notice",
+          "id": "sandbox",
+          "tone": "info",
+          "when": "!data.stores.stores[service=params.service] && data.stores.offered[id=params.service].sandbox",
+          "text": "This deployment takes {const.services[id=params.service].label} test orders only."
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Store",
+          "when": "data.stores.stores[service=params.service]",
+          "rows": [
+            {
+              "label": "{const.services[id=params.service].storeIdLabel}",
+              "value": "{data.stores.stores[service=params.service].externalStoreId}"
+            },
+            {
+              "label": "Connected",
+              "value": "{data.stores.stores[service=params.service].connectedAtMs:datetime}"
+            },
+            {
+              "label": "Menu last sent",
+              "value": "{data.stores.stores[service=params.service].menu.publishedAtMs:datetime} · {data.stores.stores[service=params.service].menu.items:number} items",
+              "when": "data.stores.stores[service=params.service].menu.publishedAtMs"
+            },
+            {
+              "label": "Menu",
+              "value": "Not sent yet",
+              "when": "!data.stores.stores[service=params.service].menu.publishedAtMs"
+            },
+            {
+              "label": "Items matching no product",
+              "value": "{data.stores.stores[service=params.service].unmatched:number}",
+              "when": "data.stores.stores[service=params.service].unmatched"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "menuError",
+          "tone": "warning",
+          "when": "data.stores.stores[service=params.service].menu.error",
+          "text": "{data.stores.stores[service=params.service].menu.error}"
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect {const.services[id=params.service].label}",
+              "icon": "link|link",
+              "when": "!data.stores.stores[service=params.service] && data.stores.offered[id=params.service]",
+              "url": "/api/delivery-apps/store",
+              "prompt": [
+                {
+                  "key": "externalStoreId",
+                  "label": "Store ID",
+                  "kind": "text",
+                  "required": true,
+                  "help": "Your {const.services[id=params.service].storeIdLabel}. {const.services[id=params.service].storeIdHelp}"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "service": "{params.service}",
+                "externalStoreId": "{form.externalStoreId}",
+                "settings": {
+                  "autoAccept": false,
+                  "prepMinutes": 15
+                }
+              },
+              "success": "{const.services[id=params.service].label} is connected."
+            },
+            {
+              "id": "menu",
+              "label": "Send menu",
+              "icon": "paperplane|send",
+              "when": "data.stores.stores[service=params.service]",
+              "url": "/api/delivery-apps/menu",
+              "body": {
+                "hostId": "{site.id}",
+                "service": "{params.service}"
+              },
+              "success": "Menu sent to {const.services[id=params.service].label}: {response.items} items."
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.stores.stores[service=params.service]",
+              "confirm": "Disconnect {const.services[id=params.service].label}? New {const.services[id=params.service].label} orders stop coming to your register. Orders already taken stay in your store. Turn the integration off in {const.services[id=params.service].label} too, or its orders wait there for an answer.",
+              "method": "DELETE",
+              "url": "/api/delivery-apps/store",
+              "body": {
+                "hostId": "{site.id}",
+                "service": "{params.service}"
+              },
+              "back": true,
+              "success": "{const.services[id=params.service].label} is disconnected."
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Orders",
+          "when": "data.stores.stores[service=params.service]",
+          "fields": [
+            {
+              "key": "autoAccept",
+              "label": "Accept orders automatically",
+              "kind": "toggle",
+              "initial": "{data.stores.stores[service=params.service].settings.autoAccept}"
+            },
+            {
+              "key": "prepMinutes",
+              "label": "Prep time (minutes)",
+              "kind": "number",
+              "initial": "{data.stores.stores[service=params.service].settings.prepMinutes}",
+              "help": "Between 5 and 120. Sent with each order you accept, so the courier arrives when it is ready."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/delivery-apps/store",
+            "body": {
+              "hostId": "{site.id}",
+              "service": "{params.service}",
+              "settings": {
+                "autoAccept": "{form.autoAccept}",
+                "prepMinutes": "{form.prepMinutes}"
+              }
+            },
+            "success": "Saved."
+          }
+        },
+        {
+          "type": "list",
+          "id": "items",
+          "title": "Items",
+          "when": "data.stores.stores[service=params.service] && data.items.items",
+          "items": "data.items.items",
+          "primary": "{item.name}",
+          "secondary": "{item.title|item.externalItemId}",
+          "icon": "fork.knife|inventory_2",
+          "badges": [
+            {
+              "text": "Matched",
+              "tone": "success",
+              "when": "item.productId"
+            },
+            {
+              "text": "Not matched",
+              "tone": "warning",
+              "when": "!item.productId"
+            }
+          ],
+          "footer": "Each item takes stock from the product it is matched to.",
+          "open": {
+            "screen": "delivery-apps.match",
+            "params": {
+              "service": "{params.service}",
+              "externalItemId": "{item.externalItemId}",
+              "name": "{item.name}"
+            },
+            "when": "!item.productId"
+          },
+          "actions": [
+            {
+              "id": "clear",
+              "label": "Clear match",
+              "icon": "xmark.circle|link_off",
+              "when": "item.productId",
+              "url": "/api/delivery-apps/items",
+              "body": {
+                "hostId": "{site.id}",
+                "service": "{params.service}",
+                "externalItemId": "{item.externalItemId}",
+                "name": "{item.name}",
+                "clear": true
+              },
+              "success": "Cleared."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "delivery-apps.match",
+      "title": "Match {params.name|'an item'}",
+      "label": "Match an item",
+      "icon": "link|link",
+      "scope": "site",
+      "load": {
+        "options": {
+          "url": "/api/delivery-apps/catalog?hostId={site.id}",
+          "searchParam": "q",
+          "items": "options"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "text": "Choose the product this item takes stock from. Each one sold takes a unit of it off your shelf."
+        },
+        {
+          "type": "list",
+          "id": "options",
+          "title": "Products",
+          "items": "data.options.options",
+          "load": "options",
+          "search": true,
+          "primary": "{item.title}",
+          "secondary": "{item.sku}",
+          "icon": "shippingbox|inventory_2",
+          "actions": [
+            {
+              "id": "match",
+              "label": "Match",
+              "icon": "link|link",
+              "url": "/api/delivery-apps/items",
+              "body": {
+                "hostId": "{site.id}",
+                "service": "{params.service}",
+                "externalItemId": "{params.externalItemId}",
+                "name": "{params.name}",
+                "productId": "{item.productId}",
+                "variantId": "{item.variantId}",
+                "title": "{item.title}"
+              },
+              "back": true,
+              "success": "Matched to {item.title}"
+            }
+          ],
+          "empty": "No product matches that search."
+        }
+      ]
+    }
+  ]
+}

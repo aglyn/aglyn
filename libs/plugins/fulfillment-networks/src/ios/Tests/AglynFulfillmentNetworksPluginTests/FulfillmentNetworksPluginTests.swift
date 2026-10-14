@@ -12,7 +12,7 @@ final class FulfillmentNetworksPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["fulfillment-networks.network", "fulfillment-networks.service"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["fulfillment-networks.network", "fulfillment-networks.order", "fulfillment-networks.service"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "fulfillment-networks", contributes: declared, register: registerFulfillmentNetworksNative)], into: registry)
     XCTAssertEqual(result.failed, [])

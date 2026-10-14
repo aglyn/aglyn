@@ -15,13 +15,14 @@ import Foundation
 
 /// The setup sections, in the console's order (`setup-sections.ts`).
 public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
-  case details, seo, tracking, theme, emails
+  case details, business, seo, tracking, theme, emails
 
   public var id: String { rawValue }
 
   public var title: String {
     switch self {
     case .details: "Basic details"
+    case .business: "Business profile"
     case .seo: "SEO"
     case .tracking: "Tracking"
     case .theme: "Theme"
@@ -32,6 +33,7 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
   public var supporting: String {
     switch self {
     case .details: "Logo, business details, layout and languages"
+    case .business: "What the business is, for everything that writes about it"
     case .seo: "Search title, social image, business profile and verification"
     case .tracking: "Analytics, ad tags and the consent banner"
     case .theme: "Colors, font, shape and your saved themes"
@@ -42,6 +44,7 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
   public var systemImage: String {
     switch self {
     case .details: "info.circle"
+    case .business: "storefront"
     case .seo: "magnifyingglass"
     case .tracking: "chart.xyaxis.line"
     case .theme: "paintpalette"

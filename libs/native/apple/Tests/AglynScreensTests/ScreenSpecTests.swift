@@ -78,10 +78,11 @@ final class ScreenSpecTests: XCTestCase {
       }
       specs += parsed
     }
-    // Every screen a spec opens or navigates to exists.
+    // Every screen a spec opens or navigates to exists: a spec, or one a plugin draws by hand.
+    let handWritten: Set<String> = ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.sales"]
     for spec in specs {
       for target in Self.targets(spec.raw) {
-        XCTAssertTrue(ids.contains(target), "\(spec.id) opens \(target), which no spec declares")
+        XCTAssertTrue(ids.contains(target) || handWritten.contains(target), "\(spec.id) opens \(target), which no spec declares")
       }
     }
   }
@@ -175,6 +176,22 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(asked("question"), ["kind", "summary", "question", "tried", "skipDeflection", "contactConsent"])
   }
 
+  /// An `export` action asks nothing of a route: it names the transfer resource, and its title, file name and filter are templates.
+  func testAnExportActionNamesTheResourceAndMakesNoRequestOfItsOwn() throws {
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Export",
+        "export": ["resource": "forms.submissions", "title": "Export {item.name}", "fileStem": "{item.slug}", "filter": ["formId": "{item.id}"]],
+      ]))
+    let export = try XCTUnwrap(action.export)
+    XCTAssertEqual(export["resource"]?.stringValue, "forms.submissions")
+    XCTAssertNil(action.url)
+    XCTAssertFalse(action.reload, "an export has nothing to reload")
+    let scope: JSONValue = ["item": ["id": "f1", "name": "Contact", "slug": "contact"]]
+    XCTAssertEqual(ScreenValues.render(export["title"]?.stringValue ?? "", in: scope), "Export Contact")
+    XCTAssertEqual(ScreenValues.resolveBody(try XCTUnwrap(export["filter"]), in: scope), ["formId": "f1"])
+  }
+
   /// An action's `headers` go out with the request, and `{attempt}` holds one key while the same
   /// request is sent again and takes a new one when the body changes (enterprise billing).
   @MainActor
@@ -198,6 +215,26 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(transport.requests[0].value(forHTTPHeaderField: "X-Staff"), "yes")
     _ = await model.run(action, in: model.context)
     XCTAssertEqual(transport.requests.last?.value(forHTTPHeaderField: "Idempotency-Key"), keys[0])
+  }
+
+  /// `{press}` is one key per tap: its own retry shares it, and a second tap of the very same request gets another.
+  @MainActor
+  func testAPressKeyIsNewForEachTapAndSharedByItsRetries() async throws {
+    let transport = RecordingTransport(responses: [(503, "{}"), (200, "{}"), (200, "{}")])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: ["form": ["points": "50"]], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Adjust", "url": "/api/loyalty/member", "body": ["points": "{form.points}"],
+        "headers": ["Idempotency-Key": "{press}"],
+      ]))
+    _ = await model.run(action, in: model.context)
+    _ = await model.run(action, in: model.context)
+    let keys = transport.requests.map { $0.value(forHTTPHeaderField: "Idempotency-Key") }
+    XCTAssertEqual(keys.count, 3)
+    XCTAssertNotNil(keys[0])
+    XCTAssertEqual(keys[0], keys[1])
+    XCTAssertNotEqual(keys[1], keys[2])
   }
 
   @MainActor
@@ -310,6 +347,99 @@ final class ScreenSpecTests: XCTestCase {
     default: return []
     }
   }
+
+  /// A form or prompt that lists the service's own fields from the data (a carrier's credentials).
+  func testFieldsFromDataBecomeFields() throws {
+    let context: JSONValue = [
+      "data": ["fields": [
+        ["key": "account_number", "label": "Account number", "secret": false],
+        ["key": "password", "label": "Password", "helper": "Kept sealed.", "secret": true, "required": true],
+        ["key": "is_test", "label": "Test account", "checkbox": true],
+        ["key": "unit", "label": "Unit", "options": [["value": "kg", "label": "Kilograms"], ["value": "lb", "label": "Pounds"]]],
+      ]]
+    ]
+    let entry: JSONValue = [
+      "fieldsFrom": [
+        "items": "data.fields", "key": "{item.key}", "label": "{item.label}", "help": "{item.helper}",
+        "required": "required", "options": "options", "kinds": ["secret": "password", "checkbox": "yesno"],
+      ]
+    ]
+    let fields = FieldSpec.parseAll([entry], in: context)
+    XCTAssertEqual(fields.map(\.key), ["account_number", "password", "is_test", "unit"])
+    XCTAssertEqual(fields.map(\.kind), ["text", "password", "select", "select"])
+    XCTAssertEqual(fields.map(\.required), [false, true, false, false])
+    XCTAssertEqual(fields[1].help, "Kept sealed.")
+    XCTAssertEqual(fields[2].options.map(\.value), ["", "true"])
+    XCTAssertEqual(fields[3].options.map(\.label), ["Kilograms", "Pounds"])
+    XCTAssertEqual(fields[3].initial, "kg")
+  }
+
+  /// `where` keeps only the rows a condition holds for; a row's field of every row projects with `*`.
+  func testOptionsCanBeFilteredAndRowsProjected() throws {
+    let context: JSONValue = [
+      "data": ["accounts": [
+        ["id": "a1", "name": "Sales", "classification": "income"],
+        ["id": "a2", "name": "Main bank", "classification": "bank"],
+      ]]
+    ]
+    let field = try XCTUnwrap(
+      FieldSpec(
+        [
+          "key": "clearing", "kind": "select",
+          "optionsFrom": ["items": "data.accounts", "where": "item.classification == bank", "value": "{item.id}", "label": "{item.name}"],
+        ]))
+    XCTAssertEqual(field.choices(in: context).map(\.value), ["a2"])
+    XCTAssertEqual(ScreenValues.render("{data.accounts.*.name}", in: context), "Sales, Main bank")
+  }
+
+  /// A plugin's package bundles every spec file it has: a file left out of `resources` compiles and tests green, and
+  /// its screens are simply missing from the app.
+  func testEveryPluginSpecFileIsBundledByItsPackage() throws {
+    let plugins = Self.screensDir.appendingPathComponent("../../plugins").standardizedFileURL
+    let dirs = try FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil)
+    var checked = 0
+    for dir in dirs {
+      let package = dir.appendingPathComponent("src/ios/Package.swift")
+      guard let manifest = try? String(contentsOf: package, encoding: .utf8) else { continue }
+      let sources = dir.appendingPathComponent("src/ios/Sources")
+      for target in (try? FileManager.default.contentsOfDirectory(at: sources, includingPropertiesForKeys: nil)) ?? [] {
+        let resources = target.appendingPathComponent("Resources")
+        for file in (try? FileManager.default.contentsOfDirectory(at: resources, includingPropertiesForKeys: nil)) ?? []
+        where file.lastPathComponent.hasSuffix(".screens.json") {
+          checked += 1
+          XCTAssertTrue(manifest.contains("\"Resources/\(file.lastPathComponent)\""), "\(package.path) does not bundle \(file.lastPathComponent)")
+        }
+      }
+    }
+    XCTAssertGreaterThan(checked, 20)
+  }
+
+  /// A report picks one of the last twelve months, newest first, each ending where the next begins.
+  func testTheLastTwelveMonthsRunNewestFirstWithoutGaps() throws {
+    let now = ScreenSession.now(Date(timeIntervalSince1970: 1_792_000_000))
+    let months = ScreenValues.lookup("months", in: now).array
+    XCTAssertEqual(months.count, 12)
+    XCTAssertEqual(months[0]["label"]?.stringValue, "October 2026")
+    XCTAssertEqual(months[0]["from"]?.stringValue, "2026-10-01T00:00:00.000Z")
+    XCTAssertEqual(months[0]["to"]?.stringValue, "2026-11-01T00:00:00.000Z")
+    XCTAssertEqual(months[11]["from"]?.stringValue, "2025-11-01T00:00:00.000Z")
+    for index in 1..<12 { XCTAssertEqual(months[index]["to"]?.stringValue, months[index - 1]["from"]?.stringValue) }
+  }
+
+  /// A map offers one choice per entry, by value (the site's screens by id); a whole-number field rounds; a pattern holds a typed value.
+  func testChoicesFromAMapAndFieldsThatHoldWhatIsTyped() throws {
+    let context: JSONValue = ["data": ["screens": ["s1": "shop", "s2": "/", "s3": "about"]]]
+    let pick = try XCTUnwrap(
+      FieldSpec(["key": "pdp", "kind": "select", "optionsFrom": ["items": "data.screens", "value": "{item.$id}", "label": "{item.$value:slashed}"]]))
+    XCTAssertEqual(pick.choices(in: context).map(\.value), ["s2", "s3", "s1"])
+    XCTAssertEqual(pick.choices(in: context).map(\.label), ["/", "/about", "/shop"])
+    let count = try XCTUnwrap(FieldSpec(["key": "n", "kind": "number", "integer": true]))
+    XCTAssertEqual(fieldJSON(count, .text("2.6")), .number(3))
+    let url = try XCTUnwrap(FieldSpec(["key": "u", "kind": "url", "pattern": "^https://"]))
+    XCTAssertTrue(url.unmet(.string("http://a.test"), in: [:]))
+    XCTAssertFalse(url.unmet(.string("https://a.test"), in: [:]))
+    XCTAssertFalse(url.unmet(.string(""), in: [:]), "an empty value is left to `required`")
+  }
 }
 
 final class RecordingTransport: HTTPTransport, @unchecked Sendable {
@@ -327,4 +457,5 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
     let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
     return (Data(body.utf8), response)
   }
+
 }

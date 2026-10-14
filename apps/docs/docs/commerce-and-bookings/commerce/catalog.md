@@ -139,7 +139,7 @@ page for example, set **Show** to **Whole store** and choose **Max reviews**
 
 ### Review settings {#review-settings}
 
-The **Reviews** card in **Settings** decides who can review your products
+The **Reviews** card on **Products → Promotions** decides who can review your products
 and when customers are asked for a review.
 
 **Who can review.** By default only customers who bought the product can
@@ -149,7 +149,7 @@ email their order went to, or when they open the link in their
 review-request email. Typing an email address into the form never verifies
 anyone. Everyone else sees "Only customers who bought this can review" and a
 **Sign in** link. To accept reviews from anyone, set **Who can review** to
-**Anyone** on the **Reviews** card in **Settings**: verified buyers still
+**Anyone** on the **Reviews** card in **Promotions**: verified buyers still
 publish right away, and everyone else gives a name and an email (never shown)
 and waits for your approval.
 
@@ -190,8 +190,8 @@ lowercase letters, numbers, and dashes.
 
 Your catalog is published as a product feed for Google Merchant Center, and
 for Meta, TikTok, Pinterest, Snapchat and Microsoft Shopping too. Each
-channel has its own feed address and setup steps in the store's settings,
-under **Sales channels**; see [Sales channels](./sales-channels.md).
+channel has its own feed address and setup steps on the
+**Products → Sales channels** page; see [Sales channels](./sales-channels.md).
 
 ## Related
 

@@ -20,7 +20,11 @@ import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import { HubSections } from '@aglyn/shared-ui-next'
 import type { ReactNode } from 'react'
-import type { CommerceConsoleSectionId } from './commerce-console-sections'
+import {
+  COMMERCE_SETTINGS_PAGE_ZONES,
+  type CommerceConsoleSectionId,
+  type CommerceSettingsSectionId,
+} from './commerce-console-sections'
 import CatalogOrganizationCard from './console/catalog-organization-card.component'
 import CommerceAnalyticsCard from './console/commerce-analytics-card.component'
 import CustomerNotificationsCard from './console/customer-notifications-card.component'
@@ -55,18 +59,47 @@ import StoreSettingsCard from './console/store-settings-card.component'
 import StorefrontTaxSummaryCard from './console/storefront-tax-summary-card.component'
 import SuppliersCard from './console/suppliers-card.component'
 import TaxSettingsCard from './console/tax-settings-card.component'
-import { COMMERCE_PROMOTIONS_ZONE, COMMERCE_SETTINGS_ZONE } from './console/store-zones'
+import { COMMERCE_PROMOTIONS_ZONE } from './console/store-zones'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
 /**
- * The `commerceSettings` zone (AGL-3612): other plugins' settings for the
- * store — label settings and carrier accounts — under the store's own.
+ * A settings page's zone (AGL-3612, AGL-3713): other plugins' settings for
+ * the store — label settings, carrier accounts, a tax service — under the
+ * page's own cards. One zone per page, from `COMMERCE_SETTINGS_PAGE_ZONES`;
+ * Integrations draws `commerceSettings`, where a widget naming no page lands.
  */
-function CommerceSettingsZone(props: { hostId: string }) {
+function CommerceSettingsZone(props: {
+  hostId: string
+  page: CommerceSettingsSectionId
+}) {
   const WidgetSlot = useConsoleWidgetSlot()
   return WidgetSlot ? (
-    <WidgetSlot slot={COMMERCE_SETTINGS_ZONE.id} hostId={props.hostId} orgId={undefined} />
+    <WidgetSlot
+      slot={COMMERCE_SETTINGS_PAGE_ZONES[props.page]}
+      hostId={props.hostId}
+      orgId={undefined}
+    />
   ) : null
+}
+
+/** One settings page: its cards in order, then its zone (AGL-3713). */
+function settingsPage(
+  page: CommerceSettingsSectionId,
+  hostId: string,
+  cards: readonly ReactNode[],
+): ReactNode {
+  return (
+    <GridItems
+      spacing={3}
+      items={[
+        ...cards.map((children) => ({ size: { xs: 12 }, children })),
+        {
+          size: { xs: 12 },
+          children: <CommerceSettingsZone hostId={hostId} page={page} />,
+        },
+      ]}
+    />
+  )
 }
 
 /**
@@ -85,7 +118,7 @@ function CommercePromotionsZone(props: { hostId: string }) {
  * being read (AGL-2501).
  *
  * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
- * would CONSTRUCT all six every render, and each card opens its Firestore
+ * would CONSTRUCT every section every render, and each card opens its Firestore
  * listens on mount — which is the entire cost this page exists to stop paying.
  * Only the returned branch is ever built.
  */
@@ -160,6 +193,12 @@ function sectionBody(
               size: { xs: 12 },
               children: <ReviewsModerationCard hostId={hostId} />,
             },
+            // Who may review, and the review-request email (AGL-3736),
+            // beside the queue those reviews land in.
+            {
+              size: { xs: 12 },
+              children: <ReviewSettingsCard hostId={hostId} />,
+            },
             {
               size: { xs: 12 },
               children: <CommercePromotionsZone hostId={hostId} />,
@@ -169,80 +208,72 @@ function sectionBody(
       )
     case 'reservations':
       return <ReservationsCard hostId={hostId} />
-    case 'settings':
-      return (
-        <GridItems
-          spacing={3}
-          items={[
-            {
-              size: { xs: 12 },
-              children: <PaymentsSettingsCard hostId={hostId} />,
-            },
-            // What shoppers may pay with (AGL-3629), beside the account the
-            // money lands in.
-            {
-              size: { xs: 12 },
-              children: <PaymentMethodsCard hostId={hostId} />,
-            },
-            {
-              size: { xs: 12 },
-              children: <StoreSettingsCard hostId={hostId} />,
-            },
-            {
-              size: { xs: 12 },
-              children: <ReturnSettingsCard hostId={hostId} />,
-            },
-            {
-              size: { xs: 12 },
-              children: <CustomerNotificationsCard hostId={hostId} />,
-            },
-            // Who may review, and the review-request email (AGL-3736).
-            {
-              size: { xs: 12 },
-              children: <ReviewSettingsCard hostId={hostId} />,
-            },
-            { size: { xs: 12 }, children: <TaxSettingsCard hostId={hostId} /> },
-            { size: { xs: 12 }, children: <LocationsCard hostId={hostId} /> },
-            { size: { xs: 12 }, children: <RegistersCard hostId={hostId} /> },
-            { size: { xs: 12 }, children: <PosStaffPinsCard hostId={hostId} /> },
-            // A register's printers, cash drawer and status (AGL-3619), one
-            // card per register, after the list that names them.
-            {
-              size: { xs: 12 },
-              children: <RegisterHardwareCards hostId={hostId} />,
-            },
-            { size: { xs: 12 }, children: <PosDevicesCard hostId={hostId} canManagePos={canManagePos} /> },
-            {
-              size: { xs: 12 },
-              children: <ShippingSettingsCard hostId={hostId} />,
-            },
-            // The store's own delivery (AGL-3624); pickup is per location,
-            // on the Inventory locations card above.
-            {
-              size: { xs: 12 },
-              children: <LocalDeliverySettingsCard hostId={hostId} />,
-            },
-            { size: { xs: 12 }, children: <SuppliersCard hostId={hostId} /> },
-            { size: { xs: 12 }, children: <ShipStationCard hostId={hostId} /> },
-            // ShippingEasy, with the merchant's own keys (AGL-3633).
-            { size: { xs: 12 }, children: <ShippingEasyCard hostId={hostId} /> },
-            // The store's own endpoints for order events (AGL-3611). Renders
-            // nothing for a person who may not manage them.
-            {
-              size: { xs: 12 },
-              children: <OrderWebhooksCard hostId={hostId} />,
-            },
-            {
-              size: { xs: 12 },
-              children: <CommerceSettingsZone hostId={hostId} />,
-            },
-          ]}
-        />
-      )
+    /*
+     * The store's settings, a page each (AGL-3713). They were one `settings`
+     * section — every card below in one column — and its old address opens
+     * Payments (`COMMERCE_RETIRED_SECTIONS`). Each page is its cards, then
+     * the zone where other plugins' cards for that page land.
+     */
+    case 'payments':
+      return settingsPage(section, hostId, [
+        <PaymentsSettingsCard key="payments" hostId={hostId} />,
+        // What shoppers may pay with (AGL-3629), beside the account the
+        // money lands in.
+        <PaymentMethodsCard key="methods" hostId={hostId} />,
+      ])
+    case 'checkout':
+      return settingsPage(section, hostId, [
+        <StoreSettingsCard key="store" hostId={hostId} />,
+        // Whether buyers may ask for a return online (AGL-3611): the store's
+        // policy, beside the terms and guest-checkout rules above it.
+        <ReturnSettingsCard key="returns" hostId={hostId} />,
+      ])
+    case 'taxes':
+      return settingsPage(section, hostId, [
+        <TaxSettingsCard key="tax" hostId={hostId} />,
+      ])
+    case 'shipping':
+      return settingsPage(section, hostId, [
+        <ShippingSettingsCard key="shipping" hostId={hostId} />,
+        // Where parcels ship from, and pickup, per location.
+        <LocationsCard key="locations" hostId={hostId} />,
+        // The store's own delivery (AGL-3624); pickup is per location, on
+        // the Inventory locations card above.
+        <LocalDeliverySettingsCard key="local" hostId={hostId} />,
+        <SuppliersCard key="suppliers" hostId={hostId} />,
+        <ShipStationCard key="shipstation" hostId={hostId} />,
+        // ShippingEasy, with the merchant's own keys (AGL-3633).
+        <ShippingEasyCard key="shippingeasy" hostId={hostId} />,
+      ])
+    case 'notifications':
+      return settingsPage(section, hostId, [
+        <CustomerNotificationsCard key="customers" hostId={hostId} />,
+        // The store's own endpoints for order events (AGL-3611). Renders
+        // nothing for a person who may not manage them.
+        <OrderWebhooksCard key="webhooks" hostId={hostId} />,
+      ])
+    case 'pos':
+      return settingsPage(section, hostId, [
+        <RegistersCard key="registers" hostId={hostId} />,
+        <PosStaffPinsCard key="pins" hostId={hostId} />,
+        // A register's printers, cash drawer and status (AGL-3619), one card
+        // per register, after the list that names them.
+        <RegisterHardwareCards key="hardware" hostId={hostId} />,
+        <PosDevicesCard
+          key="devices"
+          hostId={hostId}
+          canManagePos={canManagePos}
+        />,
+      ])
+    case 'channels':
+    case 'integrations':
+      // Other plugins' cards only; the rail leaves either page out while
+      // its zone has nothing to draw (`onlyWithZones`).
+      return settingsPage(section, hostId, [])
     case 'analytics':
       return (
         // Two cards since AGL-2440. The tax summary lives here rather
-        // than under Settings → Tax because that tab CONFIGURES tax and
+        // than on the Taxes settings page because that page CONFIGURES tax and
         // this REPORTS what was collected — a merchant reading a figure
         // they may file from should not be one field away from changing
         // the rate that produced it.
@@ -274,7 +305,7 @@ function sectionBody(
  *
  * ## Sections are ROUTES (AGL-2501)
  *
- * The six sections hold thirty-two Firestore listens between them, and a tab
+ * The sections hold thirty-two Firestore listens between them, and a tab
  * strip mounts every panel: opening Catalog also subscribed the orders,
  * promotions, reservations, settings and analytics cards. The `limit()` on
  * those queries is the bill — several ask for 500, and one load reached a

@@ -128,6 +128,7 @@ struct SpecScreenBody: View {
   @State private var reauthing: PendingAction?
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
+  @State private var exporting: TransferExportRequest?
   @State private var running: String?
   @State private var searchText = ""
 
@@ -169,6 +170,12 @@ struct SpecScreenBody: View {
           reauthing = nil
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
+        }
+      }
+      .sheet(item: $exporting) { request in
+        TransferExportSheet(context: plugin, request: request) { message in
+          exporting = nil
+          if let message { show(message, .success) }
         }
       }
       .alert(
@@ -332,6 +339,14 @@ struct SpecScreenBody: View {
             .accessibilityIdentifier("zone-widget-\(widget.id)")
         }
       }
+      // `empty`: what to say when no plugin has put anything in the zone.
+      if contributions.isEmpty, widgets.isEmpty, let empty = block["empty"]?.stringValue {
+        Section {
+          AglynNotice(ScreenValues.render(empty, in: context), tone: .info)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+        }
+      }
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))
@@ -366,7 +381,7 @@ struct SpecScreenBody: View {
   }
 
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
-    if !action.inputs.isEmpty {
+    if action.asksInputs {
       prompting = PendingAction(action: action, scope: scope)
     } else if action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
       confirming = PendingAction(action: action, scope: scope)
@@ -379,6 +394,18 @@ struct SpecScreenBody: View {
     if let copy = action.copy {
       copyToClipboard(ScreenValues.render(copy, in: scope))
       show("Copied", .success)
+      return
+    }
+    if let export = action.export {
+      let resource = export["resource"]?.stringValue ?? ""
+      let resolved = { (key: String) in export[key].map { ScreenValues.resolveBody($0, in: scope) } }
+      exporting = TransferExportRequest(
+        resource: resource,
+        title: ScreenValues.render(export["title"]?.stringValue ?? action.label, in: scope),
+        hostID: plugin.hostID,
+        scope: resolved("scope") ?? .object(["kind": .string("all")]),
+        fileStem: ScreenValues.render(export["fileStem"]?.stringValue ?? resource, in: scope),
+        filter: resolved("filter"))
       return
     }
     if let path = action.besigner {
@@ -442,7 +469,8 @@ struct SpecScreenBody: View {
       } else if let message, !message.isEmpty {
         show(message, .success)
       }
-      if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) {
+      // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
+      if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) ?? ScreenValues.lookup(reveal, in: after) {
         revealed = (action.label, ScreenValues.text(value))
       }
       if let openPath = action.openURL, let link = ScreenValues.lookup(openPath, in: response ?? .null)?.stringValue,
@@ -456,6 +484,10 @@ struct SpecScreenBody: View {
       if action.back {
         dismiss()
         return
+      }
+      if let follow = model.followUp {
+        model.followUp = nil
+        prompting = PendingAction(action: follow.action, scope: follow.scope)
       }
       if action.reload { await model.load() }
     }

@@ -3570,6 +3570,114 @@ public struct ScreenTrafficRow: Codable, Hashable, Sendable {
   }
 }
 
+public struct SeoAuditReport: Codable, Hashable, Sendable {
+  public var notes: [String]
+  public var pages: [SeoPageReport]
+  public var score: Double
+  public var site: [SeoFinding]
+  public var skipped: Int
+
+  public init(notes: [String], pages: [SeoPageReport], score: Double, site: [SeoFinding], skipped: Int) {
+    self.notes = notes
+    self.pages = pages
+    self.score = score
+    self.site = site
+    self.skipped = skipped
+  }
+}
+
+public struct SeoFinding: Codable, Hashable, Sendable {
+  public var code: SeoFindingCode
+  public var keyword: String?
+  public var message: String
+  public var nodeIds: [String]?
+  public var screenIds: [String]?
+  public var severity: SeoSeverity
+
+  public init(code: SeoFindingCode, keyword: String? = nil, message: String, nodeIds: [String]? = nil, screenIds: [String]? = nil, severity: SeoSeverity) {
+    self.code = code
+    self.keyword = keyword
+    self.message = message
+    self.nodeIds = nodeIds
+    self.screenIds = screenIds
+    self.severity = severity
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum SeoFindingCode: String, Codable, CaseIterable, Hashable, Sendable {
+  case descriptionDuplicate = "description-duplicate"
+  case descriptionMissing = "description-missing"
+  case descriptionTooLong = "description-too-long"
+  case entityIncomplete = "entity-incomplete"
+  case h1Missing = "h1-missing"
+  case h1Multiple = "h1-multiple"
+  case h1Thin = "h1-thin"
+  case imageAltMissing = "image-alt-missing"
+  case keywordMissing = "keyword-missing"
+  case llmsGuidanceMissing = "llms-guidance-missing"
+  case orphan = "orphan"
+  case searchDiscouraged = "search-discouraged"
+  case titleDuplicate = "title-duplicate"
+  case titleMissing = "title-missing"
+  case titleTooLong = "title-too-long"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct SeoKeywordCoverage: Codable, Hashable, Sendable {
+  public var inBody: Bool
+  public var inDescription: Bool
+  public var inH1: Bool
+  public var inTitle: Bool
+  public var keyword: String
+
+  public init(inBody: Bool, inDescription: Bool, inH1: Bool, inTitle: Bool, keyword: String) {
+    self.inBody = inBody
+    self.inDescription = inDescription
+    self.inH1 = inH1
+    self.inTitle = inTitle
+    self.keyword = keyword
+  }
+}
+
+public struct SeoPageReport: Codable, Hashable, Sendable {
+  public var findings: [SeoFinding]
+  public var keywords: [SeoKeywordCoverage]
+  public var name: String
+  public var path: String
+  public var score: Int
+  public var screenId: String
+  public var versionId: String?
+
+  public init(findings: [SeoFinding], keywords: [SeoKeywordCoverage], name: String, path: String, score: Int, screenId: String, versionId: String? = nil) {
+    self.findings = findings
+    self.keywords = keywords
+    self.name = name
+    self.path = path
+    self.score = score
+    self.screenId = screenId
+    self.versionId = versionId
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum SeoSeverity: String, Codable, CaseIterable, Hashable, Sendable {
+  case high = "high"
+  case low = "low"
+  case medium = "medium"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct SiteFilterOptions: Codable, Hashable, Sendable {
   public var hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]
 
@@ -3676,7 +3784,9 @@ public struct WhereUsedResult: Codable, Hashable, Sendable {
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let areaServedMax: Int
+  public let areaServedNameMaxLength: Int
   public let artifactTypeLabels: [String: String]
+  public let authorSameAsMax: Int
   public let bookingFieldAsks: [BookingFieldAsk]
   public let bookingInPersonMaxCents: Int
   public let bookingInPersonMinCents: Int
@@ -3688,6 +3798,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let bookingStateLabels: [String: String]
   public let bookingWeekdays: [String]
   public let browseSorts: [String: ListQuerySort]
+  public let businessProfileFieldOrder: [String]
+  public let businessProfileMaxChars: [String: Double]
+  public let businessProfileMaxServices: Int
+  public let businessProfileOriginLabels: [String: String]
+  public let businessProfileSiteDoc: String
+  public let businessProfileSubcollection: String
+  public let businessProfileWorkspaceDoc: String
+  public let businessToneLabels: [String: String]
+  public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
@@ -3863,6 +3982,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let screenSlugPathSeparatorMessage: String
   public let searchEngineVerificationLabels: [String: String]
   public let searchEngineVerificationMetaNames: [String: String]
+  public let seoFindingLabels: [String: String]
+  public let seoKeywordLinesMaxChars: Int
+  public let seoMaxKeywords: Int
   public let siteCardsPageSize: Int
   public let siteFilterHeaders: [String: String]
   public let siteFilterOptions: SiteFilterOptions
@@ -3883,7 +4005,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
 
   enum CodingKeys: String, CodingKey {
     case areaServedMax = "AREA_SERVED_MAX"
+    case areaServedNameMaxLength = "AREA_SERVED_NAME_MAX_LENGTH"
     case artifactTypeLabels = "ARTIFACT_TYPE_LABELS"
+    case authorSameAsMax = "AUTHOR_SAME_AS_MAX"
     case bookingFieldAsks = "BOOKING_FIELD_ASKS"
     case bookingInPersonMaxCents = "BOOKING_IN_PERSON_MAX_CENTS"
     case bookingInPersonMinCents = "BOOKING_IN_PERSON_MIN_CENTS"
@@ -3895,6 +4019,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case bookingStateLabels = "BOOKING_STATE_LABELS"
     case bookingWeekdays = "BOOKING_WEEKDAYS"
     case browseSorts = "BROWSE_SORTS"
+    case businessProfileFieldOrder = "BUSINESS_PROFILE_FIELD_ORDER"
+    case businessProfileMaxChars = "BUSINESS_PROFILE_MAX_CHARS"
+    case businessProfileMaxServices = "BUSINESS_PROFILE_MAX_SERVICES"
+    case businessProfileOriginLabels = "BUSINESS_PROFILE_ORIGIN_LABELS"
+    case businessProfileSiteDoc = "BUSINESS_PROFILE_SITE_DOC"
+    case businessProfileSubcollection = "BUSINESS_PROFILE_SUBCOLLECTION"
+    case businessProfileWorkspaceDoc = "BUSINESS_PROFILE_WORKSPACE_DOC"
+    case businessToneLabels = "BUSINESS_TONE_LABELS"
+    case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
@@ -4070,6 +4203,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case screenSlugPathSeparatorMessage = "SCREEN_SLUG_PATH_SEPARATOR_MESSAGE"
     case searchEngineVerificationLabels = "SEARCH_ENGINE_VERIFICATION_LABELS"
     case searchEngineVerificationMetaNames = "SEARCH_ENGINE_VERIFICATION_META_NAMES"
+    case seoFindingLabels = "SEO_FINDING_LABELS"
+    case seoKeywordLinesMaxChars = "SEO_KEYWORD_LINES_MAX_CHARS"
+    case seoMaxKeywords = "SEO_MAX_KEYWORDS"
     case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
     case siteFilterHeaders = "SITE_FILTER_HEADERS"
     case siteFilterOptions = "SITE_FILTER_OPTIONS"

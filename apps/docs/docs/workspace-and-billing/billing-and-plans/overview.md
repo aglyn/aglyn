@@ -658,7 +658,7 @@ subscription is calculated from.
   storefront sales is keyed by the identity Stripe holds for your connected account,
   which you set up under **Marketplace → Payouts**.
 - **It is not your storefront's tax origin either.** Sales tax on orders *your* buyers
-  place is calculated from the origin set per site in **Commerce → Settings → Taxes**.
+  place is calculated from the origin set per site in **Products → Taxes**.
 - **It can be replaced but not emptied.** A workspace with no billing address cannot have
   tax calculated at all, so clearing the form is refused rather than obeyed; an
   addressless invoice in front of a tax authority is a worse outcome than a stale one.

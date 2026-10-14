@@ -9,7 +9,7 @@ unlisted: true
 
 :::caution Rolling out
 Print on demand is **not yet available** on aglyn.com-hosted workspaces. Until
-it is, no **Print on demand** card appears in your store's settings.
+it is, no **Print on demand** card appears on **Products → Integrations**.
 :::
 
 Sell T-shirts, mugs, posters and the rest of a print-on-demand catalog without
@@ -43,7 +43,7 @@ prices; Aglyn adds nothing to them.
 
 ## Connect
 
-1. Open the store's settings and find the **Print on demand** card.
+1. Open **Products → Integrations** and find the **Print on demand** card.
 2. Select **Connect**, choose Printful or Printify, and paste your token.
 3. If the token reaches more than one store or shop, choose which one to
    connect.
