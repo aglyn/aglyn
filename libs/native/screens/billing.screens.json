@@ -1049,111 +1049,6 @@
           "text": "Past it, extra storage is billed on your invoice unless you set a storage cap. Uploads to the organization library stop at it for now, because its storage is not billed yet."
         },
         {
-          "type": "meters",
-          "title": "Your plan",
-          "footer": "What this workspace uses of what its plan includes. Storage is shown under Storage over the plan.",
-          "meters": [
-            {
-              "label": "Sites",
-              "used": "{data.collab.sites:count}",
-              "limit": "{data.ent.quotas.hostLimit}",
-              "format": "number",
-              "when": "data.ent && data.collab"
-            },
-            {
-              "label": "Team seats (incl. you)",
-              "used": "{data.seats.managerSeats}",
-              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
-              "format": "number",
-              "when": "data.ent && data.seats && !data.seats.pendingManagerSeats"
-            },
-            {
-              "label": "Team seats (incl. you + {data.seats.pendingManagerSeats} invited)",
-              "used": "{data.seats.managerSeats}",
-              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
-              "format": "number",
-              "when": "data.ent && data.seats && data.seats.pendingManagerSeats"
-            },
-            {
-              "label": "Datasets (organization)",
-              "used": "{data.datasets.count}",
-              "limit": "{data.ent.quotas.datasetsPerOrg + data.org.seatAddons.datasets?}",
-              "format": "number",
-              "when": "data.ent && data.datasets"
-            },
-            {
-              "label": "Data storage (organization), MB",
-              "used": "{data.rollup.dataStorageMb}",
-              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
-              "format": "number",
-              "when": "data.ent && data.rollup.dataStorageMb"
-            },
-            {
-              "label": "Data storage (organization), MB",
-              "used": "{data.rollupBefore.dataStorageMb}",
-              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
-              "format": "number",
-              "when": "data.ent && !data.rollup.dataStorageMb && data.rollupBefore.dataStorageMb"
-            },
-            {
-              "label": "CRM records (organization)",
-              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
-              "limit": "{data.ent.quotas.contactsPerHost}",
-              "format": "number",
-              "when": "data.ent.features.crm && data.contacts && data.companies && data.deals"
-            },
-            {
-              "label": "Stored records (organization)",
-              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
-              "limit": "{data.ent.quotas.contactsPerHost}",
-              "format": "number",
-              "when": "data.ent && !data.ent.features.crm && data.contacts && data.companies && data.deals"
-            },
-            {
-              "label": "One-to-one emails (today)",
-              "used": "{data.crmEmails.count ?? '0'}",
-              "limit": "{data.ent.quotas.crmEmailsPerDay}",
-              "format": "number",
-              "when": "data.ent.quotas.crmEmailsPerDay"
-            },
-            {
-              "label": "API requests (this month)",
-              "used": "{data.api.count ?? '0'}",
-              "limit": "{data.ent.quotas.apiRequestsPerMonth}",
-              "format": "number",
-              "when": "data.ent.quotas.apiRequestsPerMonth"
-            },
-            {
-              "label": "Workflow runs (this month, organization)",
-              "used": "{data.workflowCounter[@now.month] ?? '0'}",
-              "limit": "{data.ent.quotas.workflowRunsPerMonth}",
-              "format": "number",
-              "when": "data.ent.quotas.workflowRunsPerMonth"
-            },
-            {
-              "label": "Action runs (this month, organization)",
-              "used": "{data.actionCounter[@now.month] ?? '0'}",
-              "limit": "{data.ent.quotas.actionRunsPerMonth}",
-              "format": "number",
-              "when": "data.ent.quotas.actionRunsPerMonth"
-            },
-            {
-              "label": "Bandwidth (this month, organization), GB",
-              "used": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?}",
-              "limit": "{data.ent.quotas.bandwidthGb}",
-              "format": "number",
-              "when": "data.ent && data.siteTraffic"
-            },
-            {
-              "label": "Campaign emails (this month, organization)",
-              "used": "{data.campaignCounter[@now.month] ?? '0'}",
-              "limit": "{data.ent.quotas.emailSendsPerMonth}",
-              "format": "number",
-              "when": "data.ent.quotas.emailSendsPerMonth"
-            }
-          ]
-        },
-        {
           "type": "links",
           "items": [
             {
@@ -1198,24 +1093,6 @@
               "siteName": "{item.displayName|item.hostId}"
             }
           }
-        },
-        {
-          "type": "fields",
-          "title": "This month",
-          "rows": [
-            {
-              "label": "Page views",
-              "value": "{data.usage.monthPageViews:number}"
-            },
-            {
-              "label": "Bandwidth",
-              "value": "{data.usage.bandwidthGb:number} GB"
-            },
-            {
-              "label": "Media delivered",
-              "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
-            }
-          ]
         },
         {
           "type": "fields",

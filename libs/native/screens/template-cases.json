@@ -262,30 +262,6 @@
       "expect": "2 of 20"
     },
     {
-      "template": "{'(512) 555-0123':phone}",
-      "expect": "+15125550123"
-    },
-    {
-      "template": "{'+44 20 7946 0958':phone}",
-      "expect": "+442079460958"
-    },
-    {
-      "template": "{'1 512 555 0123':phone}",
-      "expect": "+15125550123"
-    },
-    {
-      "template": "{'555':phone}",
-      "expect": "555"
-    },
-    {
-      "template": "{data.flag:present}",
-      "expect": "true"
-    },
-    {
-      "template": "{data.nothing:present}",
-      "expect": ""
-    },
-    {
       "template": "{data.missing + 1}",
       "expect": ""
     },
@@ -311,6 +287,30 @@
     },
     {
       "template": "{data.big - 1000000 + data.nothing:number}",
+      "expect": ""
+    },
+    {
+      "template": "{'(512) 555-0123':phone}",
+      "expect": "+15125550123"
+    },
+    {
+      "template": "{'+44 20 7946 0958':phone}",
+      "expect": "+442079460958"
+    },
+    {
+      "template": "{'1 512 555 0123':phone}",
+      "expect": "+15125550123"
+    },
+    {
+      "template": "{'555':phone}",
+      "expect": "555"
+    },
+    {
+      "template": "{data.flag:present}",
+      "expect": "true"
+    },
+    {
+      "template": "{data.nothing:present}",
       "expect": ""
     },
     {
