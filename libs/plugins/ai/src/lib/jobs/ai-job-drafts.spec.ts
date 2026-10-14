@@ -69,8 +69,11 @@ import {
   aiDraftAdmissionRefusal,
   aiBuildsWithComponents,
   aiDraftAllowanceRefusal,
+  aiDraftBandTakenSince,
+  aiDraftInstantMs,
   aiPlanCapabilitiesFrom,
   readAiDraft,
+  readAiDraftBandTakenSince,
   readAiPlanCapabilities,
   writeAiDraft,
   type AiDraftInput,
@@ -817,6 +820,47 @@ describe('aiDraftAdmissionRefusal', () => {
       error: 'Open the site the component is for before starting the job',
     })
     expect(await ask({ kind: 'component' })).toBeNull()
+    expect(commits).toEqual([])
+  })
+})
+
+describe('a band taken after the plan was confirmed (AGL-3765)', () => {
+  // The production timeline (org rbgIvex5O8, host iz1LhOuQxy, 2026-10-13):
+  // job Ky96NOCL2V's plan was confirmed at 08:04:33Z while the Free site had
+  // no form; job Vgqphowx8u made the site's one form at 08:05:06Z; Ky96NOCL2V
+  // reached its form step at 08:05:16Z and was refused.
+  const CONFIRMED = Date.parse('2026-10-13T08:04:33.716Z')
+  const sibling = { id: '0Qdgr68Ccq', kind: undefined, sourceType: undefined, deletedAt: undefined }
+
+  it('reads a stored instant whatever wrote it', () => {
+    expect(aiDraftInstantMs(new Date(CONFIRMED))).toBe(CONFIRMED)
+    expect(aiDraftInstantMs({ toMillis: () => CONFIRMED })).toBe(CONFIRMED)
+    expect(aiDraftInstantMs('2026-10-13T08:04:33.716Z')).toBe(CONFIRMED)
+    expect(aiDraftInstantMs(CONFIRMED)).toBe(CONFIRMED)
+    for (const unreadable of [null, undefined, 'soon', {}, Number.NaN]) expect(aiDraftInstantMs(unreadable)).toBeNull()
+  })
+
+  it('is taken since when only the rows made after the confirmation fill the band', () => {
+    const made = (at: string) => ({ ...sibling, createdAt: new Date(at) })
+    // The incident: the one Free form was made 33 seconds after the confirmation.
+    expect(aiDraftBandTakenSince('form', [made('2026-10-13T08:05:06.584Z')], FREE_ORG, CONFIRMED)).toBe(true)
+    // A form the site already held when the plan was confirmed is the workspace's limit.
+    expect(aiDraftBandTakenSince('form', [made('2026-10-13T08:00:00.000Z')], FREE_ORG, CONFIRMED)).toBe(false)
+    // One it cannot date counts as held before: the refusal stays the workspace's.
+    expect(aiDraftBandTakenSince('form', [sibling], FREE_ORG, CONFIRMED)).toBe(false)
+    // A band with room refuses nothing, and a plan never confirmed dates nothing.
+    expect(aiDraftBandTakenSince('form', [made('2026-10-13T08:05:06.584Z')], STARTER_ORG, CONFIRMED)).toBe(false)
+    expect(aiDraftBandTakenSince('form', [made('2026-10-13T08:05:06.584Z')], FREE_ORG, null)).toBe(false)
+  })
+
+  it('reads the site’s forms as they are now', async () => {
+    mockDocs.set('hosts/host-1', { subdomain: 'acme' })
+    const ask = (since: unknown) => readAiDraftBandTakenSince(firestore, { kind: 'form', hostId: 'host-1', org: FREE_ORG, since })
+    expect(await ask(new Date(CONFIRMED))).toBe(false)
+    mockDocs.set('hosts/host-1/forms/0Qdgr68Ccq', { displayName: 'Booking request', createdAt: new Date('2026-10-13T08:05:06.584Z') })
+    expect(await ask(new Date(CONFIRMED))).toBe(true)
+    expect(await ask({ toMillis: () => CONFIRMED })).toBe(true)
+    expect(await ask(null)).toBe(false)
     expect(commits).toEqual([])
   })
 })
