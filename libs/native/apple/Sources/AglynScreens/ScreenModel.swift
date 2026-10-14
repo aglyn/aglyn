@@ -516,7 +516,7 @@ public final class ScreenModel {
         let current = ScreenValues.lookup(profile["current"]?.stringValue ?? "", in: scope)
         // One rule for the owner's save, shared with the site's profile: `businessProfileOwnerWrite` (AglynContracts).
         let next = businessProfileOwnerWrite(
-          current.flatMap { FirestoreLoads.plainValue($0) as? [String: Any] }, FirestoreLoads.plainValue(edited) as? [String: Any] ?? [:])
+          current.flatMap { FirestoreLoads.plain($0) as? [String: Any] }, FirestoreLoads.plain(edited) as? [String: Any] ?? [:])
         let profileFields = ContractValues.shared.businessProfileFieldOrder
         var fields: [String: JSONValue] = [:]
         for field in profileFields { fields[field] = next[field].flatMap(jsonValue) ?? .null }

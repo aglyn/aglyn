@@ -447,7 +447,7 @@ class ScreenModel(
         val current = ScreenValues.lookup(profile.str("current").orEmpty(), scope)
         // One rule for the owner's save, shared with the site's profile: `businessProfileOwnerWrite` (the contracts module).
         @Suppress("UNCHECKED_CAST")
-        val next = com.aglyn.contracts.businessProfileOwnerWrite(plain(current) as? Map<String, Any?>, (plain(edited) as? Map<String, Any?>) ?: emptyMap())
+        val next = com.aglyn.contracts.businessProfileOwnerWrite(current?.let { plain(it) } as? Map<String, Any?>, (plain(edited) as? Map<String, Any?>) ?: emptyMap())
         val profileFields = com.aglyn.contracts.Contracts.businessProfileFieldOrder
         val fields = linkedMapOf<String, JsonElement>()
         for (field in profileFields) fields[field] = com.aglyn.core.jsonValue(next[field])
