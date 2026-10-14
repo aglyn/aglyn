@@ -16,6 +16,7 @@ import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
 import AglynInboxPlugin
 import AglynMarketingPlugin
+import AglynMarketplacePlugin
 import AglynOutreachPlugin
 import AglynPostPurchasePlugin
 import AglynRedirectsPlugin
@@ -84,6 +85,11 @@ public enum NativePluginManifest {
       id: "marketing",
       contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
       register: AglynMarketingPlugin.registerMarketingNative
+    ),
+    NativePluginManifestEntry(
+      id: "marketplace",
+      contributes: ["screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"], "quickActions": ["marketplace.open"], "deepLinks": ["marketplace.listing-page", "marketplace.page"]],
+      register: AglynMarketplacePlugin.registerMarketplaceNative
     ),
     NativePluginManifestEntry(
       id: "outreach",
