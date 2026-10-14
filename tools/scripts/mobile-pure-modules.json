@@ -346,6 +346,10 @@
       "why": "The console's list-plan entry the Commerce app's list page imports; it re-exports the pure list-query grammar (AGL-3622)."
     },
     {
+      "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
+    },
+    {
       "path": "libs/shared/util/email/src/lib/hosted-page-screen.ts",
       "why": "Reached by the redirects model: string screens over a destination URL, no I/O."
     },

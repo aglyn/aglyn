@@ -508,9 +508,8 @@ private struct LocalBusinessCard: View {
           "Areas served", text: binding("areaServed"), multiline: true,
           error: area.count > contracts.areaServedMax ? "At most \(contracts.areaServedMax) places" : nil,
           supporting: "One place per line, up to \(contracts.areaServedMax)", enabled: canEdit)
-        AglynCountedField(
-          "Opening hours", text: binding("seo.entity.openingHours"), multiline: true,
-          supporting: "One line per day or range, like Mo-Fr 09:00-17:00", enabled: canEdit)
+        // Picked by clicking, never typed; what is saved is the same `Mo-Fr 09:00-17:00` lines.
+        OpeningHoursPicker(text: binding("seo.entity.openingHours"), label: "Opening hours", enabled: canEdit)
         AglynCountedField(
           "Price range", text: binding("seo.entity.priceRange"), max: contracts.priceRangeMaxLength, placeholder: "$$", enabled: canEdit)
         AglynCountedField(
