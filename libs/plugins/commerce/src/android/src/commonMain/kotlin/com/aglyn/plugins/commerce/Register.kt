@@ -5,6 +5,8 @@ import com.aglyn.pluginhost.NativePluginRegistrar
 import com.aglyn.pluginhost.PosPlacement
 import com.aglyn.pluginhost.ScreenLayout
 import com.aglyn.pluginhost.WidgetSize
+import com.aglyn.screens.ScreenSpec
+import com.aglyn.screens.SpecScreens
 import com.aglyn.plugins.commerce.orders.COMMERCE_ORDERS_SCREEN
 import com.aglyn.plugins.commerce.orders.COMMERCE_ORDER_SCREEN
 import com.aglyn.plugins.commerce.orders.OrdersScreen
@@ -18,7 +20,11 @@ import com.aglyn.plugins.commerce.sales.COMMERCE_SALES_SCREEN
 import com.aglyn.plugins.commerce.sales.SalesScreen
 import com.aglyn.plugins.commerce.sales.SalesTrendWidget
 import com.aglyn.plugins.commerce.sales.TodaySalesWidget
+import com.aglyn.plugins.commerce.pos.COMMERCE_DISPLAY_SCREEN
+import com.aglyn.plugins.commerce.pos.COMMERCE_KIOSK_SCREEN
 import com.aglyn.plugins.commerce.pos.CardReadersScreen
+import com.aglyn.plugins.commerce.pos.PosCustomerDisplayScreen
+import com.aglyn.plugins.commerce.pos.PosKioskScreen
 import com.aglyn.plugins.commerce.pos.RegisterScreen
 
 const val COMMERCE_REGISTER_SCREEN = "commerce.register"
@@ -56,6 +62,29 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
     icon = "credit_card",
     placement = PosPlacement.MENU,
   ) { context, _ -> CardReadersScreen(context) }
+
+  // A tablet set up as the screen facing the customer: no one signs in; a register's code pairs it.
+  r.screen(
+    COMMERCE_DISPLAY_SCREEN,
+    title = "Customer display",
+    requiresSite = false,
+    apps = setOf(NativeApp.POS),
+    icon = "tablet",
+    placement = PosPlacement.DEVICE,
+  ) { context, _ -> PosCustomerDisplayScreen(context) }
+
+  // A tablet customers order from: no one signs in; a register's kiosk code pairs it.
+  r.screen(
+    COMMERCE_KIOSK_SCREEN,
+    title = "Self-service kiosk",
+    requiresSite = false,
+    apps = setOf(NativeApp.POS),
+    icon = "shopping_cart",
+    placement = PosPlacement.DEVICE,
+  ) { context, _ -> PosKioskScreen(context) }
+  // Commerce settings, and the commerceSettings zone other plugins' cards sit in:
+  // a spec screen drawn by :native-screens (screens/commerce.screens.json).
+  SpecScreens.register(CommerceScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
 
   r.screen(COMMERCE_ORDERS_SCREEN, title = "Orders", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     OrdersScreen(context, initialOrderId = params["order"])

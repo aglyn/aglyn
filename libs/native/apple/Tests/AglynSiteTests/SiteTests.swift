@@ -129,6 +129,13 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(cleanSubdomainInput("My Site_2!"), "mysite2")
   }
 
+  func testCreatesTheSiteWithTheStarterInTheSameRequest() {
+    XCTAssertEqual(
+      createSiteBody(orgID: "org1", name: "  My Shop ", subdomain: " MyShop "),
+      // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
+      ["displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter"])
+  }
+
   func testPlansTheLibraryQueryAsTheConsoleDoes() {
     let site = mediaQuery(
       scope: .site(hostID: "h"), folder: .one("f1"), scopeTokens: nil, type: "image", sort: .name,

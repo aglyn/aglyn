@@ -8,22 +8,28 @@ import AglynAiPlugin
 import AglynBookingsPlugin
 import AglynCommercePlugin
 import AglynCrmPlugin
+import AglynDataPlugin
 import AglynEmailPlugin
 import AglynEventsCalendarPlugin
 import AglynFormsPlugin
+import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
 import AglynInboxPlugin
+import AglynLogicPlugin
 import AglynMarketingPlugin
+import AglynMarketplacePlugin
 import AglynOutreachPlugin
+import AglynPostPurchasePlugin
 import AglynRedirectsPlugin
 import AglynSmsPlugin
+import AglynTaxEnginesPlugin
 import AglynWorkflowsPlugin
 
 public enum NativePluginManifest {
   public static let entries: [NativePluginManifestEntry] = [
     NativePluginManifestEntry(
       id: "ai",
-      contributes: ["screens": ["ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
+      contributes: ["screens": ["ai.allotment", "ai.credits", "ai.hostMember", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
       register: AglynAiPlugin.registerAINative
     ),
     NativePluginManifestEntry(
@@ -33,13 +39,18 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "commerce",
-      contributes: ["screens": ["commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
+      contributes: ["screens": ["commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
       register: AglynCommercePlugin.registerCommerceNative
     ),
     NativePluginManifestEntry(
       id: "crm",
       contributes: ["screens": ["crm.companies", "crm.company", "crm.contact", "crm.contacts", "crm.deal", "crm.deals", "crm.fields", "crm.lead", "crm.leads", "crm.reports", "crm.settings", "crm.tasks"], "widgets": ["crm.glance", "crm.tasks-due"], "quickActions": ["crm.deals-action", "crm.open", "crm.tasks-action"], "deepLinks": ["crm.companies-page", "crm.company-page", "crm.contact-page", "crm.contacts-page", "crm.deal-page", "crm.deals-page", "crm.fields-page", "crm.lead-page", "crm.leads-page", "crm.legacy-contacts", "crm.page", "crm.reports-page", "crm.settings-page", "crm.tasks-page"]],
       register: AglynCrmPlugin.registerCrmNative
+    ),
+    NativePluginManifestEntry(
+      id: "data",
+      contributes: ["screens": ["data.datasets", "data.records", "data.schema"], "quickActions": ["data.open"], "deepLinks": ["data.page"]],
+      register: AglynDataPlugin.registerDataNative
     ),
     NativePluginManifestEntry(
       id: "email",
@@ -57,6 +68,11 @@ public enum NativePluginManifest {
       register: AglynFormsPlugin.registerFormsNative
     ),
     NativePluginManifestEntry(
+      id: "fulfillment-networks",
+      contributes: ["screens": ["fulfillment-networks.network", "fulfillment-networks.service"]],
+      register: AglynFulfillmentNetworksPlugin.registerFulfillmentNetworksNative
+    ),
+    NativePluginManifestEntry(
       id: "funnels",
       contributes: ["screens": ["funnels.list"], "quickActions": ["funnels.open"], "deepLinks": ["funnels.page"]],
       register: AglynFunnelsPlugin.registerFunnelsNative
@@ -67,14 +83,29 @@ public enum NativePluginManifest {
       register: AglynInboxPlugin.registerInboxNative
     ),
     NativePluginManifestEntry(
+      id: "logic",
+      contributes: ["screens": ["logic.function", "logic.page"], "quickActions": ["logic.open"], "deepLinks": ["logic.page"]],
+      register: AglynLogicPlugin.registerLogicNative
+    ),
+    NativePluginManifestEntry(
       id: "marketing",
       contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
       register: AglynMarketingPlugin.registerMarketingNative
     ),
     NativePluginManifestEntry(
+      id: "marketplace",
+      contributes: ["screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"], "quickActions": ["marketplace.open"], "deepLinks": ["marketplace.listing-page", "marketplace.page"]],
+      register: AglynMarketplacePlugin.registerMarketplaceNative
+    ),
+    NativePluginManifestEntry(
       id: "outreach",
       contributes: ["screens": ["outreach.compliance", "outreach.mailboxes", "outreach.sequences"], "widgets": ["outreach.glance"], "deepLinks": ["outreach.compliance-page", "outreach.mailboxes-page", "outreach.page", "outreach.sequence-page", "outreach.sequences-page"]],
       register: AglynOutreachPlugin.registerOutreachNative
+    ),
+    NativePluginManifestEntry(
+      id: "post-purchase",
+      contributes: ["screens": ["post-purchase.service"]],
+      register: AglynPostPurchasePlugin.registerPostPurchaseNative
     ),
     NativePluginManifestEntry(
       id: "redirects",
@@ -85,6 +116,11 @@ public enum NativePluginManifest {
       id: "sms",
       contributes: ["screens": ["sms.texts"], "quickActions": ["sms.open"]],
       register: AglynSmsPlugin.registerSmsNative
+    ),
+    NativePluginManifestEntry(
+      id: "tax-engines",
+      contributes: ["screens": ["tax-engines.service"]],
+      register: AglynTaxEnginesPlugin.registerTaxEnginesNative
     ),
     NativePluginManifestEntry(
       id: "workflows",

@@ -29,9 +29,15 @@ final class AppModel {
   private(set) var claims = TokenClaims()
   /// Bumped by Refresh (⌘R); live lists re-subscribe on it.
   private(set) var refreshToken = 0
+  /// The screen this tablet was set up as instead of a register (a customer display or a self-service
+  /// kiosk), remembered across launches so it comes back with nobody signed in. The POS app only.
+  private(set) var deviceModeID: String?
+
+  static let deviceModeKey = "aglyn.pos.deviceMode"
 
   init(app: AglynAppKind) {
     self.app = app
+    deviceModeID = app == .pos ? UserDefaults.standard.string(forKey: Self.deviceModeKey) : nil
     let appID: AglynAppID = app == .pos ? .pos : .aglyn
     let push = PushCenter(app: appID)
     self.push = push
@@ -120,11 +126,42 @@ final class AppModel {
         guard let email = await self?.auth?.user?.email else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
         try await self?.auth?.signIn(email: email, password: password)
       },
-      refreshClaims: { [weak self] in await self?.refreshClaims(force: true) })
+      refreshClaims: { [weak self] in await self?.refreshClaims(force: true) },
+      account: AccountOperations(
+        changePassword: { [weak self] current, new in
+          try await self?.auth?.changePassword(current: current, new: new)
+        },
+        updateDisplayName: { [weak self] name in try await self?.auth?.updateDisplayName(name) },
+        message: { passwordChangeMessage($0) }))
   }
 
   func signOut() async {
     await auth?.signOut()
+  }
+
+  /// The whole-screen modes a plugin offers this tablet at sign-in (the POS app only).
+  var deviceScreens: [NativeScreen] { app == .pos ? registry.screens(for: .pos, placement: .device) : [] }
+
+  /// The mode this tablet is set up as, when its plugin is loaded.
+  var deviceScreen: NativeScreen? {
+    guard let id = deviceModeID else { return nil }
+    return deviceScreens.first { $0.id == id }
+  }
+
+  /// Sets this tablet up as a device screen, or (nil) back to a register that signs in.
+  func setDeviceMode(_ id: String?) {
+    deviceModeID = id
+    if let id { UserDefaults.standard.set(id, forKey: Self.deviceModeKey) } else { UserDefaults.standard.removeObject(forKey: Self.deviceModeKey) }
+  }
+
+  /// The context a device screen is handed: nobody is signed in, so it holds no member, no workspace and no site, and
+  /// calls the console anonymously with its own pairing token. `back` returns the tablet to sign-in.
+  func deviceContext() -> NativePluginContext? {
+    guard let reader, let api else { return nil }
+    return NativePluginContext(
+      uid: "", orgID: nil, hostID: nil, orgSlug: nil, hostSlug: nil, firestore: reader, api: api,
+      navigate: { _, _ in }, openBesigner: { _ in },
+      back: { [weak self] in self?.setDeviceMode(nil) })
   }
 
   /// The context a plugin's screen or widget is handed in one window.
@@ -147,7 +184,8 @@ final class AppModel {
       back: { [weak navigation] in
         guard let navigation else { return }
         _ = navigation.paths[navigation.section]?.popLast()
-      })
+      },
+      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's

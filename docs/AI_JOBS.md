@@ -1289,6 +1289,19 @@ the submit route reads, agreeing with each other. It is a planned kind, like
   canvas-shaped design in msgpack, a `slug` from the unique name, and no
   version — the form's page mints the first when a member opens it. Nothing is
   promoted and no page places it.
+- **A band filled meanwhile (AGL-3765).** When the allowance refuses — before
+  generating or at the write — a form UNIT (`inputs.originJobId` names another
+  job: a page job's, a guided start's or a build's creation) places the form
+  another AI job made on the site instead (`aiSiblingJobForm`,
+  `ai-job-form-reuse.ts`): one the site's newest jobs name in their outputs or
+  their plan's minted form ids, in use, made in the last 15 minutes or by a job
+  of the same brief. Its output carries the note "Reused the form another build
+  just made." Otherwise, when the forms made after the plan's `confirmedAt` are
+  what fill the band (`aiDraftBandTakenSince`), the step returns a `failure`,
+  so the job fails as ours and its credits are given back; a band already full
+  at confirmation is still a `limit` review. The console's page door and the
+  plan card warn "A page is already being built" from the jobs list the
+  indicator already holds (`useAiJobsInFlightKnown`), which asks no server.
 - **The output** is `{ resource: 'form', id, hostId, hostSubdomain, label,
   load, note }`, which the drawer links to the form's page. `note` says what
   the person decides next: the lead routing that is on, how to enroll the people

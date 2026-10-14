@@ -16,6 +16,7 @@ struct RegisterScreen: View {
   @State private var showDiscount = false
   @State private var scanCode = ""
   @State private var showOps = false
+  @State private var showOfflineCash = false
   let context: NativePluginContext
 
   init(context: NativePluginContext) {
@@ -23,7 +24,7 @@ struct RegisterScreen: View {
     _model = State(
       initialValue: RegisterModel(
         hostID: context.hostID ?? "", reader: context.firestore, api: context.api,
-        collector: DeviceCardCollector.make()))
+        collector: DeviceCardCollector.make(), uid: context.uid))
   }
 
   var body: some View {
@@ -33,7 +34,7 @@ struct RegisterScreen: View {
           HStack(spacing: 0) {
             catalog
             Divider()
-            BasketPanel(model: model, onCharge: charge, onDiscount: { showDiscount = true })
+            BasketPanel(model: model, onCharge: charge, onDiscount: { showDiscount = true }, onOfflineCash: { showOfflineCash = true })
               .frame(width: 360)
               .background(AglynColor.paper)
           }
@@ -46,7 +47,9 @@ struct RegisterScreen: View {
       }
       .sheet(isPresented: $showBasket) {
         NavigationStack {
-          BasketPanel(model: model, onCharge: { showBasket = false; charge() }, onDiscount: { showDiscount = true })
+          BasketPanel(
+            model: model, onCharge: { showBasket = false; charge() }, onDiscount: { showDiscount = true },
+            onOfflineCash: { showBasket = false; showOfflineCash = true })
             .navigationTitle("Basket")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showBasket = false } } }
         }
@@ -55,17 +58,9 @@ struct RegisterScreen: View {
     }
     .background(AglynColor.page)
     .safeAreaInset(edge: .top, spacing: 0) {
-      if !model.online {
-        AglynNotice("Offline. Keep ringing up; hold baskets and charge when you are back online.", tone: .warning)
-          .overlay(alignment: .trailing) {
-            Button("Retry") { model.reconnect() }
-              .buttonStyle(.bordered)
-              .padding(.trailing, AglynSpace.one)
-              .accessibilityIdentifier("register-reconnect")
-          }
-          .padding(.horizontal, AglynSpace.two)
-          .padding(.vertical, AglynSpace.one)
-          .accessibilityIdentifier("register-offline")
+      VStack(spacing: 0) {
+        RegisterOfflineBanner(model: model)
+        KioskQueueCard(model: model)
       }
     }
     .navigationTitle(model.storeName)
@@ -75,6 +70,7 @@ struct RegisterScreen: View {
     .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
+    .sheet(isPresented: $showOfflineCash) { OfflineCashSheet(model: model) }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
     // Any touch is the register in use: it keeps the idle lock away.
     .simultaneousGesture(TapGesture().onEnded { model.cashier.touch() })
@@ -103,6 +99,11 @@ struct RegisterScreen: View {
       }
     }
     .animation(.default, value: model.toast)
+    // The paired display follows the basket, once it has settled for a moment.
+    .task(id: DisplayMirrorKey(model: model)) {
+      try? await Task.sleep(for: .milliseconds(400))
+      if !Task.isCancelled { await model.mirrorToDisplay() }
+    }
     .task {
       model.start()
     }
@@ -224,6 +225,7 @@ struct BasketPanel: View {
   let model: RegisterModel
   let onCharge: () -> Void
   let onDiscount: () -> Void
+  let onOfflineCash: () -> Void
 
   var body: some View {
     VStack(spacing: 0) {
@@ -254,6 +256,7 @@ struct BasketPanel: View {
       }
       VStack(spacing: AglynSpace.one) {
         Divider()
+        BasketCustomerRow(model: model)
         AglynAmountRow("Subtotal", amount: model.money(model.cart.subtotalCents))
         Button(action: onDiscount) {
           AglynAmountRow(
@@ -265,21 +268,35 @@ struct BasketPanel: View {
         .disabled(model.cart.isEmpty)
         Text("Tax is added when the sale opens.").font(AglynFont.caption).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
-        Button(action: onCharge) {
-          Group {
-            if model.charging {
-              ProgressView()
-            } else {
-              Text("Charge \(model.money(model.cart.subtotalCents - model.cart.discountCents))").monospacedDigit()
+        if model.online {
+          Button(action: onCharge) {
+            Group {
+              if model.charging {
+                ProgressView()
+              } else {
+                Text("Charge \(model.money(model.cart.subtotalCents - model.cart.discountCents))").monospacedDigit()
+              }
             }
+            .frame(maxWidth: .infinity)
           }
-          .frame(maxWidth: .infinity)
+          .buttonStyle(.borderedProminent)
+          .controlSize(.large)
+          .disabled(model.cart.isEmpty || model.charging || model.register == nil)
+          .keyboardShortcut(.return, modifiers: .command)
+          .accessibilityIdentifier("charge")
+        } else {
+          // Offline: cash is the one tender that still sells, saved on this register until the connection returns.
+          Button(action: onOfflineCash) {
+            Text("Take cash offline").frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.borderedProminent)
+          .controlSize(.large)
+          .disabled(model.cart.isEmpty || !model.offline.ready || model.register == nil)
+          .accessibilityIdentifier("charge-offline")
+          if !model.offline.ready, !model.cart.isEmpty, let reason = model.offline.unavailableReason {
+            Text(reason).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
+          }
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(model.cart.isEmpty || model.charging || model.register == nil)
-        .keyboardShortcut(.return, modifiers: .command)
-        .accessibilityIdentifier("charge")
         if model.register == nil, case .ready = model.registers {
           Text("Add a register in the console to take sales here.").font(AglynFont.caption).foregroundStyle(AglynColor.warning)
         }
@@ -390,5 +407,23 @@ struct ItemSheetView: View {
     }
     sheet.problem = nil
     model.sheet = sheet
+  }
+}
+
+/// Everything the customer display shows, so a change to any of it re-mirrors.
+private struct DisplayMirrorKey: Equatable {
+  let cart: Cart
+  let sale: PosSale?
+  let tipCents: Int
+  let connected: Bool
+  let asking: Bool
+
+  @MainActor
+  init(model: RegisterModel) {
+    cart = model.cart
+    sale = model.checkout?.sale
+    tipCents = model.checkout?.tipCents ?? 0
+    connected = model.display.connected
+    asking = model.display.asking != nil
   }
 }

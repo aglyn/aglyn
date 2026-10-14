@@ -229,6 +229,14 @@ Native-only fields are kept to the minimum:
   shell shows only contributions that name `.pos`.
 - `icon`: an SF Symbol on Apple and a Material Symbol on Kotlin.
 - `placement`, for POS: `register`, `tender`, `peripheral` or `menu`.
+  `device` is a whole-screen mode a tablet is set up as with nobody signed in
+  (the customer display, the self-service kiosk): the POS sign-in offers it, it
+  is remembered across launches, and it is handed a context with no member, no
+  workspace and no site, whose `api` it calls anonymously with its own pairing
+  token (`headers`), and whose `back()` returns the tablet to sign-in. A kiosk
+  takes Tap to Pay on the tablet's own card reader (Kotlin: the context's
+  `peripherals`; Apple: the device reader it makes itself) with a connection
+  token from the kiosk route, never a staff session.
 
 ```swift
 // libs/plugins/redirects/src/ios/Sources/AglynRedirectsPlugin/Register.swift
@@ -726,9 +734,19 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   grid, and variants and modifiers (`product-modifiers` contracts).
 - **Cart and tender:** `/api/commerce/pos-order` and
   `/api/commerce/pos-payment` (`context`, tender and gift-card balance), the
-  same routes and idempotency keys as the web register.
+  same routes and idempotency keys as the web register. The tenders are cash,
+  a card reader (smart reader or this device's), a gift card, store credit
+  another plugin keeps (`credits` in the context, found by `credit-lookup`),
+  a room charge to a checked-in stay (`reservations` asked for by status), and
+  the QR payment page (`card-link`), drawn as a QR code on the device and never
+  sent anywhere. A split pays part of the balance; a declined reader payment
+  can be retried and, in test mode, tapped with a test card. The one console
+  tender the apps do not take is the typed card: it needs Stripe's card-entry
+  SDK, which neither app carries.
 - **Tips** and **receipts by email or text**, through the routes the web
-  register uses.
+  register uses; **Print receipt** goes to the register's cloud printer (and
+  on Kotlin its direct printer), and a store whose receipt default is print
+  prints it as soon as the sale is paid.
 - **Booking payments:** the bookings plugin contributes a `.pos` screen.
 
 Card readers by platform:
@@ -884,17 +902,30 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
 
-An action is `{ label, icon, method, url, body, confirm, confirmWhen, destructive, prompt,
-reason, success, open, navigate, back, reload, when, link, copy, reveal,
-else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
+reason, success, instead, check, open, navigate, back, reload, when, link, copy,
+reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
 (Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
 Custom Tabs); `else` runs on a 404 (add a member, else invite them); `then`
 follows a success; `write` merges a document the person writes directly, as
 the console does (their own profile, the site document), under the rules.
+`confirm` is a template, or a list of `{ when, text }` segments joined in order
+so one sentence can follow the route's answer; `check` is a route call made
+first (the add-on price preview), whose answer is `preview` in the
+confirmation; `instead` is `{ when, title, text, open }` (or a list, the first
+that matches wins) shown in place of `success` when the route's answer meets
+`when`: the docs a question deflects to, a bank asking to confirm a payment
+(`open` then names the response field holding the invoice page to open).
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
+
+`headers` names request headers, each a template. `{attempt}` there is one key per
+(action, route, resolved body): sending the same request again, a retry or a second tap,
+reuses it, and a changed body gets a new one. A route that provisions something
+(enterprise billing) takes it as `Idempotency-Key`, and a write that carries one is retried
+like a read.
 
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,

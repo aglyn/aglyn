@@ -166,6 +166,20 @@ public func cleanSubdomainInput(_ text: String) -> String {
   String(text.lowercased().filter { ($0.isLetter && $0.isASCII) || ($0.isNumber && $0.isASCII) || $0 == "-" }.prefix(30))
 }
 
+/// What Create site sends. `start: "starter"` is the console's own "Create the
+/// starter site" answer: the site is born with the starter website in the same
+/// request. Without it the server may create the site empty to offer the guided
+/// AI start (`guidedStart` in its answer), and the app has no such start to land
+/// on, which would leave an empty site.
+public func createSiteBody(orgID: String, name: String, subdomain: String) -> [String: String] {
+  [
+    "displayName": name.trimmingCharacters(in: .whitespacesAndNewlines),
+    "subdomain": subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+    "orgId": orgID,
+    "start": "starter",
+  ]
+}
+
 /// `POST /api/hosts/create`, the console's own Create site.
 public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String) async throws
   -> CreateSiteResult
@@ -173,11 +187,7 @@ public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, sub
   do {
     let answer = try await api.request(
       "/api/hosts/create", method: .post,
-      body: .from([
-        "displayName": name.trimmingCharacters(in: .whitespacesAndNewlines),
-        "subdomain": subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-        "orgId": orgID,
-      ]))
+      body: .from(createSiteBody(orgID: orgID, name: name, subdomain: subdomain)))
     return .created(hostID: answer.field("hostId") ?? "", subdomain: answer.field("subdomain") ?? subdomain)
   } catch let error as ConsoleAPIError where error.status != 0 {
     let suggestions = error.body?["suggestions"]?.arrayValue?.compactMap(\.stringValue) ?? []

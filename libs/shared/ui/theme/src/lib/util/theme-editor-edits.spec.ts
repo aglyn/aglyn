@@ -5,6 +5,7 @@
  */
 
 import {
+  THEME_EDITOR_CATALOG,
   applyThemeEditorEdits,
   readThemeEditorEdits,
   readThemeEditorValues,
@@ -49,6 +50,34 @@ describe('theme editor edits', () => {
     const values = readThemeEditorValues(applyThemeEditorEdits(base, edits))
     expect(values.colors.light['divider']).toBeNull()
     expect(values.fontFamily).toBe(SYSTEM_FONT_VALUE)
+  })
+
+  it('applies the Style components choices with the card\'s own writer', () => {
+    const edits = readThemeEditorEdits([
+      { control: 'componentLook', field: 'button.variant', value: 'outlined' },
+      { control: 'componentLook', field: 'input.corners', value: 'pill' },
+      { control: 'componentLook', field: 'card.elevation', value: '3' },
+    ])
+    if (typeof edits === 'string') throw new Error(edits)
+    const next = applyThemeEditorEdits({}, edits)
+    const values = readThemeEditorValues(next)
+    expect(values.componentLooks['button.variant']).toBe('outlined')
+    expect(values.componentLooks['input.corners']).toBe('pill')
+    expect(values.componentLooks['card.elevation']).toBe('3')
+    expect(values.componentLooks['button.corners']).toBe('')
+    // "Theme default" clears what a choice wrote.
+    const cleared = readThemeEditorEdits([{ control: 'componentLook', field: 'button.variant', value: '' }])
+    if (typeof cleared === 'string') throw new Error(cleared)
+    expect(readThemeEditorValues(applyThemeEditorEdits(next, cleared)).componentLooks['button.variant']).toBe('')
+    // The catalog hands a client every field and choice by name, never what a choice stores.
+    const field = THEME_EDITOR_CATALOG.componentLooks.fields.find((entry) => entry.id === 'input.background')
+    expect(field?.options.map((option) => option.value)).toContain('paper')
+    expect(JSON.stringify(THEME_EDITOR_CATALOG.componentLooks)).not.toContain('stored')
+  })
+
+  it('refuses a component style or choice the card does not offer', () => {
+    expect(readThemeEditorEdits([{ control: 'componentLook', field: 'nope', value: 'x' }])).toBe('That is not a component style.')
+    expect(readThemeEditorEdits([{ control: 'componentLook', field: 'button.variant', value: 'wavy' }])).toBe('Pick one of the choices.')
   })
 
   it('refuses what the editor could not have sent', () => {

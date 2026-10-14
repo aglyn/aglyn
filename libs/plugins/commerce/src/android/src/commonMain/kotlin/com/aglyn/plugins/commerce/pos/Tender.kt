@@ -41,7 +41,7 @@ const val LOST_ANSWER = "The connection dropped before the answer arrived. Check
 /** A lost answer (no status: the network dropped) as opposed to the route's refusal. */
 fun isLostAnswer(error: Throwable): Boolean = error !is ConsoleApiError || error.status == 0
 
-private fun failedOrUnknown(error: Throwable, fallback: String): TenderOutcome {
+fun failedOrUnknown(error: Throwable, fallback: String): TenderOutcome {
   if (error is CancellationException) throw error
   if (isLostAnswer(error)) return TenderOutcome.Unknown(LOST_ANSWER)
   return TenderOutcome.Failed(error.message?.ifEmpty { null } ?: fallback, null)
@@ -259,6 +259,55 @@ suspend fun payGiftCard(deps: TenderDeps, code: String, amountCents: Long?, atte
   outcomeOfPayment(answer) ?: TenderOutcome.Settled(answer, answer.payment)
 } catch (error: Throwable) {
   failedOrUnknown(error, "The gift card could not be used.")
+}
+
+/** Store credit another plugin keeps: by the customer's code, or the account a lookup found. The server takes the smallest of what the account holds, what is left to pay and what was asked. */
+suspend fun payCredit(deps: TenderDeps, code: String?, providerId: String?, reference: String?, amountCents: Long?, attemptKey: String): TenderOutcome = try {
+  val answer = deps.api.payment(deps.orderId, SaleStep.Credit(code?.trim(), providerId, reference, amountCents), attemptKey)
+  outcomeOfPayment(answer) ?: TenderOutcome.Settled(answer, answer.payment)
+} catch (error: Throwable) {
+  failedOrUnknown(error, "The store credit could not be used.")
+}
+
+/** A room charge: the amount goes on a checked-in stay's folio. */
+suspend fun payFolio(deps: TenderDeps, reservationId: String, amountCents: Long?, attemptKey: String): TenderOutcome = try {
+  val answer = deps.api.payment(deps.orderId, SaleStep.Folio(reservationId, amountCents), attemptKey)
+  outcomeOfPayment(answer) ?: TenderOutcome.Settled(answer, answer.payment)
+} catch (error: Throwable) {
+  failedOrUnknown(error, "The room charge could not be recorded.")
+}
+
+/** What the register calls each way of paying (`ORDER_PAYMENT_METHOD_LABELS`). */
+val PAYMENT_METHOD_LABELS_BY_METHOD = mapOf(
+  "cash" to "Cash",
+  "card_present" to "Card reader",
+  "card_keyed" to "Typed card",
+  "card_link" to "Card (QR)",
+  "gift_card" to "Gift card",
+  "folio" to "Charged to room",
+  "credit" to "Store credit",
+)
+
+/** One payment as a line of the sale's ledger: `Card reader (visa •••• 4242) $12.00 + $2.00 tip` (`describeOrderPayment`). */
+fun describePayment(payment: PosSalePayment, money: (Long) -> String): String {
+  val label = (if (payment.method == "credit") payment.creditLabel else null) ?: PAYMENT_METHOD_LABELS_BY_METHOD[payment.method] ?: "Payment"
+  val card = if (payment.cardBrand != null || payment.last4 != null) {
+    " (" + listOfNotNull(payment.cardBrand, payment.last4?.let { "•••• $it" }).filter { it.isNotEmpty() }.joinToString(" ") + ")"
+  } else {
+    ""
+  }
+  val tip = if (payment.tipCents > 0) " + ${money(payment.tipCents)} tip" else ""
+  return "$label$card ${money(payment.amountCents)}$tip"
+}
+
+/** What a payment's status is called on the register. */
+fun paymentStatusLabel(status: String): String = when (status) {
+  "pending" -> "Waiting"
+  "succeeded" -> "Approved"
+  "failed" -> "Declined"
+  "canceled" -> "Canceled"
+  "reversed" -> "Returned"
+  else -> status
 }
 
 data class TipChoice(val id: String, val label: String, val cents: Long)

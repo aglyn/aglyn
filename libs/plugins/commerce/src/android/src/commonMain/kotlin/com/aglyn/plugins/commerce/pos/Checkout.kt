@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.update
  * CHECKOUT: the tender state machine.
  *
  * The server has priced the sale; this takes the money. A tip first when the
- * store asks for one, then a tender: a card reader, cash or a gift card. A
+ * store asks for one, then a tender: a card reader, cash, a gift card, store
+ * credit, a room charge or the QR payment page. A
  * tender may cover part of the balance (a split), and the sale stays open
  * until the balance is zero. Then the receipt.
  *
@@ -27,6 +28,15 @@ sealed interface CheckoutStep {
   data object Tender : CheckoutStep
   data object Cash : CheckoutStep
   data object GiftCard : CheckoutStep
+
+  /** Store credit another plugin keeps (a rewards balance, a referral credit). */
+  data class Credit(val providerId: String) : CheckoutStep
+
+  /** Charged to a checked-in stay. */
+  data object Room : CheckoutStep
+
+  /** The customer scans a QR code and pays on their phone. */
+  data class Qr(val paymentId: String, val url: String, val amountCents: Long) : CheckoutStep
 
   /** The customer is at a card reader. */
   data class Card(val readerLabel: String, val paymentId: String?) : CheckoutStep
@@ -48,6 +58,10 @@ data class CheckoutState(
   /** An answer was lost: no tender until the sale is read again. */
   val lost: Boolean = false,
   val giftBalance: String? = null,
+  /** What a store-credit lookup found; null before one is asked, empty when nothing matched. */
+  val creditAccounts: List<PosCreditAccount>? = null,
+  /** The receipt went to the register's printer. */
+  val printed: Boolean = false,
 ) {
   /** What a tender may still take. */
   val dueCents: Long get() = sale.tenderableCents
@@ -162,6 +176,136 @@ class Checkout(
     }
     val key = keys.keyFor("gift:$cleaned:${state.amountCents}")
     finish(payGiftCard(deps, cleaned, if (state.isSplit) state.amountCents else null, key))
+    }
+  }
+
+  /** Store credit by the code the customer reads out. */
+  suspend fun payCredit(code: String) {
+    startTender { state ->
+      val cleaned = code.trim()
+      if (cleaned.isEmpty()) {
+        mutable.update { it.copy(busy = false, notice = Notice(NoticeTone.ERROR, "Enter the code.")) }
+        return
+      }
+      val key = keys.keyFor("credit:code:$cleaned:${state.amountCents}")
+      finish(payCredit(deps, cleaned, null, null, if (state.isSplit) state.amountCents else null, key))
+    }
+  }
+
+  /** Store credit from the account a lookup found. */
+  suspend fun payCredit(providerId: String, account: PosCreditAccount) {
+    startTender { state ->
+      val key = keys.keyFor("credit:$providerId:${account.reference}:${state.amountCents}")
+      finish(payCredit(deps, null, providerId, account.reference, if (state.isSplit) state.amountCents else null, key))
+    }
+  }
+
+  /** Finds the accounts a customer's email or code opens at one provider. */
+  suspend fun lookUpCredit(providerId: String, query: String) {
+    val text = query.trim()
+    if (text.isEmpty() || mutable.value.busy) return
+    mutable.update { it.copy(busy = true, notice = null, creditAccounts = null) }
+    try {
+      val found = api.creditLookup(providerId, text)
+      mutable.update { it.copy(busy = false, creditAccounts = found) }
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      mutable.update { it.copy(busy = false, creditAccounts = null, notice = Notice(NoticeTone.WARNING, error.message ?: "That could not be looked up.")) }
+    }
+  }
+
+  fun clearCreditLookup() = mutable.update { it.copy(creditAccounts = null) }
+
+  /** Puts the amount on a checked-in stay's folio. */
+  suspend fun payFolio(reservationId: String) {
+    startTender { state ->
+      val key = keys.keyFor("folio:$reservationId:${state.amountCents}")
+      finish(payFolio(deps, reservationId, if (state.isSplit) state.amountCents else null, key))
+    }
+  }
+
+  /** The QR payment page: the customer pays on their phone; the register shows the code until the payment settles. */
+  suspend fun payLink() {
+    startTender { state ->
+      val key = keys.keyFor("link:${state.amountCents}:${state.tipCents}")
+      val started = try {
+        api.payment(state.opened.orderId, SaleStep.CardLink(state.amountCents, state.tipCents), key)
+      } catch (error: Throwable) {
+        finish(failedOrUnknown(error, "The QR payment page could not be made."))
+        return
+      }
+      mutable.update { it.copy(sale = started.sale) }
+      outcomeOfPayment(started)?.let { already ->
+        if (already !is TenderOutcome.Canceled) {
+          finish(already)
+          return
+        }
+      }
+      val payment = started.payment
+      val url = payment?.checkoutUrl
+      if (payment == null || url.isNullOrEmpty()) {
+        finish(TenderOutcome.Failed(payment?.failureMessage ?: "The QR payment page could not be made.", started))
+        return
+      }
+      keys.answered()
+      mutable.update { it.copy(busy = false, step = CheckoutStep.Qr(payment.id, url, payment.amountCents + payment.tipCents)) }
+    }
+  }
+
+  /** One look at the QR payment: it settles the sale, or fails, or is still waiting for the customer. */
+  suspend fun pollLink() {
+    val step = mutable.value.step as? CheckoutStep.Qr ?: return
+    val answer = try {
+      api.payment(mutable.value.opened.orderId, SaleStep.Status(step.paymentId))
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      return
+    }
+    if (mutable.value.step !is CheckoutStep.Qr) return
+    mutable.update { it.copy(sale = answer.sale) }
+    outcomeOfPayment(answer)?.let { apply(it) }
+  }
+
+  /** Closes the QR page without a payment: the amount is released for another tender. */
+  suspend fun cancelLink() {
+    val step = mutable.value.step as? CheckoutStep.Qr ?: return
+    mutable.update { it.copy(busy = true) }
+    val answer = cancelCardPayment(TenderDeps(api, mutable.value.opened.orderId, sleep), step.paymentId)
+    mutable.update { it.copy(busy = false, sale = answer?.sale ?: it.sale, step = CheckoutStep.Tender, notice = null) }
+  }
+
+  /** Reopens the QR page of a payment still waiting for the customer. */
+  fun showLink(payment: PosSalePayment) {
+    val url = payment.checkoutUrl
+    if (payment.method != "card_link" || payment.status != "pending" || url == null) return
+    mutable.update { it.copy(step = CheckoutStep.Qr(payment.id, url, payment.amountCents + payment.tipCents)) }
+  }
+
+  /** Test mode: taps a test card on a smart reader's waiting payment. */
+  suspend fun simulateTap(paymentId: String) {
+    if (mutable.value.busy) return
+    mutable.update { it.copy(busy = true) }
+    try {
+      val answer = api.payment(mutable.value.opened.orderId, SaleStep.Simulate(paymentId))
+      mutable.update { it.copy(sale = answer.sale) }
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+    }
+    mutable.update { it.copy(busy = false) }
+    recheck(quiet = true)
+  }
+
+  /** Tries a declined reader payment again on the same reader. */
+  suspend fun retryReaderPayment(paymentId: String) {
+    if (!mutable.value.canTender) return
+    mutable.update { it.copy(busy = true, notice = null) }
+    try {
+      val answer = api.payment(mutable.value.opened.orderId, SaleStep.Retry(paymentId))
+      mutable.update { it.copy(busy = false, sale = answer.sale) }
+      outcomeOfPayment(answer)?.let { apply(it) }
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      mutable.update { it.copy(busy = false, notice = Notice(NoticeTone.ERROR, error.message ?: "The payment could not be retried.")) }
     }
   }
 
@@ -292,11 +436,37 @@ class Checkout(
   }
 
   /**
+   * Sends the receipt to the register's cloud receipt printer: the server prints it under the sale's own key, so a
+   * receipt that already printed is never printed twice. Null when it went; the words when it did not.
+   */
+  suspend fun printToCloud(): String? {
+    if (mutable.value.busy) return "Wait a moment."
+    mutable.update { it.copy(busy = true, notice = null) }
+    return try {
+      api.payment(mutable.value.opened.orderId, SaleStep.Receipt("print"))
+      mutable.update { it.copy(busy = false, printed = true, notice = Notice(NoticeTone.SUCCESS, "Sent to the receipt printer.")) }
+      null
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      val words = error.message ?: "The receipt did not print."
+      mutable.update { it.copy(busy = false, notice = Notice(NoticeTone.ERROR, words)) }
+      words
+    }
+  }
+
+  /** The receipt was printed here (on a direct printer); the server only records the choice. */
+  suspend fun markPrinted() {
+    runCatching { api.payment(mutable.value.opened.orderId, SaleStep.Receipt("print")) }
+      .exceptionOrNull()?.let { if (it is CancellationException) throw it }
+    mutable.update { it.copy(printed = true) }
+  }
+
+  /**
    * Sends (or records) the receipt: `email` or `sms` to [to], `print` when it
    * printed here, `none` when the customer declined. "No receipt" never holds
    * the next customer, so its note is best-effort. True when the sale is done.
    */
-  suspend fun sendReceipt(channel: String, to: String? = null): Boolean {
+  suspend fun sendReceipt(channel: String, to: String? = null, marketingOptIn: Boolean = false): Boolean {
     if (mutable.value.busy) return false
     if (channel == "none" || channel == "print") {
       runCatching { api.payment(mutable.value.opened.orderId, SaleStep.Receipt(channel)) }
@@ -305,7 +475,7 @@ class Checkout(
     }
     mutable.update { it.copy(busy = true, notice = null) }
     return try {
-      api.payment(mutable.value.opened.orderId, SaleStep.Receipt(channel, to?.trim()))
+      api.payment(mutable.value.opened.orderId, SaleStep.Receipt(channel, to?.trim(), marketingOptIn))
       mutable.update { it.copy(busy = false, notice = Notice(NoticeTone.SUCCESS, if (channel == "sms") "Receipt texted." else "Receipt emailed.")) }
       true
     } catch (error: Throwable) {

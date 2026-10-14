@@ -1,0 +1,400 @@
+{
+  "$comment": "The Tax services plugin's native screen: the site's own Avalara AvaTax or TaxJar connection (connect, test, disconnect), the ship-from address, the default tax code, whether paid orders are recorded there, and the customers who are exempt. Routes: GET /api/tax-engines/connection, POST connect, test, disconnect, settings, exemptions, exemptions/delete. The secret is sealed server-side and never read back. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "tax-engines.service",
+      "title": "Tax service",
+      "label": "Tax service",
+      "subtitle": "Your Avalara AvaTax or TaxJar account",
+      "icon": "percent|percent",
+      "scope": "site",
+      "order": 30,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "conn": "/api/tax-engines/connection?hostId={site.id}",
+        "exemptions": {
+          "url": "/api/tax-engines/exemptions?hostId={site.id}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.conn.available",
+          "text": "Tax services are not available for this site. They need a plan that sells and a deployment that offers them."
+        },
+        {
+          "type": "form",
+          "id": "connect",
+          "title": "Connect a tax service",
+          "when": "data.conn.available && !data.conn.connection",
+          "footer": "While Taxes is set to Manual rates, your store asks your tax service for the tax on each sale and records your paid orders and refunds there. You remain responsible for registering where you owe tax, filing your returns and paying the tax you collect.",
+          "fields": [
+            {
+              "key": "provider",
+              "label": "Service",
+              "kind": "select",
+              "initial": "avalara",
+              "optionsFrom": {
+                "items": "data.conn.providers",
+                "value": "{item.id}",
+                "label": "{item.label}"
+              }
+            },
+            {
+              "key": "environment",
+              "label": "Environment",
+              "kind": "select",
+              "initial": "sandbox",
+              "options": [
+                {
+                  "value": "sandbox",
+                  "label": "Sandbox (test account, nothing is filed)"
+                },
+                {
+                  "value": "production",
+                  "label": "Production (your live account)"
+                }
+              ]
+            },
+            {
+              "key": "accountId",
+              "label": "Account id",
+              "kind": "text",
+              "help": "Digits only.",
+              "when": "form.provider == avalara"
+            },
+            {
+              "key": "companyCode",
+              "label": "Company code",
+              "kind": "text",
+              "placeholder": "DEFAULT",
+              "help": "As set up in AvaTax",
+              "when": "form.provider == avalara"
+            },
+            {
+              "key": "secret",
+              "label": "License key or API token",
+              "kind": "password",
+              "required": true,
+              "help": "Stored encrypted. It is never shown again."
+            }
+          ],
+          "submit": {
+            "label": "Test and connect",
+            "url": "/api/tax-engines/connect",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "{form.provider}",
+              "environment": "{form.environment}",
+              "accountId": "{form.accountId}",
+              "companyCode": "{form.companyCode}",
+              "secret": "{form.secret}"
+            },
+            "success": "{response.detail}"
+          }
+        },
+        {
+          "type": "notice",
+          "id": "failing",
+          "tone": "error",
+          "when": "data.conn.connection.lastError && !data.conn.connection.lastTestOk",
+          "text": "{data.conn.connection.lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "failingBare",
+          "tone": "error",
+          "when": "data.conn.connection && !data.conn.connection.lastTestOk && !data.conn.connection.lastError",
+          "text": "{data.conn.connection.providerLabel} did not accept the stored credentials."
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "{data.conn.connection.providerLabel}",
+          "when": "data.conn.connection",
+          "rows": [
+            {
+              "label": "Environment",
+              "value": "{data.conn.connection.environment:title}"
+            },
+            {
+              "label": "Account id",
+              "value": "{data.conn.connection.accountId}",
+              "when": "data.conn.connection.accountId"
+            },
+            {
+              "label": "Company code",
+              "value": "{data.conn.connection.companyCode}",
+              "when": "data.conn.connection.companyCode"
+            },
+            {
+              "label": "Ship-from address",
+              "value": "{data.conn.connection.shipFromValidated:yesno}",
+              "chip": true,
+              "tones": {
+                "Yes": "success",
+                "*": "neutral"
+              },
+              "when": "data.conn.connection.shipFrom"
+            },
+            {
+              "label": "Default tax code",
+              "value": "{data.conn.connection.defaultTaxCode|'None'}"
+            },
+            {
+              "label": "Paid orders recorded",
+              "value": "{data.conn.connection.recordTransactions:yesno}"
+            },
+            {
+              "label": "Last test",
+              "value": "{data.conn.connection.lastTestAtMs:datetime}",
+              "when": "data.conn.connection.lastTestAtMs"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Connection",
+          "when": "data.conn.connection",
+          "items": [
+            {
+              "id": "test",
+              "label": "Test connection",
+              "icon": "checkmark.seal|verified",
+              "url": "/api/tax-engines/test",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "success": "{response.detail}"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect {data.conn.connection.providerLabel}? Checkout and the register go back to your own tax rates.",
+              "url": "/api/tax-engines/disconnect",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "success": "Disconnected"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "shipFrom",
+          "title": "Ship-from address",
+          "when": "data.conn.connection",
+          "footer": "Where this store ships or sells from. The tax service taxes in-person sales here and uses it as the origin for every other sale.",
+          "fields": [
+            {
+              "key": "line1",
+              "label": "Street address",
+              "kind": "text",
+              "initial": "{data.conn.connection.shipFrom.line1}"
+            },
+            {
+              "key": "city",
+              "label": "City",
+              "kind": "text",
+              "initial": "{data.conn.connection.shipFrom.city}"
+            },
+            {
+              "key": "region",
+              "label": "State",
+              "kind": "text",
+              "initial": "{data.conn.connection.shipFrom.region}"
+            },
+            {
+              "key": "postalCode",
+              "label": "Postal code",
+              "kind": "text",
+              "initial": "{data.conn.connection.shipFrom.postalCode}"
+            },
+            {
+              "key": "country",
+              "label": "Country",
+              "kind": "text",
+              "initial": "{data.conn.connection.shipFrom.country|'US'}",
+              "placeholder": "US",
+              "help": "Two letters, like US."
+            }
+          ],
+          "submit": {
+            "label": "Check and save address",
+            "url": "/api/tax-engines/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "shipFrom": {
+                "line1": "{form.line1}",
+                "city": "{form.city}",
+                "region": "{form.region}",
+                "postalCode": "{form.postalCode}",
+                "country": "{form.country}"
+              }
+            },
+            "success": "Ship-from address saved"
+          }
+        },
+        {
+          "type": "form",
+          "id": "taxCode",
+          "title": "Default tax code",
+          "when": "data.conn.connection",
+          "fields": [
+            {
+              "key": "defaultTaxCode",
+              "label": "Tax code",
+              "kind": "text",
+              "initial": "{data.conn.connection.defaultTaxCode}",
+              "placeholder": "P0000000",
+              "help": "For products without a tax code of their own."
+            }
+          ],
+          "submit": {
+            "label": "Save code",
+            "url": "/api/tax-engines/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "defaultTaxCode": "{form.defaultTaxCode:upper}"
+            },
+            "success": "Default tax code saved"
+          }
+        },
+        {
+          "type": "form",
+          "id": "recording",
+          "title": "Recording",
+          "when": "data.conn.connection",
+          "fields": [
+            {
+              "key": "recordTransactions",
+              "label": "Record paid orders and refunds",
+              "kind": "toggle",
+              "initial": "{data.conn.connection.recordTransactions}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/tax-engines/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "recordTransactions": "{form.recordTransactions}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "list",
+          "id": "exemptions",
+          "title": "Exempt customers",
+          "when": "data.conn.connection",
+          "items": "data.exemptions.exemptions",
+          "primary": "{item.name|item.email}",
+          "secondary": "{item.email} · {item.certificateNumber|'No certificate number'}",
+          "icon": "person.crop.circle.badge.checkmark|person_check",
+          "badges": [
+            {
+              "text": "{item.type:title}",
+              "tone": "info"
+            }
+          ],
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.email} from the exempt customers?",
+              "url": "/api/tax-engines/exemptions/delete",
+              "body": {
+                "hostId": "{site.id}",
+                "id": "{item.id}"
+              },
+              "success": "Removed"
+            }
+          ],
+          "empty": "No customers are marked tax exempt."
+        },
+        {
+          "type": "actions",
+          "id": "exemptionAdd",
+          "when": "data.conn.connection",
+          "items": [
+            {
+              "id": "addExemption",
+              "label": "Add an exempt customer",
+              "icon": "plus|add",
+              "url": "/api/tax-engines/exemptions",
+              "prompt": [
+                {
+                  "key": "email",
+                  "label": "Customer email",
+                  "kind": "email",
+                  "required": true
+                },
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text"
+                },
+                {
+                  "key": "type",
+                  "label": "Why they are exempt",
+                  "kind": "select",
+                  "initial": "wholesale",
+                  "options": [
+                    {
+                      "value": "wholesale",
+                      "label": "Resale or wholesale"
+                    },
+                    {
+                      "value": "government",
+                      "label": "Government"
+                    },
+                    {
+                      "value": "nonprofit",
+                      "label": "Charitable or nonprofit"
+                    },
+                    {
+                      "value": "education",
+                      "label": "Educational"
+                    },
+                    {
+                      "value": "religious",
+                      "label": "Religious"
+                    },
+                    {
+                      "value": "other",
+                      "label": "Other"
+                    }
+                  ]
+                },
+                {
+                  "key": "certificateNumber",
+                  "label": "Certificate number",
+                  "kind": "text"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "email": "{form.email}",
+                "name": "{form.name}",
+                "type": "{form.type}",
+                "certificateNumber": "{form.certificateNumber}"
+              },
+              "success": "Added {form.email}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

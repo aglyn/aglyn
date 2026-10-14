@@ -41,4 +41,15 @@ public struct TokenClaims: Equatable, Sendable {
   }
 
   public var isSuper: Bool { staffRole == "super" }
+
+  /// How the account signs in, from the token's `firebase.identities` (`password` for the email
+  /// identity), password first and the rest in name order.
+  public var signInMethods: [String] {
+    guard case .object(let identities)? = values["firebase"]?["identities"] else { return [] }
+    let names = identities.keys.map { $0 == "email" ? "password" : $0 }
+    return names.filter { $0 == "password" } + names.filter { $0 != "password" }.sorted()
+  }
+
+  /// Whether the account's email address is confirmed (`email_verified`).
+  public var emailVerified: Bool { values["email_verified"] == .bool(true) }
 }

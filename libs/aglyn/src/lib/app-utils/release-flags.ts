@@ -47,6 +47,7 @@ export type ReleaseFlagKey =
   | 'release_video_delivery'
   | 'release_ai_generative'
   | 'release_crm_assist_whole_record'
+  | 'release_ad_audience_sync'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -211,6 +212,20 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'the Subprocessors row were republished; see ' +
       'docs/drafts/agl-3520-crm-assistance-whole-record-disclosure.md.',
     defaultEnabled: true,
+  },
+  // Platform-wide, never per org: the nightly job reads only the platform
+  // value, because it is the operator's own marketing and no workspace's
+  // feature. `apps/console/app/api/admin/ad-audience-sync/route.ts` holds the
+  // gate; a dry run reports the counts whichever way it is set.
+  {
+    key: 'release_ad_audience_sync',
+    label: 'Account-holder ad audiences',
+    description:
+      'Nightly sync of United States account holders, as SHA-256 hashed ' +
+      'email addresses, to the operator\u2019s own Meta, Google and LinkedIn ' +
+      'customer-list audiences (AGL-3780). OFF by default: nothing is sent ' +
+      'until the Privacy Policy that discloses it is published.',
+    defaultEnabled: false,
   },
 ]
 

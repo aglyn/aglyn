@@ -57,6 +57,18 @@ class RegisterModel(
   private val reconnectMs: Long = RECONNECT_MS,
   /** The shift and staff PIN routes. */
   val opsApi: PosOpsApi = OfflinePosOps,
+  /** The customer route. */
+  customersApi: PosCustomersApi = OfflinePosCustomers,
+  /** The signed-in member: the only one whose offline sales this device may sync. */
+  uid: String = "",
+  /** The offline register's kit and sync routes. */
+  offlineApi: PosOfflineApi = UnreachablePosOffline,
+  /** The return route. */
+  returnsApi: PosReturnsApi = OfflinePosReturns,
+  /** The customer display route. */
+  displayApi: PosDisplayApi = OfflinePosDisplay,
+  /** The kiosks' "pay at counter" queue. */
+  kioskQueueApi: PosKioskQueueApi = OfflinePosKioskQueue,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -65,6 +77,32 @@ class RegisterModel(
 
   /** The register's shift and its drawer. */
   val shift = PosShiftModel(opsApi, scope, { register?.id }, { cashier.assertion })
+
+  /** The customer lookup beside the basket. */
+  val customers = PosCustomerModel(customersApi, scope)
+  /** The last sale this register finished, and its receipt. */
+  val lastReceipt = PosLastReceiptModel(firestore, api, store, hostId, scope, { receiptContext() })
+
+  /** The cash sales rung while offline, and their sync. */
+  val offline = PosOfflineModel(
+    offlineApi, PosOfflineDeviceStore(deviceStore, "$uid:$hostId"), uid, scope,
+    { register?.id }, { register?.locationId }, { shift.shift?.id }, { cashier.assertion },
+  ).also { model -> model.networkSink = { failed -> if (failed) online = false } }
+
+  /** The offline cash dialog is open. */
+  var offlineCashOpen by mutableStateOf(false)
+  /** The return being rung at the register. */
+  val returns = PosReturnModel(returnsApi, scope, { register?.id }, { cashier.assertion })
+
+  /** The paired customer display and kiosks. */
+  val display = PosDisplayControl(displayApi, scope, { register?.id })
+
+  /** "Pay at counter" orders from this register's kiosks. */
+  val kioskQueue = PosKioskQueueModel(kioskQueueApi, { register?.id })
+
+  /** The display is showing the basket (so an emptied basket tells it to go idle). */
+  private var displayShowsBasket = false
+  private var displayShowsProcessing = false
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
@@ -80,6 +118,10 @@ class RegisterModel(
     private set
 
   var categories by mutableStateOf<List<PosCategory>>(emptyList())
+    private set
+
+  /** The checked-in stays a sale can be charged to. */
+  var stays by mutableStateOf<List<PosStay>>(emptyList())
     private set
   var args by mutableStateOf(PosGridArgs(quickKeys = true))
     private set
@@ -129,6 +171,7 @@ class RegisterModel(
     scope.launch { loadRegisters() }
     scope.launch { loadStore() }
     scope.launch { loadCategories() }
+    scope.launch { loadStays() }
     scope.launch { loadContext() }
     scope.launch { reconnectWhileOffline() }
     scope.launch { keepTheTill() }
@@ -155,6 +198,8 @@ class RegisterModel(
     while (currentCoroutineContext().isActive) {
       delay(CASHIER_TICK_MS)
       cashier.tick()
+      if (online && offline.kitIsStale) offline.refreshKit()
+      if (online) display.check()
     }
   }
 
@@ -190,6 +235,11 @@ class RegisterModel(
     store.registerId = next.id
     cart = store.cart(next.id)
     holds = store.holds(next.id)
+    lastReceipt.watch(next.id)
+    display.reset()
+    displayShowsBasket = false
+    displayShowsProcessing = false
+    scope.launch { display.check() }
     resumePendingSale(next)
     shift.refresh()
   }
@@ -199,6 +249,12 @@ class RegisterModel(
       .getOrElse { if (it is CancellationException) throw it else emptyList() }
   }
 
+  /** The checked-in stays a sale can be charged to; read again whenever the room charge opens, since guests come and go. */
+  suspend fun loadStays() {
+    stays = runCatching { firestore.page(staysQuery(hostId)).docs.map(::posStayFrom).sortedBy { it.name.lowercase() } }
+      .getOrElse { if (it is CancellationException) throw it else stays }
+  }
+
   suspend fun loadContext() {
     try {
       val loaded = api.context()
@@ -206,6 +262,9 @@ class RegisterModel(
       online = true
       readers.removeAll { it.kind == CardReaderKind.SMART }
       loaded.readers.filter { it.online }.forEach { readers += SmartReaderService(it) }
+      // The console answered: get the offline rules, then send whatever was rung while it did not.
+      if (offline.kitIsStale) offline.refreshKit()
+      offline.sync()
       cardCollector?.let { collector ->
         runCatching { collector.connect(hostId, terminal) }.onFailure { if (it is CancellationException) throw it }
         syncDeviceReader(collector)
@@ -373,7 +432,17 @@ class RegisterModel(
 
   fun setCustomerEmail(email: String) = updateCart(cart.withCustomerEmail(email))
 
+  /** Attaches the customer the lookup found; null lets them go. Their email is the sale's. */
+  fun attachCustomer(customer: PosCustomer?) = updateCart(cart.withCustomer(customer))
+
   fun clearCart() = updateCart(Cart.EMPTY)
+
+  /** Takes the basket's total in cash while offline. The sale is on the device, and the basket cleared, only when this answers; null when it could not be kept. */
+  fun takeOfflineCash(sold: Cart, tenderedCents: Long): PosOfflineRung? {
+    val rung = offline.ringCashSale(sold, tenderedCents) ?: return null
+    updateCart(Cart.EMPTY)
+    return rung
+  }
 
   private fun updateCart(next: Cart) {
     cart = next
@@ -468,6 +537,103 @@ class RegisterModel(
     }
   }
 
+  /** Loads a kiosk's "pay at counter" order into checkout, where the cashier takes payment as on any sale. Needs a free register. */
+  suspend fun takeKioskOrder(entry: PosKioskQueueEntry) {
+    if (checkout != null || charging) {
+      toast = Notice(NoticeTone.WARNING, "Finish or cancel the open sale first.")
+      return
+    }
+    when (val result = kioskQueue.take(entry)) {
+      is PosKioskTake.Taken -> {
+        val sale = result.taken.sale
+        startCheckout(PosOpenedSale(sale.orderId, null, null, null, sale.totalCents, sale.dueCents, emptyList()))
+        register?.let { store.savePendingSale(it.id, PendingSale(sale.orderId, sale.totalCents, nowMs())) }
+      }
+      is PosKioskTake.Refused -> toast = Notice(NoticeTone.ERROR, result.message)
+    }
+  }
+
+  // The customer display.
+
+  /** Mirrors the basket (and the open sale's totals) onto a connected display, once the basket has settled. */
+  suspend fun mirrorToDisplay() {
+    if (!display.connected || display.asking != null) return
+    val open = checkout?.state?.value
+    if (open?.sale?.status == "paid") {
+      displayShowsBasket = false
+      displayShowsProcessing = false
+      return
+    }
+    // A card payment waiting on the reader: the display says so rather than showing the balance.
+    if (open?.inFlight?.any { it.method == "card_present" } == true) {
+      if (!displayShowsProcessing) {
+        displayShowsProcessing = true
+        display.show(posDisplayProcessing(nowMs()))
+      }
+      return
+    }
+    displayShowsProcessing = false
+    if (cart.isEmpty && !displayShowsBasket) return
+    displayShowsBasket = !cart.isEmpty
+    display.show(posDisplayBasketState(cart, open?.sale, open?.tipCents ?: 0, nowMs()))
+  }
+
+  /** Asks the customer for a tip on the display and puts their answer on the tender. */
+  suspend fun askTipOnDisplay() {
+    val open = checkout ?: return
+    val amount = open.state.value.amountCents
+    if (!display.connected || amount <= 0) return
+    val answer = display.ask(posDisplayTipPrompt(amount, context?.settings?.tipPercentages ?: emptyList(), nowMs())) ?: return
+    val cents = (answer.tipCents ?: 0.0).toLong()
+    open.customTip(cents)
+    toast = Notice(NoticeTone.INFO, if (cents > 0) "Tip: ${money(cents, currency)}" else "No tip")
+  }
+
+  /** Hands the receipt choice to the customer's screen when the store asks, then sends it as they chose. */
+  suspend fun askReceiptOnDisplay(paid: Checkout) {
+    val settings = context?.settings ?: return
+    if (!display.connected || settings.receiptDefault != ReceiptDefault.ASK) return
+    val answer = display.ask(posDisplayReceiptPrompt(context?.smsReceipts == true, settings.displayMarketingOptIn, nowMs()))
+    if (answer == null) {
+      // The cashier took the receipt over, or the customer walked away: the screen still ends on its thank-you.
+      display.thank()
+      return
+    }
+    val done = when (answer.receiptChannel) {
+      com.aglyn.contracts.PosReceiptChannel.EMAIL -> paid.sendReceipt("email", answer.email ?: return, answer.marketingOptIn == true)
+      com.aglyn.contracts.PosReceiptChannel.SMS -> paid.sendReceipt("sms", answer.phone ?: return)
+      com.aglyn.contracts.PosReceiptChannel.PRINT -> printReceipt(paid) == null
+      else -> paid.sendReceipt("none")
+    }
+    if (done && checkout === paid) finished()
+  }
+
+  /**
+   * Prints the paid sale's receipt where this register prints: its direct printer, else its cloud printer; with
+   * neither, the choice is only recorded. Null when it went, the words when it did not.
+   */
+  suspend fun printReceipt(paid: Checkout): String? {
+    if (peripherals.printers.isNotEmpty()) {
+      val data = receipt ?: return "The receipt is still loading. Try again in a moment."
+      val cash = paid.state.value.sale.payments.any { it.method == "cash" && it.status == "succeeded" }
+      print(data, openDrawer = cash)?.let { return it }
+      paid.markPrinted()
+      return null
+    }
+    if (lastReceipt.hasPrinter) return paid.printToCloud()
+    paid.sendReceipt("print")
+    return null
+  }
+
+  /** A store that always prints: the receipt goes to the register's printer as soon as the sale is paid, once. */
+  suspend fun printReceiptByDefault(paid: Checkout) {
+    if (context?.settings?.receiptDefault != ReceiptDefault.PRINT || paid.state.value.printed) return
+    // A direct printer prints from the stored sale, so it waits for that read.
+    if (peripherals.printers.isEmpty() && !lastReceipt.hasPrinter) return
+    if (peripherals.printers.isNotEmpty() && receipt == null) return
+    printReceipt(paid)?.let { toast = Notice(NoticeTone.ERROR, it) }
+  }
+
   /** The sale was voided: back to the basket, which is kept for another try. */
   fun voided() {
     register?.let { store.savePendingSale(it.id, null) }
@@ -477,6 +643,7 @@ class RegisterModel(
 
   /** The sale is paid and the receipt chosen: the next customer. */
   fun finished() {
+    checkout?.state?.value?.opened?.orderId?.let(lastReceipt::remember)
     register?.let { store.savePendingSale(it.id, null) }
     updateCart(Cart.EMPTY)
     checkout = null
@@ -487,20 +654,28 @@ class RegisterModel(
   fun loadReceipt(orderId: String) {
     scope.launch {
       val order = runCatching { firestore.get("hosts/$hostId/orders/$orderId") }.getOrNull() ?: return@launch
-      receipt = receiptDataFromOrder(
-        orderId,
-        order.data,
-        ReceiptContext(storeName = storeName, registerName = register?.name, timeZone = timeZone, currency = currency),
-        nowMs(),
-      )
+      receipt = receiptDataFromOrder(orderId, order.data, receiptContext(), nowMs())
     }
   }
 
-  /** Prints the receipt on the register's direct printer, kicking the drawer for cash. */
-  suspend fun print(receiptData: ReceiptData, openDrawer: Boolean): String? {
+  /** The store's receipt header, address and return policy as this register prints them. */
+  private fun receiptContext(): ReceiptContext {
+    val rules = context?.ops
+    return ReceiptContext(
+      storeName = storeName,
+      storeLines = rules?.receiptAddress.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() },
+      registerName = register?.name,
+      timeZone = timeZone,
+      currency = currency,
+      footer = rules?.returnPolicy?.trim()?.ifEmpty { null },
+    )
+  }
+
+  /** Prints the receipt on the register's direct printer, kicking the drawer for cash. A gift receipt drops every price. */
+  suspend fun print(receiptData: ReceiptData, openDrawer: Boolean, gift: Boolean = false): String? {
     val printer = peripherals.printers.firstOrNull() ?: return "No receipt printer is set up on this register."
     return try {
-      printer.print(EscPosEncoder().encode(layoutReceipt(receiptData, ReceiptLayoutOptions(columns = 48, openDrawer = openDrawer))))
+      printer.print(EscPosEncoder().encode(layoutReceipt(receiptData, ReceiptLayoutOptions(columns = 48, openDrawer = openDrawer, gift = gift))))
       null
     } catch (error: Throwable) {
       if (error is CancellationException) throw error

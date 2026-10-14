@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynHardware
 import AglynPluginHost
+import AglynScreens
 import SwiftUI
 
 public let commerceRegisterScreen = "commerce.register"
@@ -15,6 +16,7 @@ public let commerceProductsScreen = "commerce.products"
 public let commerceProductScreen = "commerce.product"
 public let commerceScanScreen = "commerce.scan"
 public let commerceSalesScreen = "commerce.sales"
+public let commerceSettingsScreen = "commerce.settings"
 
 /// The Commerce plugin's native registration: the same ids its
 /// `mobile.contributes` declares in plugins.config.json (the Android
@@ -44,6 +46,24 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   ) { context, _ in
     CardReadersScreen(context: context)
   }
+
+  // A tablet set up as the screen facing the customer: no one signs in; a register's code pairs it.
+  r.screen(
+    commerceDisplayScreen, title: "Customer display", requiresSite: false, apps: [.pos], icon: "rectangle.on.rectangle",
+    placement: .device
+  ) { context, _ in
+    PosCustomerDisplayScreen(context: context)
+  }
+  // A tablet customers order from: no one signs in; a register's kiosk code pairs it.
+  r.screen(
+    commerceKioskScreen, title: "Self-service kiosk", requiresSite: false, apps: [.pos], icon: "cart.badge.plus",
+    placement: .device
+  ) { context, _ in
+    PosKioskScreen(context: context)
+  }
+  // Commerce settings, and the commerceSettings zone other plugins' cards sit in:
+  // a spec screen drawn by AglynScreens (Resources/commerce.screens.json).
+  SpecScreens.register(ScreenCatalog.load(from: .module), into: r)
 
   r.screen(commerceOrdersScreen, title: "Orders", requiresSite: true, icon: "bag") { context, params in
     OrdersScreen(context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all)

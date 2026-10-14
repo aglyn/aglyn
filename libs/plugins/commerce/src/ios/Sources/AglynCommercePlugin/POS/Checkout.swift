@@ -9,7 +9,8 @@ import Observation
  * CHECKOUT: the tender state machine.
  *
  * The server has priced the sale; this takes the money. A tip first when the
- * store asks for one, then a tender: a card reader, cash or a gift card. A
+ * store asks for one, then a tender: a card reader, cash, a gift card, store
+ * credit, a room charge or the QR payment page. A
  * tender may cover part of the balance (a split), and the sale stays open
  * until the balance is zero. Then the receipt.
  *
@@ -27,6 +28,12 @@ enum CheckoutStep: Equatable {
   case tender
   case cash
   case giftCard
+  /// Store credit another plugin keeps (a rewards balance, a referral credit).
+  case credit(providerID: String)
+  /// Charged to a checked-in stay.
+  case room
+  /// The customer scans a QR code and pays on their phone.
+  case qr(paymentID: String, url: String, amountCents: Int)
   /// The customer is at a card reader.
   case card(readerLabel: String, paymentID: String?)
   /// Paid: the receipt is next.
@@ -55,6 +62,10 @@ final class Checkout {
   /// An answer was lost: no tender until the sale is read again.
   private(set) var lost = false
   private(set) var giftBalance: String?
+  /// What a store-credit lookup found; nil before one is asked, empty when nothing matched.
+  private(set) var creditAccounts: [PosCreditAccount]?
+  /// The receipt went to the register's printer.
+  private(set) var printed = false
 
   @ObservationIgnored private let api: PosSaleAPI
   @ObservationIgnored private var keys: AttemptKeys
@@ -171,6 +182,138 @@ final class Checkout {
       await AglynCommercePlugin.payGiftCard(
         deps, code: cleaned, amountCents: isSplit ? amountCents : nil, attemptKey: key))
   }
+
+  /// Store credit by the code the customer reads out.
+  func payCredit(providerID: String, code: String) async {
+    guard startTender() else { return }
+    let cleaned = code.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleaned.isEmpty else {
+      busy = false
+      notice = CheckoutNotice(tone: .error, message: "Enter the code.")
+      return
+    }
+    let key = keys.key(for: "credit:code:\(cleaned):\(amountCents)")
+    await finish(
+      await AglynCommercePlugin.payCredit(
+        deps, code: cleaned, providerID: nil, reference: nil, amountCents: isSplit ? amountCents : nil, attemptKey: key))
+  }
+
+  /// Store credit from the account a lookup found.
+  func payCredit(providerID: String, account: PosCreditAccount) async {
+    guard startTender() else { return }
+    let key = keys.key(for: "credit:\(providerID):\(account.reference):\(amountCents)")
+    await finish(
+      await AglynCommercePlugin.payCredit(
+        deps, code: nil, providerID: providerID, reference: account.reference, amountCents: isSplit ? amountCents : nil,
+        attemptKey: key))
+  }
+
+  /// Finds the accounts a customer's email or code opens at one provider.
+  func lookUpCredit(providerID: String, query: String) async {
+    let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty, !busy else { return }
+    busy = true
+    notice = nil
+    creditAccounts = nil
+    do {
+      creditAccounts = try await api.creditLookup(providerID: providerID, query: text)
+    } catch {
+      creditAccounts = nil
+      notice = CheckoutNotice(
+        tone: .warning, message: (error as? ConsoleAPIErrorMessage)?.message ?? "That could not be looked up.")
+    }
+    busy = false
+  }
+
+  /// Puts the amount on a checked-in stay's folio.
+  func payFolio(reservationID: String) async {
+    guard startTender() else { return }
+    let key = keys.key(for: "folio:\(reservationID):\(amountCents)")
+    await finish(
+      await AglynCommercePlugin.payFolio(
+        deps, reservationID: reservationID, amountCents: isSplit ? amountCents : nil, attemptKey: key))
+  }
+
+  /// The QR payment page: the customer pays on their phone; the register shows the code until the payment settles.
+  func payLink() async {
+    guard startTender() else { return }
+    let (amount, tip) = (amountCents, tipCents)
+    let key = keys.key(for: "link:\(amount):\(tip)")
+    let started: PosPaymentAnswer
+    do {
+      started = try await api.payment(orderID: opened.orderID, step: .cardLink(amountCents: amount, tipCents: tip), attemptKey: key)
+    } catch {
+      await finish(failedOrUnknown(error, "The QR payment page could not be made."))
+      return
+    }
+    sale = started.sale
+    if let already = outcomeOfPayment(started) {
+      if case .canceled = already {} else {
+        await finish(already)
+        return
+      }
+    }
+    guard let payment = started.payment, let url = payment.checkoutURL, !url.isEmpty else {
+      await finish(.failed(started.payment?.failureMessage ?? "The QR payment page could not be made.", started))
+      return
+    }
+    keys.answered()
+    busy = false
+    step = .qr(paymentID: payment.id, url: url, amountCents: payment.amountCents + payment.tipCents)
+  }
+
+  /// One look at the QR payment: it settles the sale, or fails, or is still waiting for the customer.
+  func pollLink() async {
+    guard case .qr(let paymentID, _, _) = step else { return }
+    guard let answer = try? await api.payment(orderID: opened.orderID, step: .status(paymentID: paymentID)) else { return }
+    guard case .qr = step else { return }
+    sale = answer.sale
+    if let outcome = outcomeOfPayment(answer) { apply(outcome) }
+  }
+
+  /// Closes the QR page without a payment: the amount is released for another tender.
+  func cancelLink() async {
+    guard case .qr(let paymentID, _, _) = step else { return }
+    busy = true
+    let answer = await cancelCardPayment(deps, paymentID)
+    busy = false
+    if let answer { sale = answer.sale }
+    step = .tender
+    notice = nil
+  }
+
+  /// Reopens the QR page of a payment still waiting for the customer.
+  func showLink(_ payment: PosSalePayment) {
+    guard payment.method == "card_link", payment.status == "pending", let url = payment.checkoutURL else { return }
+    step = .qr(paymentID: payment.id, url: url, amountCents: payment.amountCents + payment.tipCents)
+  }
+
+  /// Test mode: taps a test card on a smart reader's waiting payment.
+  func simulateTap(_ paymentID: String) async {
+    guard !busy else { return }
+    busy = true
+    if let answer = try? await api.payment(orderID: opened.orderID, step: .simulate(paymentID: paymentID)) { sale = answer.sale }
+    busy = false
+    await recheck(quiet: true)
+  }
+
+  /// Tries a declined reader payment again on the same reader.
+  func retryReaderPayment(_ paymentID: String) async {
+    guard canTender else { return }
+    busy = true
+    notice = nil
+    do {
+      let answer = try await api.payment(orderID: opened.orderID, step: .retry(paymentID: paymentID))
+      sale = answer.sale
+      busy = false
+      if let outcome = outcomeOfPayment(answer) { apply(outcome) }
+    } catch {
+      busy = false
+      notice = CheckoutNotice(tone: .error, message: (error as? ConsoleAPIErrorMessage)?.message ?? "The payment could not be retried.")
+    }
+  }
+
+  func clearCreditLookup() { creditAccounts = nil }
 
   /// Reads a gift card's balance to the customer before it is applied.
   func checkGiftCard(code: String) async {
@@ -291,10 +434,29 @@ final class Checkout {
     }
   }
 
+  /// Sends the receipt to the register's cloud receipt printer: the server prints it under the sale's own key, so a receipt
+  /// that already printed is never printed twice. True when it went; the words are the notice when it did not.
+  func printToCloud() async -> Bool {
+    guard !busy else { return false }
+    busy = true
+    notice = nil
+    do {
+      _ = try await api.payment(orderID: opened.orderID, step: .receipt(channel: "print", to: nil))
+      busy = false
+      printed = true
+      notice = CheckoutNotice(tone: .success, message: "Sent to the receipt printer.")
+      return true
+    } catch {
+      busy = false
+      notice = CheckoutNotice(tone: .error, message: (error as? ConsoleAPIErrorMessage)?.message ?? "The receipt did not print.")
+      return false
+    }
+  }
+
   /// Sends (or records) the receipt: `email` or `sms` to `to`, `print` when
   /// it printed here, `none` when the customer declined. "No receipt" never
   /// holds the next customer, so its note is best-effort. True when the sale is done.
-  func sendReceipt(channel: String, to: String? = nil) async -> Bool {
+  func sendReceipt(channel: String, to: String? = nil, marketingOptIn: Bool = false) async -> Bool {
     guard !busy else { return false }
     if channel == "none" || channel == "print" {
       _ = try? await api.payment(orderID: opened.orderID, step: .receipt(channel: channel, to: nil))
@@ -305,7 +467,8 @@ final class Checkout {
     do {
       _ = try await api.payment(
         orderID: opened.orderID,
-        step: .receipt(channel: channel, to: to?.trimmingCharacters(in: .whitespacesAndNewlines)))
+        step: .receipt(
+          channel: channel, to: to?.trimmingCharacters(in: .whitespacesAndNewlines), marketingOptIn: marketingOptIn))
       busy = false
       notice = CheckoutNotice(tone: .success, message: channel == "sms" ? "Receipt texted." : "Receipt emailed.")
       return true

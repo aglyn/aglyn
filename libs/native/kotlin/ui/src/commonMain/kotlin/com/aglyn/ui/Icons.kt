@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.HealthAndSafety
+import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.ImageNotSupported
@@ -266,6 +267,7 @@ object AglynIcons {
     "launch" to Icons.AutoMirrored.Outlined.Launch,
     "search" to Icons.Outlined.Search,
     "qr_code_scanner" to Icons.Outlined.QrCodeScanner,
+    "hotel" to Icons.Outlined.Hotel,
     "add" to Icons.Outlined.Add,
     "remove" to Icons.Outlined.Remove,
     "delete" to Icons.Outlined.DeleteOutline,

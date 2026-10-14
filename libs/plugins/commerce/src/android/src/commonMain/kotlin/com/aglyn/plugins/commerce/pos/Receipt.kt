@@ -126,6 +126,8 @@ data class ReceiptLayoutOptions(
   val logo: Boolean = false,
   /** Kick the cash drawer as the receipt starts printing. */
   val openDrawer: Boolean = false,
+  /** A gift receipt: the items and the barcode a recipient returns with, and no price, total or tender. */
+  val gift: Boolean = false,
 )
 
 /** The customer receipt, laid out to the paper (`layoutReceipt`). */
@@ -152,22 +154,28 @@ fun layoutReceipt(receipt: ReceiptData, options: ReceiptLayoutOptions): PrintDoc
   ops += rule
   for (item in receipt.lines) {
     val quantity = item.quantity.toLong()
-    line(if (quantity > 1) "$quantity x ${item.name}" else item.name, money(item.totalCents))
+    if (options.gift) {
+      for (text in wrapText("$quantity x ${item.name}", columns)) ops += PrintOp.Text(text)
+    } else {
+      line(if (quantity > 1) "$quantity x ${item.name}" else item.name, money(item.totalCents))
+    }
     item.detail?.ifEmpty { null }?.let { detail -> for (text in wrapText(detail, columns - 2)) ops += PrintOp.Text("  $text") }
-    if (quantity > 1) ops += PrintOp.Text(toPrintable("  @ ${money(item.unitCents)} each").take(columns))
+    if (quantity > 1 && !options.gift) ops += PrintOp.Text(toPrintable("  @ ${money(item.unitCents)} each").take(columns))
   }
   ops += rule
-  line("Subtotal", money(receipt.subtotalCents))
-  receipt.discountCents?.takeIf { it != 0.0 }?.let { line("Discount", "-${money(it)}") }
-  receipt.shippingCents?.takeIf { it != 0.0 }?.let { line("Shipping", money(it)) }
-  receipt.taxCents?.takeIf { it != 0.0 }?.let { line("Tax", money(it)) }
-  receipt.tipCents?.takeIf { it != 0.0 }?.let { line("Tip", money(it)) }
-  for (text in twoColumnLines("TOTAL", money(receipt.totalCents), columns / 2)) ops += PrintOp.Text(text, bold = true, size = 2)
-  val change = receipt.changeCents?.takeIf { it != 0.0 }
-  if (!receipt.tenders.isNullOrEmpty() || change != null) ops += PrintOp.Feed(1)
-  for (tender in receipt.tenders ?: emptyList()) line(tender.label, money(tender.amountCents))
-  change?.let { line("Change", money(it), bold = true) }
-  receipt.refundedCents?.takeIf { it != 0.0 }?.let { line("Refunded", "-${money(it)}") }
+  if (!options.gift) {
+    line("Subtotal", money(receipt.subtotalCents))
+    receipt.discountCents?.takeIf { it != 0.0 }?.let { line("Discount", "-${money(it)}") }
+    receipt.shippingCents?.takeIf { it != 0.0 }?.let { line("Shipping", money(it)) }
+    receipt.taxCents?.takeIf { it != 0.0 }?.let { line("Tax", money(it)) }
+    receipt.tipCents?.takeIf { it != 0.0 }?.let { line("Tip", money(it)) }
+    for (text in twoColumnLines("TOTAL", money(receipt.totalCents), columns / 2)) ops += PrintOp.Text(text, bold = true, size = 2)
+    val change = receipt.changeCents?.takeIf { it != 0.0 }
+    if (!receipt.tenders.isNullOrEmpty() || change != null) ops += PrintOp.Feed(1)
+    for (tender in receipt.tenders ?: emptyList()) line(tender.label, money(tender.amountCents))
+    change?.let { line("Change", money(it), bold = true) }
+    receipt.refundedCents?.takeIf { it != 0.0 }?.let { line("Refunded", "-${money(it)}") }
+  }
   val barcode = code128Printable(receipt.barcode ?: receipt.orderNumber)
   if (barcode.isNotEmpty()) {
     ops += PrintOp.Feed(1)

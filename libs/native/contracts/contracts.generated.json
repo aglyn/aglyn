@@ -4091,6 +4091,9 @@
     "paid_out": "Paid out",
     "refund": "Cash refund"
   },
+  "POS_DISPLAY_MAX_LINES": 60,
+  "POS_DISPLAY_PAIRING_TTL_MS": 600000,
+  "POS_DISPLAY_THANKS_MS": 8000,
   "POS_KIOSK_CATALOG_LIMIT": 200,
   "POS_KIOSK_DONE_SECONDS": 15,
   "POS_KIOSK_IDLE_SECONDS_DEFAULT": 90,
@@ -4318,6 +4321,22 @@
   "REMINDER_WINDOW_START_HOURS": 23,
   "REPLY_BODY_MAX": 20000,
   "REPLY_SUBJECT_MAX": 150,
+  "RETURN_REASON_LABELS": {
+    "damaged": "Arrived damaged",
+    "no_longer_needed": "No longer needed",
+    "not_as_described": "Not as described",
+    "other": "Other",
+    "size_or_fit": "Size or fit",
+    "wrong_item": "Wrong item"
+  },
+  "RETURN_REASONS": [
+    "damaged",
+    "wrong_item",
+    "not_as_described",
+    "size_or_fit",
+    "no_longer_needed",
+    "other"
+  ],
   "SCOPED_SEARCH_JOIN": "~",
   "SEARCH_ENGINE_VERIFICATION_LABELS": {
     "bing": "Bing Webmaster Tools",

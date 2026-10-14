@@ -76,16 +76,19 @@ final class RegistryTests: XCTestCase {
     _ = NativePluginLoader.load(
       [
         entry(
-          contributes: ["screens": ["a.list", "a.register"], "quickActions": ["a.one", "a.two"]],
+          contributes: ["screens": ["a.list", "a.register", "a.display"], "quickActions": ["a.one", "a.two"]],
           register: {
             $0.screen("a.list", title: "A") { _, _ in EmptyView() }
             $0.screen("a.register", title: "Register", apps: [.pos], placement: .register) { _, _ in EmptyView() }
+            $0.screen("a.display", title: "Display", apps: [.pos], placement: .device) { _, _ in EmptyView() }
             $0.quickAction("a.two", title: "Two", icon: "x", order: 2, screen: "a.list")
             $0.quickAction("a.one", title: "One", icon: "x", order: 1, screen: "a.list")
           })
       ], into: registry)
     XCTAssertEqual(registry.quickActions(for: .aglyn).map(\.id), ["a.one", "a.two"])
     XCTAssertEqual(registry.screens(for: .pos, placement: .register).map(\.id), ["a.register"])
+    // A device screen is a mode a tablet is set up as, never a register placement.
+    XCTAssertEqual(registry.screens(for: .pos, placement: .device).map(\.id), ["a.display"])
     XCTAssertEqual(registry.screens(for: .aglyn).map(\.id), ["a.list"])
   }
 }
@@ -101,6 +104,32 @@ final class BesignerOnlyTests: XCTestCase {
     XCTAssertTrue(context.openBesigner("/screens/s1/versions/v1/besigner"))
     XCTAssertFalse(context.openBesigner("/products/orders"))
     XCTAssertEqual(opened, ["/acme/hosts/shop/screens/s1/versions/v1/besigner"])
+  }
+
+  func testTheContextHandsAHostThePluginsWidgetsInAnamedSlot() {
+    let registry = NativePluginRegistry()
+    _ = NativePluginLoader.load(
+      [
+        NativePluginManifestEntry(
+          id: "a", contributes: ["widgets": ["a.late", "a.early", "a.home"]],
+          register: {
+            $0.widget("a.late", title: "Late", order: 2, slot: "commerceSettings") { _ in EmptyView() }
+            $0.widget("a.early", title: "Early", order: 1, slot: "commerceSettings") { _ in EmptyView() }
+            $0.widget("a.home", title: "Home", order: 1) { _ in EmptyView() }
+          })
+      ], into: registry)
+    let bare = NativePluginContext(
+      uid: "u", orgID: "o", hostID: "h", orgSlug: "acme", hostSlug: "shop", firestore: NullReader(),
+      api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }),
+      navigate: { _, _ in }, openBesigner: { _ in })
+    XCTAssertEqual(bare.slotWidgets("commerceSettings").map(\.id), [], "a shell that hosts no slots hands none")
+    let hosted = NativePluginContext(
+      uid: "u", orgID: "o", hostID: "h", orgSlug: "acme", hostSlug: "shop", firestore: NullReader(),
+      api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }),
+      navigate: { _, _ in }, openBesigner: { _ in },
+      slotWidgets: { registry.widgets(for: .aglyn, slot: $0) })
+    XCTAssertEqual(hosted.slotWidgets("commerceSettings").map(\.id), ["a.early", "a.late"])
+    XCTAssertEqual(hosted.slotWidgets("elsewhere").map(\.id), [])
   }
 }
 

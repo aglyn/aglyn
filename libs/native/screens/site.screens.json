@@ -382,6 +382,7 @@
           "primary": "{item.displayName|item.email}",
           "secondary": "{item.email}",
           "icon": "person.crop.circle|account_circle",
+          "open": { "screen": "core.site.member", "params": { "memberId": "{item.$id}" } },
           "badges": [
             {
               "text": "{item.role:title}"
@@ -473,7 +474,52 @@
             }
           ],
           "empty": "No one has signed up on the site yet."
-        }
+        },
+        { "type": "zone", "name": "hostMembers", "title": "More", "params": { "who": "This site", "subject": "host:{site.id}", "hostId": "{site.id}" } }
+      ]
+    },
+    {
+      "id": "core.site.member",
+      "title": "{data.member.displayName|data.member.email|'Collaborator'}",
+      "label": "Collaborator",
+      "icon": "person.crop.circle|account_circle",
+      "scope": "site",
+      "links": ["/users/:memberId"],
+      "load": { "member": { "doc": "hosts/{site.id}/members/{params.memberId}" } },
+      "blocks": [
+        {
+          "type": "fields",
+          "rows": [
+            { "label": "Name", "value": "{data.member.displayName}", "when": "data.member.displayName" },
+            { "label": "Email", "value": "{data.member.email}" },
+            { "label": "Role", "value": "{data.member.role:title}", "chip": true, "tone": "info" },
+            { "label": "Status", "value": "{data.member.status:title}", "when": "data.member.status != active", "chip": true, "tone": "warning" }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "org.manager && data.member.role != owner",
+          "items": [
+            {
+              "id": "role", "label": "Change role", "icon": "person.badge.key|manage_accounts",
+              "method": "PATCH", "url": "/api/hosts/members",
+              "prompt": [{
+                "key": "role", "label": "Role", "kind": "select", "initial": "{data.member.role}",
+                "options": [{ "value": "admin", "label": "Admin" }, { "value": "editor", "label": "Editor" }, { "value": "author", "label": "Author" }, { "value": "viewer", "label": "Viewer" }]
+              }],
+              "body": { "hostId": "{site.id}", "memberId": "{params.memberId}", "role": "{form.role}" },
+              "success": "Role changed"
+            },
+            {
+              "id": "remove", "label": "Remove from site", "icon": "person.badge.minus|person_remove", "destructive": true,
+              "confirm": "Remove {data.member.displayName|data.member.email} from this site?",
+              "method": "DELETE", "url": "/api/hosts/members",
+              "body": { "hostId": "{site.id}", "memberId": "{params.memberId}" },
+              "success": "Removed", "back": true
+            }
+          ]
+        },
+        { "type": "zone", "name": "hostMember", "title": "More", "params": { "memberId": "{params.memberId}", "who": "{data.member.displayName|data.member.email}", "subject": "collab:{site.id}:{data.member.uid|params.memberId}", "hostId": "{site.id}", "uid": "{data.member.uid|params.memberId}" } }
       ]
     },
     {

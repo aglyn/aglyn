@@ -2562,6 +2562,149 @@ public enum PosDeviceMode: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct PosDisplayCart: Codable, Hashable, Sendable {
+  public var discountCents: Double
+  public var dueCents: Double?
+  public var itemsCents: Double
+  public var lines: [PosDisplayLine]
+  public var paidCents: Double?
+  public var taxCents: Double
+  public var tipCents: Double?
+  public var totalCents: Double
+
+  public init(discountCents: Double, dueCents: Double? = nil, itemsCents: Double, lines: [PosDisplayLine], paidCents: Double? = nil, taxCents: Double, tipCents: Double? = nil, totalCents: Double) {
+    self.discountCents = discountCents
+    self.dueCents = dueCents
+    self.itemsCents = itemsCents
+    self.lines = lines
+    self.paidCents = paidCents
+    self.taxCents = taxCents
+    self.tipCents = tipCents
+    self.totalCents = totalCents
+  }
+}
+
+public struct PosDisplayLine: Codable, Hashable, Sendable {
+  public var amountCents: Double
+  public var name: String
+  public var quantity: Double
+  public var variantLabel: String?
+
+  public init(amountCents: Double, name: String, quantity: Double, variantLabel: String? = nil) {
+    self.amountCents = amountCents
+    self.name = name
+    self.quantity = quantity
+    self.variantLabel = variantLabel
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosDisplayMode: String, Codable, CaseIterable, Hashable, Sendable {
+  case cart = "cart"
+  case idle = "idle"
+  case processing = "processing"
+  case receipt = "receipt"
+  case thanks = "thanks"
+  case tip = "tip"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosDisplayResponse: Codable, Hashable, Sendable {
+  public var atMs: Double
+  public var email: String?
+  public var marketingOptIn: Bool?
+  public var phone: String?
+  public var promptId: String
+  public var receiptChannel: PosReceiptChannel?
+  public var tipCents: Double?
+  public var tipChoice: PosDisplayResponseTipChoice?
+  public var tipPercent: Double?
+
+  public init(atMs: Double, email: String? = nil, marketingOptIn: Bool? = nil, phone: String? = nil, promptId: String, receiptChannel: PosReceiptChannel? = nil, tipCents: Double? = nil, tipChoice: PosDisplayResponseTipChoice? = nil, tipPercent: Double? = nil) {
+    self.atMs = atMs
+    self.email = email
+    self.marketingOptIn = marketingOptIn
+    self.phone = phone
+    self.promptId = promptId
+    self.receiptChannel = receiptChannel
+    self.tipCents = tipCents
+    self.tipChoice = tipChoice
+    self.tipPercent = tipPercent
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PosDisplayResponseTipChoice: String, Codable, CaseIterable, Hashable, Sendable {
+  case custom = "custom"
+  case none = "none"
+  case percent = "percent"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosDisplayState: Codable, Hashable, Sendable {
+  public var cart: PosDisplayCart?
+  public var currency: String?
+  public var mode: PosDisplayMode
+  public var processing: PosDisplayStateProcessing?
+  public var promptId: String?
+  public var receipt: PosDisplayStateReceipt?
+  public var response: PosDisplayResponse?
+  public var tip: PosDisplayStateTip?
+  public var updatedAtMs: Double
+
+  public init(cart: PosDisplayCart? = nil, currency: String? = nil, mode: PosDisplayMode, processing: PosDisplayStateProcessing? = nil, promptId: String? = nil, receipt: PosDisplayStateReceipt? = nil, response: PosDisplayResponse? = nil, tip: PosDisplayStateTip? = nil, updatedAtMs: Double) {
+    self.cart = cart
+    self.currency = currency
+    self.mode = mode
+    self.processing = processing
+    self.promptId = promptId
+    self.receipt = receipt
+    self.response = response
+    self.tip = tip
+    self.updatedAtMs = updatedAtMs
+  }
+}
+
+public struct PosDisplayStateProcessing: Codable, Hashable, Sendable {
+  public var message: String
+
+  public init(message: String) {
+    self.message = message
+  }
+}
+
+public struct PosDisplayStateReceipt: Codable, Hashable, Sendable {
+  public var channels: [PosReceiptChannel]
+  public var offerMarketing: Bool
+
+  public init(channels: [PosReceiptChannel], offerMarketing: Bool) {
+    self.channels = channels
+    self.offerMarketing = offerMarketing
+  }
+}
+
+public struct PosDisplayStateTip: Codable, Hashable, Sendable {
+  public var allowCustom: Bool
+  public var baseCents: Double
+  public var percentages: [Double]
+
+  public init(allowCustom: Bool, baseCents: Double, percentages: [Double]) {
+    self.allowCustom = allowCustom
+    self.baseCents = baseCents
+    self.percentages = percentages
+  }
+}
+
 public struct PosKioskCatalog: Codable, Hashable, Sendable {
   public var categories: [PosKioskCategory]
   public var currency: String
@@ -3397,6 +3540,22 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ReturnReason: String, Codable, CaseIterable, Hashable, Sendable {
+  case damaged = "damaged"
+  case noLongerNeeded = "no_longer_needed"
+  case notAsDescribed = "not_as_described"
+  case other = "other"
+  case sizeOrFit = "size_or_fit"
+  case wrongItem = "wrong_item"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct ScreenTrafficRow: Codable, Hashable, Sendable {
   public var devices: [String: Double]
   public var referrers: [String: Double]
@@ -3661,6 +3820,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let outreachTaskTitleMax: Int
   public let paymentAcceptedMaxLength: Int
   public let posCashEventLabels: [String: String]
+  public let posDisplayMaxLines: Int
+  public let posDisplayPairingTtlMs: Double
+  public let posDisplayThanksMs: Int
   public let posKioskCatalogLimit: Int
   public let posKioskDoneSeconds: Int
   public let posKioskIdleSecondsDefault: Int
@@ -3691,6 +3853,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let reminderWindowStartHours: Int
   public let replyBodyMax: Int
   public let replySubjectMax: Int
+  public let returnReasonLabels: [String: String]
+  public let returnReasons: [ReturnReason]
   public let scopedSearchJoin: String
   public let searchEngineVerificationLabels: [String: String]
   public let searchEngineVerificationMetaNames: [String: String]
@@ -3858,6 +4022,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
     case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
+    case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
+    case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"
+    case posDisplayThanksMs = "POS_DISPLAY_THANKS_MS"
     case posKioskCatalogLimit = "POS_KIOSK_CATALOG_LIMIT"
     case posKioskDoneSeconds = "POS_KIOSK_DONE_SECONDS"
     case posKioskIdleSecondsDefault = "POS_KIOSK_IDLE_SECONDS_DEFAULT"
@@ -3888,6 +4055,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
+    case returnReasonLabels = "RETURN_REASON_LABELS"
+    case returnReasons = "RETURN_REASONS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
     case searchEngineVerificationLabels = "SEARCH_ENGINE_VERIFICATION_LABELS"
     case searchEngineVerificationMetaNames = "SEARCH_ENGINE_VERIFICATION_META_NAMES"

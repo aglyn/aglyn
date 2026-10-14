@@ -25,6 +25,17 @@ class TokenClaims(val values: Map<String, JsonElement> = emptyMap()) {
 
   val isSuper: Boolean get() = staffRole == "super"
 
+  /** How the account signs in, from the token's `firebase.identities` (`password` for the email identity), password first and the rest in name order. */
+  val signInMethods: List<String>
+    get() {
+      val identities = ((values["firebase"] as? JsonObject)?.get("identities") as? JsonObject) ?: return emptyList()
+      val names = identities.keys.map { if (it == "email") "password" else it }
+      return names.filter { it == "password" } + names.filter { it != "password" }.sorted()
+    }
+
+  /** Whether the account's email address is confirmed (`email_verified`). */
+  val emailVerified: Boolean get() = (values["email_verified"] as? JsonPrimitive)?.booleanOrNull == true
+
   override fun equals(other: Any?) = other is TokenClaims && other.values == values
   override fun hashCode() = values.hashCode()
 

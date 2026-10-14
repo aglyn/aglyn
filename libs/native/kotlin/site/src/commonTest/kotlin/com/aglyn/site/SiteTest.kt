@@ -36,6 +36,7 @@ import com.aglyn.site.pages.pageStatus
 import com.aglyn.site.pages.pageTree
 import com.aglyn.site.sites.SiteDomainFilter
 import com.aglyn.site.sites.SUBDOMAIN_PATTERN
+import com.aglyn.site.sites.createSiteBody
 import com.aglyn.site.sites.suggestSubdomain
 import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
@@ -70,6 +71,8 @@ import com.aglyn.site.setup.fontFileSize
 import com.aglyn.site.setup.installedFontsOf
 import com.aglyn.site.setup.isFontFileName
 import com.aglyn.site.setup.themePresetsOf
+import com.aglyn.site.setup.themeCatalogOf
+import com.aglyn.site.setup.themeValuesOf
 import com.aglyn.site.setup.SetupSection
 import com.aglyn.site.setup.ThemeEdit
 import com.aglyn.site.setup.ThemeValues
@@ -146,6 +149,16 @@ class SiteTest {
     assertTrue(FirestoreFilter("searchTokens", FilterOp.ARRAY_CONTAINS, "dem") in query.filters)
     assertEquals("my-new-site", suggestSubdomain("My New Site!"))
     assertTrue(SUBDOMAIN_PATTERN.matches("my-new-site"))
+  }
+
+  @Test
+  fun createsTheSiteWithTheStarterInTheSameRequest() {
+    val body = createSiteBody("org1", "  My Shop ", " MyShop ")
+    assertEquals("My Shop", body["displayName"]?.jsonPrimitive?.content)
+    assertEquals("myshop", body["subdomain"]?.jsonPrimitive?.content)
+    assertEquals("org1", body["orgId"]?.jsonPrimitive?.content)
+    // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
+    assertEquals("starter", body["start"]?.jsonPrimitive?.content)
   }
 
   @Test
@@ -264,6 +277,24 @@ class SiteTest {
   }
 
   @Test
+  fun readsTheStyleComponentsCatalogAndSendsOnlyTheLooksThatChanged() {
+    val catalog = themeCatalogOf(
+      Json.parseToJsonElement(
+        """{"componentLooks":{"groups":[{"group":"button","label":"Buttons"}],"fields":[{"id":"button.variant","group":"button","label":"Button style","kind":"select","options":[{"value":"contained","label":"Filled"},{"value":"outlined","label":"Outlined"}]},{"id":"input.border","group":"input","label":"Input border color","kind":"color","options":[{"value":"primary","label":"Primary","token":"primary"}]}]}}""",
+      ),
+    )
+    assertEquals(listOf("button" to "Buttons"), catalog.lookGroups)
+    assertEquals(listOf("button.variant", "input.border"), catalog.looks.map { it.id })
+    assertEquals("primary", catalog.looks[1].options[0].token)
+    val values = themeValuesOf(Json.parseToJsonElement("""{"componentLooks":{"button.variant":"","input.border":"__custom__","card.variant":"outlined"}}"""))
+    assertEquals("outlined", values.componentLooks["card.variant"])
+    val after = values.copy(componentLooks = mapOf("button.variant" to "outlined", "input.border" to "__custom__", "card.variant" to ""))
+    // A Custom look is left alone; "Theme default" is the empty choice that clears one.
+    assertEquals(listOf(ThemeEdit.ComponentLook("button.variant", "outlined"), ThemeEdit.ComponentLook("card.variant", "")), themeEdits(values, after))
+    assertEquals(mapOf("control" to "componentLook", "field" to "card.variant", "value" to ""), ThemeEdit.ComponentLook("card.variant", "").body())
+  }
+
+  @Test
   fun readsCollectionsAndPlansTheEntriesQuery() {
     val docs = listOf(
       FirestoreDoc("blog", "hosts/h/collections/blog", mapOf("displayName" to "Blog", "slug" to "blog", "categories" to listOf(mapOf("id" to "news", "name" to "News")))),
@@ -359,5 +390,25 @@ class SiteTest {
     assertTrue(seen.all { it.second == null || it.second == "h1" })
     assertEquals(listOf("/api/fonts/prepare", "/api/fonts/theme", "/api/media/replace", "/api/fonts/theme"), seen.map { it.first })
     assertEquals(emptyList(), installedFontsOf(null))
+  }
+
+  @Test
+  fun anAudioUploadCarriesItsRightsConfirmationAndOtherFilesCarryNone() = runTest {
+    val bodies = mutableListOf<kotlinx.serialization.json.JsonObject>()
+    val engine = MockEngine { request ->
+      val text = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      if (text.isNotEmpty()) bodies += Json.parseToJsonElement(text).jsonObject
+      respond("""{"mediaId":"m1"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    val api = com.aglyn.site.media.MediaApi(ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1), MediaScope.Site("h1"))
+    val song = PickedFile("song.mp3", "audio/mpeg", byteArrayOf(1, 2, 3))
+    assertTrue(com.aglyn.site.media.isAudioFile(song))
+    assertTrue(!com.aglyn.site.media.isAudioFile(PickedFile("a.png", "image/png", byteArrayOf(1))))
+    api.upload(song, null, rightsConfirmed = true)
+    api.upload(PickedFile("a.png", "image/png", byteArrayOf(1)), null)
+    assertEquals("true", bodies[0]["rightsConfirmed"]?.jsonPrimitive?.content)
+    assertEquals("audio/mpeg", bodies[0]["contentType"]?.jsonPrimitive?.content)
+    assertNull(bodies[1]["rightsConfirmed"])
+    assertEquals("I own this audio or have a license to use it on my site", com.aglyn.site.media.AUDIO_RIGHTS_STATEMENT)
   }
 }
