@@ -48,6 +48,8 @@ let mockReads: string[] = []
 let mockNotifications: Record<string, any>[] = []
 /** The options each notification was raised with: what its email alone carries. */
 let mockNotifyOptions: Array<Record<string, any> | undefined> = []
+/** Held open by a spec to see whether the route answers before the fan-out ends. */
+let mockNotifyGate: Promise<void> | null = null
 let mockDescribes: Record<string, any>[] = []
 let mockResolved: Record<string, any> | null = null
 let mockDescription: Record<string, any> | null = null
@@ -129,6 +131,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ) => {
     mockNotifications.push(payload)
     mockNotifyOptions.push(options)
+    if (mockNotifyGate) await mockNotifyGate
   },
   orgDataCollectionForHost: async () => mockCollectionHandle('orgs/org-1/datasets'),
   dataStorageRefusal: async () => null,
@@ -218,6 +221,7 @@ beforeEach(() => {
   mockReads = []
   mockNotifications = []
   mockNotifyOptions = []
+  mockNotifyGate = null
   mockDescribes = []
   mockResolved = null
   mockDescription = null
@@ -282,6 +286,24 @@ describe('the alert', () => {
     expect(mockNotifications[0].link).toBe(
       `/${HOST_ID}/inbox/submissions?submission=submission-1`,
     )
+  })
+
+  it('is sent in full before the response, which freezes the invocation', async () => {
+    let release = (): void => undefined
+    mockNotifyGate = new Promise((resolve) => {
+      release = resolve
+    })
+    let responded = false
+    const responding = submit({ formId: 'f1' }).then((response) => {
+      responded = true
+      return response
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(mockNotifications).toHaveLength(1)
+    expect(responded).toBe(false)
+    release()
+    expect((await responding).status).toBe(200)
   })
 
   it('is the Inbox’s own address for that submission once followed', async () => {
