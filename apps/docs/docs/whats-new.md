@@ -28,7 +28,18 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — translate your site with Weglot (newest)
+## October 2026 — dropship suppliers get cart orders (newest)
+
+- **[Dropship suppliers](commerce-and-bookings/commerce/dropship-suppliers.md)** —
+  orders placed through the cart now reach your suppliers too, not only Buy-button
+  orders. Each supplier is sent just its own items with a link to record the
+  tracking, so an order shared between suppliers ships in parts. A new setup guide
+  walks through adding a supplier, assigning products and signed webhooks.
+- **[Discounts and coupons](commerce-and-bookings/commerce/discounts-and-coupons.md)** —
+  switch a discount on or off from its row on the **Discounts** card, including the
+  ones you imported or Aglyn AI proposed, which start switched off.
+
+## October 2026 — translate your site with Weglot
 
 - **[Weglot translation](building-sites/multilingual/weglot.md)** — already use
   Weglot? Switch it on for a site, paste your Weglot API key and choose your
@@ -84,6 +95,10 @@ for the how-to.
   the register's card reader, or an order number to pay at the counter. Orders sent
   to the counter wait on the register under **Kiosk orders**. An idle kiosk clears the
   customer's order and details, and staff unlock it with their register PIN.
+- **[Pair from POS devices](commerce-and-bookings/commerce/pos-and-reservations.md#customer-display)** —
+  each register on **Products → Settings → POS devices** now has its own **Pair display**
+  button for a customer display or a kiosk, and a site with no register yet gets an
+  **Add a register** button there and on the register page.
 
 ## October 2026 — buy online, pick up in store, and local delivery
 

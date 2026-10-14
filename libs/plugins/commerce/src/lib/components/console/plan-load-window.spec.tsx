@@ -326,6 +326,18 @@ describe('POS page, plan not yet known', () => {
     expect(screen.queryByText(/registers exceed your plan/i)).toBeNull()
     expect(screen.getByText('Front counter')).toBeTruthy()
   })
+
+  // AGL-3712: no register is a button to the card that makes one, not a
+  // menu path to follow by hand.
+  it('with no register, links to the POS registers card', () => {
+    planLands()
+    render(<PosConsolePage hostId="host-1" entitled basePath="/acme/hosts/shop/pos" />)
+    expect(screen.getByText(/No POS register yet/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add a register' }).getAttribute('href')).toBe(
+      '/acme/hosts/shop/products/settings#pos-registers',
+    )
+    expect(screen.queryByRole('button', { name: 'Pair display' })).toBeNull()
+  })
 })
 
 /**
