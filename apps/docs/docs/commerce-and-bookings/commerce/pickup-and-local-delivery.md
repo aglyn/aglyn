@@ -22,8 +22,8 @@ are covered by [Delivery apps](./delivery-apps.md), which work separately.
 
 ## Set up pickup {#set-up-pickup}
 
-Pickup is turned on per location, on the **Inventory locations** card in the
-store's settings, so buyers can collect orders there at the hours you set. On a
+Pickup is turned on per location, on the **Inventory locations** card on
+**Products → Shipping & delivery**, so buyers can collect orders there at the hours you set. On a
 location's row, choose **Pickup**, then:
 
 1. Turn on **Buyers can pick up orders here**.
@@ -49,7 +49,7 @@ locations instead.
 
 ## Set up local delivery {#set-up-local-delivery}
 
-The **Local delivery** card, in the store's settings, lets your own driver
+The **Local delivery** card, on **Products → Shipping & delivery**, lets your own driver
 deliver orders: buyers enter their postal code at the cart, pay your fee and
 book a delivery time. To set it up:
 

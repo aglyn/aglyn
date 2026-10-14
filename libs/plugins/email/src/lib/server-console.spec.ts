@@ -263,6 +263,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 import {
   CONSOLE_ADD_SOURCE,
   LIST_MEMBER_BATCH_MAX,
+  emailListMemberConsentHandler,
   emailListMembersAddHandler,
   emailListMembersPreviewHandler,
   emailListRulePreviewHandler,
@@ -1034,5 +1035,67 @@ describe('the sites a pass-through covers on a grouped site', () => {
     const out = await add({ email: UNKNOWN, attestConsent: true })
     expect(out.body.added).toBe(1)
     expect(sites(UNKNOWN)).toEqual([HOST_ID])
+  })
+})
+
+/*
+ * `email/list-member-consent` — the Consent column's half of the overlay the
+ * send applies to rule-enrolled rows.
+ */
+describe('the consent a rule member’s contact holds', () => {
+  const consentFor = (emails: string[], headers?: any) =>
+    drive(
+      emailListMemberConsentHandler,
+      { hostId: HOST_ID, listId: LIST_ID, emails },
+      headers,
+    )
+  beforeEach(() => {
+    store[`${MEMBERS_PATH}/m1`] = { email: OPTED_IN, via: 'rule' }
+    store[`${MEMBERS_PATH}/m2`] = { email: REFUSED, via: 'rule' }
+    store[`${MEMBERS_PATH}/m3`] = { email: UNKNOWN, via: 'rule' }
+  })
+
+  it('answers each silent rule row with its contact’s basis', async () => {
+    const out = await consentFor([OPTED_IN, REFUSED, UNKNOWN])
+    expect(out.code).toBe(200)
+    expect(out.body.consent[OPTED_IN]).toMatchObject({
+      basis: 'granted',
+      basisAtMs: OPTED_IN_AT,
+    })
+    expect(out.body.consent[REFUSED]).toMatchObject({ basis: 'declined' })
+    expect(out.body.consent[UNKNOWN]).toMatchObject({ basis: 'unrecorded' })
+  })
+
+  it('leaves out a row added by hand, and a row that holds its own basis', async () => {
+    store[`${MEMBERS_PATH}/m1`] = { email: OPTED_IN, via: 'manual' }
+    store[`${MEMBERS_PATH}/m2`] = {
+      email: REFUSED,
+      via: 'rule',
+      ...grantedHere(OPTED_IN_AT),
+    }
+    const out = await consentFor([OPTED_IN, REFUSED])
+    expect(out.code).toBe(200)
+    expect(out.body.consent).toEqual({})
+  })
+
+  it('reads nothing for an address that is not on the list', async () => {
+    const out = await consentFor(['stranger@lumen.co'])
+    expect(out.body.consent).toEqual({})
+  })
+
+  it('sends only the named fields, never the stored provenance', async () => {
+    const out = await consentFor([OPTED_IN])
+    expect(Object.keys(out.body.consent[OPTED_IN]).sort()).toEqual(
+      ['assertedBy', 'basis', 'basisAtMs', 'otherGrant'],
+    )
+  })
+
+  it('is behind the same gate as the preview', async () => {
+    membership = {
+      orgId: ORG_ID,
+      member: { role: 'editor', allHosts: false, hostAccess: { [HOST_ID]: true } },
+    }
+    expect((await consentFor([OPTED_IN])).code).toBe(403)
+    expect((await consentFor([OPTED_IN], {})).code).toBe(401)
   })
 })

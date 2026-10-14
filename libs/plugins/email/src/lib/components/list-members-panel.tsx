@@ -64,6 +64,7 @@ import {
   readMarketingBasis,
   type ConsentGroup,
   type DynamicListRule,
+  type MarketingConsentRecord,
 } from '@aglyn/aglyn'
 import { mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -260,11 +261,38 @@ type ConsentKey =
   | 'no-site'
   | 'none'
 
-function consentLabel(
+/**
+ * A rule-enrolled member's basis as their CONTACT records it, as
+ * `email/list-member-consent` answers it.
+ *
+ * A row a list rule wrote never holds a basis of its own — matching a rule is
+ * not an opt-in — so `performCampaignSend` reads those people's contacts, and
+ * this column shows what it reads. Fetched, because the browser may not read
+ * the org's contacts by address.
+ */
+export interface ContactBasis {
+  basis: MarketingConsentRecord['basis']
+  assertedBy: MarketingConsentRecord['assertedBy']
+  basisAtMs: number | null
+  otherGrant: MarketingConsentRecord['otherGrant']
+}
+
+/** The key a member row and the consent route both use for an address. */
+const memberAddress = (member: MemberRow): string =>
+  typeof member.email === 'string' ? member.email.trim().toLowerCase() : ''
+
+export function consentLabel(
   member: MemberRow,
   group: ConsentGroup,
+  fromContact?: ContactBasis | null,
 ): { key: ConsentKey; label: string; color: 'default' | 'warning' | 'error' } {
-  const record = readMarketingBasis(member as Record<string, unknown>, group)
+  const own = readMarketingBasis(member as Record<string, unknown>, group)
+  // The contact answers only where the row itself is silent and a rule put it
+  // there — the same overlay the send applies.
+  const record =
+    fromContact && member.via === 'rule' && own.basis === 'unrecorded'
+      ? fromContact
+      : own
   const when = record.basisAtMs
     ? ` · ${new Date(record.basisAtMs).toLocaleDateString()}`
     : ''
@@ -383,9 +411,18 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
     deps: [firestore, scope[0], scope[1], listId],
     idField: '$id',
   })
+  /** Rule members' contact bases, by address — see {@link ContactBasis}. */
+  const [contactConsent, setContactConsent] = useState<
+    Readonly<Record<string, ContactBasis | null>>
+  >({})
+  const labelFor = useCallback(
+    (row: MemberRow) =>
+      consentLabel(row, consentGroup, contactConsent[memberAddress(row)]),
+    [consentGroup, contactConsent],
+  )
   const pageSorts = useMemo(
-    () => ({ consent: (row: MemberRow) => consentLabel(row, consentGroup).label }),
-    [consentGroup],
+    () => ({ consent: (row: MemberRow) => labelFor(row).label }),
+    [labelFor],
   )
   const columnSort = useListColumnSort<MemberRow>({
     sorts: LIST_MEMBER_QUERY.sorts,
@@ -470,6 +507,42 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
     },
     [user, hostId, listId],
   )
+
+  /*
+   * The page's rule rows that say nothing about consent themselves, asked of
+   * their contacts once per page. Rows already answered are not asked again;
+   * a refused or failed read leaves the row's own label, which is the honest
+   * fallback — it is what the row records.
+   */
+  const unansweredRuleRows = members
+    .filter(
+      (row) =>
+        row.via === 'rule' &&
+        consentLabel(row, consentGroup).key === 'none' &&
+        !(memberAddress(row) in contactConsent),
+    )
+    .map(memberAddress)
+    .filter(Boolean)
+  const unansweredKey = unansweredRuleRows.join('\n')
+  useEffect(() => {
+    if (!unansweredKey || !user) return
+    let current = true
+    const asked = unansweredKey.split('\n')
+    void post('list-member-consent', { emails: asked })
+      .then(({ ok, payload }) => {
+        if (!current || !ok) return
+        const answered = (payload?.consent ?? {}) as Record<string, ContactBasis>
+        // Every address asked is settled — `null` where the route had nothing
+        // to add — so a page is asked about once.
+        const settled: Record<string, ContactBasis | null> = {}
+        for (const email of asked) settled[email] = answered[email] ?? null
+        setContactConsent((before) => ({ ...before, ...settled }))
+      })
+      .catch(() => undefined)
+    return () => {
+      current = false
+    }
+  }, [unansweredKey, user, post])
 
   const handlePreview = useCallback(async () => {
     if (busy || !addresses.length) return
@@ -692,9 +765,9 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
       field: 'consent',
       headerName: 'Consent',
       width: 190,
-      valueGetter: (_value, row) => consentLabel(row, consentGroup).label,
+      valueGetter: (_value, row) => labelFor(row).label,
       renderCell: ({ row }) => {
-        const consent = consentLabel(row, consentGroup)
+        const consent = labelFor(row)
         return (
           <Chip
             size="small"

@@ -122,6 +122,9 @@ jest.mock('../hooks/use-console-plugins', () => ({
   // The route's own plugins are already here: this file's registry is a
   // double, so there is no chunk to fetch (AGL-3142).
   useConsoleRoutePlugins: () => true,
+  // The rail asks which zone-only sections have a card (AGL-3713); the
+  // zones' plugins are the same double.
+  useConsoleSlotPlugins: () => true,
 }))
 jest.mock('../hooks/use-release-flags', () => ({
   __esModule: true,

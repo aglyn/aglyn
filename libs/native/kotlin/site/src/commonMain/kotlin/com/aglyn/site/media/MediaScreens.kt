@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
@@ -74,6 +75,7 @@ import com.aglyn.ui.AglynListDetail
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
+import com.aglyn.ui.CountedTextField
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.ListHeader
@@ -88,6 +90,8 @@ import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectField
+import com.aglyn.ui.SelectOption
 import com.aglyn.ui.SkeletonGrid
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
@@ -177,6 +181,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val foldersById = folderList.associateBy { it.id }
   val canEdit = scope is MediaScope.Org && context.orgRole in setOf("owner", "admin", "editor") || scope is MediaScope.Site && context.siteRole in CONTENT_ROLES
   var dialog by remember { mutableStateOf<MediaDialog?>(null) }
+  var filtersOpen by remember { mutableStateOf(false) }
   val picker = LocalMediaPicker.current
   var uploading by remember { mutableStateOf<String?>(null) }
   var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -238,8 +243,10 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
           }
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
             SearchField(model.search, model::type, placeholder = "Search files", modifier = Modifier.weight(1f))
+            FiltersButton(model.filters.count) { filtersOpen = true }
             SortMenu(model.sort, model::order)
           }
+          model.notices.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("media-filter-notice")) }
           if (scopeTokens != null && model.search.isNotBlank()) {
             Text(Contracts.mediaScopedSearchNotice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           }
@@ -254,7 +261,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load the library", skeleton = { SkeletonGrid(tiles = 12) }) { rows ->
             if (rows.isEmpty()) {
               EmptyState(
-                if (model.search.isBlank() && model.type == null) "No files here yet" else "No files match",
+                if (model.search.isBlank() && model.type == null && model.filters.count == 0) "No files here yet" else "No files match",
                 body = if (canEdit) "Upload photos, videos and documents to use on your pages." else null,
                 icon = AglynIcons.named("photo_library"),
               )
@@ -290,6 +297,9 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   )
 
   MediaDialogs(dialog, api, runner, foldersById, onChanged = { model.refresh() }) { dialog = null }
+  if (filtersOpen) {
+    MediaFiltersDialog(model.filters, scoped = scopeTokens != null, onApply = { model.filter(it); filtersOpen = false }, onDismiss = { filtersOpen = false })
+  }
   audioBatch?.let { files ->
     AudioRightsDialog(files) { confirmed ->
       audioBatch = null
@@ -320,6 +330,63 @@ internal fun AudioRightsDialog(files: List<PickedFile>, onAnswer: (Boolean) -> U
     modifier = Modifier.testTag("audio-rights"),
   ) {
     SwitchRow(AUDIO_RIGHTS_STATEMENT, confirmed, { confirmed = it }, Modifier.testTag("audio-rights-confirm"))
+  }
+}
+
+/** The Filters button, with how many are set. */
+@Composable
+private fun FiltersButton(count: Int, onClick: () -> Unit) {
+  OutlinedButton(onClick = onClick, modifier = Modifier.testTag("media-filters").semantics { contentDescription = if (count == 0) "Filters" else "Filters, $count set" }) {
+    Icon(AglynIcons.named("filter_list"), contentDescription = null)
+    if (count > 0) Text("$count", Modifier.padding(start = space(0.5f)))
+  }
+}
+
+/**
+ * The library's other filters, the console's Filters panel in a dialog:
+ * orientation, alt text, a tag (not for a reader limited to some sites, whose
+ * scope holds the query's one array clause) and a size range in megabytes.
+ */
+@Composable
+private fun MediaFiltersDialog(filters: MediaFilters, scoped: Boolean, onApply: (MediaFilters) -> Unit, onDismiss: () -> Unit) {
+  var draft by remember { mutableStateOf(filters) }
+  ActionDialog(
+    title = "Filters",
+    icon = "filter_list",
+    confirmLabel = "Apply",
+    dismissLabel = "Cancel",
+    onConfirm = { onApply(draft) },
+    onDismiss = onDismiss,
+  ) {
+    SelectField(
+      Contracts.mediaFilterHeaders["orientation"] ?: "Orientation",
+      Contracts.mediaOrientationOptions.map { SelectOption(it.value, it.label) },
+      draft.orientation,
+      { draft = draft.copy(orientation = it) },
+      noneLabel = "Any",
+    )
+    SelectField(
+      Contracts.mediaFilterHeaders["alt"] ?: "Alt text",
+      Contracts.mediaAltOptions.map { SelectOption(it.value, it.label) },
+      draft.alt,
+      { draft = draft.copy(alt = it) },
+      noneLabel = "Any",
+    )
+    if (!scoped) {
+      CountedTextField(
+        Contracts.mediaFilterHeaders["tags"]?.removeSuffix("s") ?: "Tag",
+        draft.tag,
+        { draft = draft.copy(tag = it) },
+        max = Contracts.mediaTagMaxLength.toInt(),
+        supporting = "Files with this tag.",
+        modifier = Modifier.testTag("media-filter-tag"),
+      )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      CountedTextField("At least (MB)", draft.minMegabytes, { draft = draft.copy(minMegabytes = megabytesInput(it)) }, keyboardType = KeyboardType.Decimal, modifier = Modifier.weight(1f).testTag("media-filter-min"))
+      CountedTextField("At most (MB)", draft.maxMegabytes, { draft = draft.copy(maxMegabytes = megabytesInput(it)) }, keyboardType = KeyboardType.Decimal, modifier = Modifier.weight(1f).testTag("media-filter-max"))
+    }
+    TextButton(onClick = { draft = MediaFilters() }, enabled = draft.count > 0) { Text("Clear all") }
   }
 }
 

@@ -159,6 +159,40 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(scoped.order.first?.descending, false)
   }
 
+  func testPlansTheLibraryFiltersAsTheConsoleDoes() {
+    let filters = MediaFilters(
+      orientation: "landscape", alt: "false", tag: " Hero ", minMegabytes: "1", maxMegabytes: "2.5")
+    XCTAssertEqual(filters.count, 5)
+    XCTAssertEqual(MediaFilters().count, 0)
+    let site = mediaQuery(
+      scope: .site(hostID: "h"), folder: .all, scopeTokens: nil, type: "image", sort: .newest, search: "",
+      filters: filters)
+    XCTAssertTrue(has(site, "orientation", .equal, "landscape"))
+    XCTAssertTrue(has(site, "hasAlt", .equal, false))
+    // Tags are stored trimmed and lower-cased, so the one asked for is too.
+    XCTAssertTrue(has(site, "tags", .arrayContains, "hero"))
+    // The size is typed in megabytes and stored in bytes.
+    func size(_ op: ListQueryOp) -> Double? {
+      site.filters.first { $0.path == "sizeBytes" && $0.op == op }.flatMap { ($0.value as? NSNumber)?.doubleValue }
+    }
+    XCTAssertEqual(size(.greaterThanOrEqual), 1_048_576)
+    XCTAssertEqual(size(.lessThanOrEqual), 2_621_440)
+    // A reader limited to some sites has no Tags filter: the scope holds the query's one array clause.
+    let scoped = mediaQuery(
+      scope: .org(orgID: "o", forHostID: "h"), folder: .all, scopeTokens: ["org", "host:h"], type: nil,
+      sort: .newest, search: "", filters: filters)
+    XCTAssertFalse(scoped.filters.contains { $0.path == "tags" })
+    // A blank box asks nothing, and a megabyte box takes digits and one point.
+    XCTAssertEqual(MediaFilters(tag: "  ", minMegabytes: " ").clauses(scoped: false), [])
+    XCTAssertEqual(megabytesInput("1a2.5.7"), "12.57")
+    // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
+    let notices = mediaPlanNotices(
+      mediaPlan(
+        folder: .all, scopeTokens: nil, type: nil, sort: .newest, search: "hero",
+        filters: MediaFilters(tag: "sunset")))
+    XCTAssertFalse(notices.isEmpty, "\(notices)")
+  }
+
   func testWritesTheScopeIntoEveryMediaRoute() {
     let client = ConsoleAPIClient(origin: "https://console.test") { _ in "t" }
     let org = MediaAPI(api: client, scope: .org(orgID: "o", forHostID: "h"))
@@ -168,6 +202,48 @@ final class SiteTests: XCTestCase {
     let site = MediaAPI(api: client, scope: .site(hostID: "h"))
     XCTAssertEqual(site.body(["mediaId": "m1", "tags": ["a", "b"]]), ["hostId": "h", "mediaId": "m1", "tags": ["a", "b"]])
     XCTAssertEqual(MediaScope.org(orgID: "o", forHostID: nil).cdnScope, "org:o")
+  }
+
+  func testChoosesAFileTheWayTheConsolesPickerStoresIt() throws {
+    func file(_ id: String, _ fields: [String: Any] = [:]) throws -> MediaItem {
+      try XCTUnwrap(
+        MediaItem(doc(id, ["fileName": "\(id).jpg", "contentType": "image/jpeg"].merging(fields) { _, new in new })))
+    }
+    // A site's own file: its reference.
+    XCTAssertEqual(
+      ChosenMedia(item: try file("m1", ["cdnPath": "/api/media/cdn/h/m1"]), scope: .site(hostID: "h")).reference,
+      "media:h/m1")
+    // A workspace file shared with only some sites is requested through the form that names this site; an org-wide one is not.
+    let restricted = try file("m2", ["cdnPath": "/api/media/cdn/org:o1/m2", "visibleTo": ["host:h"]])
+    XCTAssertEqual(
+      ChosenMedia(item: restricted, scope: .org(orgID: "o1", forHostID: "h")).reference, "media:org:o1:h/m2")
+    let wide = try file("m3", ["cdnPath": "/api/media/cdn/org:o1/m3", "visibleTo": ["org"]])
+    XCTAssertEqual(ChosenMedia(item: wide, scope: .org(orgID: "o1", forHostID: "h")).reference, "media:org:o1/m3")
+    // No CDN path: the Storage address names the asset; any other address is kept.
+    let storage = "https://firebasestorage.googleapis.com/v0/b/bucket/o/hosts%2Fh%2Fmedia%2Fm4?alt=media"
+    XCTAssertEqual(ChosenMedia(item: try file("m4", ["url": storage]), scope: .site(hostID: "h")).reference, "media:h/m4")
+    XCTAssertEqual(
+      ChosenMedia(item: try file("m5", ["url": "https://elsewhere.test/p.png"]), scope: .site(hostID: "h")).reference,
+      "https://elsewhere.test/p.png")
+    // A film's measured length, in whole seconds.
+    XCTAssertEqual(try file("m6", ["video": ["durationMs": 63_400, "width": 1920, "height": 1080]]).videoSeconds, 63)
+    XCTAssertNil(try file("m7").videoSeconds)
+  }
+
+  func testShowsAStoredPictureFromTheCDNForTheSiteBeingEdited() {
+    XCTAssertEqual(
+      mediaPreviewURL("media:h/m1", origin: "https://console.test/", hostID: "h")?.absoluteString,
+      "https://console.test/api/media/cdn/h/m1?w=320")
+    XCTAssertEqual(
+      mediaPreviewURL("media:org:o1/m2", origin: "https://console.test", hostID: "h9")?.absoluteString,
+      "https://console.test/api/media/cdn/org:o1:h9/m2?w=320")
+    XCTAssertEqual(
+      mediaPreviewURL("https://example.com/a.png", origin: "https://console.test", hostID: "h")?.absoluteString,
+      "https://example.com/a.png")
+    XCTAssertEqual(
+      mediaPreviewURL("/img/a.png", origin: "https://console.test", hostID: "h")?.absoluteString,
+      "https://console.test/img/a.png")
+    XCTAssertNil(mediaPreviewURL("  ", origin: "https://console.test", hostID: "h"))
   }
 
   func testReadsAFileAndBuildsItsAddresses() throws {

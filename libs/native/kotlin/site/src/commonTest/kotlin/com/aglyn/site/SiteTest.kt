@@ -23,11 +23,17 @@ import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.pluginhost.DeepLinks
 import com.aglyn.pluginhost.NativeLinkTarget
 import com.aglyn.pluginhost.NativePluginRegistry
+import com.aglyn.site.media.ChosenMedia
 import com.aglyn.site.media.FolderPick
+import com.aglyn.site.media.MediaFilters
 import com.aglyn.site.media.MediaItem
 import com.aglyn.site.media.MediaScope
 import com.aglyn.site.media.formatBytes
+import com.aglyn.site.media.mediaPlan
+import com.aglyn.site.media.mediaPlanNotices
+import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.site.media.mediaQuery
+import com.aglyn.site.media.megabytesInput
 import com.aglyn.site.pages.PageNode
 import com.aglyn.site.pages.SiteRouting
 import com.aglyn.site.pages.livePageUrl
@@ -175,6 +181,56 @@ class SiteTest {
     assertTrue(FirestoreFilter("visibleTo", FilterOp.ARRAY_CONTAINS_ANY, listOf("org", "host:h")) in scoped.filters)
     assertTrue(FirestoreFilter("folderId", FilterOp.EQ, null) in scoped.filters)
     assertTrue(scoped.filters.none { it.field == "nameTokens" })
+  }
+
+  @Test
+  fun plansTheLibraryFiltersAsTheConsoleDoes() {
+    val filters = MediaFilters(orientation = "landscape", alt = "false", tag = " Hero ", minMegabytes = "1", maxMegabytes = "2.5")
+    assertEquals(5, filters.count)
+    assertEquals(0, MediaFilters().count)
+    val site = mediaQuery(MediaScope.Site("h"), FolderPick.All, null, "image", MediaSort.NEWEST, "", filters = filters)
+    assertTrue(FirestoreFilter("orientation", FilterOp.EQ, "landscape") in site.filters)
+    assertTrue(FirestoreFilter("hasAlt", FilterOp.EQ, false) in site.filters)
+    // Tags are stored trimmed and lower-cased, so the one asked for is too.
+    assertTrue(FirestoreFilter("tags", FilterOp.ARRAY_CONTAINS, "hero") in site.filters)
+    // The size is typed in megabytes and stored in bytes.
+    assertTrue(FirestoreFilter("sizeBytes", FilterOp.GTE, 1_048_576L) in site.filters)
+    assertTrue(FirestoreFilter("sizeBytes", FilterOp.LTE, 2_621_440L) in site.filters)
+    // A reader limited to some sites has no Tags filter: the scope holds the query's one array clause.
+    val scoped = mediaQuery(MediaScope.Org("o", "h"), FolderPick.All, listOf("org", "host:h"), null, MediaSort.NEWEST, "", filters = filters)
+    assertTrue(scoped.filters.none { it.field == "tags" })
+    // A blank box asks nothing, and a megabyte box takes digits and one point.
+    assertEquals(emptyList(), MediaFilters(tag = "  ", minMegabytes = " ").clauses(scoped = false))
+    assertEquals("12.57", megabytesInput("1a2.5.7"))
+    // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
+    val notices = mediaPlanNotices(mediaPlan(FolderPick.All, null, null, MediaSort.NEWEST, "hero", MediaFilters(tag = "sunset")))
+    assertTrue(notices.isNotEmpty(), notices.toString())
+  }
+
+  @Test
+  fun choosesAFileTheWayTheConsolesPickerStoresIt() {
+    fun file(id: String, vararg fields: Pair<String, Any?>) = MediaItem.from(FirestoreDoc(id, "hosts/h/media/$id", mapOf("fileName" to "$id.jpg", "contentType" to "image/jpeg") + fields))!!
+    // A site's own file: its reference.
+    assertEquals("media:h/m1", ChosenMedia(file("m1", "cdnPath" to "/api/media/cdn/h/m1"), MediaScope.Site("h")).reference)
+    // A workspace file shared with only some sites is requested through the form that names this site; an org-wide one is not.
+    assertEquals("media:org:o1:h/m2", ChosenMedia(file("m2", "cdnPath" to "/api/media/cdn/org:o1/m2", "visibleTo" to listOf("host:h")), MediaScope.Org("o1", "h")).reference)
+    assertEquals("media:org:o1/m3", ChosenMedia(file("m3", "cdnPath" to "/api/media/cdn/org:o1/m3", "visibleTo" to listOf("org")), MediaScope.Org("o1", "h")).reference)
+    // No CDN path: the Storage address names the asset; any other address is kept.
+    val storage = "https://firebasestorage.googleapis.com/v0/b/bucket/o/hosts%2Fh%2Fmedia%2Fm4?alt=media"
+    assertEquals("media:h/m4", ChosenMedia(file("m4", "url" to storage), MediaScope.Site("h")).reference)
+    assertEquals("https://elsewhere.test/p.png", ChosenMedia(file("m5", "url" to "https://elsewhere.test/p.png"), MediaScope.Site("h")).reference)
+    // A film's measured length, in whole seconds.
+    assertEquals(63L, file("m6", "video" to mapOf("durationMs" to 63_400L, "width" to 1920L, "height" to 1080L)).videoSeconds)
+    assertNull(file("m7").videoSeconds)
+  }
+
+  @Test
+  fun showsAStoredPictureFromTheCdnForTheSiteBeingEdited() {
+    assertEquals("https://console.test/api/media/cdn/h/m1?w=320", mediaPreviewUrl("media:h/m1", "https://console.test/", "h"))
+    assertEquals("https://console.test/api/media/cdn/org:o1:h9/m2?w=320", mediaPreviewUrl("media:org:o1/m2", "https://console.test", "h9"))
+    assertEquals("https://example.com/a.png", mediaPreviewUrl("https://example.com/a.png", "https://console.test", "h"))
+    assertEquals("https://console.test/img/a.png", mediaPreviewUrl("/img/a.png", "https://console.test", "h"))
+    assertNull(mediaPreviewUrl("  ", "https://console.test", "h"))
   }
 
   @Test
@@ -390,6 +446,38 @@ class SiteTest {
     assertTrue(seen.all { it.second == null || it.second == "h1" })
     assertEquals(listOf("/api/fonts/prepare", "/api/fonts/theme", "/api/media/replace", "/api/fonts/theme"), seen.map { it.first })
     assertEquals(emptyList(), installedFontsOf(null))
+  }
+
+  @Test
+  fun listsTheRoutedPagesForTheKeywordPickerAndReadsTheReportTheRouteAnswers() {
+    val pages = com.aglyn.site.setup.seoKeywordPages(
+      mapOf("screens" to mapOf("s2" to "pricing", "s1" to "/", "s3" to 5)),
+      mapOf("s1" to "Home", "s2" to ""),
+    )
+    assertEquals(listOf("/" to "Home", "/pricing" to "/pricing"), pages.map { it.path to it.name })
+    val report = com.aglyn.contracts.ContractJsonFormat.decodeFromJsonElement(
+      com.aglyn.contracts.SeoAuditReport.serializer(),
+      Json.parseToJsonElement(
+        """{"pages":[{"screenId":"s1","path":"/","name":"Home","versionId":null,"score":85,"findings":[{"code":"title-missing","severity":"high","message":"No title."},{"code":"keyword-missing","severity":"low","message":"Say it.","keyword":"pricing"}],"keywords":[]}],"skipped":2,"site":[{"code":"search-discouraged","severity":"high","message":"Hidden."}],"score":85,"notes":["A note"]}""",
+      ),
+    )
+    assertEquals(3, com.aglyn.contracts.seoAuditFindingCount(report))
+    assertEquals(2L, report.skipped)
+    assertEquals(null, report.pages[0].versionId)
+  }
+
+  @Test
+  fun saysWhereABusinessProfileValueComesFrom() {
+    val host = mapOf("seo" to mapOf("entity" to mapOf("description" to "Dog grooming with a calm hand.", "areaServed" to listOf("Austin"))))
+    val stored = mapOf("services" to listOf("Bath"), "audience" to "Owners", "sources" to mapOf("audience" to "ai"))
+    val resolved = com.aglyn.contracts.resolveBusinessProfile(host, stored)
+    assertEquals(
+      "Empty here, so Aglyn AI uses “Dog grooming with a calm hand.” from your SEO settings.",
+      com.aglyn.site.setup.businessOriginLine("whatYouDo", stored, resolved, "One sentence"),
+    )
+    assertEquals("Suggested by Aglyn AI. Edit it and it becomes yours.", com.aglyn.site.setup.businessOriginLine("audience", stored, resolved, "x"))
+    assertEquals("One per line", com.aglyn.site.setup.businessOriginLine("services", stored, resolved, "One per line"))
+    assertEquals(listOf("details", "business", "seo", "tracking", "theme", "emails"), com.aglyn.site.setup.SetupSection.entries.map { it.id })
   }
 
   @Test

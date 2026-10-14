@@ -20,7 +20,7 @@ through a register you've created.
 
 ## Registers
 
-Create your registers under **Products → Settings → POS registers** — one
+Create your registers under **Products → Point of sale → POS registers** — one
 per till or device that takes in-person payments. Before your first
 register exists, the register page and the **POS devices** card each show
 an **Add a register** button that takes you there. Give each a name (and,
@@ -232,7 +232,7 @@ no card reader controls and the register has no **Card reader** button.
 To add a reader:
 
 1. On the reader, open **Settings** and choose **Generate pairing code**.
-2. In the console, open **Products → Settings → POS devices** and choose
+2. In the console, open **Products → Point of sale → POS devices** and choose
    **Add card reader**.
 3. Enter the **registration code** the reader shows, give the reader a
    name (such as "Front counter reader") and, optionally, pick the
@@ -264,7 +264,7 @@ themselves.
 To pair one, start from either place:
 
 - **On the register**, tap **Pair display** next to the **Register** heading.
-- **In the console**, open **Products → Settings → POS devices** and tap
+- **In the console**, open **Products → Point of sale → POS devices** and tap
   **Pair display** beside the register the tablet belongs to. Use this when
   you are setting a tablet up away from the till.
 
@@ -303,7 +303,7 @@ The email address or phone number the customer typed is not kept on the
 display: it is cleared as soon as the receipt is sent. Change the welcome line with **Customer display welcome**
 in the **Commerce settings** card (blank shows "Welcome").
 
-Paired displays are listed under **Products → Settings → POS devices**,
+Paired displays are listed under **Products → Point of sale → POS devices**,
 beneath their register, with a **Connected** or **Not connected** status. **Sign out** there
 unpairs a display, and so does removing its register; it then has to be
 paired again with a new code.
@@ -319,7 +319,7 @@ automatic promotions and stock as a sale you ring up.
 To pair one:
 
 1. Tap **Pair display** on the register, or beside the register under
-   **Products → Settings → POS devices**, then choose **Self-service
+   **Products → Point of sale → POS devices**, then choose **Self-service
    kiosk**. It shows an address and a 6-digit code that works **once** and
    expires in **10 minutes**.
 2. On the tablet, open that address — your console address followed by
@@ -373,7 +373,7 @@ the right PIN you can choose the card reader the kiosk uses, reload it, or
 screen locks for 15 minutes.
 
 Paired kiosks are listed with your customer displays under **Products →
-Settings → POS devices**, where **Sign out** unpairs one.
+Point of sale → POS devices**, where **Sign out** unpairs one.
 
 Pairing from either place needs the same access as the register itself: an
 admin or editor on the site with the **Use the point of sale** permission, on a plan

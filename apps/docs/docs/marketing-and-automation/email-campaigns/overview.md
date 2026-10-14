@@ -701,7 +701,8 @@ read for the site you are on, so no one stored answer holds for every site. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The address and name boxes above the table add people;
 they are not filters.
 
-**Consent** is the basis the membership carries, read for the site you are on — or, on
+**Consent** is the basis the membership carries — or, for a person a rule added, the
+one on their contact — read for the site you are on, or, on
 your [organization's Emails page](#organization-emails-page), for the site chosen under
 **Enroll as**. The kinds are not the same fact and the column keeps them apart:
 
@@ -827,8 +828,8 @@ instead — that is the record that holds across every list and every campaign.
 
 ### Lists built from a rule
 
-A **dynamic** list holds everyone matching a rule, re-checked about every fifteen
-minutes. Pick **From a rule** when you create the list, then say who it draws from:
+A **dynamic** list holds everyone matching a rule, re-checked about once an hour,
+and sooner after you edit the rule. Pick **From a rule** when you create the list, then say who it draws from:
 
 - **People from** — contacts, leads, site members, form submissions, or any combination.
 - **Tagged** — one or more contact tags, comma separated. Contacts only.
@@ -876,6 +877,10 @@ Four things worth knowing:
   refused, telling you the number it found.
 - **Matching a rule is not consent.** A dynamic list decides who is in the audience;
   [the consent rules](#who-a-campaign-is-allowed-to-reach) still decide who is mailed.
+  The list records no consent of its own, so for the people a rule added, a campaign
+  reads the opt-in on their **contact**, and the list's **Consent** column shows that
+  same opt-in. Someone who signed up through a form that subscribes them reads
+  **Opted in**.
 
 ## Experiments
 

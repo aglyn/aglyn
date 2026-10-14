@@ -51,6 +51,23 @@ The **Products** page is the catalog manager:
 - **Payments** — Stripe Connect onboarding status and your plan's fee
   ladder.
 
+The store's settings sit under **Settings** at the foot of the Products rail,
+a page each:
+
+- **Payments** — your Stripe account and the payment methods shoppers may use.
+- **Checkout** — the **Store settings** card (templates, currency, guest
+  checkout, terms, receipt footer) and online returns.
+- **Taxes** — your tax rates, and a tax service where one is set up.
+- **Shipping & delivery** — shipping rates, inventory locations and pickup,
+  local delivery, dropship suppliers, and shipping and fulfillment services.
+- **Notifications** — which emails customers get, and order webhooks.
+- **Point of sale** — registers, staff PINs, register hardware and POS devices.
+- **Sales channels** and **Integrations** — the shopping channels,
+  marketplaces and other services you connect. Each appears only once there is
+  something on it for your store.
+
+An old link to the single Settings page opens **Payments**.
+
 The product list filters through its own toolbar, and every filter and the
 search reach the whole catalog, not only the rows on screen. The list is in name
 order and pages through whatever matches.
@@ -88,7 +105,7 @@ except deleted products.
 
 ### Inventory locations {#inventory-locations}
 
-The **Inventory locations** card, in the store's settings, splits your stock
+The **Inventory locations** card, on **Products → Shipping & delivery**, splits your stock
 across warehouses or storefronts: add a location for each place you keep stock,
 then set each variant's count per location.
 
@@ -448,7 +465,7 @@ switch; including commerce is your plan's. See
 
 ## Payment methods
 
-The **Payment methods** card, in the store's settings, chooses what shoppers may
+The **Payment methods** card, on **Products → Payments**, chooses what shoppers may
 pay with besides a card, once your Stripe account is connected on the
 **Payments** card. Cards are always on. Every other method is on unless you turn it off,
 except stablecoins, which you turn on. Stripe shows a method only on orders it
@@ -505,7 +522,7 @@ Turning a method on or off never changes your fees.
 
 ### Tax settings {#tax-settings}
 
-The **Taxes** card, in the store's settings, decides how your store charges
+The **Taxes** card, on **Products → Taxes**, decides how your store charges
 sales tax: rates you enter, Stripe Tax, or none at all. Checkout stays off until you choose an option and save, so no order
 is taken that cannot be taxed correctly.
 
@@ -553,7 +570,7 @@ resolved against an address; occupancy (lodging/hotel) tax is a separate
 regime with its own rates, its own registration and its own return, so
 reservations do not use them.
 
-**Lodging tax**, on the **Taxes** card in the store's settings, is where you set your own rate
+**Lodging tax**, on the **Taxes** card (**Products → Taxes**), is where you set your own rate
 for it. It is **off by default** — leave it blank and reservations charge no
 lodging tax, exactly as before.
 
@@ -667,7 +684,7 @@ See [Dropship suppliers](./dropship-suppliers.md).
 
 ## Store settings {#store-settings}
 
-The **Store settings** card, in the store's settings, sets the pages product and
+The **Store settings** card, on **Products → Checkout**, sets the pages product and
 collection links open, the currency prices show in, guest checkout, your terms
 link and the receipt footer.
 
@@ -683,7 +700,7 @@ link and the receipt footer.
    footer**.
 6. Select **Save store settings**.
 
-Taxes and shipping have their own cards. Store password and maintenance mode
+Taxes and shipping have their own pages, **Taxes** and **Shipping & delivery**. Store password and maintenance mode
 live under Site Protection.
 
 ## Discounts and coupons {#discounts-and-coupons}

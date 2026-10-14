@@ -31,7 +31,7 @@ Storefront **subscriptions** (including the subscribe side of
 
 ## 1. Connect payments
 
-The **Payments** card, in the store's settings, connects your own Stripe
+The **Payments** card, on **Products → Payments**, connects your own Stripe
 account so buyers pay you directly; checkout stays off until Stripe reports
 charges enabled.
 

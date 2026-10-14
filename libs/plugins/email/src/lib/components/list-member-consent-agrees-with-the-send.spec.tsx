@@ -64,7 +64,7 @@ import {
   splitByMarketingConsent,
   type MarketingConsentRecord,
 } from '@aglyn/aglyn'
-import { ListMembersPanel } from './list-members-panel'
+import { ListMembersPanel, consentLabel } from './list-members-panel'
 
 /** The site whose console this is, and whose campaign the split is for. */
 const HOST = 'site-a'
@@ -355,5 +355,52 @@ describe('the membership table reports the basis the sender acts on', () => {
       soloConsentGroup(OTHER_HOST),
     )
     expect(asOtherHost.basis).toBe('granted')
+  })
+})
+
+/*
+ * A ROW A LIST RULE WROTE SHOWS ITS CONTACT'S BASIS — the one the send reads.
+ *
+ * The materializer writes no basis onto rule rows, so the send reads those
+ * people's contacts (`withContactConsentForRuleMembers`) and the column is
+ * handed the same answer by `email/list-member-consent`. Only a silent rule
+ * row takes it: a row with its own basis, or one added by hand, keeps its own.
+ */
+describe('the Consent column shows a rule member’s contact basis', () => {
+  const optedIn = {
+    basis: 'granted' as const,
+    assertedBy: 'person' as const,
+    basisAtMs: Date.UTC(2026, 9, 13),
+    otherGrant: 'none' as const,
+  }
+
+  it('reads opted in for a silent rule row whose contact opted in', () => {
+    const row = { $id: 'r1', email: 'reader@lumen.co', via: 'rule' as const }
+    expect(consentLabel(row, GROUP).key).toBe('none')
+    expect(consentLabel(row, GROUP, optedIn).key).toBe('opted-in')
+  })
+
+  it('keeps a refusal the row itself stores', () => {
+    const row = {
+      $id: 'r2',
+      email: 'no@lumen.co',
+      via: 'rule' as const,
+      marketingConsentByHost: {
+        [HOST]: { marketingConsent: false, marketingConsentAtMs: Date.UTC(2026, 9, 1) },
+      },
+    }
+    expect(consentLabel(row, GROUP, optedIn).key).toBe('opted-out')
+  })
+
+  it('does not lend the contact basis to a row added by hand', () => {
+    const row = { $id: 'r3', email: 'hand@lumen.co', via: 'manual' as const }
+    expect(consentLabel(row, GROUP, optedIn).key).toBe('none')
+  })
+
+  it('reads a contact refusal as opted out', () => {
+    const row = { $id: 'r4', email: 'left@lumen.co', via: 'rule' as const }
+    expect(
+      consentLabel(row, GROUP, { ...optedIn, basis: 'declined' }).key,
+    ).toBe('opted-out')
   })
 })
