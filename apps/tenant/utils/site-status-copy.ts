@@ -26,8 +26,12 @@
  * site in a language not listed keeps the English.
  */
 
+import { NOT_FOUND_PAGE_NAME } from './not-found-title'
+
 /** Every line the status pages write themselves, in English. */
 export const SITE_STATUS_COPY_EN = {
+  /** The 404's name in the tab's `<title>`, joined to the site's title (`not-found-title.ts`, AGL-3791). */
+  notFoundPageName: NOT_FOUND_PAGE_NAME,
   notFoundTitle: 'We can’t find that page',
   notFoundMessage:
     'The link may be out of date, or the page may have been moved or removed. Everything else on the site is still here.',
@@ -53,6 +57,7 @@ export type SiteStatusCopy = Record<keyof typeof SITE_STATUS_COPY_EN, string>
 /** The same lines in each language listed, by its two-letter code. */
 const COPY: Readonly<Record<string, SiteStatusCopy>> = {
   es: {
+    notFoundPageName: 'Página no encontrada',
     notFoundTitle: 'No encontramos esa página',
     notFoundMessage:
       'Es posible que el enlace sea antiguo o que la página se haya movido o eliminado. Todo lo demás del sitio sigue aquí.',
@@ -68,6 +73,7 @@ const COPY: Readonly<Record<string, SiteStatusCopy>> = {
     markHome: 'Inicio de {name}',
   },
   fr: {
+    notFoundPageName: 'Page introuvable',
     notFoundTitle: 'Nous ne trouvons pas cette page',
     notFoundMessage:
       'Le lien est peut-être ancien, ou la page a été déplacée ou supprimée. Tout le reste du site est toujours là.',
@@ -83,6 +89,7 @@ const COPY: Readonly<Record<string, SiteStatusCopy>> = {
     markHome: 'Accueil de {name}',
   },
   pt: {
+    notFoundPageName: 'Página não encontrada',
     notFoundTitle: 'Não encontramos essa página',
     notFoundMessage:
       'O link pode estar desatualizado, ou a página pode ter sido movida ou removida. Todo o resto do site continua aqui.',
@@ -98,6 +105,7 @@ const COPY: Readonly<Record<string, SiteStatusCopy>> = {
     markHome: 'Início de {name}',
   },
   de: {
+    notFoundPageName: 'Seite nicht gefunden',
     notFoundTitle: 'Diese Seite finden wir nicht',
     notFoundMessage:
       'Der Link ist vielleicht veraltet, oder die Seite wurde verschoben oder entfernt. Alles andere auf der Website ist noch da.',
@@ -113,6 +121,7 @@ const COPY: Readonly<Record<string, SiteStatusCopy>> = {
     markHome: 'Startseite von {name}',
   },
   it: {
+    notFoundPageName: 'Pagina non trovata',
     notFoundTitle: 'Non troviamo questa pagina',
     notFoundMessage:
       'Il link potrebbe essere vecchio, oppure la pagina è stata spostata o rimossa. Tutto il resto del sito è ancora qui.',
@@ -137,4 +146,15 @@ export function siteStatusLanguageOf(language: string | null | undefined): strin
 /** The status pages' lines in a site's language, or in English where it is not listed. */
 export function siteStatusCopy(language: string | null | undefined): SiteStatusCopy {
   return COPY[siteStatusLanguageOf(language)] ?? SITE_STATUS_COPY_EN
+}
+
+/**
+ * The language a status page speaks on the client (AGL-3771): the one the
+ * host layout published, else the document's own `<html lang>`, which the
+ * same layout wrote. The 404's heading and its tab title both read it
+ * (AGL-3791), so the two never disagree.
+ */
+export function siteStatusLanguage(published: string | null | undefined): string {
+  if (published) return published
+  return typeof document === 'undefined' ? '' : document.documentElement.lang
 }
