@@ -1,0 +1,483 @@
+{
+  "$comment": "The Couriers plugin's native screen: the merchant's own DoorDash Drive developer keys (live, test or both), testing them, the phone and note every courier gets at the store, and the webhook DoorDash reports progress to. Routes: GET /api/couriers/connection, POST connect, test, settings, webhook-token and disconnect. A courier on one order (quote, book, cancel, refresh) is the order screen's. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "couriers.service",
+      "title": "Couriers",
+      "label": "Couriers",
+      "subtitle": "DoorDash Drive couriers for your local deliveries",
+      "icon": "bicycle|local_shipping",
+      "scope": "site",
+      "order": 45,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "conn": "/api/couriers/connection?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.conn.available",
+          "text": "Couriers are not available for this site. They need a plan that sells and a deployment that offers them."
+        },
+        {
+          "type": "notice",
+          "id": "money",
+          "tone": "info",
+          "when": "data.conn.available",
+          "text": "DoorDash charges each courier to your own DoorDash Drive account. Aglyn doesn’t charge, collect or mark up the courier’s fee; your buyers pay your delivery zone’s fee, as they do now."
+        },
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "when": "data.conn.available && !data.conn.connection",
+          "text": "Send a DoorDash courier for your local deliveries, from your own DoorDash Drive account. Create a key in your DoorDash Drive developer portal (developer.doordash.com/portal). Add your test key to try it on test orders, your live key to send real couriers, or both."
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "title": "Connect DoorDash",
+          "when": "data.conn.available && !data.conn.connection",
+          "items": [
+            {
+              "id": "connectLive",
+              "label": "Connect with a live key",
+              "icon": "link|link",
+              "url": "/api/couriers/connect",
+              "prompt": [
+                {
+                  "key": "developerId",
+                  "label": "Developer ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "keyId",
+                  "label": "Key ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "signingSecret",
+                  "label": "Signing secret",
+                  "kind": "password",
+                  "required": true,
+                  "help": "Stored encrypted. It is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash",
+                "live": {
+                  "developerId": "{form.developerId}",
+                  "keyId": "{form.keyId}",
+                  "signingSecret": "{form.signingSecret}"
+                }
+              },
+              "success": "DoorDash connected"
+            },
+            {
+              "id": "connectTest",
+              "label": "Connect with a test key",
+              "icon": "flask|science",
+              "url": "/api/couriers/connect",
+              "prompt": [
+                {
+                  "key": "developerId",
+                  "label": "Developer ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "keyId",
+                  "label": "Key ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "signingSecret",
+                  "label": "Signing secret",
+                  "kind": "password",
+                  "required": true,
+                  "help": "Stored encrypted. It is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash",
+                "test": {
+                  "developerId": "{form.developerId}",
+                  "keyId": "{form.keyId}",
+                  "signingSecret": "{form.signingSecret}"
+                }
+              },
+              "success": "DoorDash connected"
+            },
+            {
+              "id": "portal",
+              "label": "Open the developer portal",
+              "icon": "arrow.up.right.square|open_in_new",
+              "link": "https://developer.doordash.com/portal"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "{data.conn.connection.providerLabel}",
+          "when": "data.conn.connection",
+          "rows": [
+            {
+              "label": "Live key",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Refused": "error",
+                "Not added": "neutral",
+                "*": "neutral"
+              },
+              "when": "data.conn.connection.live.configured && data.conn.connection.live.lastTestOk"
+            },
+            {
+              "label": "Live key",
+              "value": "Refused",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Refused": "error",
+                "Not added": "neutral",
+                "*": "neutral"
+              },
+              "when": "data.conn.connection.live.configured && !data.conn.connection.live.lastTestOk"
+            },
+            {
+              "label": "Live key",
+              "value": "Not added",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Refused": "error",
+                "Not added": "neutral",
+                "*": "neutral"
+              },
+              "when": "!data.conn.connection.live.configured"
+            },
+            {
+              "label": "Test key",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Refused": "error",
+                "Not added": "neutral",
+                "*": "neutral"
+              },
+              "when": "data.conn.connection.test.configured && data.conn.connection.test.lastTestOk"
+            },
+            {
+              "label": "Test key",
+              "value": "Refused",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Refused": "error",
+                "Not added": "neutral",
+                "*": "neutral"
+              },
+              "when": "data.conn.connection.test.configured && !data.conn.connection.test.lastTestOk"
+            },
+            {
+              "label": "Test key",
+              "value": "Not added",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Refused": "error",
+                "Not added": "neutral",
+                "*": "neutral"
+              },
+              "when": "!data.conn.connection.test.configured"
+            },
+            {
+              "label": "Webhook address",
+              "value": "{data.conn.connection.webhookUrl}",
+              "when": "data.conn.connection.webhookUrl"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "liveError",
+          "tone": "error",
+          "when": "data.conn.connection.live.lastError",
+          "text": "{data.conn.connection.live.lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "testError",
+          "tone": "error",
+          "when": "data.conn.connection.test.lastError",
+          "text": "{data.conn.connection.test.lastError}"
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "when": "data.conn.connection",
+          "items": [
+            {
+              "id": "test",
+              "label": "Test keys",
+              "icon": "checkmark.seal|verified",
+              "url": "/api/couriers/test",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash"
+              },
+              "success": "Tested the stored keys"
+            },
+            {
+              "id": "liveKey",
+              "label": "Replace live key",
+              "icon": "key|key",
+              "when": "data.conn.connection.live.configured",
+              "url": "/api/couriers/connect",
+              "prompt": [
+                {
+                  "key": "developerId",
+                  "label": "Developer ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "keyId",
+                  "label": "Key ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "signingSecret",
+                  "label": "Signing secret",
+                  "kind": "password",
+                  "required": true,
+                  "help": "Stored encrypted. It is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash",
+                "live": {
+                  "developerId": "{form.developerId}",
+                  "keyId": "{form.keyId}",
+                  "signingSecret": "{form.signingSecret}"
+                }
+              },
+              "success": "Live key saved"
+            },
+            {
+              "id": "addLiveKey",
+              "label": "Add live key",
+              "icon": "key|key",
+              "when": "!data.conn.connection.live.configured",
+              "url": "/api/couriers/connect",
+              "prompt": [
+                {
+                  "key": "developerId",
+                  "label": "Developer ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "keyId",
+                  "label": "Key ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "signingSecret",
+                  "label": "Signing secret",
+                  "kind": "password",
+                  "required": true,
+                  "help": "Stored encrypted. It is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash",
+                "live": {
+                  "developerId": "{form.developerId}",
+                  "keyId": "{form.keyId}",
+                  "signingSecret": "{form.signingSecret}"
+                }
+              },
+              "success": "Live key saved"
+            },
+            {
+              "id": "testKey",
+              "label": "Replace test key",
+              "icon": "key|key",
+              "when": "data.conn.connection.test.configured",
+              "url": "/api/couriers/connect",
+              "prompt": [
+                {
+                  "key": "developerId",
+                  "label": "Developer ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "keyId",
+                  "label": "Key ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "signingSecret",
+                  "label": "Signing secret",
+                  "kind": "password",
+                  "required": true,
+                  "help": "Stored encrypted. It is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash",
+                "test": {
+                  "developerId": "{form.developerId}",
+                  "keyId": "{form.keyId}",
+                  "signingSecret": "{form.signingSecret}"
+                }
+              },
+              "success": "Test key saved"
+            },
+            {
+              "id": "addTestKey",
+              "label": "Add test key",
+              "icon": "key|key",
+              "when": "!data.conn.connection.test.configured",
+              "url": "/api/couriers/connect",
+              "prompt": [
+                {
+                  "key": "developerId",
+                  "label": "Developer ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "keyId",
+                  "label": "Key ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "signingSecret",
+                  "label": "Signing secret",
+                  "kind": "password",
+                  "required": true,
+                  "help": "Stored encrypted. It is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash",
+                "test": {
+                  "developerId": "{form.developerId}",
+                  "keyId": "{form.keyId}",
+                  "signingSecret": "{form.signingSecret}"
+                }
+              },
+              "success": "Test key saved"
+            },
+            {
+              "id": "copyWebhook",
+              "label": "Copy webhook address",
+              "icon": "doc.on.doc|content_copy",
+              "when": "data.conn.connection.webhookUrl",
+              "copy": "{data.conn.connection.webhookUrl}"
+            },
+            {
+              "id": "webhookToken",
+              "label": "New webhook token",
+              "icon": "key.radiowaves.forward|vpn_key",
+              "when": "data.conn.connection.webhookTokenSet",
+              "url": "/api/couriers/webhook-token",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash"
+              },
+              "reveal": "webhookToken",
+              "confirm": "The current token stops working at once. Put the new one in your DoorDash developer portal, or its updates are refused until you do.",
+              "success": "New webhook token"
+            },
+            {
+              "id": "createWebhookToken",
+              "label": "Create webhook token",
+              "icon": "key.radiowaves.forward|vpn_key",
+              "when": "!data.conn.connection.webhookTokenSet",
+              "url": "/api/couriers/webhook-token",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash"
+              },
+              "reveal": "webhookToken",
+              "success": "Webhook token created"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect DoorDash? Your keys are forgotten, and no courier can be sent until you connect again.",
+              "url": "/api/couriers/disconnect",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "doordash"
+              },
+              "success": "Disconnected"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "store",
+          "title": "At the store",
+          "when": "data.conn.connection",
+          "footer": "In your DoorDash developer portal, add a webhook with the address above, Authorization type Basic, and the webhook token. Without it, a courier’s progress reaches your orders on the next check, every 15 minutes.",
+          "fields": [
+            {
+              "key": "pickupPhone",
+              "label": "Store phone for couriers",
+              "kind": "text",
+              "initial": "{data.conn.connection.pickupPhone}",
+              "help": "Used when the location deliveries leave from has no phone number."
+            },
+            {
+              "key": "pickupNote",
+              "label": "Note for every courier",
+              "kind": "text",
+              "initial": "{data.conn.connection.pickupNote}",
+              "placeholder": "Ask at the counter for the order number",
+              "help": "Up to 280 characters."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/couriers/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "doordash",
+              "pickupPhone": "{form.pickupPhone}",
+              "pickupNote": "{form.pickupNote}"
+            },
+            "success": "Saved"
+          }
+        }
+      ]
+    }
+  ]
+}

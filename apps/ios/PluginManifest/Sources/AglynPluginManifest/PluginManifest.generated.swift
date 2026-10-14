@@ -7,6 +7,7 @@ import AglynPluginHost
 import AglynAiPlugin
 import AglynBookingsPlugin
 import AglynCommercePlugin
+import AglynCouriersPlugin
 import AglynCrmPlugin
 import AglynDeliveryAppsPlugin
 import AglynEmailPlugin
@@ -44,6 +45,11 @@ public enum NativePluginManifest {
       id: "commerce",
       contributes: ["screens": ["commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
       register: AglynCommercePlugin.registerCommerceNative
+    ),
+    NativePluginManifestEntry(
+      id: "couriers",
+      contributes: ["screens": ["couriers.service"]],
+      register: AglynCouriersPlugin.registerCouriersNative
     ),
     NativePluginManifestEntry(
       id: "crm",

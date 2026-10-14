@@ -3382,6 +3382,22 @@
     },
     {
       "id": "couriers",
+      "mobile": {
+        "$comment": "AGL-3652: couriers natively (DoorDash Drive with the merchant's own keys): live and test keys, testing them, the store phone and note and the webhook, from the spec in src/android/screens/couriers.screens.json. It sits in Commerce settings' commerceSettings zone. A courier on one order is the order screen's.",
+        "ios": {
+          "module": "AglynCouriersPlugin",
+          "register": "registerCouriersNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.couriers",
+          "register": "registerCouriersNative"
+        },
+        "contributes": {
+          "screens": [
+            "couriers.service"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-couriers",
       "register": {
         "console": "registerCouriersConsole",

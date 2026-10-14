@@ -633,4 +633,56 @@ class CommerceServiceSpecsTest {
     assertEquals("Customer not found", ScreenValues.render(cin7.spec.blocks.first { it.id == "attention" }.string("secondary")!!, ScreenContext.with(cin7.context, "item", json("""{"note":"Customer not found"}"""))))
     assertEquals("Customer for web orders: The name of a Cin7 Core customer that store orders are recorded under.", ScreenValues.render(FieldSpec.parse(cin7.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.first { (it.jsonObject["key"] as JsonPrimitive).content == "orderCustomer" })!!.help!!, cin7.context))
   }
+
+  // ---- couriers ----------------------------------------------------------------------------------------------------
+
+  private fun couriers(connection: String?, available: Boolean = true) =
+    screen(spec("couriers", "couriers.service"), emptyMap(), """{"conn":{"available":$available,"providers":[{"id":"doordash","label":"DoorDash","product":"DoorDash Drive","portal":"https://developer.doordash.com/portal"}],"connection":${connection ?: "null"}}}""")
+
+  private fun courierKeys(configured: Boolean, ok: Boolean = true, error: String? = null) =
+    """{"configured":$configured,"developerId":"d","keyId":"k","lastTestOk":$ok,"lastTestAtMs":1,"lastError":${error?.let { "\"$it\"" } ?: "null"}}"""
+
+  private fun courierConnection(live: String, test: String, tokenSet: Boolean = false) =
+    """{"provider":"doordash","providerLabel":"DoorDash","live":$live,"test":$test,"pickupPhone":"+15125550100","pickupNote":"Ask at the counter","webhookUrl":"https://console.test/api/couriers/webhook?hostId=h1","webhookTokenSet":$tokenSet,"updatedAtMs":1}"""
+
+  @Test
+  fun couriersAskForKeysUntilOneIsConnected() {
+    assertEquals(listOf("unavailable"), couriers(null, available = false).shown())
+    val bare = couriers(null)
+    assertEquals(listOf("money", "intro", "connect"), bare.shown())
+    assertEquals(listOf("connectLive", "connectTest", "portal"), bare.actionsShown("connect"))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","live":{"developerId":"d","keyId":"k","signingSecret":"s"}}"""),
+      bare.body(bare.action("connect", "connectLive"), """{"developerId":"d","keyId":"k","signingSecret":"s"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","test":{"developerId":"d","keyId":"k","signingSecret":"s"}}"""),
+      bare.body(bare.action("connect", "connectTest"), """{"developerId":"d","keyId":"k","signingSecret":"s"}"""),
+    )
+    assertEquals("https://developer.doordash.com/portal", bare.action("connect", "portal").link)
+  }
+
+  @Test
+  fun aConnectedCourierShowsEachKeysStateAndOffersTheMatchingKeyActions() {
+    val both = couriers(courierConnection(courierKeys(true), courierKeys(true, ok = false, error = "Bad secret"), tokenSet = true))
+    assertEquals(listOf("money", "status", "testError", "manage", "store"), both.shown())
+    assertEquals(listOf("test", "liveKey", "testKey", "copyWebhook", "webhookToken", "disconnect"), both.actionsShown("manage"))
+    val onlyTest = couriers(courierConnection(courierKeys(false), courierKeys(true)))
+    assertEquals(listOf("test", "addLiveKey", "testKey", "copyWebhook", "createWebhookToken", "disconnect"), onlyTest.actionsShown("manage"))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","live":{"developerId":"d2","keyId":"k2","signingSecret":"s2"}}"""),
+      onlyTest.body(onlyTest.action("manage", "addLiveKey"), """{"developerId":"d2","keyId":"k2","signingSecret":"s2"}"""),
+    )
+    assertEquals("webhookToken", both.action("manage", "webhookToken").reveal)
+    assertEquals(json("""{"hostId":"h1","provider":"doordash"}"""), both.body(both.action("manage", "test")))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","pickupPhone":"+15125550111","pickupNote":"Side door"}"""),
+      both.body(both.form("store"), """{"pickupPhone":"+15125550111","pickupNote":"Side door"}"""),
+    )
+    assertEquals("DoorDash", ScreenValues.render(both.spec.blocks.first { it.id == "status" }.title!!, both.context))
+    val rows = both.spec.blocks.first { it.id == "status" }.raw.jsonObject["rows"]!!.jsonArray
+    val shown = rows.filter { ScreenValues.condition(it.jsonObject["when"]?.let { w -> (w as JsonPrimitive).content }, both.context) }
+      .map { (it.jsonObject["label"] as JsonPrimitive).content + "=" + (it.jsonObject["value"] as JsonPrimitive).content }
+    assertEquals(listOf("Live key=Connected", "Test key=Refused"), shown.take(2))
+  }
 }
