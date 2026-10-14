@@ -153,6 +153,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// route that provisions something (enterprise billing).
   public let headers: [String: String]
   public let confirm: String?
+  /// A confirmation built from segments, `[{ "when": …, "text": … }]`, joined in order, so one
+  /// sentence can change with the route's answer (the add-on's price preview).
+  public let confirmParts: [JSONValue]
   /// When set, the confirmation is asked only while this condition holds.
   public let confirmWhen: String?
   public let destructive: Bool
@@ -185,10 +188,14 @@ public struct ActionSpec: Sendable, Identifiable {
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
-  /// `{ when, title, text }`: when the route's answer meets `when`, the person is shown `text`
-  /// (a template over `response`) in place of the success message, as the console's report
-  /// dialog shows the documentation that may already answer a question.
+  /// `{ when, title, text }` (or a list of them, the first that matches wins): when the route's
+  /// answer meets `when`, the person is shown `text` (a template over `response`) in place of the
+  /// success message, as the console's report dialog shows the documentation that may already
+  /// answer a question, and its add-on card the bank-confirmation notice.
   public let instead: JSONValue?
+  /// A route call made first, whose answer is `preview` in the confirmation (the console asks
+  /// Stripe what an add-on change would charge before it asks the person to confirm).
+  public let check: ActionSpecBox?
 
   public init?(_ json: JSONValue) {
     guard let label = json["label"]?.stringValue else { return nil }
@@ -200,6 +207,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.body = json["body"]
     self.headers = json["headers"].objectEntries.reduce(into: [:]) { $0[$1.key] = $1.value.stringValue ?? ScreenValues.text($1.value) }
     self.confirm = json["confirm"]?.stringValue
+    self.confirmParts = json["confirm"].array
     self.confirmWhen = json["confirmWhen"]?.stringValue
     self.destructive = json["destructive"] == .bool(true)
     self.reason = json["reason"] == .bool(true)
@@ -220,6 +228,27 @@ public struct ActionSpec: Sendable, Identifiable {
     self.report = json["report"].array.compactMap(ReportLine.init)
     self.loop = json["loop"].flatMap(LoopSpec.init)
     self.instead = json["instead"]
+    self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
+  }
+
+  /// Whether the action asks the person to confirm before it runs.
+  public var asksConfirmation: Bool { confirm != nil || !confirmParts.isEmpty }
+
+  /// The confirmation as the person reads it, over `scope`.
+  public func confirmText(in scope: JSONValue) -> String? {
+    if !confirmParts.isEmpty {
+      return confirmParts.filter { ScreenValues.condition($0["when"]?.stringValue, in: scope) }
+        .map { ScreenValues.render($0["text"]?.stringValue ?? "", in: scope) }.joined()
+    }
+    return confirm.map { ScreenValues.render($0, in: scope) }
+  }
+
+  /// The `instead` entry the route's answer meets, if any.
+  public func insteadEntry(in scope: JSONValue) -> JSONValue? {
+    guard let instead else { return nil }
+    let entries: [JSONValue]
+    if case .array(let list) = instead { entries = list } else { entries = [instead] }
+    return entries.first { ScreenValues.condition($0["when"]?.stringValue, in: scope) }
   }
 
   /// Every field the action asks for before it runs: its prompt, then a reason.
