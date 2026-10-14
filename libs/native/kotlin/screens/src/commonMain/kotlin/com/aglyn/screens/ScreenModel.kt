@@ -79,12 +79,31 @@ data class ScreenSession(
         put("month", "$year-${month.toString().padStart(2, '0')}")
         put("quarter", "$year-Q${(month - 1) / 3 + 1}")
         put("ms", nowMillis().toDouble())
+        // The last twelve months, newest first, as a report picks them: `{ from, to, label }` with ISO instants in UTC.
+        put("months", JsonArray(recentMonths(year, month)))
       })
       put("params", JsonObject(params.mapValues { JsonPrimitive(it.value) }))
       put("data", JsonObject(emptyMap()))
       put("form", JsonObject(emptyMap()))
     }
   }
+}
+
+private val MONTH_NAMES = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+internal fun recentMonths(year: Int, month: Int, count: Int = 12): List<JsonElement> = (0 until count).map { back ->
+  val total = year * 12 + (month - 1) - back
+  val y = total / 12
+  val m = total % 12 + 1
+  val next = total + 1
+  fun iso(yearValue: Int, monthValue: Int) = "${yearValue.toString().padStart(4, '0')}-${monthValue.toString().padStart(2, '0')}-01T00:00:00.000Z"
+  JsonObject(
+    mapOf(
+      "from" to JsonPrimitive(iso(y, m)),
+      "to" to JsonPrimitive(iso(next / 12, next % 12 + 1)),
+      "label" to JsonPrimitive("${MONTH_NAMES[m - 1]} $y"),
+    ),
+  )
 }
 
 val LocalScreenSession = compositionLocalOf { ScreenSession() }

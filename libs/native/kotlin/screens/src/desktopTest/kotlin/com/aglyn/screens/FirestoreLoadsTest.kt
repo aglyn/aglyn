@@ -68,6 +68,18 @@ class FirestoreLoadsTest {
   }
 
   @Test
+  fun theLastTwelveMonthsRunNewestFirstWithoutGaps() {
+    val months = recentMonths(2026, 10)
+    assertEquals(12, months.size)
+    assertEquals("October 2026", (months[0].jsonObject["label"] as JsonPrimitive).content)
+    assertEquals("2026-11-01T00:00:00.000Z", (months[0].jsonObject["to"] as JsonPrimitive).content)
+    assertEquals("2025-11-01T00:00:00.000Z", (months[11].jsonObject["from"] as JsonPrimitive).content)
+    assertEquals("January 2026", (recentMonths(2026, 1)[0].jsonObject["label"] as JsonPrimitive).content)
+    assertEquals("2025-12-01T00:00:00.000Z", (recentMonths(2026, 1)[1].jsonObject["from"] as JsonPrimitive).content)
+    assertEquals("2026-01-01T00:00:00.000Z", (recentMonths(2025, 12)[0].jsonObject["to"] as JsonPrimitive).content)
+  }
+
+  @Test
   fun anEntitlementReadsTheWorkspaceDocumentAndNamesThePlanThatHasTheFeature() {
     val business = Reader(docs = mapOf("orgs/o1" to mapOf("plan" to "business")))
     val free = Reader(docs = mapOf("orgs/o1" to mapOf("plan" to "free")))

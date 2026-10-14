@@ -96,8 +96,10 @@ public enum ScreenValues {
     case .object(let record)?: return record[segment]
     case .array(let items)?:
       if segment == "length" { return .number(Double(items.count)) }
-      guard let index = Int(segment), items.indices.contains(index) else { return nil }
-      return items[index]
+      // A negative number counts from the end: `attempts.-1` is the last one.
+      guard let number = Int(segment) else { return nil }
+      let index = number < 0 ? items.count + number : number
+      return items.indices.contains(index) ? items[index] : nil
     default: return nil
     }
   }
@@ -268,6 +270,24 @@ public enum ScreenValues {
     case .object(let record) where record.count == 1 && record["$slug"] != nil:
       // `{"$slug": "{form.name}"}`: the console's slug of a name (lower case, letters and digits joined by hyphens).
       return .string(commerceSlug(Self.text(resolveBody(record["$slug"] ?? .null, in: context))))
+    case .object(let record) where record.count == 1 && record["$codes"] != nil:
+      // `{"$codes": "{form.countries}"}`: comma- or line-separated codes, trimmed and upper case, as a list (empty ones dropped).
+      let typed = Self.text(resolveBody(record["$codes"] ?? .null, in: context))
+      return .array(typed.split(whereSeparator: { $0 == "," || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }.filter { !$0.isEmpty }.map(JSONValue.string))
+    case .object(let record) where record.count == 1 && record["$reject"] != nil:
+      // `{"$reject": {"list": "{rates}", "key": "zoneId", "match": "{item.id}"}}`: the list without the rows whose `key` equals `match`.
+      let spec = record["$reject"] ?? .null
+      var list: [JSONValue] = []
+      if case .array(let items) = resolveBody(spec["list"] ?? .null, in: context) { list = items }
+      let key = spec["key"]?.stringValue ?? ""
+      let match = Self.text(resolveBody(spec["match"] ?? .null, in: context))
+      return .array(list.filter { Self.text(lookup(key, in: $0)) != match })
+    case .object(let record) where record.count == 1 && record["$number"] != nil:
+      // `{"$number": "{form.ready}"}`: a choice or typed text as a number; null when it is not one (a select's "don't say").
+      return number(resolveBody(record["$number"] ?? .null, in: context)).map { .number($0) } ?? .null
+    case .object(let record) where record.count == 1 && record["$nowMs"] != nil:
+      // `{"$nowMs": true}`: the time of the press, as epoch milliseconds (a moderation's `moderatedAtMs`).
+      return .number((Date().timeIntervalSince1970 * 1000).rounded())
     case .object(let record) where record.count == 1 && record["$orNull"] != nil:
       // `{"$orNull": "{form.parentId}"}`: the value, or an explicit null when it is empty (a merge write clears the field).
       let value = resolveBody(record["$orNull"] ?? .null, in: context)
@@ -293,6 +313,10 @@ public enum ScreenValues {
       // `with` adds more columns from other prefixes (`{"reason": "reason_"}`); `skipEmpty` leaves out a row whose value is empty or zero.
       let extra = spec["with"].objectEntries.reduce(into: [String: String]()) { $0[$1.key] = $1.value.stringValue ?? "" }
       let skipEmpty = spec["skipEmpty"] == .bool(true)
+      // `keys`: only the names (after the prefix) of the entries that are on, in name order: the checked events of a list of toggles.
+      if spec["keys"] == .bool(true) {
+        return .array(source.filter { $0.key.hasPrefix(prefix) && truthy($0.value) }.sorted { $0.key < $1.key }.map { .string(String($0.key.dropFirst(prefix.count))) })
+      }
       return .array(
         source.filter { $0.key.hasPrefix(prefix) }.sorted { $0.key < $1.key }.compactMap { name, entry in
           if skipEmpty, !truthy(entry) { return nil }
@@ -342,7 +366,8 @@ public enum ScreenValues {
       for (key, value) in record {
         let resolved = resolveBody(value, in: context)
         // A template that found nothing is left out; a literal null is sent (it clears the field).
-        if resolved != .null || value == .null || value["$orNull"] != nil { out[key] = resolved }
+        // A key written as a template (`{item.id}`) is the text it renders: a map keyed by the row's own id.
+        if resolved != .null || value == .null || value["$orNull"] != nil { out[key.contains("{") ? render(key, in: context) : key] = resolved }
       }
       return .object(out)
     default: return body
@@ -391,13 +416,20 @@ public enum ScreenValues {
     let clause = raw.trimmingCharacters(in: .whitespaces)
     for op in ["!=", "=="] {
       if let range = clause.range(of: op) {
-        let left = text(lookup(String(clause[..<range.lowerBound]), in: context))
+        let leftPath = String(clause[..<range.lowerBound])
+        let found = lookup(leftPath, in: context)
+        let left = text(found)
         var right = clause[range.upperBound...].trimmingCharacters(in: .whitespaces)
         if right.count >= 2, right.hasPrefix("'"), right.hasSuffix("'") { right = String(right.dropFirst().dropLast()) }
         // `path == @other.path`: compared with the text at another path instead of a literal.
         let options = right.hasPrefix("@")
           ? [text(lookup(String(right.dropFirst()), in: context))]
           : right.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        // A projected list (`zones.*.kind == radius`): `==` holds when any of its values does, `!=` when none does.
+        if case .array(let items)? = found, leftPath.contains(".*") {
+          let hit = items.contains { options.contains(text($0)) }
+          return op == "==" ? hit : !hit
+        }
         return op == "==" ? options.contains(left) : !options.contains(left)
       }
     }
@@ -619,13 +651,19 @@ public enum ScreenValues {
       // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
       let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
       return formatOrderMoney(Int(max(0, (number(value) ?? 0) - other).rounded()), currency: "USD")
+    case "slashed":
+      // A site path with its leading slash: `about` is `/about`, the home page `/`.
+      let path = text(value)
+      return path == "/" ? "/" : "/" + (path.hasPrefix("/") ? String(path.dropFirst()) : path)
     case "take":
       // `take/120`: at most that many characters.
       return String(text(value).prefix(parts.count > 1 ? Int(parts[1]) ?? Int.max : Int.max))
     case "plural":
-      // `plural/item`: the count (or the total of a list of numbers) with its noun, `1 item` or `3 items`.
+      // `plural/item`: the count (a list of numbers is their total, any other list its length) with its noun, `1 item` or `3 items`.
       var count = number(value) ?? 0
-      if case .array(let items)? = value { count = items.reduce(0) { $0 + (number($1) ?? 0) } }
+      if case .array(let items)? = value {
+        count = !items.isEmpty && items.allSatisfy({ number($0) != nil }) ? items.reduce(0) { $0 + (number($1) ?? 0) } : Double(items.count)
+      }
       return "\(numberText(count)) \(parts.count > 1 ? parts[1] : "")\(count == 1 ? "" : "s")"
     case "ordernumber":
       // `ordernumber/item.$id`: an order's number as `#1042`, else the last six characters of its id (`#A1B2C3`).
@@ -652,7 +690,9 @@ public enum ScreenValues {
       let raw = text(value).replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
       return raw.prefix(1).uppercased() + raw.dropFirst()
     case "upper":
-      return text(value).uppercased()
+      // `upper/2` also keeps at most that many characters (a country or state code).
+      let upper = text(value).uppercased()
+      return parts.count > 1 ? Int(parts[1]).map { String(upper.prefix($0)) } ?? upper : upper
     case "json":
       return (try? value.map { String(data: try $0.encoded(), encoding: .utf8) ?? "" }) ?? ""
     default:

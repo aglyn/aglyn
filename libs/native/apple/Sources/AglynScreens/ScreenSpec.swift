@@ -301,10 +301,16 @@ public struct FieldSpec: Sendable, Identifiable {
   public let max: Double?
   /// A number field that takes whole numbers: what is typed is rounded to one.
   public let integer: Bool
+  /// A regular expression a typed value must contain a match of (an https address); an empty value is left to `required`.
+  public let pattern: String?
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
     if let mustMatch, ScreenValues.text(value) != ScreenValues.render(mustMatch, in: context) { return true }
+    if let pattern {
+      let typed = ScreenValues.text(value)
+      if !typed.isEmpty, typed.range(of: pattern, options: .regularExpression) == nil { return true }
+    }
     if kind == "number", let number = ScreenValues.number(value) {
       if let min, number < min { return true }
       if let max, number > max { return true }
@@ -332,6 +338,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.min = nil
     self.max = nil
     self.integer = false
+    self.pattern = nil
   }
 
   /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
@@ -395,6 +402,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.min = nil
     self.max = nil
     self.integer = false
+    self.pattern = nil
   }
 
   init?(_ json: JSONValue) {
@@ -416,6 +424,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.min = ScreenValues.number(json["min"])
     self.max = ScreenValues.number(json["max"])
     self.integer = json["integer"] == .bool(true)
+    self.pattern = json["pattern"]?.stringValue
   }
 
   /// The choices for a `select`: the static options, then any read from data.
@@ -423,7 +432,14 @@ public struct FieldSpec: Sendable, Identifiable {
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
-    let rows = ScreenValues.lookup(path, in: context).array
+    // A map (the site's screens by id) offers one choice per entry: `{ $id: key, $value: value }`, by value.
+    let rows: [JSONValue]
+    if case .object(let record)? = ScreenValues.lookup(path, in: context) {
+      rows = record.map { JSONValue.object(["$id": .string($0.key), "$value": $0.value]) }
+        .sorted { ScreenValues.text($0["$value"]).lowercased() < ScreenValues.text($1["$value"]).lowercased() }
+    } else {
+      rows = ScreenValues.lookup(path, in: context).array
+    }
     // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
     let keep = from["where"]?.stringValue
     return options + rows.map { ScreenContext.with(context, item: $0) }.filter { ScreenValues.condition(keep, in: $0) }.map { scope in

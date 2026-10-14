@@ -182,10 +182,13 @@ class FieldSpec private constructor(
   val max: Double? = null,
   /** A number field that takes whole numbers: what is typed is rounded to one. */
   val integer: Boolean = false,
+  /** A regular expression a typed value must contain a match of (an https address); an empty value is left to `required`. */
+  val pattern: String? = null,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
     if (mustMatch != null && ScreenValues.text(value) != ScreenValues.render(mustMatch, context)) return true
+    if (pattern != null) ScreenValues.text(value).let { typed -> if (typed.isNotEmpty() && !Regex(pattern).containsMatchIn(typed)) return true }
     if (kind == "number") {
       ScreenValues.number(value)?.let { number ->
         if (min != null && number < min) return true
@@ -202,7 +205,12 @@ class FieldSpec private constructor(
     val path = from.str("items") ?: return options
     val valueTemplate = from.str("value") ?: "{item.\$id}"
     val labelTemplate = from.str("label") ?: valueTemplate
-    val rows = (ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()
+    // A map (the site's screens by id) offers one choice per entry: `{ $id: key, $value: value }`, by value.
+    val rows = when (val source = ScreenValues.lookup(path, context)) {
+      is JsonArray -> source
+      is JsonObject -> source.entries.map { JsonObject(mapOf("\$id" to JsonPrimitive(it.key), "\$value" to it.value)) }.sortedBy { ScreenValues.text(it["\$value"]).lowercase() }
+      else -> emptyList()
+    }
     // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
     val keep = from.str("where")
     return options + rows.map { ScreenContext.withItem(context, it) }.filter { ScreenValues.condition(keep, it) }.map { scope ->
@@ -284,6 +292,7 @@ class FieldSpec private constructor(
         min = ScreenValues.number(json.obj("min")),
         max = ScreenValues.number(json.obj("max")),
         integer = json.isTrue("integer"),
+        pattern = json.str("pattern"),
       )
     }
   }

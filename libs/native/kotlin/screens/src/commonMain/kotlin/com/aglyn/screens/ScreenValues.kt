@@ -89,7 +89,8 @@ object ScreenValues {
 
   private fun step(current: JsonElement?, segment: String): JsonElement? = when (current) {
     is JsonObject -> current[segment]
-    is JsonArray -> if (segment == "length") JsonPrimitive(current.size) else segment.toIntOrNull()?.let { current.getOrNull(it) }
+    // A negative number counts from the end: `attempts.-1` is the last one.
+    is JsonArray -> if (segment == "length") JsonPrimitive(current.size) else segment.toIntOrNull()?.let { current.getOrNull(if (it < 0) current.size + it else it) }
     else -> null
   }
 
@@ -239,6 +240,22 @@ object ScreenValues {
     } else if (body.size == 1 && body["\$slug"] != null) {
       // `{"$slug": "{form.name}"}`: the console's slug of a name (lower case, letters and digits joined by hyphens).
       JsonPrimitive(com.aglyn.contracts.commerceSlug(text(resolveBody(body.getValue("\$slug"), context))))
+    } else if (body.size == 1 && body["\$codes"] != null) {
+      // `{"$codes": "{form.countries}"}`: comma- or line-separated codes, trimmed and upper case, as a list (empty ones dropped).
+      JsonArray(text(resolveBody(body.getValue("\$codes"), context)).split(',', '\n').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.map { JsonPrimitive(it) })
+    } else if (body.size == 1 && body["\$reject"] is JsonObject) {
+      // `{"$reject": {"list": "{rates}", "key": "zoneId", "match": "{item.id}"}}`: the list without the rows whose `key` equals `match`.
+      val spec = body["\$reject"] as JsonObject
+      val list = (spec["list"]?.let { resolveBody(it, context) } as? JsonArray) ?: JsonArray(emptyList())
+      val key = (spec["key"] as? JsonPrimitive)?.content.orEmpty()
+      val match = text(spec["match"]?.let { resolveBody(it, context) })
+      JsonArray(list.filter { text(lookup(key, it)) != match })
+    } else if (body.size == 1 && body["\$number"] != null) {
+      // `{"$number": "{form.ready}"}`: a choice or typed text as a number; null when it is not one (a select's "don't say").
+      number(resolveBody(body.getValue("\$number"), context))?.let { JsonPrimitive(it) } ?: JsonNull
+    } else if (body.size == 1 && body["\$nowMs"] != null) {
+      // `{"$nowMs": true}`: the time of the press, as epoch milliseconds (a moderation's `moderatedAtMs`).
+      JsonPrimitive(nowMillis())
     } else if (body.size == 1 && body["\$orNull"] != null) {
       // `{"$orNull": "{form.parentId}"}`: the value, or an explicit null when it is empty (a merge write clears the field).
       resolveBody(body.getValue("\$orNull"), context).let { if (truthy(it)) it else JsonNull }
@@ -260,6 +277,10 @@ object ScreenValues {
       // `with` adds more columns from other prefixes (`{"reason": "reason_"}`); `skipEmpty` leaves out a row whose value is empty or zero.
       val extra = (spec["with"] as? JsonObject)?.entries.orEmpty().associate { it.key to (it.value as? JsonPrimitive)?.content.orEmpty() }
       val skipEmpty = (spec["skipEmpty"] as? JsonPrimitive)?.content == "true"
+      // `keys`: only the names (after the prefix) of the entries that are on, in name order: the checked events of a list of toggles.
+      if ((spec["keys"] as? JsonPrimitive)?.content == "true") {
+        return JsonArray(source.entries.filter { it.key.startsWith(prefix) && truthy(it.value) }.sortedBy { it.key }.map { JsonPrimitive(it.key.removePrefix(prefix)) })
+      }
       JsonArray(
         source.entries.filter { it.key.startsWith(prefix) }.sortedBy { it.key }.mapNotNull { (name, entry) ->
           if (skipEmpty && !truthy(entry)) return@mapNotNull null
@@ -299,7 +320,8 @@ object ScreenValues {
         for ((key, value) in body) {
           val resolved = resolveBody(value, context)
           // A template that found nothing is left out; a literal null is sent (it clears the field).
-          if (resolved != JsonNull || value == JsonNull || (value is JsonObject && value.containsKey("\$orNull"))) put(key, resolved)
+          // A key written as a template (`{item.id}`) is the text it renders: a map keyed by the row's own id.
+          if (resolved != JsonNull || value == JsonNull || (value is JsonObject && value.containsKey("\$orNull"))) put(if ('{' in key) render(key, context) else key, resolved)
         }
       },
     )
@@ -350,11 +372,17 @@ object ScreenValues {
     for (op in listOf("!=", "==")) {
       val at = clause.indexOf(op)
       if (at >= 0) {
-        val left = text(lookup(clause.substring(0, at), context))
+        val found = lookup(clause.substring(0, at), context)
+        val left = text(found)
         var right = clause.substring(at + 2).trim()
         if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right = right.substring(1, right.length - 1)
         // `path == @other.path`: compared with the text at another path instead of a literal.
         val options = if (right.startsWith("@")) listOf(text(lookup(right.substring(1), context))) else right.split(',').map { it.trim() }
+        // A projected list (`zones.*.kind == radius`): `==` holds when any of its values does, `!=` when none does.
+        if (found is JsonArray && ".*" in clause.substring(0, at)) {
+          val hit = found.any { text(it) in options }
+          return if (op == "==") hit else !hit
+        }
         return if (op == "==") left in options else left !in options
       }
     }
@@ -523,10 +551,12 @@ object ScreenValues {
       "minus" -> number(value)?.let { numberText(max(0.0, it - (parts.getOrNull(1)?.let { path -> number(lookup(path, context)) } ?: 0.0))) } ?: text(value)
       // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
       "lesscents" -> formatOrderMoney(round(max(0.0, (number(value) ?: 0.0) - (parts.getOrNull(1)?.let { number(lookup(it, context)) } ?: 0.0))), "USD")
+      // A site path with its leading slash: `about` is `/about`, the home page `/`.
+      "slashed" -> text(value).let { if (it == "/") "/" else "/" + it.removePrefix("/") }
       // `take/120`: at most that many characters.
       "take" -> text(value).take(parts.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE)
-      // `plural/item`: the count (or the total of a list of numbers) with its noun, `1 item` or `3 items`.
-      "plural" -> ((value as? JsonArray)?.sumOf { number(it) ?: 0.0 } ?: number(value) ?: 0.0).let { count -> "${numberText(count)} ${parts.getOrElse(1) { "" }}${if (count == 1.0) "" else "s"}" }
+      // `plural/item`: the count (a list of numbers is their total, any other list its length) with its noun, `1 item` or `3 items`.
+      "plural" -> (if (value is JsonArray) (if (value.isNotEmpty() && value.all { number(it) != null }) value.sumOf { number(it) ?: 0.0 } else value.size.toDouble()) else number(value) ?: 0.0).let { count -> "${numberText(count)} ${parts.getOrElse(1) { "" }}${if (count == 1.0) "" else "s"}" }
       // `ordernumber/item.$id`: an order's number as `#1042`, else the last six characters of its id (`#A1B2C3`).
       "ordernumber" -> if (truthy(value)) "#${text(value)}" else parts.getOrNull(1)?.let { text(lookup(it, context)) }?.takeIf { it.isNotEmpty() }?.let { "#${it.takeLast(6).uppercase()}" } ?: "#\u2014"
       // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.
@@ -538,7 +568,8 @@ object ScreenValues {
       "ahead" -> ((value as? JsonArray)?.count { (epochMillis(it) ?: 0L) > nowMillis() } ?: 0).toString()
       "yesno" -> if (truthy(value)) "Yes" else "No"
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
-      "upper" -> text(value).uppercase()
+      // `upper/2` also keeps at most that many characters (a country or state code).
+      "upper" -> text(value).uppercase().let { upper -> parts.getOrNull(1)?.toIntOrNull()?.let { upper.take(it) } ?: upper }
       "json" -> value?.toString() ?: ""
       else -> text(value)
     }

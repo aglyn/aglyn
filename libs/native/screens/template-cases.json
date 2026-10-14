@@ -88,7 +88,8 @@
         "id": "abcdef123456",
         "day": 1791590400000,
         "recent": 0,
-        "one": 1
+        "one": 1,
+        "slash": "/"
       },
       "qty": [
         2,
@@ -324,11 +325,31 @@
     },
     {
       "template": "{data.list:plural/x}",
-      "expect": "0 xs"
+      "expect": "2 xs"
     },
     {
       "template": "{data.qty:plural/item}",
       "expect": "6 items"
+    },
+    {
+      "template": "{data.hostKey:slashed}",
+      "expect": "/h2"
+    },
+    {
+      "template": "{data.stub.slash:slashed}",
+      "expect": "/"
+    },
+    {
+      "template": "{data.qty.-1}",
+      "expect": "3"
+    },
+    {
+      "template": "{data.members:plural/member}",
+      "expect": "2 members"
+    },
+    {
+      "template": "{data.members.-1.role}",
+      "expect": "editor"
     }
   ],
   "url": [
@@ -692,6 +713,93 @@
         "s": 1791590399000,
         "n": null
       }
+    },
+    {
+      "body": {
+        "a": {
+          "$number": "{data.stub.num}"
+        },
+        "b": {
+          "$number": "{data.hostKey}"
+        },
+        "c": {
+          "$number": "90"
+        }
+      },
+      "expect": {
+        "a": 1042,
+        "c": 90
+      }
+    },
+    {
+      "body": {
+        "{data.hostKey}": true,
+        "map": {
+          "{data.currency}": "{data.stub.num}"
+        }
+      },
+      "expect": {
+        "h2": true,
+        "map": {
+          "eur": 1042
+        }
+      }
+    },
+    {
+      "body": {
+        "k": {
+          "$gather": {
+            "from": "{data.access}",
+            "prefix": "h",
+            "keys": true
+          }
+        },
+        "m": {
+          "$gather": {
+            "from": "{data.access}",
+            "prefix": "x",
+            "keys": true
+          }
+        }
+      },
+      "expect": {
+        "k": [
+          "1",
+          "2"
+        ],
+        "m": []
+      }
+    },
+    {
+      "body": {
+        "c": {
+          "$codes": " us, ca ,,*\nmx"
+        },
+        "r": {
+          "$reject": {
+            "list": "{data.members}",
+            "key": "role",
+            "match": "owner"
+          }
+        }
+      },
+      "expect": {
+        "c": [
+          "US",
+          "CA",
+          "*",
+          "MX"
+        ],
+        "r": [
+          {
+            "$id": "u2",
+            "email": "b@acme.test",
+            "displayName": "",
+            "role": "editor",
+            "joined": 1791331200
+          }
+        ]
+      }
     }
   ],
   "condition": [
@@ -821,6 +929,22 @@
     },
     {
       "when": "data.nothing.*.expiresAtMs > 5",
+      "expect": false
+    },
+    {
+      "when": "data.members.*.role == editor",
+      "expect": true
+    },
+    {
+      "when": "data.members.*.role == viewer",
+      "expect": false
+    },
+    {
+      "when": "data.members.*.role != viewer",
+      "expect": true
+    },
+    {
+      "when": "data.members.*.role != owner",
       "expect": false
     }
   ]

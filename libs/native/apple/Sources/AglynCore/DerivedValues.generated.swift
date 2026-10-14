@@ -4,18 +4,18 @@
 /// Each plan's default for the plan features native screens gate on.
 public enum PlanFeatureDefaults {
   public static let byPlan: [String: [String: Bool]] = [
-    "free": ["marketingOverlays": false, "abTesting": false, "screenAnalytics": false, "outreach": false, "giftCards": false, "abandonedCart": false],
-    "starter": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": false, "outreach": false, "giftCards": false, "abandonedCart": false],
-    "pro": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": true, "outreach": false, "giftCards": false, "abandonedCart": true],
-    "business": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true],
-    "scale": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true],
-    "advanced": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true],
-    "agency": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true],
-    "enterprise": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true],
+    "free": ["marketingOverlays": false, "abTesting": false, "screenAnalytics": false, "outreach": false, "giftCards": false, "abandonedCart": false, "productReviews": false, "dropshipRouting": false, "contentGating": false],
+    "starter": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": false, "outreach": false, "giftCards": false, "abandonedCart": false, "productReviews": false, "dropshipRouting": false, "contentGating": false],
+    "pro": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": true, "outreach": false, "giftCards": false, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": false],
+    "business": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "scale": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "advanced": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "agency": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "enterprise": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
   ]
 
   /// The plan an upsell names for a feature: the cheapest one that carries it.
-  public static let grantedFrom: [String: String] = ["marketingOverlays": "Starter", "abTesting": "Business", "screenAnalytics": "Pro", "giftCards": "Business", "abandonedCart": "Pro"]
+  public static let grantedFrom: [String: String] = ["marketingOverlays": "Starter", "abTesting": "Business", "screenAnalytics": "Pro", "giftCards": "Business", "abandonedCart": "Pro", "productReviews": "Pro", "dropshipRouting": "Pro", "contentGating": "Business"]
 }
 
 /// The events an A/B test can count as its goal, in the console's picker order.

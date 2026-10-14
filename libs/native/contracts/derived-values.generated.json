@@ -17,7 +17,10 @@
       "screenAnalytics": false,
       "outreach": false,
       "giftCards": false,
-      "abandonedCart": false
+      "abandonedCart": false,
+      "productReviews": false,
+      "dropshipRouting": false,
+      "contentGating": false
     },
     "starter": {
       "marketingOverlays": true,
@@ -25,7 +28,10 @@
       "screenAnalytics": false,
       "outreach": false,
       "giftCards": false,
-      "abandonedCart": false
+      "abandonedCart": false,
+      "productReviews": false,
+      "dropshipRouting": false,
+      "contentGating": false
     },
     "pro": {
       "marketingOverlays": true,
@@ -33,7 +39,10 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": false,
-      "abandonedCart": true
+      "abandonedCart": true,
+      "productReviews": true,
+      "dropshipRouting": true,
+      "contentGating": false
     },
     "business": {
       "marketingOverlays": true,
@@ -41,7 +50,10 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
-      "abandonedCart": true
+      "abandonedCart": true,
+      "productReviews": true,
+      "dropshipRouting": true,
+      "contentGating": true
     },
     "scale": {
       "marketingOverlays": true,
@@ -49,7 +61,10 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
-      "abandonedCart": true
+      "abandonedCart": true,
+      "productReviews": true,
+      "dropshipRouting": true,
+      "contentGating": true
     },
     "advanced": {
       "marketingOverlays": true,
@@ -57,7 +72,10 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
-      "abandonedCart": true
+      "abandonedCart": true,
+      "productReviews": true,
+      "dropshipRouting": true,
+      "contentGating": true
     },
     "agency": {
       "marketingOverlays": true,
@@ -65,7 +83,10 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
-      "abandonedCart": true
+      "abandonedCart": true,
+      "productReviews": true,
+      "dropshipRouting": true,
+      "contentGating": true
     },
     "enterprise": {
       "marketingOverlays": true,
@@ -73,7 +94,10 @@
       "screenAnalytics": true,
       "outreach": false,
       "giftCards": true,
-      "abandonedCart": true
+      "abandonedCart": true,
+      "productReviews": true,
+      "dropshipRouting": true,
+      "contentGating": true
     }
   },
   "grantedFrom": {
@@ -81,7 +105,10 @@
     "abTesting": "Business",
     "screenAnalytics": "Pro",
     "giftCards": "Business",
-    "abandonedCart": "Pro"
+    "abandonedCart": "Pro",
+    "productReviews": "Pro",
+    "dropshipRouting": "Pro",
+    "contentGating": "Business"
   },
   "cases": [
     {
@@ -128,6 +155,27 @@
     },
     {
       "org": {
+        "plan": "free"
+      },
+      "feature": "productReviews",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free"
+      },
+      "feature": "dropshipRouting",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free"
+      },
+      "feature": "contentGating",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "starter"
       },
       "feature": "marketingOverlays",
@@ -170,6 +218,27 @@
     },
     {
       "org": {
+        "plan": "starter"
+      },
+      "feature": "productReviews",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
+      "feature": "dropshipRouting",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
+      "feature": "contentGating",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "pro"
       },
       "feature": "marketingOverlays",
@@ -212,6 +281,27 @@
     },
     {
       "org": {
+        "plan": "pro"
+      },
+      "feature": "productReviews",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "pro"
+      },
+      "feature": "dropshipRouting",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "pro"
+      },
+      "feature": "contentGating",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "business"
       },
       "feature": "marketingOverlays",
@@ -254,6 +344,27 @@
     },
     {
       "org": {
+        "plan": "business"
+      },
+      "feature": "productReviews",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business"
+      },
+      "feature": "dropshipRouting",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business"
+      },
+      "feature": "contentGating",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "enterprise"
       },
       "feature": "marketingOverlays",
@@ -296,6 +407,27 @@
     },
     {
       "org": {
+        "plan": "enterprise"
+      },
+      "feature": "productReviews",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise"
+      },
+      "feature": "dropshipRouting",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise"
+      },
+      "feature": "contentGating",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "nonsense"
       },
       "feature": "marketingOverlays",
@@ -334,6 +466,27 @@
         "plan": "nonsense"
       },
       "feature": "abandonedCart",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
+      "feature": "productReviews",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
+      "feature": "dropshipRouting",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
+      "feature": "contentGating",
       "result": false
     },
     {
@@ -387,6 +540,30 @@
     {
       "org": {
         "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "productReviews",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "dropshipRouting",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "contentGating",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
         "billingStatus": "past_due"
       },
       "feature": "marketingOverlays",
@@ -430,6 +607,30 @@
         "billingStatus": "past_due"
       },
       "feature": "abandonedCart",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "productReviews",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "dropshipRouting",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "contentGating",
       "result": true
     },
     {
@@ -490,6 +691,36 @@
         }
       },
       "feature": "abandonedCart",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "productReviews",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "dropshipRouting",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "contentGating",
       "result": false
     },
     {
@@ -562,6 +793,42 @@
         }
       },
       "feature": "abandonedCart",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "productReviews",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "dropshipRouting",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "contentGating",
       "result": true
     },
     {
@@ -645,6 +912,45 @@
     {
       "org": {
         "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "productReviews",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "dropshipRouting",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "contentGating",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
         "billingStatus": "canceled",
         "entitlements": {
           "planComp": {
@@ -722,6 +1028,45 @@
     },
     {
       "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "productReviews",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "dropshipRouting",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "contentGating",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "free",
         "entitlements": {
           "features": {
@@ -800,6 +1145,45 @@
     },
     {
       "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "productReviews",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "dropshipRouting",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "contentGating",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "enterprise",
         "entitlements": {
           "features": {
@@ -868,6 +1252,42 @@
         }
       },
       "feature": "abandonedCart",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "productReviews",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "dropshipRouting",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "contentGating",
       "result": true
     }
   ],

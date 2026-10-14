@@ -91,7 +91,24 @@ extension ScreenSession {
       "month": .string(String(format: "%04d-%02d", year, month)),
       "quarter": .string("\(year)-Q\((month - 1) / 3 + 1)"),
       "ms": .number((date.timeIntervalSince1970 * 1000).rounded()),
+      // The last twelve months, newest first, as a report picks them: `{ from, to, label }` with ISO instants in UTC.
+      "months": .array(recentMonths(year: year, month: month)),
     ]
+  }
+
+  static let monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+  static func recentMonths(year: Int, month: Int, count: Int = 12) -> [JSONValue] {
+    (0..<count).map { back in
+      let total = year * 12 + (month - 1) - back
+      let next = total + 1
+      func iso(_ y: Int, _ m: Int) -> String { String(format: "%04d-%02d-01T00:00:00.000Z", y, m) }
+      return [
+        "from": .string(iso(total / 12, total % 12 + 1)),
+        "to": .string(iso(next / 12, next % 12 + 1)),
+        "label": .string("\(monthNames[total % 12]) \(total / 12)"),
+      ]
+    }
   }
 }
 

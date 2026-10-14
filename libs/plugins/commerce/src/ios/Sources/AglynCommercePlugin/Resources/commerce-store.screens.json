@@ -1,0 +1,2636 @@
+{
+  "$comment": "The Commerce plugin's store settings and moderation pages, natively: store settings, customer notifications, reviews, suppliers, locations, taxes, payments, payment methods, ShipStation, ShippingEasy and order webhooks, each writing the store's documents or calling the console's route as the console's card does. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.storeSettings",
+      "title": "Store settings",
+      "label": "Store settings",
+      "subtitle": "Templates, checkout and receipts",
+      "icon": "storefront|storefront",
+      "scope": "site",
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        },
+        "host": {
+          "doc": "hosts/{site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "settings",
+          "fields": [
+            {
+              "key": "pdpScreenId",
+              "label": "Product page template",
+              "kind": "select",
+              "initial": "{data.store.pdpScreenId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "None (product URLs 404)"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.host.screens",
+                "value": "{item.$id}",
+                "label": "{item.$value:slashed}"
+              },
+              "help": "Page rendered at /products/{{slug} — design it in the Besigner with the Product detail block and {{{{product.*}} tokens."
+            },
+            {
+              "key": "collectionScreenId",
+              "label": "Collection page template",
+              "kind": "select",
+              "initial": "{data.store.collectionScreenId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "None (collection URLs 404)"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.host.screens",
+                "value": "{item.$id}",
+                "label": "{item.$value:slashed}"
+              },
+              "help": "Page rendered at /collections/{{slug} — drop a Product grid with source “A collection” and {{{{collection.*}} tokens."
+            },
+            {
+              "key": "currency",
+              "label": "Currency",
+              "kind": "select",
+              "initial": "{data.store.currency|'USD'}",
+              "options": [
+                {
+                  "value": "USD",
+                  "label": "USD ($)"
+                }
+              ],
+              "help": "Charges settle in USD; more currencies are coming"
+            },
+            {
+              "key": "guestCheckout",
+              "label": "Allow guest checkout (no account required)",
+              "kind": "toggle",
+              "initial": "{?data.store.guestCheckout != false}"
+            },
+            {
+              "key": "termsUrl",
+              "label": "Terms URL",
+              "kind": "url",
+              "initial": "{data.store.termsUrl}",
+              "placeholder": "/terms",
+              "help": "Linked from checkout when set"
+            },
+            {
+              "key": "receiptFooter",
+              "label": "Receipt footer",
+              "kind": "multiline",
+              "initial": "{data.store.receiptFooter}",
+              "placeholder": "Thanks for supporting our shop!"
+            }
+          ],
+          "footer": "Password protection and maintenance mode live under Site Protection.",
+          "submit": {
+            "label": "Save store settings",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "siteWide": true,
+              "fields": {
+                "pdpScreenId": {
+                  "$orNull": "{form.pdpScreenId}"
+                },
+                "collectionScreenId": {
+                  "$orNull": "{form.collectionScreenId}"
+                },
+                "currency": "{form.currency}",
+                "guestCheckout": "{form.guestCheckout}",
+                "termsUrl": {
+                  "$orNull": "{form.termsUrl}"
+                },
+                "receiptFooter": {
+                  "$orNull": "{form.receiptFooter}"
+                }
+              }
+            },
+            "success": "Store settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "commerce.notifications",
+      "title": "Customer notifications",
+      "label": "Customer notifications",
+      "subtitle": "The emails customers get about their orders",
+      "icon": "mail|mail",
+      "scope": "site",
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        },
+        "sms": {
+          "optional": true,
+          "url": "/api/commerce/order-receipt-send?hostId={site.id}"
+        }
+      },
+      "constants": {
+        "events": [
+          {
+            "id": "receipt",
+            "label": "Order receipt",
+            "description": "When an order is paid: online, from a payment link, or at the register when the customer gives an email."
+          },
+          {
+            "id": "shipped",
+            "label": "Order shipped",
+            "description": "Each time you ship part or all of an order, with the carrier and tracking link."
+          },
+          {
+            "id": "delivered",
+            "label": "Order delivered",
+            "description": "When you mark an order delivered."
+          },
+          {
+            "id": "refunded",
+            "label": "Refund issued",
+            "description": "Each refund, with the amount and any items you named."
+          },
+          {
+            "id": "cancelled",
+            "label": "Order canceled",
+            "description": "When you cancel an order."
+          },
+          {
+            "id": "ready_for_pickup",
+            "label": "Ready for pickup",
+            "description": "When you mark a pickup order ready, with where to collect it and the pickup hours."
+          },
+          {
+            "id": "picked_up",
+            "label": "Order picked up",
+            "description": "When a pickup order is collected."
+          },
+          {
+            "id": "out_for_delivery",
+            "label": "Out for delivery",
+            "description": "When your own driver sets out with a local delivery order."
+          }
+        ],
+        "texts": [
+          {
+            "id": "texts",
+            "label": "Also send as texts",
+            "description": "When an order has the customer’s phone number for updates. Customers can reply STOP to opt out."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "text": "The emails your customers get about their orders. Each one links to a private order status page with shipments and tracking. Change their wording and colors under Emails."
+        },
+        {
+          "type": "list",
+          "id": "events",
+          "items": "const.events",
+          "icon": "mail|mail",
+          "primary": "{item.label}",
+          "secondary": "{item.description}",
+          "toggle": {
+            "value": "{?data.store.buyerNotifications[@item.id] != false}",
+            "label": "{item.label}",
+            "on": {
+              "label": "On",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "buyerNotifications": {
+                    "{item.id}": true
+                  }
+                }
+              }
+            },
+            "off": {
+              "label": "Off",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "buyerNotifications": {
+                    "{item.id}": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "list",
+          "id": "texts",
+          "when": "data.sms.sms",
+          "items": "const.texts",
+          "icon": "sms|sms",
+          "primary": "{item.label}",
+          "secondary": "{item.description}",
+          "toggle": {
+            "value": "{?data.store.buyerNotifications.texts != false}",
+            "label": "{item.label}",
+            "on": {
+              "label": "On",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "buyerNotifications": {
+                    "{item.id}": true
+                  }
+                }
+              }
+            },
+            "off": {
+              "label": "Off",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "buyerNotifications": {
+                    "{item.id}": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "commerce.reviewSettings",
+      "title": "Reviews",
+      "label": "Review settings",
+      "subtitle": "Who may review, and the request email",
+      "icon": "star|star",
+      "scope": "site",
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "settings",
+          "fields": [
+            {
+              "key": "policy",
+              "label": "Who can review",
+              "kind": "select",
+              "initial": "{data.store.reviews.policy|'verified'}",
+              "options": [
+                {
+                  "value": "verified",
+                  "label": "Verified buyers only (recommended)"
+                },
+                {
+                  "value": "anyone",
+                  "label": "Anyone"
+                }
+              ],
+              "help": "Verified buyers: customers who bought the product, signed in to their account or through the link in their review-request email; their reviews publish right away with a “Verified buyer” badge. Anyone: customers who bought the product still get the badge and publish right away; everyone else gives a name and email (never shown) and waits for your approval."
+            },
+            {
+              "key": "requestEmail",
+              "label": "Ask customers for a review",
+              "kind": "toggle",
+              "initial": "{?data.store.reviews.requestEmail != false}",
+              "help": "One email per order, after it is fulfilled, with a link for each product. Each link works once, for 60 days. Change its wording under Emails → Review request."
+            },
+            {
+              "key": "requestDelayDays",
+              "label": "Send the request (days after fulfillment)",
+              "kind": "number",
+              "integer": true,
+              "min": 3,
+              "max": 30,
+              "initial": "{data.store.reviews.requestDelayDays|'7'}",
+              "when": "form.requestEmail",
+              "help": "Between 3 and 30 days. Give the order time to arrive."
+            }
+          ],
+          "footer": "Verified reviews are published as written, good or bad. You can hide or reject one only for spam, abuse, being off-topic or sharing private information.",
+          "submit": {
+            "label": "Save",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "siteWide": true,
+              "fields": {
+                "reviews": {
+                  "policy": "{form.policy}",
+                  "requestEmail": "{form.requestEmail}",
+                  "requestDelayDays": "{form.requestDelayDays}"
+                }
+              }
+            },
+            "success": "Review settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "commerce.reviews",
+      "title": "Review moderation",
+      "label": "Review moderation",
+      "subtitle": "Approve, hide and reply to reviews",
+      "icon": "star|star",
+      "scope": "site",
+      "constants": {
+        "reasons": [
+          {
+            "id": "spam",
+            "label": "Spam or advertising"
+          },
+          {
+            "id": "abusive",
+            "label": "Abusive or hateful"
+          },
+          {
+            "id": "off_topic",
+            "label": "Not about the product"
+          },
+          {
+            "id": "private_information",
+            "label": "Shares private information"
+          }
+        ],
+        "filters": [
+          {
+            "id": "pending",
+            "label": "Pending"
+          },
+          {
+            "id": "approved",
+            "label": "Published"
+          },
+          {
+            "id": "hidden",
+            "label": "Hidden"
+          },
+          {
+            "id": "rejected",
+            "label": "Rejected"
+          },
+          {
+            "id": "all",
+            "label": "All"
+          }
+        ]
+      },
+      "load": {
+        "gate": {
+          "entitlement": "productReviews"
+        },
+        "reviews": {
+          "query": {
+            "collection": "hosts/{site.id}/reviews",
+            "limit": 50,
+            "orderBy": "createdAtMs desc",
+            "where": [
+              [
+                "status",
+                "==",
+                "pending",
+                "!params.status"
+              ],
+              [
+                "status",
+                "==",
+                "{params.status}",
+                "params.status && params.status != all"
+              ]
+            ]
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "locked",
+          "tone": "info",
+          "when": "!data.gate.carried",
+          "text": "Verified-buyer reviews let customers rate what they bought and show the star aggregate on your product pages and in search results. Included from {data.gate.label}."
+        },
+        {
+          "type": "actions",
+          "id": "filter",
+          "when": "data.gate.carried",
+          "items": [
+            {
+              "id": "show",
+              "label": "Show: {const.filters[id=params.status].label|'Pending'}",
+              "icon": "filter_alt|filter_alt",
+              "prompt": [
+                {
+                  "key": "status",
+                  "label": "Show",
+                  "kind": "select",
+                  "initial": "{params.status|'pending'}",
+                  "options": [
+                    {
+                      "value": "pending",
+                      "label": "Pending"
+                    },
+                    {
+                      "value": "approved",
+                      "label": "Published"
+                    },
+                    {
+                      "value": "hidden",
+                      "label": "Hidden"
+                    },
+                    {
+                      "value": "rejected",
+                      "label": "Rejected"
+                    },
+                    {
+                      "value": "all",
+                      "label": "All"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.reviews",
+                "params": {
+                  "status": "{form.status}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "reviews",
+          "when": "data.gate.carried",
+          "items": "data.reviews.items",
+          "empty": "Nothing to moderate.",
+          "icon": "star|star",
+          "primary": "{item.authorName}",
+          "secondary": "{item.body}",
+          "tertiary": "{item.reply}",
+          "trailing": "{item.rating} of 5",
+          "badges": [
+            {
+              "text": "Verified",
+              "tone": "success",
+              "when": "item.verified"
+            },
+            {
+              "text": "{item.status}",
+              "tone": "neutral"
+            },
+            {
+              "text": "Replied",
+              "tone": "neutral",
+              "when": "item.reply"
+            },
+            {
+              "text": "Hidden: {const.reasons[id=item.moderationReason].label}",
+              "tone": "neutral",
+              "when": "const.reasons[id=item.moderationReason]"
+            }
+          ],
+          "actions": [
+            {
+              "id": "approve",
+              "label": "Approve",
+              "icon": "checkmark.circle|check_circle",
+              "when": "item.status != approved",
+              "write": {
+                "doc": "hosts/{site.id}/reviews/{item.$id}",
+                "siteWide": true,
+                "fields": {
+                  "status": "approved",
+                  "moderationReason": null,
+                  "moderatedAtMs": {
+                    "$nowMs": true
+                  }
+                }
+              },
+              "success": "Approved"
+            },
+            {
+              "id": "reject",
+              "label": "Reject…",
+              "icon": "xmark.circle|cancel",
+              "when": "item.status == pending",
+              "write": {
+                "doc": "hosts/{site.id}/reviews/{item.$id}",
+                "siteWide": true,
+                "fields": {
+                  "status": "rejected",
+                  "moderationReason": {
+                    "$orNull": "{form.reason}"
+                  },
+                  "moderatedAtMs": {
+                    "$nowMs": true
+                  }
+                }
+              },
+              "success": "Rejected",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "spam",
+                  "options": [
+                    {
+                      "value": "spam",
+                      "label": "Spam or advertising"
+                    },
+                    {
+                      "value": "abusive",
+                      "label": "Abusive or hateful"
+                    },
+                    {
+                      "value": "off_topic",
+                      "label": "Not about the product"
+                    },
+                    {
+                      "value": "private_information",
+                      "label": "Shares private information"
+                    }
+                  ],
+                  "help": "Reviews can’t be hidden for being negative."
+                }
+              ],
+              "destructive": true
+            },
+            {
+              "id": "hide",
+              "label": "Hide…",
+              "icon": "xmark.circle|cancel",
+              "when": "item.status != rejected && item.status != hidden && item.status != pending",
+              "write": {
+                "doc": "hosts/{site.id}/reviews/{item.$id}",
+                "siteWide": true,
+                "fields": {
+                  "status": "hidden",
+                  "moderationReason": {
+                    "$orNull": "{form.reason}"
+                  },
+                  "moderatedAtMs": {
+                    "$nowMs": true
+                  }
+                }
+              },
+              "success": "Hidden",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "spam",
+                  "options": [
+                    {
+                      "value": "spam",
+                      "label": "Spam or advertising"
+                    },
+                    {
+                      "value": "abusive",
+                      "label": "Abusive or hateful"
+                    },
+                    {
+                      "value": "off_topic",
+                      "label": "Not about the product"
+                    },
+                    {
+                      "value": "private_information",
+                      "label": "Shares private information"
+                    }
+                  ],
+                  "help": "Reviews can’t be hidden for being negative."
+                }
+              ],
+              "destructive": true
+            },
+            {
+              "id": "reply",
+              "label": "Reply",
+              "icon": "reply|reply",
+              "when": "!item.reply",
+              "prompt": [
+                {
+                  "key": "reply",
+                  "label": "Public seller reply",
+                  "kind": "multiline"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/reviews/{item.$id}",
+                "siteWide": true,
+                "fields": {
+                  "reply": {
+                    "$orNull": "{form.reply:take/500}"
+                  }
+                }
+              },
+              "success": "Reply saved"
+            },
+            {
+              "id": "editReply",
+              "label": "Edit reply",
+              "icon": "pencil|edit",
+              "when": "item.reply",
+              "prompt": [
+                {
+                  "key": "reply",
+                  "label": "Public seller reply",
+                  "kind": "multiline",
+                  "initial": "{item.reply}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/reviews/{item.$id}",
+                "siteWide": true,
+                "fields": {
+                  "reply": {
+                    "$orNull": "{form.reply:take/500}"
+                  }
+                }
+              },
+              "success": "Reply saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.suppliers",
+      "title": "Dropship suppliers",
+      "label": "Dropship suppliers",
+      "subtitle": "Route paid orders to a fulfillment partner",
+      "icon": "local_shipping|local_shipping",
+      "scope": "site",
+      "load": {
+        "gate": {
+          "entitlement": "dropshipRouting"
+        },
+        "suppliers": {
+          "query": {
+            "collection": "hosts/{site.id}/suppliers",
+            "limit": 100
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "locked",
+          "tone": "info",
+          "when": "!data.gate.carried",
+          "text": "Dropship routing forwards each paid order to the right supplier by email or signed webhook, and takes tracking numbers back without the supplier needing an Aglyn account. Included from {data.gate.label}."
+        },
+        {
+          "type": "list",
+          "id": "suppliers",
+          "when": "data.gate.carried",
+          "title": "Suppliers",
+          "items": "data.suppliers.items",
+          "empty": "Route paid orders straight to a fulfillment partner: add a supplier, then assign it on products.",
+          "icon": "local_shipping|local_shipping",
+          "primary": "{item.name}",
+          "secondary": "{item.email} {item.webhookUrl}",
+          "badges": [
+            {
+              "text": "No delivery method set",
+              "tone": "warning",
+              "when": "!item.email && !item.webhookUrl"
+            }
+          ],
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "email",
+                  "label": "Notification email",
+                  "kind": "email",
+                  "help": "Gets order details + a tracking link per sale",
+                  "initial": "{item.email}"
+                },
+                {
+                  "key": "webhookUrl",
+                  "label": "Webhook URL",
+                  "kind": "url",
+                  "placeholder": "https://…",
+                  "initial": "{item.webhookUrl}"
+                },
+                {
+                  "key": "webhookSecret",
+                  "label": "Webhook secret",
+                  "kind": "text",
+                  "help": "Payloads carry an x-aglyn-signature HMAC header",
+                  "initial": "{item.webhookSecret}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/suppliers/{item.$id}",
+                "fields": {
+                  "name": "{form.name:take/80}",
+                  "email": {
+                    "$orNull": "{form.email}"
+                  },
+                  "webhookUrl": {
+                    "$orNull": "{form.webhookUrl}"
+                  },
+                  "webhookSecret": {
+                    "$orNull": "{form.webhookSecret}"
+                  }
+                }
+              },
+              "success": "Supplier saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.name}? Products assigned to “{item.name}” stop routing; orders already sent are unaffected.",
+              "write": {
+                "delete": "hosts/{site.id}/suppliers/{item.$id}"
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "when": "data.gate.carried",
+          "items": [
+            {
+              "id": "addSupplier",
+              "label": "Add supplier",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "email",
+                  "label": "Notification email",
+                  "kind": "email",
+                  "help": "Gets order details + a tracking link per sale"
+                },
+                {
+                  "key": "webhookUrl",
+                  "label": "Webhook URL",
+                  "kind": "url",
+                  "placeholder": "https://…"
+                },
+                {
+                  "key": "webhookSecret",
+                  "label": "Webhook secret",
+                  "kind": "text",
+                  "help": "Payloads carry an x-aglyn-signature HMAC header"
+                }
+              ],
+              "write": {
+                "add": "hosts/{site.id}/suppliers",
+                "fields": {
+                  "name": "{form.name:take/80}",
+                  "email": {
+                    "$orNull": "{form.email}"
+                  },
+                  "webhookUrl": {
+                    "$orNull": "{form.webhookUrl}"
+                  },
+                  "webhookSecret": {
+                    "$orNull": "{form.webhookSecret}"
+                  }
+                }
+              },
+              "success": "Supplier saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.locations",
+      "title": "Inventory locations",
+      "label": "Inventory locations",
+      "subtitle": "Track stock per warehouse or storefront",
+      "icon": "location_on|location_on",
+      "scope": "site",
+      "load": {
+        "locations": {
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "limit": 25,
+            "orderBy": "name"
+          }
+        },
+        "count": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "aggregate": {
+              "count": true
+            }
+          }
+        },
+        "plan": {
+          "optional": true,
+          "url": "/api/orgs/entitlements?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "locations",
+          "items": "data.locations.items",
+          "empty": "Track stock per warehouse or storefront. Without locations, every variant has a single stock count.",
+          "icon": "location_on|location_on",
+          "primary": "{item.name}",
+          "badges": [
+            {
+              "text": "Pickup",
+              "tone": "neutral",
+              "when": "item.pickup.enabled == true"
+            },
+            {
+              "text": "Default",
+              "tone": "neutral",
+              "when": "item.isDefault"
+            }
+          ],
+          "actions": [
+            {
+              "id": "pickup",
+              "label": "Pickup",
+              "icon": "storefront|storefront",
+              "prompt": [
+                {
+                  "key": "enabled",
+                  "label": "Buyers can pick up orders here",
+                  "kind": "toggle",
+                  "initial": "{?item.pickup.enabled == true}",
+                  "help": "Buyers choose this location at checkout. The order’s stock comes off this location, and the buyer is emailed when you mark the order ready. Add this location’s address so buyers know where to go."
+                },
+                {
+                  "key": "hours",
+                  "label": "Pickup hours",
+                  "kind": "multiline",
+                  "initial": "{item.pickup.hours}",
+                  "placeholder": "Mo-Fr 09:00-17:00",
+                  "help": "One line for each set of days: Mo-Fr 09:00-17:00, Sa 10:00-14:00."
+                },
+                {
+                  "key": "instructions",
+                  "label": "Arrival instructions",
+                  "kind": "multiline",
+                  "initial": "{item.pickup.instructions}",
+                  "placeholder": "Ring the bell at the side door and give your order number."
+                },
+                {
+                  "key": "ready",
+                  "label": "Usually ready in",
+                  "kind": "select",
+                  "initial": "{item.pickup.readyWithinMinutes}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Don’t say"
+                    },
+                    {
+                      "value": "30",
+                      "label": "30 minutes"
+                    },
+                    {
+                      "value": "60",
+                      "label": "1 hour"
+                    },
+                    {
+                      "value": "120",
+                      "label": "2 hours"
+                    },
+                    {
+                      "value": "240",
+                      "label": "4 hours"
+                    },
+                    {
+                      "value": "1440",
+                      "label": "1 day"
+                    },
+                    {
+                      "value": "2880",
+                      "label": "2 days"
+                    }
+                  ]
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/locations/{item.$id}",
+                "fields": {
+                  "pickup": {
+                    "enabled": "{form.enabled}",
+                    "hours": {
+                      "$orNull": "{form.hours:take/600}"
+                    },
+                    "instructions": {
+                      "$orNull": "{form.instructions:take/400}"
+                    },
+                    "readyWithinMinutes": {
+                      "$orNull": {
+                        "$number": "{form.ready}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Pickup saved"
+            },
+            {
+              "id": "address",
+              "label": "{item.postalAddress.line1|'Add address'}",
+              "icon": "location_on|location_on",
+              "prompt": [
+                {
+                  "key": "line1",
+                  "label": "Street address",
+                  "kind": "text",
+                  "initial": "{item.postalAddress.line1}"
+                },
+                {
+                  "key": "line2",
+                  "label": "Apartment, suite (optional)",
+                  "kind": "text",
+                  "initial": "{item.postalAddress.line2}"
+                },
+                {
+                  "key": "city",
+                  "label": "City",
+                  "kind": "text",
+                  "initial": "{item.postalAddress.city}"
+                },
+                {
+                  "key": "state",
+                  "label": "State or region",
+                  "kind": "text",
+                  "initial": "{item.postalAddress.state}"
+                },
+                {
+                  "key": "postalCode",
+                  "label": "Postal code",
+                  "kind": "text",
+                  "initial": "{item.postalAddress.postalCode}"
+                },
+                {
+                  "key": "country",
+                  "label": "Country (two letters)",
+                  "kind": "text",
+                  "initial": "{item.postalAddress.country}",
+                  "pattern": "^[A-Za-z]{2}$"
+                },
+                {
+                  "key": "phone",
+                  "label": "Phone",
+                  "kind": "text",
+                  "initial": "{item.postalAddress.phone}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/locations/{item.$id}",
+                "fields": {
+                  "postalAddress": {
+                    "line1": {
+                      "$orNull": "{form.line1:take/120}"
+                    },
+                    "line2": {
+                      "$orNull": "{form.line2:take/120}"
+                    },
+                    "city": {
+                      "$orNull": "{form.city:take/120}"
+                    },
+                    "state": {
+                      "$orNull": "{form.state:take/120}"
+                    },
+                    "postalCode": {
+                      "$orNull": "{form.postalCode:take/120}"
+                    },
+                    "phone": {
+                      "$orNull": "{form.phone:take/120}"
+                    },
+                    "country": {
+                      "$orNull": "{form.country:upper/2}"
+                    }
+                  }
+                }
+              },
+              "success": "Address saved"
+            },
+            {
+              "id": "default",
+              "label": "Make default",
+              "icon": "check|check",
+              "when": "!item.isDefault",
+              "write": {
+                "steps": [
+                  {
+                    "each": {
+                      "items": "data.locations.items",
+                      "filter": "item.isDefault && item.$id != @parent.$id"
+                    },
+                    "doc": "hosts/{site.id}/locations/{item.$id}",
+                    "fields": {
+                      "isDefault": false
+                    }
+                  },
+                  {
+                    "doc": "hosts/{site.id}/locations/{item.$id}",
+                    "fields": {
+                      "isDefault": true
+                    }
+                  }
+                ]
+              },
+              "success": "Default location changed"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.name}? Stock bucketed under “{item.name}” folds back into the flat totals; adjust counts afterward if needed.",
+              "write": {
+                "delete": "hosts/{site.id}/locations/{item.$id}"
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addLocation",
+              "label": "Add location",
+              "icon": "plus|add",
+              "url": "/api/hosts/resources",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "New location",
+                  "kind": "text",
+                  "required": true,
+                  "placeholder": "Main warehouse"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "resource": "location",
+                "data": {
+                  "name": "{form.name:take/80}",
+                  "isDefault": "{?!data.locations.items.0}"
+                }
+              },
+              "success": "Location added"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "quota",
+          "rows": [
+            {
+              "label": "Locations",
+              "value": "{data.count.count|'0'}/{data.plan.quotas.inventoryLocations|'∞'} locations on your plan",
+              "when": "data.plan.quotas"
+            },
+            {
+              "label": "Locations",
+              "value": "{data.count.count|'0'} locations · checking your plan…",
+              "when": "!data.plan.quotas"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.tax",
+      "title": "Taxes",
+      "label": "Taxes",
+      "subtitle": "Sales tax rates, lodging and service tax",
+      "icon": "percent|percent",
+      "scope": "site",
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "undecided",
+          "tone": "warning",
+          "when": "!data.store.tax.mode",
+          "text": "Choose how this store handles sales tax and save. Until you do, checkout is turned off — we won’t take an order we can’t tax correctly."
+        },
+        {
+          "type": "form",
+          "id": "calculation",
+          "title": "Calculation",
+          "fields": [
+            {
+              "key": "mode",
+              "label": "Calculation",
+              "kind": "select",
+              "initial": "{data.store.tax.mode|'manual'}",
+              "options": [
+                {
+                  "value": "manual",
+                  "label": "Manual rates (below)"
+                },
+                {
+                  "value": "stripe",
+                  "label": "Stripe Tax (automatic)"
+                },
+                {
+                  "value": "none",
+                  "label": "Don’t collect sales tax"
+                }
+              ],
+              "help": "Stripe Tax calculates per buyer location at checkout; activate Stripe Tax in your Stripe dashboard first. Don’t collect sales tax: this store adds no sales tax to any order. Orders still go through — the decision is recorded, not the tax."
+            },
+            {
+              "key": "pricesIncludeTax",
+              "label": "Prices include tax (VAT-style)",
+              "kind": "toggle",
+              "initial": "{?data.store.tax.pricesIncludeTax == true}",
+              "when": "form.mode == manual"
+            },
+            {
+              "key": "originCountry",
+              "label": "Origin country",
+              "kind": "text",
+              "initial": "{data.store.tax.origin.country}",
+              "placeholder": "US",
+              "pattern": "^[A-Za-z]{2}$",
+              "when": "form.mode == manual",
+              "help": "Where this store ships or sells FROM — the jurisdiction the manual rates are applied from. Not the address your workspace is billed at by Aglyn, and not where your payouts are sent."
+            },
+            {
+              "key": "originState",
+              "label": "Origin state",
+              "kind": "text",
+              "initial": "{data.store.tax.origin.state}",
+              "placeholder": "TX",
+              "when": "form.mode == manual"
+            }
+          ],
+          "submit": {
+            "label": "Save tax settings",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "fields": {
+                "tax": {
+                  "mode": "{form.mode}",
+                  "pricesIncludeTax": "{form.pricesIncludeTax}",
+                  "origin": {
+                    "country": {
+                      "$orNull": "{form.originCountry:upper/2}"
+                    },
+                    "state": {
+                      "$orNull": "{form.originState:upper/3}"
+                    }
+                  }
+                }
+              }
+            },
+            "success": "Tax settings saved"
+          }
+        },
+        {
+          "type": "list",
+          "id": "rates",
+          "title": "Manual rates",
+          "when": "data.store.tax.mode != stripe && data.store.tax.mode != none",
+          "items": "data.store.tax.rates",
+          "empty": "No rates yet. The most specific rate for a destination wins.",
+          "icon": "percent|percent",
+          "primary": "{item.country} {item.state}",
+          "secondary": "{item.pct}% {item.label}",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "country",
+                  "label": "Country",
+                  "kind": "text",
+                  "required": true,
+                  "pattern": "^[A-Za-z]{2}$",
+                  "initial": "{item.country}"
+                },
+                {
+                  "key": "state",
+                  "label": "State",
+                  "kind": "text",
+                  "initial": "{item.state}"
+                },
+                {
+                  "key": "pct",
+                  "label": "%",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0,
+                  "initial": "{item.pct}"
+                },
+                {
+                  "key": "label",
+                  "label": "Label",
+                  "kind": "text",
+                  "placeholder": "Sales tax",
+                  "initial": "{item.label}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "tax": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.tax.rates}",
+                        "key": "*",
+                        "match": "{item}",
+                        "value": {
+                          "country": "{form.country:upper/2}",
+                          "state": "{form.state:upper/3}",
+                          "pct": "{form.pct}",
+                          "label": "{form.label}"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Rate saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "tax": {
+                    "rates": {
+                      "$without": {
+                        "list": "{data.store.tax.rates}",
+                        "item": "{item}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "addRate",
+          "when": "data.store.tax.mode != stripe && data.store.tax.mode != none",
+          "items": [
+            {
+              "id": "add",
+              "label": "Add rate",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "country",
+                  "label": "Country",
+                  "kind": "text",
+                  "required": true,
+                  "pattern": "^[A-Za-z]{2}$"
+                },
+                {
+                  "key": "state",
+                  "label": "State",
+                  "kind": "text"
+                },
+                {
+                  "key": "pct",
+                  "label": "%",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0
+                },
+                {
+                  "key": "label",
+                  "label": "Label",
+                  "kind": "text",
+                  "placeholder": "Sales tax"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "tax": {
+                    "rates": {
+                      "$append": {
+                        "list": "{data.store.tax.rates}",
+                        "item": {
+                          "country": "{form.country:upper/2}",
+                          "state": "{form.state:upper/3}",
+                          "pct": "{form.pct}",
+                          "label": "{form.label}"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Rate saved"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "lodging",
+          "title": "Lodging tax",
+          "fields": [
+            {
+              "key": "pct",
+              "label": "Rate %",
+              "kind": "number",
+              "min": 0,
+              "max": 100,
+              "initial": "{data.store.tax.lodging.pct}",
+              "placeholder": "0"
+            },
+            {
+              "key": "label",
+              "label": "Label",
+              "kind": "text",
+              "initial": "{data.store.tax.lodging.label}",
+              "placeholder": "Occupancy tax",
+              "help": "Shown to the guest on the receipt"
+            }
+          ],
+          "footer": "Charged on reservations, on top of the price, using the rate you enter here. It is separate from the sales tax above because occupancy tax is its own regime with its own rates and its own return. Leave it blank to charge none — that is the default. Aglyn applies the rate you enter and records what was charged. It does not determine whether this tax applies to you, at what rate, or where it should be paid — that is yours to decide. On a reservation that takes a deposit, the rate is applied to the deposit — the amount actually charged here — not to the whole stay. If tax is due on the full stay, collect the difference the same way you collect the rest of the balance.",
+          "submit": {
+            "label": "Save lodging tax",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "fields": {
+                "tax": {
+                  "lodging": {
+                    "pct": {
+                      "$orNull": "{form.pct}"
+                    },
+                    "label": {
+                      "$orNull": "{form.label}"
+                    }
+                  }
+                }
+              }
+            },
+            "success": "Tax settings saved"
+          }
+        },
+        {
+          "type": "form",
+          "id": "service",
+          "title": "Service tax",
+          "fields": [
+            {
+              "key": "pct",
+              "label": "Rate %",
+              "kind": "number",
+              "min": 0,
+              "max": 100,
+              "initial": "{data.store.tax.service.pct}",
+              "placeholder": "0"
+            },
+            {
+              "key": "label",
+              "label": "Label",
+              "kind": "text",
+              "initial": "{data.store.tax.service.label}",
+              "placeholder": "Service tax",
+              "help": "Shown to the client on the receipt"
+            }
+          ],
+          "footer": "Charged on paid bookings, on top of the price, using the rate you enter here. It is separate from the sales tax above because whether a service is taxable is often a different question from whether goods are. Leave it blank to charge none — that is the default. Aglyn applies the rate you enter and records what was charged. It does not determine whether this tax applies to you, at what rate, or where it should be paid — that is yours to decide.",
+          "submit": {
+            "label": "Save service tax",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "fields": {
+                "tax": {
+                  "service": {
+                    "pct": {
+                      "$orNull": "{form.pct}"
+                    },
+                    "label": {
+                      "$orNull": "{form.label}"
+                    }
+                  }
+                }
+              }
+            },
+            "success": "Tax settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "commerce.payments",
+      "title": "Payments",
+      "label": "Payments",
+      "subtitle": "Your Stripe account and the fee on each sale",
+      "icon": "payments|payments",
+      "scope": "site",
+      "load": {
+        "profile": {
+          "doc": "profiles/{user.uid}"
+        },
+        "plan": {
+          "optional": true,
+          "url": "/api/orgs/entitlements?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "account",
+          "title": "Payments",
+          "rows": [
+            {
+              "label": "Stripe account",
+              "value": "Charges enabled",
+              "chip": true,
+              "tone": "success",
+              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode == true,false"
+            },
+            {
+              "label": "Stripe account",
+              "value": "Not verified",
+              "chip": true,
+              "tone": "error",
+              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode != true,false"
+            },
+            {
+              "label": "Stripe account",
+              "value": "Not set up",
+              "chip": true,
+              "tone": "warning",
+              "when": "!data.profile.stripeChargesEnabled"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "unverified",
+          "tone": "error",
+          "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode != true,false",
+          "text": "Your Stripe account has not been verified for payments on this site, so sales will be refused. Set up payments again to verify it — if it was connected against Stripe test mode, you will need to connect a live account."
+        },
+        {
+          "type": "notice",
+          "id": "paid",
+          "tone": "info",
+          "when": "data.plan.features && !data.plan.features.commerce",
+          "text": "Selling requires a paid plan — upgrade on the billing page."
+        },
+        {
+          "type": "fields",
+          "id": "fees",
+          "when": "data.plan.quotas",
+          "title": "Platform fee on each sale",
+          "rows": [
+            {
+              "label": "Physical products",
+              "value": "{data.plan.quotas.transactionFeePhysicalPct}%"
+            },
+            {
+              "label": "Digital products, services & bookings",
+              "value": "{data.plan.quotas.transactionFeeDigitalPct}%"
+            }
+          ],
+          "footer": "Buyers pay on your own Stripe account; Aglyn LLC collects a platform fee per sale based on your plan. Card processing is passed through at cost on top of that: 2.9–6% + 30¢ per online sale, what Stripe charges to take the payment. It is not a Aglyn LLC margin."
+        },
+        {
+          "type": "notice",
+          "id": "higher",
+          "tone": "info",
+          "when": "data.plan.quotas.transactionFeePhysicalPct > 0 || data.plan.quotas.transactionFeeDigitalPct > 0",
+          "text": "Higher plans reduce fees to 0%. The fee is charged on the sale, not on how it was paid — in-person cash and room-charge sales carry it too. On card sales it is deducted from your Stripe payout; on cash and room-charge sales there is no payout to deduct from, so it is added to your monthly Aglyn LLC invoice instead."
+        },
+        {
+          "type": "notice",
+          "id": "payout",
+          "tone": "warning",
+          "when": "data.profile.lastPayoutFailureAtMs",
+          "text": "A payout of {data.profile.lastPayoutFailureCents:cents} did not reach your bank on {data.profile.lastPayoutFailureAtMs:date} — {data.profile.lastPayoutFailureReason|'Stripe did not say why'} The money is still in your Stripe account. Open Stripe to fix your payout details."
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "when": "org.owner",
+          "items": [
+            {
+              "id": "setup",
+              "label": "Set up payments",
+              "icon": "payments|payments",
+              "when": "!data.profile.stripeChargesEnabled || data.profile.stripeAccountLivemode != true,false",
+              "url": "/api/commerce/connect",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "open": "url",
+              "instead": [
+                {
+                  "when": "response.chargesEnabled && response.payoutsEnabled == false",
+                  "text": "Connected — payouts are not released yet",
+                  "open": "url"
+                },
+                {
+                  "when": "response.chargesEnabled",
+                  "text": "Payments are enabled"
+                }
+              ],
+              "success": "Opening Stripe…"
+            },
+            {
+              "id": "refresh",
+              "label": "Refresh status",
+              "icon": "refresh|refresh",
+              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode == true,false",
+              "url": "/api/commerce/connect",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "open": "url",
+              "instead": [
+                {
+                  "when": "response.chargesEnabled && response.payoutsEnabled == false",
+                  "text": "Connected — payouts are not released yet",
+                  "open": "url"
+                },
+                {
+                  "when": "response.chargesEnabled",
+                  "text": "Payments are enabled"
+                }
+              ],
+              "success": "Opening Stripe…"
+            },
+            {
+              "id": "payouts",
+              "label": "View payouts in Stripe",
+              "icon": "open_in_new|open_in_new",
+              "when": "data.profile.stripeChargesEnabled && data.profile.stripeAccountLivemode == true,false",
+              "url": "/api/commerce/connect",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "open": "dashboardUrl"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "ownerOnly",
+          "tone": "info",
+          "when": "!org.owner",
+          "text": "Only the organization owner can set up payments."
+        }
+      ]
+    },
+    {
+      "id": "commerce.paymentMethods",
+      "title": "Payment methods",
+      "label": "Payment methods",
+      "subtitle": "What shoppers may pay with",
+      "icon": "credit_card|credit_card",
+      "scope": "site",
+      "constants": {
+        "methods": [
+          {
+            "id": "apple_pay",
+            "label": "Apple Pay",
+            "kind": "wallet",
+            "capability": false,
+            "requirements": "Safari on a Mac, iPhone or iPad with a card in Apple Wallet. Your site’s domain is registered with Apple Pay for you.",
+            "limits": "Same as cards."
+          },
+          {
+            "id": "google_pay",
+            "label": "Google Pay",
+            "kind": "wallet",
+            "capability": false,
+            "requirements": "Chrome or an Android device with a card saved to Google Pay. With Stripe Tax on, Google Pay shows when the checkout collects a shipping address.",
+            "limits": "Same as cards."
+          },
+          {
+            "id": "link",
+            "label": "Link",
+            "kind": "wallet",
+            "capability": false,
+            "requirements": "Shoppers who saved a card or bank with Link check out in one step.",
+            "limits": "Same as cards."
+          },
+          {
+            "id": "klarna",
+            "label": "Klarna",
+            "kind": "bnpl",
+            "capability": true,
+            "requirements": "US shoppers paying in USD. Pay in full, in 30 days, in 4, or monthly financing.",
+            "limits": "From $10; the highest amount depends on the shopper (financing up to $10,000)."
+          },
+          {
+            "id": "afterpay_clearpay",
+            "label": "Afterpay",
+            "kind": "bnpl",
+            "capability": true,
+            "requirements": "US shoppers paying in USD. Pay in 4 interest-free installments.",
+            "limits": "$1 to $4,000. One-time purchases only."
+          },
+          {
+            "id": "affirm",
+            "label": "Affirm",
+            "kind": "bnpl",
+            "capability": true,
+            "requirements": "US shoppers paying in USD. Pay in 4, or monthly installments up to 36 months.",
+            "limits": "$50 to $30,000. One-time purchases only."
+          },
+          {
+            "id": "cashapp",
+            "label": "Cash App Pay",
+            "kind": "wallet",
+            "capability": true,
+            "requirements": "US shoppers with Cash App, paying in USD.",
+            "limits": "USD only."
+          },
+          {
+            "id": "amazon_pay",
+            "label": "Amazon Pay",
+            "kind": "wallet",
+            "capability": true,
+            "requirements": "Shoppers pay with the card and address saved to their Amazon account.",
+            "limits": "USD only."
+          },
+          {
+            "id": "crypto",
+            "label": "Stablecoins (crypto)",
+            "kind": "crypto",
+            "capability": true,
+            "requirements": "Shoppers pay in USDC or another supported stablecoin from their crypto wallet; you are paid in USD. Refunds go back to the shopper’s wallet as stablecoins, and these payments cannot be disputed.",
+            "limits": "USD only, up to $10,000 per payment."
+          }
+        ]
+      },
+      "load": {
+        "view": {
+          "url": "/api/commerce/payment-methods?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "text": "Cards are always on. Turn off anything you don’t want to offer. Stripe shows each method only on orders and to shoppers it suits, using the limits below."
+        },
+        {
+          "type": "notice",
+          "id": "readonly",
+          "tone": "info",
+          "when": "data.view.canEdit == false",
+          "text": "Only a site admin can change which payment methods your store offers."
+        },
+        {
+          "type": "list",
+          "id": "warnings",
+          "items": "data.view.warnings",
+          "primary": "{item}",
+          "icon": "warning|warning"
+        },
+        {
+          "type": "list",
+          "id": "methods",
+          "title": "Methods",
+          "items": "data.view.methods",
+          "icon": "credit_card|credit_card",
+          "filter": "item.platform != unavailable && item.platform || item.platform != unavailable && const.methods[id=item.id].kind != crypto",
+          "primary": "{const.methods[id=item.id].label}",
+          "secondary": "{const.methods[id=item.id].requirements}",
+          "tertiary": "{const.methods[id=item.id].limits}",
+          "badges": [
+            {
+              "text": "Connect Stripe first",
+              "tone": "neutral",
+              "when": "item.on && !data.view.accountConnected && const.methods[id=item.id].capability"
+            },
+            {
+              "text": "Ready",
+              "tone": "success",
+              "when": "item.on && data.view.accountConnected && const.methods[id=item.id].capability && item.capability == active"
+            },
+            {
+              "text": "Stripe is reviewing",
+              "tone": "warning",
+              "when": "item.on && data.view.accountConnected && const.methods[id=item.id].capability && item.capability == pending"
+            },
+            {
+              "text": "Stripe needs more details",
+              "tone": "warning",
+              "when": "item.on && data.view.accountConnected && const.methods[id=item.id].capability && item.capability == inactive"
+            },
+            {
+              "text": "Save to request",
+              "tone": "neutral",
+              "when": "item.on && data.view.accountConnected && const.methods[id=item.id].capability && item.capability == unrequested"
+            }
+          ],
+          "toggle": {
+            "value": "{item.on}",
+            "disabled": "data.view.canEdit == false",
+            "label": "{const.methods[id=item.id].label}",
+            "on": {
+              "label": "On",
+              "url": "/api/commerce/payment-methods",
+              "body": {
+                "hostId": "{site.id}",
+                "methods": {
+                  "{item.id}": true
+                }
+              },
+              "success": "Payment methods saved"
+            },
+            "off": {
+              "label": "Off",
+              "url": "/api/commerce/payment-methods",
+              "body": {
+                "hostId": "{site.id}",
+                "methods": {
+                  "{item.id}": false
+                }
+              },
+              "success": "Payment methods saved"
+            }
+          },
+          "actions": [
+            {
+              "id": "finish",
+              "label": "Finish in Stripe",
+              "icon": "open_in_new|open_in_new",
+              "when": "item.on && item.capability == inactive && data.view.canFinish != false",
+              "url": "/api/commerce/payment-methods",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "finish"
+              },
+              "open": "url"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "domains",
+          "title": "Wallet domains",
+          "items": "data.view.domains",
+          "icon": "language|language",
+          "empty": "No domains yet.",
+          "primary": "{item.domain}",
+          "badges": [
+            {
+              "text": "Apple Pay ready",
+              "tone": "success",
+              "when": "item.enabled && item.status.applePay == active"
+            },
+            {
+              "text": "Registered",
+              "tone": "neutral",
+              "when": "item.enabled && item.status.applePay != active"
+            },
+            {
+              "text": "Retrying",
+              "tone": "warning",
+              "when": "!item.enabled && item.lastError"
+            },
+            {
+              "text": "Registers on first checkout",
+              "tone": "neutral",
+              "when": "!item.enabled && !item.lastError"
+            }
+          ],
+          "footer": "Apple Pay shows only on a domain registered with Stripe. Your site’s domains are registered for you when you connect them and on the first in-page checkout."
+        }
+      ]
+    },
+    {
+      "id": "commerce.shipstation",
+      "title": "ShipStation",
+      "label": "ShipStation",
+      "subtitle": "Import orders and take shipments back",
+      "icon": "local_shipping|local_shipping",
+      "scope": "site",
+      "load": {
+        "status": {
+          "url": "/api/commerce/shipping-connectors?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "data.status.available == false && !data.status.connected",
+          "text": "ShipStation is not available on this site."
+        },
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "when": "!data.status.connected && data.status.available != false",
+          "text": "Already labeling in ShipStation? Connect it as a Custom Store: ShipStation imports the orders you still have to ship, and each label you buy there marks the order shipped here and emails your customer the tracking link. Only a site admin can connect it."
+        },
+        {
+          "type": "fields",
+          "id": "connection",
+          "when": "data.status.connected",
+          "title": "Paste these into ShipStation",
+          "rows": [
+            {
+              "label": "URL to custom XML page",
+              "value": "{app.origin}/api/commerce/shipstation/{site.id}"
+            },
+            {
+              "label": "Username",
+              "value": "{data.status.username}"
+            }
+          ],
+          "footer": "Anyone with the password can read the name and address on every order you ship. If it gets out, make a new password: the old one stops working at once."
+        },
+        {
+          "type": "fields",
+          "id": "statusNames",
+          "when": "data.status.connected",
+          "title": "Status names to type into ShipStation",
+          "rows": [
+            {
+              "label": "Unpaid Status",
+              "value": "unpaid"
+            },
+            {
+              "label": "Paid Status",
+              "value": "paid"
+            },
+            {
+              "label": "Shipped Status",
+              "value": "shipped"
+            },
+            {
+              "label": "Canceled Status",
+              "value": "canceled"
+            },
+            {
+              "label": "On-Hold Status",
+              "value": "on_hold"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "activity",
+          "when": "data.status.connected",
+          "rows": [
+            {
+              "label": "Last order import",
+              "value": "{data.status.lastExportAtMs|'Not yet':datetime}"
+            },
+            {
+              "label": "Last shipment received",
+              "value": "{data.status.lastShipNoticeAtMs|'Not yet':datetime}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect ShipStation",
+              "icon": "link|link",
+              "when": "!data.status.connected && data.status.available != false",
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "connect"
+              },
+              "reveal": "password",
+              "success": "ShipStation is connected."
+            },
+            {
+              "id": "show",
+              "label": "Show the password",
+              "icon": "visibility|visibility",
+              "when": "data.status.connected",
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "reveal"
+              },
+              "reveal": "password"
+            },
+            {
+              "id": "rotate",
+              "label": "New password",
+              "icon": "refresh|refresh",
+              "when": "data.status.connected",
+              "confirm": "Make a new password? The old one stops working at once.",
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "rotate"
+              },
+              "reveal": "password"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "link_off|link_off",
+              "destructive": true,
+              "when": "data.status.connected",
+              "confirm": "Disconnect ShipStation? ShipStation stops importing orders from this site, and shipments it sends back are refused. Orders already shipped stay shipped. You can connect again later with a new password.",
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "disconnect"
+              },
+              "success": "ShipStation is disconnected. It can no longer read your orders."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.shippingeasy",
+      "title": "ShippingEasy",
+      "label": "ShippingEasy",
+      "subtitle": "Send orders and take shipments back",
+      "icon": "local_shipping|local_shipping",
+      "scope": "site",
+      "load": {
+        "status": {
+          "url": "/api/commerce/shipping-connectors?connector=shippingeasy&hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "data.status.available == false && !data.status.connected",
+          "text": "ShippingEasy is not available on this site."
+        },
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "when": "!data.status.connected && data.status.available != false",
+          "text": "Labeling in ShippingEasy? Connect it with the API key, API secret and store API key from your ShippingEasy account: each order is sent there as it is paid, and each label you buy there marks the order shipped here and emails your customer the tracking link. Only a site admin can connect it."
+        },
+        {
+          "type": "notice",
+          "id": "attention",
+          "tone": "warning",
+          "when": "data.status.lastError",
+          "text": "{data.status.lastError.message} ({data.status.lastError.atMs:datetime})"
+        },
+        {
+          "type": "fields",
+          "id": "connection",
+          "when": "data.status.connected",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Needs attention",
+              "chip": true,
+              "tone": "warning",
+              "when": "data.status.lastError"
+            },
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tone": "success",
+              "when": "!data.status.lastError"
+            },
+            {
+              "label": "Callback URL",
+              "value": "{app.origin}/api/commerce/shippingeasy/{site.id}"
+            },
+            {
+              "label": "API key",
+              "value": "Ends in {data.status.apiKeyEnding}"
+            },
+            {
+              "label": "Store API key",
+              "value": "Ends in {data.status.storeApiKeyEnding}"
+            },
+            {
+              "label": "Last order sent",
+              "value": "{data.status.lastPushAtMs|'Not yet':datetime}"
+            },
+            {
+              "label": "Last shipment received",
+              "value": "{data.status.lastCallbackAtMs|'Not yet':datetime}"
+            }
+          ],
+          "footer": "Paste the callback URL into your API store’s settings in ShippingEasy, so each label marks the order shipped here."
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect ShippingEasy",
+              "icon": "link|link",
+              "when": "!data.status.connected && data.status.available != false",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "text",
+                  "required": true,
+                  "help": "In ShippingEasy, the API key and API secret are under Settings → API Credentials, and the store API key is on your API store under Settings → Stores & Orders. The secret is kept encrypted and is never shown again."
+                },
+                {
+                  "key": "apiSecret",
+                  "label": "API secret",
+                  "kind": "password",
+                  "required": true
+                },
+                {
+                  "key": "storeApiKey",
+                  "label": "Store API key",
+                  "kind": "text",
+                  "required": true
+                }
+              ],
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "connector": "shippingeasy",
+                "action": "connect",
+                "apiKey": "{form.apiKey}",
+                "apiSecret": "{form.apiSecret}",
+                "storeApiKey": "{form.storeApiKey}"
+              },
+              "success": "ShippingEasy is connected. Paste the callback URL into your ShippingEasy API store."
+            },
+            {
+              "id": "sync",
+              "label": "Send open orders",
+              "icon": "send|send",
+              "when": "data.status.connected",
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "connector": "shippingeasy",
+                "action": "sync"
+              },
+              "instead": [
+                {
+                  "when": "response.sync",
+                  "title": "Send open orders",
+                  "text": "{response.sync.sent:plural/order} sent to ShippingEasy, {response.sync.already} already there, {response.sync.failed} not sent."
+                }
+              ],
+              "success": "Sent."
+            },
+            {
+              "id": "keys",
+              "label": "Change keys",
+              "icon": "key|key",
+              "when": "data.status.connected",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "text",
+                  "required": true,
+                  "help": "In ShippingEasy, the API key and API secret are under Settings → API Credentials, and the store API key is on your API store under Settings → Stores & Orders. The secret is kept encrypted and is never shown again."
+                },
+                {
+                  "key": "apiSecret",
+                  "label": "API secret",
+                  "kind": "password",
+                  "required": true
+                },
+                {
+                  "key": "storeApiKey",
+                  "label": "Store API key",
+                  "kind": "text",
+                  "required": true
+                }
+              ],
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "connector": "shippingeasy",
+                "action": "connect",
+                "apiKey": "{form.apiKey}",
+                "apiSecret": "{form.apiSecret}",
+                "storeApiKey": "{form.storeApiKey}"
+              },
+              "success": "Keys saved"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "link_off|link_off",
+              "destructive": true,
+              "when": "data.status.connected",
+              "confirm": "Disconnect ShippingEasy? New orders stop going to ShippingEasy, and shipments it sends back are refused. Orders already there stay there, and orders already shipped stay shipped. The keys are deleted from Aglyn.",
+              "url": "/api/commerce/shipping-connectors",
+              "body": {
+                "hostId": "{site.id}",
+                "connector": "shippingeasy",
+                "action": "disconnect"
+              },
+              "success": "ShippingEasy is disconnected. New orders are no longer sent to it."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.orderWebhooks",
+      "title": "Order webhooks",
+      "label": "Order webhooks",
+      "subtitle": "Order and return events sent to your own systems",
+      "icon": "webhook|webhook",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "delivered",
+            "label": "Delivered"
+          },
+          {
+            "id": "retrying",
+            "label": "Retrying"
+          },
+          {
+            "id": "failed",
+            "label": "Failed"
+          }
+        ]
+      },
+      "load": {
+        "status": {
+          "url": "/api/commerce/order-webhooks",
+          "method": "POST",
+          "body": {
+            "hostId": "{site.id}",
+            "action": "status"
+          },
+          "optional": true
+        },
+        "endpoints": {
+          "query": {
+            "collection": "hosts/{site.id}/orderWebhooks",
+            "limit": 10,
+            "orderBy": "createdAtMs desc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "off",
+          "tone": "info",
+          "when": "!data.status.configured",
+          "text": "Order webhooks are not set up on this deployment."
+        },
+        {
+          "type": "list",
+          "id": "endpoints",
+          "when": "data.status.configured",
+          "items": "data.endpoints.items",
+          "empty": "Send order and return events to your own systems — a warehouse, an ERP or a script. Each event is signed so your endpoint can check it came from this store.",
+          "icon": "webhook|webhook",
+          "primary": "{item.url}",
+          "secondary": "{item.description}",
+          "tertiary": "{item.events} · secret ends {item.secretHint}",
+          "badges": [
+            {
+              "text": "On",
+              "tone": "success",
+              "when": "item.enabled"
+            },
+            {
+              "text": "Paused",
+              "tone": "neutral",
+              "when": "!item.enabled"
+            },
+            {
+              "text": "Last: {const.statuses[id=item.lastDeliveryStatus].label}",
+              "tone": "neutral",
+              "when": "item.lastDeliveryStatus"
+            }
+          ],
+          "actions": [
+            {
+              "id": "test",
+              "label": "Send test event",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "test",
+                "endpointId": "{item.$id}"
+              },
+              "icon": "send|send",
+              "when": "item.enabled",
+              "instead": [
+                {
+                  "when": "response.delivered",
+                  "text": "Test event delivered"
+                },
+                {
+                  "text": "Test event not delivered: {response.attempt.error|'no answer'}"
+                }
+              ],
+              "success": "Sent."
+            },
+            {
+              "id": "deliveries",
+              "label": "Deliveries",
+              "icon": "history|history",
+              "navigate": {
+                "screen": "commerce.orderWebhookDeliveries",
+                "params": {
+                  "endpointId": "{item.$id}"
+                }
+              }
+            },
+            {
+              "id": "edit",
+              "label": "Edit",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "endpointId": "{item.$id}",
+                "url": "{form.url}",
+                "description": "{form.description}",
+                "events": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "evt_",
+                    "keys": true
+                  }
+                }
+              },
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "url",
+                  "label": "Endpoint URL",
+                  "kind": "url",
+                  "required": true,
+                  "pattern": "^https://",
+                  "placeholder": "https://example.com/aglyn-webhooks",
+                  "help": "An https address on a public server. Redirects are not followed.",
+                  "initial": "{item.url}"
+                },
+                {
+                  "key": "description",
+                  "label": "Description",
+                  "kind": "text",
+                  "placeholder": "Warehouse",
+                  "initial": "{item.description}"
+                },
+                {
+                  "fieldsFrom": {
+                    "items": "data.status.events",
+                    "each": [
+                      {
+                        "key": "evt_{item.event}",
+                        "label": "{item.label} ({item.event})",
+                        "kind": "toggle",
+                        "help": "{item.description}",
+                        "initial": "{?parent.events[=item.event]}"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "success": "Endpoint saved"
+            },
+            {
+              "id": "pause",
+              "label": "Pause",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "endpointId": "{item.$id}",
+                "enabled": false
+              },
+              "icon": "pause_circle|pause_circle",
+              "when": "item.enabled"
+            },
+            {
+              "id": "resume",
+              "label": "Resume",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "endpointId": "{item.$id}",
+                "enabled": true
+              },
+              "icon": "play_circle|play_circle",
+              "when": "!item.enabled"
+            },
+            {
+              "id": "roll",
+              "label": "Roll secret",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "roll-secret",
+                "endpointId": "{item.$id}"
+              },
+              "icon": "refresh|refresh",
+              "confirm": "Roll the signing secret? A new secret signs every event from now on. Update your endpoint before the next order, or it will reject what it is sent.",
+              "reveal": "secret"
+            },
+            {
+              "id": "delete",
+              "label": "Delete",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "delete",
+                "endpointId": "{item.$id}"
+              },
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Delete {item.url}? It stops receiving order events. Its delivery log is kept for 30 days.",
+              "success": "Endpoint deleted"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "when": "data.status.configured",
+          "items": [
+            {
+              "id": "addEndpoint",
+              "label": "Add endpoint",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "create",
+                "url": "{form.url}",
+                "description": "{form.description}",
+                "events": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "evt_",
+                    "keys": true
+                  }
+                }
+              },
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "url",
+                  "label": "Endpoint URL",
+                  "kind": "url",
+                  "required": true,
+                  "pattern": "^https://",
+                  "placeholder": "https://example.com/aglyn-webhooks",
+                  "help": "An https address on a public server. Redirects are not followed."
+                },
+                {
+                  "key": "description",
+                  "label": "Description",
+                  "kind": "text",
+                  "placeholder": "Warehouse"
+                },
+                {
+                  "fieldsFrom": {
+                    "items": "data.status.events",
+                    "each": [
+                      {
+                        "key": "evt_{item.event}",
+                        "label": "{item.label} ({item.event})",
+                        "kind": "toggle",
+                        "help": "{item.description}",
+                        "initial": "true"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "reveal": "secret",
+              "success": "Endpoint added"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "count",
+          "when": "data.status.configured",
+          "rows": [
+            {
+              "label": "Endpoints",
+              "value": "{data.endpoints.items:count}/{data.status.maxEndpoints}"
+            }
+          ],
+          "footer": "A failed delivery is retried for about a day. Each request carries an Aglyn-Signature header, t=<timestamp>,v1=<signature>. The signature is the HMAC-SHA256, in hex, of the timestamp, a period and the raw body, keyed with the signing secret. Aglyn-Event-Id is the same on every retry."
+        }
+      ]
+    },
+    {
+      "id": "commerce.orderWebhookDeliveries",
+      "title": "Deliveries",
+      "label": "Webhook deliveries",
+      "icon": "history|history",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "delivered",
+            "label": "Delivered"
+          },
+          {
+            "id": "retrying",
+            "label": "Retrying"
+          },
+          {
+            "id": "failed",
+            "label": "Failed"
+          }
+        ]
+      },
+      "load": {
+        "status": {
+          "url": "/api/commerce/order-webhooks",
+          "method": "POST",
+          "body": {
+            "hostId": "{site.id}",
+            "action": "status"
+          },
+          "optional": true
+        },
+        "deliveries": {
+          "query": {
+            "collection": "hosts/{site.id}/orderWebhookDeliveries",
+            "limit": 50,
+            "orderBy": "createdAtMs desc",
+            "where": [
+              [
+                "endpointId",
+                "==",
+                "{params.endpointId}"
+              ],
+              [
+                "status",
+                "==",
+                "{params.status}",
+                "params.status"
+              ]
+            ]
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "actions",
+          "id": "filter",
+          "items": [
+            {
+              "id": "status",
+              "label": "Status",
+              "icon": "filter_alt|filter_alt",
+              "prompt": [
+                {
+                  "key": "status",
+                  "label": "Status",
+                  "kind": "select",
+                  "initial": "{params.status}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "All"
+                    },
+                    {
+                      "value": "delivered",
+                      "label": "Delivered"
+                    },
+                    {
+                      "value": "retrying",
+                      "label": "Retrying"
+                    },
+                    {
+                      "value": "failed",
+                      "label": "Failed"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.orderWebhookDeliveries",
+                "params": {
+                  "endpointId": "{params.endpointId}",
+                  "status": "{form.status}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "deliveries",
+          "items": "data.deliveries.items",
+          "empty": "No deliveries in the last 30 days.",
+          "icon": "history|history",
+          "primary": "{item.event} · {item.createdAtMs:datetime}",
+          "secondary": "{item.attempts:plural/attempt} · last {item.attempts.-1.httpStatus|'no answer'} {item.attempts.-1.error}",
+          "badges": [
+            {
+              "text": "Test event",
+              "tone": "neutral",
+              "when": "item.test"
+            },
+            {
+              "text": "{const.statuses[id=item.status].label}",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "body",
+              "label": "Body",
+              "icon": "description|description",
+              "reveal": "item.body"
+            },
+            {
+              "id": "resend",
+              "label": "Resend",
+              "icon": "send|send",
+              "url": "/api/commerce/order-webhooks",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "resend",
+                "deliveryId": "{item.$id}"
+              },
+              "instead": [
+                {
+                  "when": "response.delivered",
+                  "text": "Delivered"
+                },
+                {
+                  "text": "Not delivered: {response.attempt.error|'no answer'}"
+                }
+              ],
+              "success": "Sent."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

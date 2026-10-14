@@ -1,6 +1,185 @@
 {
-  "$comment": "The Commerce plugin's native screens, drawn by the shared spec renderer: Commerce settings, the store's settings hub, with the commerceSettings zone other plugins put their cards in (tax services, shipping labels, fulfillment networks and the rest, each its own spec in its own plugin). Grammar: docs/mobile/native-architecture.md section 13.",
+  "$comment": "The Commerce plugin's hub screens, drawn by the shared spec renderer: Store (every area the console's Commerce page has), Promotions, and Commerce settings, the store's settings hub, with the commerceSettings zone other plugins put their cards in (tax services, shipping labels, fulfillment networks and the rest, each its own spec in its own plugin). Grammar: docs/mobile/native-architecture.md section 13.",
   "screens": [
+    {
+      "id": "commerce.manage",
+      "title": "Store",
+      "label": "Store",
+      "subtitle": "Catalog, orders, promotions, settings and reports",
+      "icon": "storefront|storefront",
+      "scope": "site",
+      "group": "site",
+      "order": 39,
+      "blocks": [
+        {
+          "type": "links",
+          "id": "catalog",
+          "title": "Catalog",
+          "items": [
+            {
+              "title": "Products",
+              "icon": "inventory_2|inventory_2",
+              "screen": "commerce.products",
+              "subtitle": "Add, edit and count stock"
+            },
+            {
+              "title": "Categories",
+              "icon": "category|category",
+              "screen": "commerce.categories",
+              "subtitle": "Group products"
+            },
+            {
+              "title": "Collections",
+              "icon": "view_agenda|view_agenda",
+              "screen": "commerce.collections",
+              "subtitle": "Hand-picked and smart collections"
+            },
+            {
+              "title": "Stock movements",
+              "icon": "swap_horiz|swap_horiz",
+              "screen": "commerce.stockMovements",
+              "subtitle": "Why a count changed"
+            },
+            {
+              "title": "Member updates",
+              "icon": "forum|forum",
+              "screen": "commerce.memberPosts",
+              "subtitle": "Posts only your subscribers can see"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "orders",
+          "title": "Orders",
+          "items": [
+            {
+              "title": "Orders",
+              "icon": "shopping_basket|shopping_basket",
+              "screen": "commerce.orders",
+              "subtitle": "Fulfill, refund and print"
+            },
+            {
+              "title": "Pickup & delivery",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.fulfillmentQueue",
+              "subtitle": "What to prepare, hand over and drive out"
+            },
+            {
+              "title": "Recovery & alerts",
+              "icon": "undo|undo",
+              "screen": "commerce.recovery",
+              "subtitle": "Checkouts shoppers left and sold-out alerts"
+            },
+            {
+              "title": "Returns",
+              "icon": "restore|restore",
+              "screen": "commerce.returns",
+              "subtitle": "Requests, receiving and refunds"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "sell",
+          "title": "Sell",
+          "items": [
+            {
+              "title": "Promotions",
+              "icon": "local_offer|local_offer",
+              "screen": "commerce.promotions",
+              "subtitle": "Discounts, coupons, gift cards and reviews"
+            },
+            {
+              "title": "Reservations",
+              "icon": "event|event",
+              "screen": "commerce.reservations",
+              "subtitle": "Resources and the stays booked against them"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "configure",
+          "title": "Settings",
+          "items": [
+            {
+              "title": "Commerce settings",
+              "icon": "settings|settings",
+              "screen": "commerce.settings",
+              "subtitle": "Payments, taxes, shipping and connected services"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "reports",
+          "title": "Reports",
+          "items": [
+            {
+              "title": "Sales",
+              "icon": "insights|insights",
+              "screen": "commerce.sales",
+              "subtitle": "Sales and traffic"
+            },
+            {
+              "title": "Storefront sales tax",
+              "icon": "receipt_long|receipt_long",
+              "screen": "commerce.taxSummary",
+              "subtitle": "What your storefront collected, by how it was calculated"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.promotions",
+      "title": "Promotions",
+      "label": "Promotions",
+      "subtitle": "Discounts, coupons, gift cards and reviews",
+      "icon": "local_offer|local_offer",
+      "scope": "site",
+      "order": 38,
+      "blocks": [
+        {
+          "type": "links",
+          "id": "money",
+          "items": [
+            {
+              "title": "Discounts",
+              "icon": "tag|sell",
+              "screen": "commerce.discounts",
+              "subtitle": "Codes and automatic promotions"
+            },
+            {
+              "title": "Coupons",
+              "icon": "ticket|local_offer",
+              "screen": "commerce.coupons",
+              "subtitle": "Percent-off codes buyers enter at checkout"
+            },
+            {
+              "title": "Gift cards",
+              "icon": "gift|card_giftcard",
+              "screen": "commerce.giftCards",
+              "subtitle": "Issued cards and what is left on them"
+            },
+            {
+              "title": "Review moderation",
+              "icon": "star|star",
+              "screen": "commerce.reviews",
+              "subtitle": "Approve, hide and reply to reviews"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commercePromotions",
+          "title": "Rewards",
+          "footer": "Rewards programs and other money-off tools that plugins add."
+        }
+      ]
+    },
     {
       "id": "commerce.settings",
       "title": "Commerce settings",
@@ -11,6 +190,97 @@
       "group": "site",
       "order": 40,
       "blocks": [
+        {
+          "type": "links",
+          "id": "store",
+          "title": "Store",
+          "items": [
+            {
+              "title": "Payments",
+              "icon": "payments|payments",
+              "screen": "commerce.payments",
+              "subtitle": "Your Stripe account and the fee on each sale"
+            },
+            {
+              "title": "Payment methods",
+              "icon": "credit_card|credit_card",
+              "screen": "commerce.paymentMethods",
+              "subtitle": "What shoppers may pay with"
+            },
+            {
+              "title": "Store settings",
+              "icon": "storefront|storefront",
+              "screen": "commerce.storeSettings",
+              "subtitle": "Templates, checkout and receipts"
+            },
+            {
+              "title": "Return settings",
+              "icon": "settings|settings",
+              "screen": "commerce.returnSettings",
+              "subtitle": "Online requests, the window and which products"
+            },
+            {
+              "title": "Customer notifications",
+              "icon": "mail|mail",
+              "screen": "commerce.notifications",
+              "subtitle": "The emails customers get about their orders"
+            },
+            {
+              "title": "Reviews",
+              "icon": "star|star",
+              "screen": "commerce.reviewSettings",
+              "subtitle": "Who may review, and the request email"
+            },
+            {
+              "title": "Taxes",
+              "icon": "percent|percent",
+              "screen": "commerce.tax",
+              "subtitle": "Sales tax rates, lodging and service tax"
+            },
+            {
+              "title": "Inventory locations",
+              "icon": "location_on|location_on",
+              "screen": "commerce.locations",
+              "subtitle": "Stock per warehouse or storefront, and pickup"
+            },
+            {
+              "title": "Shipping",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.shipping",
+              "subtitle": "Zones, rates and local pickup"
+            },
+            {
+              "title": "Local delivery",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.localDelivery",
+              "subtitle": "Deliver orders yourself"
+            },
+            {
+              "title": "Dropship suppliers",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.suppliers",
+              "subtitle": "Route paid orders to a fulfillment partner"
+            },
+            {
+              "title": "ShipStation",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.shipstation",
+              "subtitle": "Import orders and take shipments back"
+            },
+            {
+              "title": "ShippingEasy",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.shippingeasy",
+              "subtitle": "Send orders and take shipments back"
+            },
+            {
+              "title": "Order webhooks",
+              "icon": "webhook|webhook",
+              "screen": "commerce.orderWebhooks",
+              "subtitle": "Order and return events sent to your own systems"
+            }
+          ]
+        },
         {
           "type": "zone",
           "id": "zone",

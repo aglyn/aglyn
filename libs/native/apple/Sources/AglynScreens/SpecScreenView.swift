@@ -441,7 +441,8 @@ struct SpecScreenBody: View {
       } else if let message, !message.isEmpty {
         show(message, .success)
       }
-      if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) {
+      // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
+      if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) ?? ScreenValues.lookup(reveal, in: after) {
         revealed = (action.label, ScreenValues.text(value))
       }
       if let openPath = action.openURL, let link = ScreenValues.lookup(openPath, in: response ?? .null)?.stringValue,

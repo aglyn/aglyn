@@ -277,6 +277,33 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(field.choices(in: context).map(\.value), ["a2"])
     XCTAssertEqual(ScreenValues.render("{data.accounts.*.name}", in: context), "Sales, Main bank")
   }
+
+  /// A report picks one of the last twelve months, newest first, each ending where the next begins.
+  func testTheLastTwelveMonthsRunNewestFirstWithoutGaps() throws {
+    let now = ScreenSession.now(Date(timeIntervalSince1970: 1_792_000_000))
+    let months = ScreenValues.lookup("months", in: now).array
+    XCTAssertEqual(months.count, 12)
+    XCTAssertEqual(months[0]["label"]?.stringValue, "October 2026")
+    XCTAssertEqual(months[0]["from"]?.stringValue, "2026-10-01T00:00:00.000Z")
+    XCTAssertEqual(months[0]["to"]?.stringValue, "2026-11-01T00:00:00.000Z")
+    XCTAssertEqual(months[11]["from"]?.stringValue, "2025-11-01T00:00:00.000Z")
+    for index in 1..<12 { XCTAssertEqual(months[index]["to"]?.stringValue, months[index - 1]["from"]?.stringValue) }
+  }
+
+  /// A map offers one choice per entry, by value (the site's screens by id); a whole-number field rounds; a pattern holds a typed value.
+  func testChoicesFromAMapAndFieldsThatHoldWhatIsTyped() throws {
+    let context: JSONValue = ["data": ["screens": ["s1": "shop", "s2": "/", "s3": "about"]]]
+    let pick = try XCTUnwrap(
+      FieldSpec(["key": "pdp", "kind": "select", "optionsFrom": ["items": "data.screens", "value": "{item.$id}", "label": "{item.$value:slashed}"]]))
+    XCTAssertEqual(pick.choices(in: context).map(\.value), ["s2", "s3", "s1"])
+    XCTAssertEqual(pick.choices(in: context).map(\.label), ["/", "/about", "/shop"])
+    let count = try XCTUnwrap(FieldSpec(["key": "n", "kind": "number", "integer": true]))
+    XCTAssertEqual(fieldJSON(count, .text("2.6")), .number(3))
+    let url = try XCTUnwrap(FieldSpec(["key": "u", "kind": "url", "pattern": "^https://"]))
+    XCTAssertTrue(url.unmet(.string("http://a.test"), in: [:]))
+    XCTAssertFalse(url.unmet(.string("https://a.test"), in: [:]))
+    XCTAssertFalse(url.unmet(.string(""), in: [:]), "an empty value is left to `required`")
+  }
 }
 
 final class RecordingTransport: HTTPTransport, @unchecked Sendable {
