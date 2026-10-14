@@ -263,11 +263,20 @@ public struct FieldSpec: Sendable, Identifiable {
   public let when: String?
   /// A template the typed value must equal (type the workspace name to delete it).
   public let mustMatch: String?
+  /// The bounds of a number field; one outside them leaves the field unfinished.
+  public let min: Double?
+  public let max: Double?
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
     if let mustMatch, ScreenValues.text(value) != ScreenValues.render(mustMatch, in: context) { return true }
-    return required && kind != "toggle" && !ScreenValues.truthy(value)
+    if kind == "number", let number = ScreenValues.number(value) {
+      if let min, number < min { return true }
+      if let max, number > max { return true }
+    }
+    // A number field is finished by any number, zero too.
+    let finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != nil)
+    return required && kind != "toggle" && !finished
   }
 
   init(
@@ -285,6 +294,8 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = nil
     self.when = nil
     self.mustMatch = nil
+    self.min = nil
+    self.max = nil
   }
 
   /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
@@ -296,8 +307,24 @@ public struct FieldSpec: Sendable, Identifiable {
     items.flatMap { entry -> [FieldSpec] in
       guard let from = entry["fieldsFrom"] else { return FieldSpec(entry).map { [$0] } ?? [] }
       let rows = ScreenValues.rows(ScreenValues.lookup(from["items"]?.stringValue ?? "", in: context))
-      return rows.compactMap { row -> FieldSpec? in
-        let scope = ScreenContext.with(context, item: row)
+      let perRow = from["each"].array
+      if !perRow.isEmpty {
+        // `each`: a field template per entry, drawn for every row, so one row's fields sit together.
+        return rows.enumerated().flatMap { position, row -> [FieldSpec] in
+          let scope = ScreenContext.with(ScreenContext.with(context, item: row), "index", .number(Double(position)))
+          return perRow.compactMap { template -> FieldSpec? in
+            guard case .object(let record) = template else { return nil }
+            let rendered = record.mapValues { value -> JSONValue in
+              if case .string(let text) = value { return .string(ScreenValues.render(text, in: scope)) }
+              return value
+            }
+            return FieldSpec(.object(rendered))
+          }
+        }
+      }
+      return rows.enumerated().compactMap { position, row -> FieldSpec? in
+        // `{index}` is the row's place in the list, for a key that names the row by position.
+        let scope = ScreenContext.with(ScreenContext.with(context, item: row), "index", .number(Double(position)))
         let key = ScreenValues.render(from["key"]?.stringValue ?? "{item.key}", in: scope)
         if key.isEmpty { return nil }
         let choices = row[from["options"]?.stringValue ?? "options"].array.map {
@@ -309,8 +336,8 @@ public struct FieldSpec: Sendable, Identifiable {
         let help = from["help"]?.stringValue.map { ScreenValues.render($0, in: scope) }
         return FieldSpec(
           key: key, label: ScreenValues.render(from["label"]?.stringValue ?? "{item.label}", in: scope),
-          kind: yesno || !choices.isEmpty ? "select" : (kind ?? "text"),
-          initial: yesno ? nil : choices.first?.0, help: (help?.isEmpty ?? true) ? nil : help,
+          kind: yesno || !choices.isEmpty ? "select" : (kind ?? from["kind"]?.stringValue ?? "text"),
+          initial: yesno ? nil : (choices.first?.0 ?? from["initial"]?.stringValue), help: (help?.isEmpty ?? true) ? nil : help,
           required: from["required"]?.stringValue.map { ScreenValues.truthy(ScreenValues.lookup($0, in: row)) } ?? false,
           options: yesno ? [("", "No"), ("true", "Yes")] : choices)
       }
@@ -329,6 +356,8 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = nil
     self.when = nil
     self.mustMatch = nil
+    self.min = nil
+    self.max = nil
   }
 
   init?(_ json: JSONValue) {
@@ -347,6 +376,8 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = json["optionsFrom"]
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
+    self.min = ScreenValues.number(json["min"])
+    self.max = ScreenValues.number(json["max"])
   }
 
   /// The choices for a `select`: the static options, then any read from data.

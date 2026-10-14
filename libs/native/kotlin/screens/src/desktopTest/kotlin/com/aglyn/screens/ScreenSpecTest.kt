@@ -87,10 +87,12 @@ class ScreenSpecTest {
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
     val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone")
+    // Screens a plugin draws by hand rather than from a spec, which a spec may still open.
+    val handWritten = setOf("commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.sales")
     for (spec in specs) {
       assertTrue(spec.scope in setOf("org", "site", "account", "staff"), "${spec.id}: scope ${spec.scope}")
       for (block in spec.blocks) assertTrue(block.type in known, "${spec.id}: block ${block.type}")
-      for (target in targets(spec.raw)) assertTrue(target in ids, "${spec.id} opens $target, which no spec declares")
+      for (target in targets(spec.raw)) assertTrue(target in ids || target in handWritten, "${spec.id} opens $target, which no spec declares")
       for (icon in icons(spec.raw)) assertTrue(AglynIcons.has(icon), "${spec.id}: Material icon \"$icon\" is not in AglynIcons")
     }
   }

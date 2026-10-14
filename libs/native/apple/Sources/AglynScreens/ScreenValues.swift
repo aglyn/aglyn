@@ -130,6 +130,10 @@ public enum ScreenValues {
   /// One `{…}` expression: `a.b|c.d|'fallback'` with an optional `:format`.
   /// The first alternative that is present wins.
   public static func evaluate(_ expression: String, in context: JSONValue) -> JSONValue? {
+    // `{?a == b || !c}`: a condition, as true or false.
+    if expression.trimmingCharacters(in: .whitespaces).hasPrefix("?") {
+      return .bool(condition(String(expression.trimmingCharacters(in: .whitespaces).dropFirst()), in: context))
+    }
     var body = expression
     var format: String?
     // A format follows the last ':' that is outside quotes.
@@ -254,10 +258,16 @@ public enum ScreenValues {
       let prefix = spec["prefix"]?.stringValue ?? ""
       let keyName = spec["key"]?.stringValue ?? "key"
       let valueName = spec["value"]?.stringValue ?? "value"
+      // `with` adds more columns from other prefixes (`{"reason": "reason_"}`); `skipEmpty` leaves out a row whose value is empty or zero.
+      let extra = spec["with"].objectEntries.reduce(into: [String: String]()) { $0[$1.key] = $1.value.stringValue ?? "" }
+      let skipEmpty = spec["skipEmpty"] == .bool(true)
       return .array(
-        source.filter { $0.key.hasPrefix(prefix) }.sorted { $0.key < $1.key }.map { name, entry in
+        source.filter { $0.key.hasPrefix(prefix) }.sorted { $0.key < $1.key }.compactMap { name, entry in
+          if skipEmpty, !truthy(entry) { return nil }
           let rest = String(name.dropFirst(prefix.count))
-          return .object([keyName: Int64(rest).map { .number(Double($0)) } ?? .string(rest), valueName: entry])
+          var row: [String: JSONValue] = [keyName: Int64(rest).map { .number(Double($0)) } ?? .string(rest), valueName: entry]
+          for (column, columnPrefix) in extra { if let more = source[columnPrefix + rest] { row[column] = more } }
+          return .object(row)
         })
     case .object(let record) where record.count == 1 && record["$uuid"] != nil:
       // `{"$uuid": "box_"}`: the prefix and eight random hex digits, a fresh id for a row the person is adding.

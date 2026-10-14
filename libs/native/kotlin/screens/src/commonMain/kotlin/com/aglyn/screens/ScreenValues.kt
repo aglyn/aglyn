@@ -114,6 +114,8 @@ object ScreenValues {
     else number.toString()
 
   fun evaluate(expression: String, context: JsonElement): JsonElement? {
+    // `{?a == b || !c}`: a condition, as true or false.
+    if (expression.trimStart().startsWith("?")) return JsonPrimitive(condition(expression.trim().substring(1), context))
     var body = expression
     var format: String? = null
     lastUnquotedColon(body)?.let { colon ->
@@ -230,10 +232,19 @@ object ScreenValues {
       val prefix = (spec["prefix"] as? JsonPrimitive)?.content.orEmpty()
       val keyName = (spec["key"] as? JsonPrimitive)?.content ?: "key"
       val valueName = (spec["value"] as? JsonPrimitive)?.content ?: "value"
+      // `with` adds more columns from other prefixes (`{"reason": "reason_"}`); `skipEmpty` leaves out a row whose value is empty or zero.
+      val extra = (spec["with"] as? JsonObject)?.entries.orEmpty().associate { it.key to (it.value as? JsonPrimitive)?.content.orEmpty() }
+      val skipEmpty = (spec["skipEmpty"] as? JsonPrimitive)?.content == "true"
       JsonArray(
-        source.entries.filter { it.key.startsWith(prefix) }.sortedBy { it.key }.map { (name, entry) ->
+        source.entries.filter { it.key.startsWith(prefix) }.sortedBy { it.key }.mapNotNull { (name, entry) ->
+          if (skipEmpty && !truthy(entry)) return@mapNotNull null
           val rest = name.removePrefix(prefix)
-          JsonObject(mapOf(keyName to (rest.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(rest)), valueName to entry))
+          val row = mutableMapOf<String, JsonElement>(
+            keyName to (rest.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(rest)),
+            valueName to entry,
+          )
+          for ((column, columnPrefix) in extra) source[columnPrefix + rest]?.let { row[column] = it }
+          JsonObject(row)
         },
       )
     } else if (body.size == 1 && body["\$uuid"] is JsonPrimitive) {

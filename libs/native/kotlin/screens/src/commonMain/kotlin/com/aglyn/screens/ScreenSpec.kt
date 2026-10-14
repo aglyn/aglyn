@@ -153,11 +153,22 @@ class FieldSpec private constructor(
   val whenCondition: String?,
   /** A template the typed value must equal (type the workspace name to delete it). */
   val mustMatch: String? = null,
+  /** The bounds of a number field; one outside them leaves the field unfinished. */
+  val min: Double? = null,
+  val max: Double? = null,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
     if (mustMatch != null && ScreenValues.text(value) != ScreenValues.render(mustMatch, context)) return true
-    return required && kind != "toggle" && !ScreenValues.truthy(value)
+    if (kind == "number") {
+      ScreenValues.number(value)?.let { number ->
+        if (min != null && number < min) return true
+        if (max != null && number > max) return true
+      }
+    }
+    // A number field is finished by any number, zero too.
+    val finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != null)
+    return required && kind != "toggle" && !finished
   }
 
   fun choices(context: JsonElement): List<Pair<String, String>> {
@@ -181,12 +192,30 @@ class FieldSpec private constructor(
      * data (a service that names its own credential fields): `items` is the path to the rows; `key`, `label` and
      * `help` are templates over `item`; `kinds` maps a row flag to a field kind (first set flag wins, else text),
      * `yesno` being a No/Yes pick that sends "" or "true"; `options` names the row field holding `{value,label}`
-     * choices, which make a select; `required` names the row flag.
+     * choices, which make a select; `required` names the row flag; `kind` is the kind of a row with no flag set and
+     * `initial` a template for its starting value; `{index}` in any template is the row's place in the list. With
+     * `each` (a list of field templates, their strings rendered per row) every row draws all of them together.
      */
     fun parseAll(items: List<JsonElement>, context: JsonElement): List<FieldSpec> = items.flatMap { entry ->
       val from = entry.obj("fieldsFrom") ?: return@flatMap listOfNotNull(parse(entry))
-      ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context)).mapNotNull { row ->
-        val scope = ScreenContext.withItem(context, row)
+      val perRow = from.arr("each")
+      if (perRow.isNotEmpty()) {
+        // `each`: a field template per entry, drawn for every row, so one row's fields sit together.
+        return@flatMap ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context)).withIndex().flatMap { (position, row) ->
+          val scope = ScreenContext.with(ScreenContext.withItem(context, row), "index", JsonPrimitive(position))
+          perRow.mapNotNull { template ->
+            val rendered = JsonObject(
+              (template as? JsonObject).orEmpty().mapValues { (_, value) ->
+                if (value is JsonPrimitive && value.isString) JsonPrimitive(ScreenValues.render(value.content, scope)) else value
+              },
+            )
+            parse(rendered)
+          }
+        }
+      }
+      ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context)).withIndex().mapNotNull { (position, row) ->
+        // `{index}` is the row's place in the list, for a key that names the row by position.
+        val scope = ScreenContext.with(ScreenContext.withItem(context, row), "index", JsonPrimitive(position))
         val key = ScreenValues.render(from.str("key") ?: "{item.key}", scope).ifEmpty { return@mapNotNull null }
         val choices = row.arr(from.str("options") ?: "options").map { ScreenValues.text(it.obj("value")) to ScreenValues.text(it.obj("label") ?: it.obj("value")) }
         val flagged = (from.obj("kinds") as? JsonObject)?.entries.orEmpty().sortedBy { it.key }.firstOrNull { ScreenValues.truthy(ScreenValues.lookup(it.key, row)) }?.value
@@ -196,9 +225,9 @@ class FieldSpec private constructor(
           label = ScreenValues.render(from.str("label") ?: "{item.label}", scope),
           kind = when {
             kind == "yesno" || choices.isNotEmpty() -> "select"
-            else -> kind ?: "text"
+            else -> kind ?: from.str("kind") ?: "text"
           },
-          initial = if (kind == "yesno") null else choices.firstOrNull()?.first,
+          initial = if (kind == "yesno") null else choices.firstOrNull()?.first ?: from.str("initial"),
           placeholder = null,
           help = from.str("help")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() },
           required = from.str("required")?.let { ScreenValues.truthy(ScreenValues.lookup(it, row)) } ?: false,
@@ -226,6 +255,8 @@ class FieldSpec private constructor(
         optionsFrom = json.obj("optionsFrom"),
         whenCondition = json.str("when"),
         mustMatch = json.str("mustMatch"),
+        min = ScreenValues.number(json.obj("min")),
+        max = ScreenValues.number(json.obj("max")),
       )
     }
   }

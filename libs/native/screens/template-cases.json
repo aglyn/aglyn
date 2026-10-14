@@ -168,6 +168,14 @@
     {
       "template": "{data.missing:amount}",
       "expect": ""
+    },
+    {
+      "template": "{?org.manager && !staff.is}",
+      "expect": "true"
+    },
+    {
+      "template": "{?data.perms.missing || org.role == viewer}",
+      "expect": "false"
     }
   ],
   "url": [
@@ -434,6 +442,43 @@
           {
             "lineItemId": 2,
             "quantity": "1"
+          }
+        ]
+      }
+    },
+    {
+      "body": {
+        "rows": {
+          "$gather": {
+            "from": {
+              "qty_0": 2,
+              "qty_1": 0,
+              "qty_2": 1,
+              "reason_0": "damaged",
+              "reason_1": "other",
+              "reason_2": "size_or_fit"
+            },
+            "prefix": "qty_",
+            "key": "lineItemId",
+            "value": "quantity",
+            "with": {
+              "reason": "reason_"
+            },
+            "skipEmpty": true
+          }
+        }
+      },
+      "expect": {
+        "rows": [
+          {
+            "lineItemId": 0,
+            "quantity": 2,
+            "reason": "damaged"
+          },
+          {
+            "lineItemId": 2,
+            "quantity": 1,
+            "reason": "size_or_fit"
           }
         ]
       }
