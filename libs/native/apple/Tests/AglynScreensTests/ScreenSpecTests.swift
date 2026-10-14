@@ -585,6 +585,61 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ScreenValues.render(try XCTUnwrap(actions.first?.download), in: scope), "import-j9-results.csv")
   }
 
+  @MainActor
+  func testTheRecordsListShowsWhatThePluginsAndThePlanAllowAndExportsThroughTheSheet() throws {
+    let records = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.records" })
+    let consts = try XCTUnwrap(records.raw["constants"])
+    func context(crm: Bool, running: [String]) -> JSONValue {
+      [
+        "org": ["id": "o1", "manager": true], "const": consts,
+        "data": [
+          "sw": ["rows": .array(running.map { ["id": .string($0), "on": true] })],
+          "ent": ["features": ["crm": .bool(crm)]],
+          "datasets": ["items": [["$id": "d1", "name": "Pets"]]],
+        ],
+      ]
+    }
+    let crmList = try XCTUnwrap(records.blocks.first { $0.title == "CRM" })
+    let on = context(crm: false, running: ["crm"])
+    XCTAssertTrue(ScreenValues.condition(crmList.when, in: on))
+    // On a plan without the CRM only the exports that stay free are listed.
+    let free = ScreenValues.scopes(items: crmList["items"]?.stringValue ?? "", filter: crmList["filter"]?.stringValue, in: on)
+    XCTAssertEqual(free.map { ScreenValues.render("{item.key}", in: $0) }, ["crm.contacts", "crm.leads"])
+    let paid = ScreenValues.scopes(items: crmList["items"]?.stringValue ?? "", filter: crmList["filter"]?.stringValue, in: context(crm: true, running: ["crm"]))
+    XCTAssertTrue(paid.count > free.count)
+    XCTAssertFalse(ScreenValues.condition(crmList.when, in: context(crm: true, running: [])))
+    let note = try XCTUnwrap(records.blocks.first { $0.type == "notice" && $0.when?.contains("!data.ent.features.crm") == true })
+    XCTAssertTrue(ScreenValues.condition(note.when, in: on))
+    XCTAssertFalse(ScreenValues.condition(note.when, in: context(crm: true, running: ["crm"])))
+
+    // A row's Export opens the platform sheet on its resource, for the whole workspace.
+    let export = try XCTUnwrap(crmList["actions"].array.first.flatMap(ActionSpec.init))
+    let request = try XCTUnwrap(export.exportRequest(in: free[0]))
+    XCTAssertEqual(request.resource, "crm.contacts")
+    XCTAssertEqual(request.title, "Export Contacts")
+    XCTAssertNil(request.hostID)
+    XCTAssertEqual(request.scope, ["kind": "all"])
+    XCTAssertEqual(request.fileStem, "crm-contacts")
+    XCTAssertTrue(ScreenValues.condition(export.when, in: free[0]))
+
+    // A dataset is exported on its own, under the key that names it.
+    let datasets = try XCTUnwrap(records.blocks.first { $0.title == "Dataset records" })
+    let dataset = try XCTUnwrap(ScreenValues.scopes(items: "data.datasets.items", in: on).first)
+    let one = try XCTUnwrap(datasets["actions"].array.first.flatMap(ActionSpec.init).flatMap { $0.exportRequest(in: dataset) })
+    XCTAssertEqual(one.resource, "data.dataset:d1")
+    XCTAssertEqual(one.title, "Export Pets")
+    XCTAssertEqual(one.fileStem, "data-dataset-d1")
+
+    // A site's resources name the site.
+    let site = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.data" })
+    let redirects = try XCTUnwrap(site.blocks.first { $0.title == "Redirects" })
+    let siteContext = ScreenContext.with(["site": ["id": "h1"], "const": site.raw["constants"] ?? .null], item: ["key": "redirects", "label": "Redirects"])
+    let inSite = try XCTUnwrap(redirects["actions"].array.first.flatMap(ActionSpec.init).flatMap { $0.exportRequest(in: siteContext) })
+    XCTAssertEqual(inSite.hostID, "h1")
+    XCTAssertEqual(inSite.resource, "redirects")
+    XCTAssertNil(ActionSpec(["label": "Go", "url": "/api/x"])?.exportRequest(in: [:]))
+  }
+
   static func targets(_ json: JSONValue) -> [String] {
     switch json {
     case .object(let record):

@@ -175,6 +175,7 @@ private fun SpecBody(
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
+  var exportDialog by remember { mutableStateOf<ExportRequest?>(null) }
   val exporter = com.aglyn.ui.LocalFileExporter.current
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
@@ -192,6 +193,10 @@ private fun SpecBody(
   }
 
   suspend fun execute(action: ActionSpec, actionScope: JsonElement) {
+    action.exportRequest(actionScope)?.let {
+      exportDialog = it
+      return
+    }
     action.copy?.let {
       clipboard.setText(AnnotatedString(ScreenValues.render(it, actionScope)))
       show("Copied", StatusTone.SUCCESS)
@@ -336,6 +341,15 @@ private fun SpecBody(
     }
   }
 
+  exportDialog?.let { request ->
+    com.aglyn.pluginhost.TransferExportDialog(
+      plugin, resource = request.resource, title = request.title, hostId = request.hostId,
+      scope = mapOf("kind" to "all"), fileStem = request.fileStem,
+    ) { message ->
+      exportDialog = null
+      if (message != null) show(message, StatusTone.SUCCESS)
+    }
+  }
   confirming?.let { pending ->
     ActionDialog(
       title = pending.action.confirmText(pending.scope) ?: ScreenValues.render(pending.action.label, pending.scope),

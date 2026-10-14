@@ -52,6 +52,17 @@
           "text": "Every import shows what it would do before it writes anything, asks how to handle each conflict, and can be undone for seven days."
         },
         {
+          "type": "links",
+          "items": [
+            {
+              "title": "Records and packages",
+              "subtitle": "Export what each plugin keeps, or move a package",
+              "icon": "tablecells|view_agenda",
+              "screen": "core.settings.data.records"
+            }
+          ]
+        },
+        {
           "type": "actions",
           "items": [
             {

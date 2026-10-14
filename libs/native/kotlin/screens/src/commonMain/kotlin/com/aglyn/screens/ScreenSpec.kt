@@ -89,6 +89,9 @@ class BlockSpec(val type: String, val raw: JsonElement) {
 
 class NavigateSpec(val screen: String, val params: Map<String, String>)
 
+/** What an `export` action opens the export dialog on. */
+class ExportRequest(val resource: String, val title: String, val hostId: String?, val fileStem: String)
+
 class ActionSpec private constructor(json: JsonElement, val label: String) {
   val id: String = json.str("id") ?: label
   val icon: String? = materialIcon(json.str("icon"))
@@ -123,6 +126,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** The route answers with a file (an export), not JSON; the person saves it. Its value names the file when the route names none. */
   val download: String? = json.str("download") ?: if (json.isTrue("download")) "download" else null
+  /** `export: { resource, title, hostId }`: the platform's export dialog for a records resource (its fields, the format, then the file saved or shared), as every list opens it. */
+  val export: JsonElement? = json.obj("export")
   /** The route answers with JSON, and the file is the value at this path of it (a workspace package export wraps its file as `{ fileName, package }`); `download` is then a template over `response` that names the file. */
   val downloadAt: String? = json.str("downloadAt")
   /**
@@ -151,6 +156,15 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val write: JsonElement? = json.obj("write")
   /** `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds, until the app closes. */
   val stash: JsonElement? = json.obj("stash")
+
+  /** The export dialog's resource, title and site, with the action's templates read in [scope]; null when the action opens none. */
+  fun exportRequest(scope: JsonElement): ExportRequest? {
+    val spec = export ?: return null
+    val key = spec.str("resource")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() } ?: return null
+    val title = ScreenValues.render(spec.str("title") ?: "Export", scope)
+    val host = spec.str("hostId")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
+    return ExportRequest(key, title, host, key.replace(':', '-').replace('.', '-'))
+  }
 
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>

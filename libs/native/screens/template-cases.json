@@ -13,7 +13,10 @@
     },
     "params": {
       "uid": "u2",
-      "empty": ""
+      "empty": "",
+      "col": "1",
+      "mrow": "r1",
+      "mcol": "c2"
     },
     "data": {
       "members": [
@@ -101,7 +104,29 @@
           "items": []
         }
       ],
-      "pick": "y"
+      "pick": "y",
+      "samples": [
+        [
+          "a",
+          "b",
+          "c"
+        ],
+        [
+          "d",
+          "e",
+          "f"
+        ],
+        [
+          "g",
+          "h"
+        ]
+      ],
+      "matrix": {
+        "r1": {
+          "c1": "x",
+          "c2": "y"
+        }
+      }
     }
   },
   "render": [
@@ -244,6 +269,22 @@
     {
       "template": "{data.groups.*.label}",
       "expect": "Sequences, Campaigns, Empty"
+    },
+    {
+      "template": "{data.groups[label='Campaigns'].items.0.key}",
+      "expect": "campaign/c"
+    },
+    {
+      "template": "{data.samples.*.[@params.col]}",
+      "expect": "b, e, h"
+    },
+    {
+      "template": "{data.matrix[@params.mrow][@params.mcol]}",
+      "expect": "y"
+    },
+    {
+      "template": "{data.groups[label='Missing'].items.0.key|'none'}",
+      "expect": "none"
     }
   ],
   "url": [

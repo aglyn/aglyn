@@ -13,46 +13,75 @@ import Foundation
 public enum ScreenValues {
   /// The value at a dotted path (`data.members.0.email`), or nil.
   public static func lookup(_ path: String, in context: JSONValue) -> JSONValue? {
+    lookup(path, root: context, from: context)
+  }
+
+  /// `path` read from `start`, with every `@path` and selector value read from `root`.
+  static func lookup(_ path: String, root: JSONValue, from start: JSONValue?) -> JSONValue? {
     let trimmed = path.trimmingCharacters(in: .whitespaces)
-    if trimmed.isEmpty { return context }
-    var current: JSONValue? = context
+    if trimmed.isEmpty { return start }
+    var current: JSONValue? = start
     let parts = segments(trimmed)
     for (position, raw) in parts.enumerated() {
       // `rows.*.field`: that field of every row, as a list (rows without it are left out; a field
       // that is itself a list adds its members, so `resources.*.items` is every resource's items).
       if raw == "*", case .array(let items)? = current {
         let rest = parts[(position + 1)...].joined(separator: ".")
-        return .array(items.compactMap { rest.isEmpty ? $0 : lookup(rest, in: $0) }.flatMap { value -> [JSONValue] in
+        return .array(items.compactMap { rest.isEmpty ? $0 : lookup(rest, root: root, from: $0) }.flatMap { value -> [JSONValue] in
           if case .array(let members) = value { return members }
           return [value]
         })
       }
-      // `rows[field=other.path]`: the first row whose field reads as the text at other.path.
-      var segment = raw
-      var selector: (field: String, path: String)?
+      // `name[group][group]…`: each group is `[field=other.path]` (the first row whose field reads as the text
+      // at other.path, or as a quoted literal), `[@path]` (the key is the text at path) or `[some.key]` (a key
+      // that itself holds dots).
+      var name = raw
+      var groups: [String] = []
       if raw.hasSuffix("]"), let open = raw.firstIndex(of: "[") {
-        let inner = raw[raw.index(after: open)..<raw.index(before: raw.endIndex)]
-        segment = String(raw[..<open])
-        if !segment.isEmpty { current = step(current, segment) }
-        if let equals = inner.firstIndex(of: "=") {
-          selector = (String(inner[..<equals]), String(inner[inner.index(after: equals)...]))
-        } else {
-          // `map[some.key]`: a key that itself holds dots; `map[@path]`: the key is the text at path.
-          if inner.hasPrefix("@") {
-            current = step(current, text(lookup(String(inner.dropFirst()), in: context)))
-          } else {
-            current = step(current, String(inner))
-          }
-        }
-      } else if !segment.isEmpty {
-        current = step(current, segment)
+        name = String(raw[..<open])
+        groups = bracketGroups(raw[open...])
       }
-      if let selector {
-        let wanted = text(lookup(selector.path, in: context))
-        current = current.array.first { text(lookup(selector.field, in: $0)) == wanted }
+      if !name.isEmpty { current = step(current, name) }
+      for inner in groups {
+        if inner.hasPrefix("@") {
+          current = step(current, text(lookup(String(inner.dropFirst()), root: root, from: root)))
+        } else if let equals = inner.firstIndex(of: "=") {
+          let field = String(inner[..<equals])
+          let right = inner[inner.index(after: equals)...].trimmingCharacters(in: .whitespaces)
+          let wanted =
+            right.count >= 2 && right.hasPrefix("'") && right.hasSuffix("'")
+            ? String(right.dropFirst().dropLast()) : text(lookup(right, root: root, from: root))
+          current = current.array.first { text(lookup(field, root: $0, from: $0)) == wanted }
+        } else {
+          current = step(current, inner)
+        }
       }
     }
     return current
+  }
+
+  /// The groups of `[a][b[c]]`: `a` and `b[c]`, matching brackets inside a group.
+  private static func bracketGroups(_ text: Substring) -> [String] {
+    var groups: [String] = []
+    var depth = 0
+    var current = ""
+    for character in text {
+      if character == "[" {
+        if depth > 0 { current.append(character) }
+        depth += 1
+      } else if character == "]" {
+        depth -= 1
+        if depth == 0 {
+          groups.append(current)
+          current = ""
+        } else {
+          current.append(character)
+        }
+      } else if depth > 0 {
+        current.append(character)
+      }
+    }
+    return groups
   }
 
   /// The rows a list or meters block walks: an array as it is, or an

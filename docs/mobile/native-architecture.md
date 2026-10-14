@@ -948,6 +948,15 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   `a.*.b.*.c` flattens lists it meets, so `resources.*.items.*.key` is every
   resource's item keys. `path ~= @other.path` asks whether a list holds, or a text
   contains, what the other path reads.
+- `export: { resource, title, hostId }` opens the platform's export sheet for a records
+  resource (its fields, the format, then the file saved or shared), the sheet every list
+  uses; the Imports and exports hub's lists open it per resource.
+- A path can chain bracket groups (`stash.choices[@field][@value]`), take a quoted literal in a
+  selector (`rows[id='crm']`), and read an `@path` after `*` against the whole context
+  (`samples.*.[@index]` is one column of every sample row).
+- `libs/native/screens/transfer-resources.screens.json` is generated from the plugins'
+  `transferResources` (`generate-native-contracts.mjs`): the hub lists every resource whose
+  plugin runs (the `switchboard` load) and whose plan feature the entitlements carry.
 - A POST load pages too: `cursor` names the response field, and the next page is
   the same body with the cursor under `cursorParam` (a number cursor, such as a
   job's `createdAt`, goes back as a number).

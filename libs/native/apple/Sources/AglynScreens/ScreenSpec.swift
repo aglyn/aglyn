@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynPluginHost
 import Foundation
 
 /// A console screen as data: what it loads from the console's own API
@@ -183,6 +184,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// `download`: the route answers with a file (an export), not JSON; the person saves or shares it.
   /// Its value names the file when the route names none.
   public let download: String?
+  /// `export: { resource, title, hostId }`: the platform's export sheet for a records resource (its
+  /// fields, the format, then the file saved or shared), as every list opens it.
+  public let export: JSONValue?
   /// `downloadAt`: the route answers with JSON, and the file is the value at this path of it
   /// (a workspace package export wraps its file as `{ fileName, package }`). `download` is then a
   /// template over `response`, which names the file.
@@ -226,6 +230,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.stash = json["stash"]
     self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)
     self.downloadAt = json["downloadAt"]?.stringValue
+    self.export = json["export"]
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }
@@ -248,6 +253,17 @@ public struct ActionSpec: Sendable, Identifiable {
     let entries: [JSONValue]
     if case .array(let list) = instead { entries = list } else { entries = [instead] }
     return entries.first { ScreenValues.condition($0["when"]?.stringValue, in: scope) }
+  }
+
+  /// The export sheet's request, with the action's templates read in `scope`; nil when the action opens none.
+  public func exportRequest(in scope: JSONValue) -> TransferExportRequest? {
+    guard let export, let resource = export["resource"]?.stringValue else { return nil }
+    let key = ScreenValues.render(resource, in: scope)
+    guard !key.isEmpty else { return nil }
+    let title = ScreenValues.render(export["title"]?.stringValue ?? "Export", in: scope)
+    let host = export["hostId"]?.stringValue.map { ScreenValues.render($0, in: scope) }.flatMap { $0.isEmpty ? nil : $0 }
+    let stem = key.replacingOccurrences(of: ":", with: "-").replacingOccurrences(of: ".", with: "-")
+    return TransferExportRequest(resource: key, title: title, hostID: host, scope: ["kind": "all"], fileStem: stem)
   }
 
   /// Every field the action asks for before it runs: its prompt, then a reason.

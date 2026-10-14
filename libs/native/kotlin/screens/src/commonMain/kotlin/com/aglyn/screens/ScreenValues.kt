@@ -41,39 +41,71 @@ object ScreenValues {
     )
   }
 
-  fun lookup(path: String, context: JsonElement): JsonElement? {
+  fun lookup(path: String, context: JsonElement): JsonElement? = lookup(path, context, context)
+
+  /** [path] read from [start], with every `@path` and selector value read from [root]. */
+  private fun lookup(path: String, root: JsonElement, start: JsonElement?): JsonElement? {
     val trimmed = path.trim()
-    if (trimmed.isEmpty()) return context
-    var current: JsonElement? = context
+    if (trimmed.isEmpty()) return start
+    var current: JsonElement? = start
     val parts = segments(trimmed)
     for ((position, raw) in parts.withIndex()) {
       // `rows.*.field`: that field of every row, as a list (rows without it are left out; a field
       // that is itself a list adds its members, so `resources.*.items` is every resource's items).
       if (raw == "*" && current is JsonArray) {
         val rest = parts.drop(position + 1).joinToString(".")
-        return JsonArray(current.mapNotNull { if (rest.isEmpty()) it else lookup(rest, it) }.flatMap { if (it is JsonArray) it.toList() else listOf(it) })
+        return JsonArray(current.mapNotNull { if (rest.isEmpty()) it else lookup(rest, root, it) }.flatMap { if (it is JsonArray) it.toList() else listOf(it) })
       }
+      // `name[group][group]…`: each group is `[field=other.path]` (the first row whose field reads as the text
+      // at other.path, or as a quoted literal), `[@path]` (the key is the text at path) or `[some.key]` (a key
+      // that itself holds dots).
+      var name = raw
+      var groups = emptyList<String>()
       val open = raw.indexOf('[')
       if (raw.endsWith("]") && open >= 0) {
-        val segment = raw.substring(0, open)
-        val inner = raw.substring(open + 1, raw.length - 1)
-        if (segment.isNotEmpty()) current = step(current, segment)
+        name = raw.substring(0, open)
+        groups = bracketGroups(raw.substring(open))
+      }
+      if (name.isNotEmpty()) current = step(current, name)
+      for (inner in groups) {
         val equals = inner.indexOf('=')
-        if (equals >= 0) {
-          val wanted = text(lookup(inner.substring(equals + 1), context))
+        if (inner.startsWith("@")) {
+          current = step(current, text(lookup(inner.substring(1), root, root)))
+        } else if (equals >= 0) {
           val field = inner.substring(0, equals)
-          current = (current as? JsonArray)?.firstOrNull { text(lookup(field, it)) == wanted }
-        } else if (inner.startsWith("@")) {
-          // `map[@path]`: the key is the text at path.
-          current = step(current, text(lookup(inner.substring(1), context)))
+          val right = inner.substring(equals + 1).trim()
+          val wanted = if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right.substring(1, right.length - 1) else text(lookup(right, root, root))
+          current = (current as? JsonArray)?.firstOrNull { text(lookup(field, it, it)) == wanted }
         } else {
           current = step(current, inner)
         }
-      } else if (raw.isNotEmpty()) {
-        current = step(current, raw)
       }
     }
     return current
+  }
+
+  /** The groups of `[a][b[c]]`: `a` and `b[c]`, matching brackets inside a group. */
+  private fun bracketGroups(text: String): List<String> {
+    val groups = mutableListOf<String>()
+    var depth = 0
+    val current = StringBuilder()
+    for (character in text) {
+      if (character == '[') {
+        if (depth > 0) current.append(character)
+        depth += 1
+      } else if (character == ']') {
+        depth -= 1
+        if (depth == 0) {
+          groups += current.toString()
+          current.clear()
+        } else {
+          current.append(character)
+        }
+      } else if (depth > 0) {
+        current.append(character)
+      }
+    }
+    return groups
   }
 
   /** The rows a list or meters block walks: an array as it is, or an object's entries as `{ key, value }`. */
