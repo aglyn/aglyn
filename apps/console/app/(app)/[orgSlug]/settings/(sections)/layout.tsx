@@ -27,7 +27,7 @@ import {
 import { Box, CircularProgress } from '@mui/material'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
+import { useSlotHasWidgets } from '../../../../../components/plugin-widget-slot.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -55,6 +55,14 @@ export default function SettingsSectionsLayout({
   const canManage = canManageOrg(currentOrg?.role)
   const isOwner = currentOrg?.role === 'owner'
   const transferHubVisible = useTransferHubVisible()
+  /*
+   * The `orgSettings` zone is a section of its own (AGL-3711), offered only
+   * while it has a card for this reader. Drawn below the rail, a card ran full
+   * width under every section.
+   */
+  const { hasWidgets: integrations } = useSlotHasWidgets(
+    CONSOLE_WIDGET_SLOTS.orgSettings,
+  )
   const section = (
     route: Route,
     label: string,
@@ -68,7 +76,7 @@ export default function SettingsSectionsLayout({
   })
   // Rail groups (AGL-3713): the workspace's setup, then what it holds about
   // people, then the owner's irreversible steps — a divider and a subheader
-  // between each, so eleven sections read as three short lists.
+  // between each, so twelve sections read as three short lists.
   const DATA = 'Data & compliance'
   const OWNER = 'Danger zone'
 
@@ -89,6 +97,9 @@ export default function SettingsSectionsLayout({
     // that setup is self-serve once there. Hiding it would leave
     // "can I do SSO?" unanswerable from inside the product.
     section(Route.ORG_SETTINGS_SSO, 'Single sign-on', canManage),
+    // Other plugins' workspace settings (AGL-3711), with the workspace's
+    // own setup above the rail's groups (AGL-3713).
+    section(Route.ORG_SETTINGS_INTEGRATIONS, 'Integrations', integrations),
     // The workspace's privacy obligations (AGL-2839): exporting the people
     // it holds and erasing one. Outside the CRM, so every plan has them.
     section(Route.ORG_SETTINGS_PRIVACY, 'Privacy', canManage, DATA),
@@ -142,15 +153,6 @@ export default function SettingsSectionsLayout({
         ) : (
           <HubSections sections={sections}>{children}</HubSections>
         )}
-        {/* The organization's settings zone (AGL-2943): the catalog key,
-            with the props the zone documents. `org.settings` is the
-            permission that gates this page, not a zone, and a widget
-            registered for the documented key never appeared here. */}
-        <PluginWidgetSlot
-          slot={CONSOLE_WIDGET_SLOTS.orgSettings}
-          orgId={currentOrg?.$id}
-          org={currentOrg}
-        />
       </Container>
     </DashboardLayout>
   )
