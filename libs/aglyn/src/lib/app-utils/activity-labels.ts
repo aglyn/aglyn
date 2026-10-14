@@ -251,6 +251,7 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'user.erased': 'Erased the account',
   'user.impersonate': 'Signed in as the account',
   'user.sendPasswordReset': 'Sent a password reset',
+  'user.setAdAudienceOptOut': 'Changed the ad audience opt-out',
   'user.setPassword': 'Set the password',
   'user.signOutDevice': 'Signed a device out',
   'user.updateProfile': 'Updated the profile',

@@ -668,6 +668,6 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#outbound-webhooks': 'Send an HTTP request to a URL you control when a site event fires — for example, post to a Slack endpoint or your own API when a form is submitted or a new booking comes in.',
   },
   zapier: {
-    '#see-and-disconnect-your-zaps': 'The Zapier card on a site\'s setup page lists every Zap that takes the site\'s records: what it takes, the API key it connected with, and when it was last sent something.',
+    '#see-and-disconnect-your-zaps': 'The Zapier card in a site\'s Setup → Integrations lists every Zap that takes the site\'s records: what it takes, the API key it connected with, and when it was last sent something.',
   },
 }

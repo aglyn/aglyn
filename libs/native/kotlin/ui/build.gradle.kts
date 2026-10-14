@@ -35,6 +35,9 @@ kotlin {
       // The calendars read days on a zone's wall clock (LocalDays).
       implementation(project(":native-contracts"))
     }
+    commonTest.dependencies {
+      implementation(kotlin("test"))
+    }
   }
 }
 
