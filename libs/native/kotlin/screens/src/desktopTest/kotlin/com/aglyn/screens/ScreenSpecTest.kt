@@ -636,6 +636,102 @@ class ScreenSpecTest {
     assertFalse(ScreenValues.condition(instead.str("when"), Json.parseToJsonElement("""{"response":{"ok":true}}""")))
   }
 
+  /** The abuse and counter-notice pages keep the console's "Changes made in this session", in its words. */
+  @Test
+  fun abuseDecisionsLeaveTheConsolesSessionLines() = runTest {
+    val screens = ScreenSpec.parseFile(File(screensDir, "staff.screens.json").readText())
+    val api = client(
+      200 to """{"confirmed":true}""",
+      200 to """{"confirmed":true,"scheduling":"scheduled","counterNotice":{"restoreAtMs":1760000000000}}""",
+      200 to """{"confirmed":false,"scheduling":"notSuspended"}""",
+      200 to """{"confirmed":true,"scheduling":"noClock"}""",
+      sent = mutableListOf(),
+    )
+    fun action(screen: String, id: String): ActionSpec =
+      screens.first { it.id == screen }.raw.arr("blocks").flatMap { it.arr("items") }.mapNotNull { ActionSpec.parse(it) }.first { it.id == id }
+
+    val report = ScreenModel(
+      screens.first { it.id == "core.staff.abuseReport" },
+      Json.parseToJsonElement("""{"params":{"reportId":"r1"},"data":{"report":{"report":{"reference":"AR-1"}}}}"""), api,
+    )
+    report.run(action("core.staff.abuseReport", "actioned"), report.context)
+    assertEquals(listOf("AR-1 → actioned"), report.journal.map { it.str("text") })
+    assertEquals(true, (report.journal.first().obj("confirmed") as JsonPrimitive).booleanOrNull)
+
+    val notice = ScreenModel(
+      screens.first { it.id == "core.staff.counterNotice" },
+      Json.parseToJsonElement("""{"params":{"noticeId":"n1"},"data":{"notice":{"counterNotices":[{"id":"n1","reference":"CN-7"}]}}}"""), api,
+    )
+    notice.run(action("core.staff.counterNotice", "forwarded"), notice.context)
+    val scheduled = notice.journal.first().str("text")!!
+    val prefix = "CN-7 → forwarded — restoration scheduled for "
+    assertTrue(scheduled.startsWith(prefix), scheduled)
+    assertTrue(scheduled.length > prefix.length, scheduled)
+    notice.run(action("core.staff.counterNotice", "withdrawn"), notice.context)
+    assertEquals("CN-7 → withdrawn — the site was NOT suspended, so nothing was scheduled", notice.journal.first().str("text"))
+    assertEquals(false, (notice.journal.first().obj("confirmed") as JsonPrimitive).booleanOrNull)
+    // No clock to set says nothing more than the step.
+    notice.run(action("core.staff.counterNotice", "rejected"), notice.context)
+    assertEquals("CN-7 → rejected", notice.journal.first().str("text"))
+    assertEquals(3, notice.journal.size)
+  }
+
+  /** The staff routes mint a custom token for a support session; the action names where in the answer it and its pool are. */
+  @Test
+  fun anImpersonateActionReadsTheTokenAndPoolFromTheAnswer() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement("""{"label":"Sign in as this customer","url":"/api/admin/impersonate","impersonate":{"token":"token","tenantId":"tenantId"}}"""),
+    )!!
+    val spec = assertNotNull(action.impersonate)
+    assertEquals("custom-token" to "tenant-9", spec.resolve(Json.parseToJsonElement("""{"token":"custom-token","tenantId":"tenant-9"}""")))
+    // An account in the project's own pool has no tenant.
+    assertEquals("custom-token" to null, spec.resolve(Json.parseToJsonElement("""{"token":"custom-token","tenantId":null}""")))
+    assertNull(spec.resolve(Json.parseToJsonElement("""{"tenantId":"tenant-9"}""")))
+    assertNull(spec.resolve(Json.parseToJsonElement("""{"token":""}""")))
+    assertNull(spec.resolve(null))
+    assertNull(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Plain","url":"/x"}"""))!!.impersonate)
+  }
+
+  /** Person and Workspace both offer the sign-in the console does, asking the reason the route insists on. */
+  @Test
+  fun thePersonAndWorkspaceScreensOfferASupportSession() = runTest {
+    val screens = ScreenSpec.parseFile(File(screensDir, "staff.screens.json").readText())
+    fun offered(id: String): ActionSpec {
+      val screen = screens.first { it.id == id }
+      return screen.raw.arr("blocks").flatMap { it.arr("items") }.mapNotNull { ActionSpec.parse(it) }.first { it.impersonate != null }
+    }
+    val person = offered("core.staff.user")
+    val workspace = offered("core.staff.org")
+    for ((action, uid) in listOf(person to "{params.uid}", workspace to "{data.detail.org.ownerUid}")) {
+      assertEquals("/api/admin/impersonate", action.url)
+      val reason = action.prompt.single { it.key == "reason" }
+      assertTrue(reason.required)
+      assertEquals(uid, action.body?.str("uid"))
+      assertEquals("{form.reason}", action.body?.str("reason"))
+      assertFalse(action.reason, "the reason is asked once, by the prompt")
+    }
+    // The route's own minimum is the one the prompt tells the person about.
+    val min = screens.first { it.id == "core.staff.user" }.raw.obj("constants").obj("impersonation").obj("minReason")!!.jsonPrimitive.content
+    assertTrue(min.toInt() > 1)
+
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"token":"custom-token","tenantId":null}""", sent = sent)
+    val model = ScreenModel(screens.first { it.id == "core.staff.user" }, Json.parseToJsonElement("""{"params":{"uid":"u1"}}"""), api)
+    assertEquals(
+      "At least $min characters. Write what you are reproducing, or the ticket it serves.",
+      ScreenValues.render(person.prompt.single().help!!, model.context),
+    )
+    val scope = Json.parseToJsonElement("""{"params":{"uid":"u1"},"form":{"reason":"ticket 481: billing page"}}""")
+    val outcome = model.run(person, scope)
+    assertIs<ActionOutcome.Done>(outcome)
+    assertEquals("/api/admin/impersonate", sent.single().url.encodedPath)
+    assertEquals(
+      Json.parseToJsonElement("""{"uid":"u1","reason":"ticket 481: billing page"}"""),
+      Json.parseToJsonElement((sent.single().body as TextContent).text),
+    )
+    assertEquals("custom-token" to null, person.impersonate!!.resolve(outcome.response))
+  }
+
   @Test
   fun theReportFormShowsOnlyTheFieldsOfItsKind() {
     val file = File(screensDir, "account.screens.json")

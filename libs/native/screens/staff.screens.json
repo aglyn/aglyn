@@ -713,6 +713,37 @@
           ]
         },
         {
+          "type": "actions",
+          "title": "Support session",
+          "items": [
+            {
+              "id": "impersonate",
+              "label": "Sign in as the owner",
+              "icon": "arrow.right.circle|login",
+              "confirm": "This replaces your staff session in this app with {data.detail.org.ownerEmail|data.detail.org.ownerUid}'s. The reason is recorded on the audit trail alongside your account, and is the only record of why this session happened. Exit impersonation in the banner brings your own session back.",
+              "url": "/api/admin/impersonate",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "multiline",
+                  "required": true,
+                  "help": "At least {const.impersonation.minReason} characters. Write what you are reproducing, or the ticket it serves."
+                }
+              ],
+              "body": {
+                "uid": "{data.detail.org.ownerUid}",
+                "reason": "{form.reason}"
+              },
+              "impersonate": {
+                "token": "token",
+                "tenantId": "tenantId"
+              },
+              "when": "data.detail.org.ownerUid"
+            }
+          ]
+        },
+        {
           "type": "fields",
           "title": "Enterprise custom billing",
           "when": "data.detail.org.subscription.customMonthlyUsd",
@@ -1917,7 +1948,10 @@
             "value": "other",
             "label": "Other — say what, below"
           }
-        ]
+        ],
+        "impersonation": {
+          "minReason": 8
+        }
       }
     },
     {
@@ -3713,6 +3747,37 @@
           "footer": "No recorded opt-out is not consent to market. Check before calling or texting. Recording or clearing an opt-out is the audited contact-suppressions form."
         },
         {
+          "type": "actions",
+          "title": "Support session",
+          "items": [
+            {
+              "id": "impersonate",
+              "label": "Sign in as this customer",
+              "icon": "arrow.right.circle|login",
+              "confirm": "This replaces your staff session in this app with {data.detail.user.email|data.detail.user.displayName|'this customer'}'s. The reason is recorded on the audit trail alongside your account, and is the only record of why this session happened. Exit impersonation in the banner brings your own session back.",
+              "url": "/api/admin/impersonate",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "multiline",
+                  "required": true,
+                  "help": "At least {const.impersonation.minReason} characters. Write what you are reproducing, or the ticket it serves."
+                }
+              ],
+              "body": {
+                "uid": "{params.uid}",
+                "reason": "{form.reason}"
+              },
+              "impersonate": {
+                "token": "token",
+                "tenantId": "tenantId"
+              },
+              "when": "!data.detail.user.staff"
+            }
+          ]
+        },
+        {
           "type": "list",
           "title": "Sign-in methods",
           "items": "data.detail.user.providers",
@@ -4457,6 +4522,9 @@
           "minLength": 12,
           "alphabet": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789",
           "length": 20
+        },
+        "impersonation": {
+          "minReason": 8
         }
       }
     },
@@ -17908,6 +17976,38 @@
                   "text": "The change did not verify on re-reading. Do not walk away.",
                   "when": "response.confirmed == false"
                 }
+              ],
+              "log": [
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → forwarded — restoration scheduled for {response.counterNotice.restoreAtMs:datetime}",
+                  "when": "response.scheduling == scheduled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → forwarded — the site was NOT suspended, so nothing was scheduled",
+                  "when": "response.scheduling == notSuspended",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → forwarded — the existing suspension already ends sooner; left alone",
+                  "when": "response.scheduling == alreadySooner",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → forwarded — the scheduled restoration was canceled",
+                  "when": "response.scheduling == cancelled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → forwarded — no site resolved, so nothing was scheduled",
+                  "when": "response.scheduling == noHost",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → forwarded",
+                  "when": "response.scheduling != scheduled && response.scheduling != notSuspended && response.scheduling != alreadySooner && response.scheduling != cancelled && response.scheduling != noHost",
+                  "confirmed": "response.confirmed != false"
+                }
               ]
             },
             {
@@ -17964,6 +18064,38 @@
                 {
                   "text": "The change did not verify on re-reading. Do not walk away.",
                   "when": "response.confirmed == false"
+                }
+              ],
+              "log": [
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → restored — restoration scheduled for {response.counterNotice.restoreAtMs:datetime}",
+                  "when": "response.scheduling == scheduled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → restored — the site was NOT suspended, so nothing was scheduled",
+                  "when": "response.scheduling == notSuspended",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → restored — the existing suspension already ends sooner; left alone",
+                  "when": "response.scheduling == alreadySooner",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → restored — the scheduled restoration was canceled",
+                  "when": "response.scheduling == cancelled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → restored — no site resolved, so nothing was scheduled",
+                  "when": "response.scheduling == noHost",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → restored",
+                  "when": "response.scheduling != scheduled && response.scheduling != notSuspended && response.scheduling != alreadySooner && response.scheduling != cancelled && response.scheduling != noHost",
+                  "confirmed": "response.confirmed != false"
                 }
               ]
             },
@@ -18022,6 +18154,38 @@
                   "text": "The change did not verify on re-reading. Do not walk away.",
                   "when": "response.confirmed == false"
                 }
+              ],
+              "log": [
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → suitFiled — restoration scheduled for {response.counterNotice.restoreAtMs:datetime}",
+                  "when": "response.scheduling == scheduled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → suitFiled — the site was NOT suspended, so nothing was scheduled",
+                  "when": "response.scheduling == notSuspended",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → suitFiled — the existing suspension already ends sooner; left alone",
+                  "when": "response.scheduling == alreadySooner",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → suitFiled — the scheduled restoration was canceled",
+                  "when": "response.scheduling == cancelled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → suitFiled — no site resolved, so nothing was scheduled",
+                  "when": "response.scheduling == noHost",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → suitFiled",
+                  "when": "response.scheduling != scheduled && response.scheduling != notSuspended && response.scheduling != alreadySooner && response.scheduling != cancelled && response.scheduling != noHost",
+                  "confirmed": "response.confirmed != false"
+                }
               ]
             },
             {
@@ -18078,6 +18242,38 @@
                 {
                   "text": "The change did not verify on re-reading. Do not walk away.",
                   "when": "response.confirmed == false"
+                }
+              ],
+              "log": [
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → withdrawn — restoration scheduled for {response.counterNotice.restoreAtMs:datetime}",
+                  "when": "response.scheduling == scheduled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → withdrawn — the site was NOT suspended, so nothing was scheduled",
+                  "when": "response.scheduling == notSuspended",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → withdrawn — the existing suspension already ends sooner; left alone",
+                  "when": "response.scheduling == alreadySooner",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → withdrawn — the scheduled restoration was canceled",
+                  "when": "response.scheduling == cancelled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → withdrawn — no site resolved, so nothing was scheduled",
+                  "when": "response.scheduling == noHost",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → withdrawn",
+                  "when": "response.scheduling != scheduled && response.scheduling != notSuspended && response.scheduling != alreadySooner && response.scheduling != cancelled && response.scheduling != noHost",
+                  "confirmed": "response.confirmed != false"
                 }
               ]
             },
@@ -18136,6 +18332,38 @@
                   "text": "The change did not verify on re-reading. Do not walk away.",
                   "when": "response.confirmed == false"
                 }
+              ],
+              "log": [
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → rejected — restoration scheduled for {response.counterNotice.restoreAtMs:datetime}",
+                  "when": "response.scheduling == scheduled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → rejected — the site was NOT suspended, so nothing was scheduled",
+                  "when": "response.scheduling == notSuspended",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → rejected — the existing suspension already ends sooner; left alone",
+                  "when": "response.scheduling == alreadySooner",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → rejected — the scheduled restoration was canceled",
+                  "when": "response.scheduling == cancelled",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → rejected — no site resolved, so nothing was scheduled",
+                  "when": "response.scheduling == noHost",
+                  "confirmed": "response.confirmed != false"
+                },
+                {
+                  "text": "{data.notice.counterNotices[id=params.noticeId].reference|params.noticeId} → rejected",
+                  "when": "response.scheduling != scheduled && response.scheduling != notSuspended && response.scheduling != alreadySooner && response.scheduling != cancelled && response.scheduling != noHost",
+                  "confirmed": "response.confirmed != false"
+                }
               ]
             },
             {
@@ -18151,6 +18379,28 @@
               }
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Changes made in this session",
+          "items": "session.log",
+          "primary": "{item.text}",
+          "secondary": "{item.at:datetime}",
+          "badges": [
+            {
+              "text": "verified",
+              "when": "item.confirmed",
+              "tone": "success"
+            },
+            {
+              "text": "NOT CONFIRMED",
+              "when": "!item.confirmed",
+              "tone": "error"
+            }
+          ],
+          "icon": "clock|schedule",
+          "count": false,
+          "empty": "Nothing yet. If you tapped a step and no line appeared here, the tap did not reach the server — refresh the counter-notice and check it before assuming it moved."
         }
       ]
     },
@@ -18529,7 +18779,13 @@
                 "resolution": "{form.resolution}"
               },
               "reload": true,
-              "success": "Report is now reviewing"
+              "success": "Report is now reviewing",
+              "log": [
+                {
+                  "text": "{data.report.report.reference|params.reportId} → reviewing",
+                  "confirmed": "response.confirmed != false"
+                }
+              ]
             },
             {
               "id": "actioned",
@@ -18557,7 +18813,13 @@
                 "repeatInfringerDecision": "{form.decision}"
               },
               "reload": true,
-              "success": "Report is now actioned"
+              "success": "Report is now actioned",
+              "log": [
+                {
+                  "text": "{data.report.report.reference|params.reportId} → actioned",
+                  "confirmed": "response.confirmed != false"
+                }
+              ]
             },
             {
               "id": "dismissed",
@@ -18585,9 +18847,37 @@
                 "repeatInfringerDecision": "{form.decision}"
               },
               "reload": true,
-              "success": "Report is now dismissed"
+              "success": "Report is now dismissed",
+              "log": [
+                {
+                  "text": "{data.report.report.reference|params.reportId} → dismissed",
+                  "confirmed": "response.confirmed != false"
+                }
+              ]
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Changes made in this session",
+          "items": "session.log",
+          "primary": "{item.text}",
+          "secondary": "{item.at:datetime}",
+          "badges": [
+            {
+              "text": "verified",
+              "when": "item.confirmed",
+              "tone": "success"
+            },
+            {
+              "text": "NOT CONFIRMED",
+              "when": "!item.confirmed",
+              "tone": "error"
+            }
+          ],
+          "icon": "clock|schedule",
+          "count": false,
+          "empty": "Nothing yet. If you tapped Save status and no line appeared here, the tap did not reach the server — refresh the report and check it before assuming it moved."
         }
       ]
     },

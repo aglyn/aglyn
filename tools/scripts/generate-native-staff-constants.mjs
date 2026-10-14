@@ -69,6 +69,7 @@ export async function staffSources() {
   const passwordGenerator = await jiti.import(join(ROOT, 'apps/console/utils/password-generator.ts'))
   const taxFiling = await jiti.import(join(ROOT, 'apps/console/utils/tax-filing-config.ts'))
   const quarantine = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-quarantine.ts'))
+  const impersonation = await jiti.import(join(ROOT, 'apps/console/utils/impersonation-reason.ts'))
   const takedown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-takedown-reach.ts'))
   const denyList = await jiti.import(join(ROOT, 'apps/console/utils/media-quarantine-list-query.ts'))
   const gateways = await jiti.import(join(ROOT, 'libs/shared/util/email/src/lib/mail-gateway.ts'))
@@ -109,6 +110,7 @@ export async function staffSources() {
         alphabet: passwordGenerator.PASSWORD_GENERATOR_ALPHABET,
         length: passwordGenerator.PASSWORD_GENERATOR_LENGTH,
       },
+      impersonation: { minReason: impersonation.IMPERSONATION_MIN_REASON_LENGTH },
     },
     site: {
       tenantApex: apex.TENANT_APEX,
@@ -213,6 +215,7 @@ export async function staffSources() {
       health.HEALTH_PROBES.map(({ id, label, path, auth, meaning, remedy }) => [id, { label, path, auth, meaning, remedy }]),
     ),
     reasonMin: maintenance.MAINTENANCE_REASON_MIN,
+    impersonation: { minReason: impersonation.IMPERSONATION_MIN_REASON_LENGTH },
     jobs: maintenance.MAINTENANCE_JOBS.map(({ id, label, path, destructive, confirmPhrase, what, consequence, previewShows }) => ({
       id,
       label,
@@ -505,7 +508,7 @@ replace('core.staff.margin', (screen) => ({ ...screen, constants: sources.margin
 replace('core.staff.revenue', (screen) => ({ ...screen, constants: sources.revenue }))
 replace('core.staff.abuse', (screen) => ({ ...screen, constants: sources.abuse }))
 replace('core.staff.lockdown', (screen) => ({ ...screen, constants: sources.lockdown }))
-replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons } }))
+replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons, impersonation: sources.impersonation } }))
 replace('core.staff.pluginReview', (screen) => ({ ...screen, constants: sources.pluginReview }))
 replace('core.staff.site', (screen) => ({
   ...screen,

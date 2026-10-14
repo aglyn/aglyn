@@ -252,6 +252,48 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ScreenValues.text(model.journal.first?["text"] ?? .null), "Billing cancel NOT confirmed")
   }
 
+  /// The abuse and counter-notice pages keep the console's "Changes made in this session", in its words: the report and the
+  /// status, and for a counter-notice what happened to the site's clock.
+  @MainActor
+  func testAbuseDecisionsLeaveTheConsolesSessionLines() async throws {
+    let transport = RecordingTransport(responses: [
+      (200, #"{"confirmed":true}"#),
+      (200, #"{"confirmed":true,"scheduling":"scheduled","counterNotice":{"restoreAtMs":1760000000000}}"#),
+      (200, #"{"confirmed":false,"scheduling":"notSuspended"}"#),
+      (200, #"{"confirmed":true,"scheduling":"noClock"}"#),
+    ])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    func action(_ screen: String, _ id: String) throws -> ActionSpec {
+      let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == screen })
+      let actions = spec.blocks.filter { $0.type == "actions" }.flatMap { $0["items"].array.compactMap(ActionSpec.init) }
+      return try XCTUnwrap(actions.first { $0.id == id })
+    }
+
+    let reportSpec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.staff.abuseReport" })
+    let report = ScreenModel(
+      spec: reportSpec, context: ["params": ["reportId": "r1"], "data": ["report": ["report": ["reference": "AR-1"]]]], api: api)
+    _ = await report.run(try action("core.staff.abuseReport", "actioned"), in: report.context)
+    XCTAssertEqual(report.journal.map { ScreenValues.text($0["text"] ?? .null) }, ["AR-1 → actioned"])
+    XCTAssertEqual(report.journal.first?["confirmed"], .bool(true))
+
+    let noticeSpec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.staff.counterNotice" })
+    let notice = ScreenModel(
+      spec: noticeSpec,
+      context: ["params": ["noticeId": "n1"], "data": ["notice": ["counterNotices": [["id": "n1", "reference": "CN-7"]]]]], api: api)
+    _ = await notice.run(try action("core.staff.counterNotice", "forwarded"), in: notice.context)
+    let scheduled = ScreenValues.text(notice.journal.first?["text"] ?? .null)
+    XCTAssertTrue(scheduled.hasPrefix("CN-7 → forwarded — restoration scheduled for "), scheduled)
+    XCTAssertGreaterThan(scheduled.count, "CN-7 → forwarded — restoration scheduled for ".count)
+    _ = await notice.run(try action("core.staff.counterNotice", "withdrawn"), in: notice.context)
+    XCTAssertEqual(
+      ScreenValues.text(notice.journal.first?["text"] ?? .null), "CN-7 → withdrawn — the site was NOT suspended, so nothing was scheduled")
+    XCTAssertEqual(notice.journal.first?["confirmed"], .bool(false))
+    // No clock to set says nothing more than the step.
+    _ = await notice.run(try action("core.staff.counterNotice", "rejected"), in: notice.context)
+    XCTAssertEqual(ScreenValues.text(notice.journal.first?["text"] ?? .null), "CN-7 → rejected")
+    XCTAssertEqual(notice.journal.count, 3)
+  }
+
   /// A guarded run waits for a preview that was read: the preview arms a key, a failed preview takes it back, and the
   /// run spends it (the console's maintenance cards).
   @MainActor
@@ -427,6 +469,63 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(down, ["o1", "o2", "o3"])
     XCTAssertEqual(up, ["o2", "o1", "o3"])
     XCTAssertEqual(ListColumns.line(columns, shown: ["spend"], in: ScreenContext.with(model.context, item: rows[0])), "Spend $1.0000")
+  }
+
+  /// The staff routes mint a custom token for a support session; the action names where in the answer it and its identity
+  /// pool are, and an answer without a token opens nothing.
+  func testAnImpersonateActionReadsTheTokenAndPoolFromTheAnswer() throws {
+    let action = try XCTUnwrap(
+      ActionSpec(["label": "Sign in as this customer", "url": "/api/admin/impersonate", "impersonate": ["token": "token", "tenantId": "tenantId"]]))
+    let spec = try XCTUnwrap(action.impersonate)
+    let answered = spec.resolve(in: ["token": "custom-token", "tenantId": "tenant-9"])
+    XCTAssertEqual(answered?.token, "custom-token")
+    XCTAssertEqual(answered?.tenantId, "tenant-9")
+    // An account in the project's own pool has no tenant.
+    let plain = spec.resolve(in: ["token": "custom-token", "tenantId": .null])
+    XCTAssertEqual(plain?.token, "custom-token")
+    XCTAssertNil(plain?.tenantId)
+    XCTAssertNil(spec.resolve(in: ["tenantId": "tenant-9"]))
+    XCTAssertNil(spec.resolve(in: ["token": ""]))
+    XCTAssertNil(spec.resolve(in: nil))
+    XCTAssertNil(ActionSpec(["label": "Plain", "url": "/x"])?.impersonate)
+  }
+
+  /// Person and Workspace both offer the sign-in the console does, asking the reason the route insists on.
+  @MainActor
+  func testThePersonAndWorkspaceScreensOfferASupportSession() async throws {
+    func offered(_ id: String) throws -> ActionSpec {
+      let screen = try XCTUnwrap(CoreScreens.specs.first { $0.id == id })
+      let actions = screen.blocks.filter { $0.type == "actions" }.flatMap { $0["items"].array.compactMap(ActionSpec.init) }
+      return try XCTUnwrap(actions.first { $0.impersonate != nil })
+    }
+    let person = try offered("core.staff.user")
+    let workspace = try offered("core.staff.org")
+    for (action, uid) in [(person, "{params.uid}"), (workspace, "{data.detail.org.ownerUid}")] {
+      XCTAssertEqual(action.url, "/api/admin/impersonate")
+      let reason = try XCTUnwrap(action.prompt.first { $0.key == "reason" })
+      XCTAssertTrue(reason.required)
+      XCTAssertEqual(action.body?["uid"]?.stringValue, uid)
+      XCTAssertEqual(action.body?["reason"]?.stringValue, "{form.reason}")
+      XCTAssertFalse(action.reason, "the reason is asked once, by the prompt")
+    }
+
+    let transport = RecordingTransport(responses: [(200, #"{"token":"custom-token","tenantId":null}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let screen = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.staff.user" })
+    let model = ScreenModel(spec: screen, context: ["params": ["uid": "u1"]], api: api)
+    // The route's own minimum is the one the prompt tells the person about.
+    let min = try XCTUnwrap(model.context["const"]?["impersonation"]?["minReason"]).numberValue
+    XCTAssertGreaterThan(min ?? 0, 1)
+    XCTAssertEqual(
+      ScreenValues.render(person.prompt[0].help ?? "", in: model.context),
+      "At least \(Int(min ?? 0)) characters. Write what you are reproducing, or the ticket it serves.")
+    let outcome = await model.run(person, in: ["params": ["uid": "u1"], "form": ["reason": "ticket 481: billing page"]])
+    guard case .done(_, let response) = outcome else { return XCTFail("expected done, got \(outcome)") }
+    XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/admin/impersonate"])
+    XCTAssertEqual(JSONValue.decode(transport.requests[0].httpBody ?? Data()), ["uid": "u1", "reason": "ticket 481: billing page"])
+    let resolved = try XCTUnwrap(person.impersonate?.resolve(in: response))
+    XCTAssertEqual(resolved.token, "custom-token")
+    XCTAssertNil(resolved.tenantId)
   }
 
   /// A probe that answers 503 is reporting: its body is the answer.
