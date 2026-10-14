@@ -152,6 +152,59 @@
               "success": "Your plan continues"
             },
             {
+              "id": "plans",
+              "label": "Choose a plan",
+              "icon": "sparkles|workspace_premium",
+              "navigate": {
+                "screen": "core.billing.plans"
+              }
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Manage",
+          "when": "org.manager",
+          "footer": "Plans, payment methods and cancellations open on Stripe's secure pages.",
+          "items": [
+            {
+              "id": "portal",
+              "label": "Manage subscription",
+              "icon": "creditcard|credit_card",
+              "when": "data.billing.subscription || data.org.subscription",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "portal"
+              },
+              "open": "url"
+            },
+            {
+              "id": "card",
+              "label": "Update payment method",
+              "icon": "creditcard.and.123|add_card",
+              "when": "data.billing.subscription || data.org.subscription",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "portal",
+                "flow": "payment_method_update"
+              },
+              "open": "url"
+            },
+            {
+              "id": "resume",
+              "label": "Keep my plan",
+              "icon": "arrow.uturn.backward|undo",
+              "when": "data.billing.subscription.cancelAtPeriodEnd",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "resume"
+              },
+              "success": "Your plan continues"
+            },
+            {
               "id": "cancel",
               "label": "Cancel my plan",
               "icon": "xmark.circle|cancel",
@@ -222,6 +275,46 @@
       "scope": "org",
       "requires": "org.manager",
       "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Pick a plan to continue on Stripe's secure checkout, where the price and terms are shown. A workspace already on a paid plan changes it under Manage subscription."
+        },
+        {
+          "type": "list",
+          "items": "const.plans",
+          "primary": "{item.label}",
+          "secondary": "{item.blurb}",
+          "icon": "sparkles|workspace_premium",
+          "actions": [
+            {
+              "id": "monthly",
+              "label": "Continue, billed monthly",
+              "icon": "calendar|event",
+              "url": "/api/billing/checkout",
+              "body": {
+                "orgId": "{org.id}",
+                "plan": "{item.id}",
+                "interval": "month"
+              },
+              "open": "url",
+              "reload": false
+            },
+            {
+              "id": "yearly",
+              "label": "Continue, billed yearly",
+              "icon": "calendar.badge.clock|event",
+              "url": "/api/billing/checkout",
+              "body": {
+                "orgId": "{org.id}",
+                "plan": "{item.id}",
+                "interval": "year"
+              },
+              "open": "url",
+              "reload": false
+            }
+          ]
+        },
         {
           "type": "notice",
           "tone": "info",
@@ -459,6 +552,26 @@
       ],
       "constants": {
         "plans": [
+          {
+            "id": "starter",
+            "label": "Starter",
+            "blurb": "One site, the essentials"
+          },
+          {
+            "id": "pro",
+            "label": "Pro",
+            "blurb": "More sites, store and forms"
+          },
+          {
+            "id": "business",
+            "label": "Business",
+            "blurb": "Teams and higher limits"
+          },
+          {
+            "id": "agency",
+            "label": "Agency",
+            "blurb": "Client workspaces and white-label"
+          },
           {
             "id": "free",
             "label": "Free",
@@ -780,9 +893,161 @@
         "rollupBefore": {
           "doc": "orgs/{org.id}/usage/{now.prevMonth}",
           "optional": true
+        },
+        "band": {
+          "url": "/api/media/storage?orgId={org.id}",
+          "optional": true
         }
       },
       "blocks": [
+        {
+          "type": "meters",
+          "title": "Your plan",
+          "footer": "What this workspace uses of what its plan includes. Storage is shown under Storage over the plan.",
+          "meters": [
+            {
+              "label": "Sites",
+              "used": "{data.collab.sites:count}",
+              "limit": "{data.ent.quotas.hostLimit}",
+              "format": "number",
+              "when": "data.ent && data.collab"
+            },
+            {
+              "label": "Team seats (incl. you)",
+              "used": "{data.seats.managerSeats}",
+              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
+              "format": "number",
+              "when": "data.ent && data.seats && !data.seats.pendingManagerSeats"
+            },
+            {
+              "label": "Team seats (incl. you + {data.seats.pendingManagerSeats} invited)",
+              "used": "{data.seats.managerSeats}",
+              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
+              "format": "number",
+              "when": "data.ent && data.seats && data.seats.pendingManagerSeats"
+            },
+            {
+              "label": "Datasets (organization)",
+              "used": "{data.datasets.count}",
+              "limit": "{data.ent.quotas.datasetsPerOrg + data.org.seatAddons.datasets?}",
+              "format": "number",
+              "when": "data.ent && data.datasets"
+            },
+            {
+              "label": "Storage (organization), MB",
+              "used": "{data.band.usedBytes:megabytes}",
+              "limit": "{data.band.allowanceMb}",
+              "format": "number",
+              "when": "data.band && !data.band.unlimited"
+            },
+            {
+              "label": "Data storage (organization), MB",
+              "used": "{data.rollup.dataStorageMb}",
+              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
+              "format": "number",
+              "when": "data.ent && data.rollup.dataStorageMb"
+            },
+            {
+              "label": "Data storage (organization), MB",
+              "used": "{data.rollupBefore.dataStorageMb}",
+              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
+              "format": "number",
+              "when": "data.ent && !data.rollup.dataStorageMb && data.rollupBefore.dataStorageMb"
+            },
+            {
+              "label": "CRM records (organization)",
+              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
+              "limit": "{data.ent.quotas.contactsPerHost}",
+              "format": "number",
+              "when": "data.ent.features.crm && data.contacts && data.companies && data.deals"
+            },
+            {
+              "label": "Stored records (organization)",
+              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
+              "limit": "{data.ent.quotas.contactsPerHost}",
+              "format": "number",
+              "when": "data.ent && !data.ent.features.crm && data.contacts && data.companies && data.deals"
+            },
+            {
+              "label": "One-to-one emails (today)",
+              "used": "{data.crmEmails.count ?? '0'}",
+              "limit": "{data.ent.quotas.crmEmailsPerDay}",
+              "format": "number",
+              "when": "data.ent.quotas.crmEmailsPerDay"
+            },
+            {
+              "label": "API requests (this month)",
+              "used": "{data.api.count ?? '0'}",
+              "limit": "{data.ent.quotas.apiRequestsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.apiRequestsPerMonth"
+            },
+            {
+              "label": "Workflow runs (this month, organization)",
+              "used": "{data.workflowCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.workflowRunsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.workflowRunsPerMonth"
+            },
+            {
+              "label": "Action runs (this month, organization)",
+              "used": "{data.actionCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.actionRunsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.actionRunsPerMonth"
+            },
+            {
+              "label": "Bandwidth (this month, organization), GB",
+              "used": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?}",
+              "limit": "{data.ent.quotas.bandwidthGb}",
+              "format": "number",
+              "when": "data.ent && data.siteTraffic"
+            },
+            {
+              "label": "Campaign emails (this month, organization)",
+              "used": "{data.campaignCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.emailSendsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.emailSendsPerMonth"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Storage (organization)",
+          "when": "data.band",
+          "footer": "Every site's media library and the organization library share this one allowance.",
+          "rows": [
+            {
+              "label": "Used",
+              "value": "{data.band.usedBytes:bytes} (unlimited)",
+              "when": "data.band.unlimited"
+            },
+            {
+              "label": "In the organization library",
+              "value": "{data.band.scopeBytes:bytes}",
+              "when": "data.band.scopeBytes"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage && !data.storage.metered",
+          "text": "Uploads stop when your workspace reaches it. Free up space or upgrade to add more."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage.metered && !data.band.hardBand",
+          "text": "Past it, extra storage is billed on your invoice unless you set a storage cap."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage.metered && data.band.hardBand",
+          "text": "Past it, extra storage is billed on your invoice unless you set a storage cap. Uploads to the organization library stop at it for now, because its storage is not billed yet."
+        },
         {
           "type": "meters",
           "title": "Your plan",
@@ -2008,6 +2273,163 @@
       }
     },
     {
+      "id": "core.billing.usage.site",
+      "title": "{params.siteName|'Site usage'}",
+      "icon": "chart.bar|bar_chart",
+      "scope": "org",
+      "load": {
+        "ent": {
+          "url": "/api/orgs/entitlements?orgId={org.id}",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "pages": {
+          "url": "/api/hosts/usage?hostId={params.siteId}",
+          "optional": true
+        },
+        "layouts": {
+          "query": {
+            "collection": "hosts/{params.siteId}/layouts",
+            "count": true
+          },
+          "optional": true
+        },
+        "variables": {
+          "query": {
+            "collection": "hosts/{params.siteId}/variables",
+            "count": true
+          },
+          "optional": true
+        },
+        "functions": {
+          "query": {
+            "collection": "hosts/{params.siteId}/functions",
+            "count": true
+          },
+          "optional": true
+        },
+        "forms": {
+          "query": {
+            "collection": "hosts/{params.siteId}/forms",
+            "count": true
+          },
+          "optional": true
+        },
+        "componentsAll": {
+          "query": {
+            "collection": "hosts/{params.siteId}/components",
+            "count": true
+          },
+          "optional": true
+        },
+        "componentsGone": {
+          "query": {
+            "collection": "hosts/{params.siteId}/components",
+            "count": true,
+            "where": [
+              [
+                "deletedAt",
+                ">",
+                {
+                  "$date": "1970-01-01T00:00:00Z"
+                }
+              ]
+            ]
+          },
+          "optional": true
+        },
+        "media": {
+          "doc": "hosts/{params.siteId}/counters/media",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "meters",
+          "title": "This site",
+          "footer": "Per-site collaborators, not end-user accounts, which are never metered.",
+          "meters": [
+            {
+              "label": "Pages",
+              "used": "{data.pages.screens}",
+              "limit": "{data.ent.quotas.screensPerHost}",
+              "format": "number",
+              "when": "data.ent && data.pages"
+            },
+            {
+              "label": "Shared layouts",
+              "used": "{data.layouts.count}",
+              "limit": "{data.ent.quotas.sharedLayoutsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.layouts"
+            },
+            {
+              "label": "Site collaborators",
+              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
+              "limit": "{data.collab.sites[hostId=params.siteId].cap}",
+              "format": "number",
+              "when": "data.collab.sites[hostId=params.siteId] && !data.collab.sites[hostId=params.siteId].capUnlimited"
+            },
+            {
+              "label": "Site collaborators",
+              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
+              "limit": "",
+              "format": "number",
+              "when": "data.collab.sites[hostId=params.siteId].capUnlimited"
+            },
+            {
+              "label": "Saved forms",
+              "used": "{data.forms.count}",
+              "limit": "{data.ent.quotas.formsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.forms"
+            },
+            {
+              "label": "Reusable components",
+              "used": "{data.componentsAll.count - data.componentsGone.count}",
+              "limit": "{data.ent.quotas.componentsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.componentsAll && data.componentsGone"
+            },
+            {
+              "label": "Variables",
+              "used": "{data.variables.count}",
+              "limit": "{data.ent.quotas.variablesPerHost}",
+              "format": "number",
+              "when": "data.ent && data.variables"
+            },
+            {
+              "label": "Functions",
+              "used": "{data.functions.count}",
+              "limit": "{data.ent.quotas.functionsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.functions"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Storage on this site",
+          "footer": "A share of the workspace's storage, not a meter of its own.",
+          "rows": [
+            {
+              "label": "Media",
+              "value": "{data.media.bytes ?? '0':bytes}",
+              "when": "data.media || data.ent"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "core.billing.cancel",
       "title": "Before you go",
       "icon": "xmark.circle|cancel",
@@ -2205,163 +2627,6 @@
               },
               "success": "Deletion requested. Your data is erased after a 7-day hold; cancel on the delete screen to keep the workspace.",
               "back": true
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "core.billing.usage.site",
-      "title": "{params.siteName|'Site usage'}",
-      "icon": "chart.bar|bar_chart",
-      "scope": "org",
-      "load": {
-        "ent": {
-          "url": "/api/orgs/entitlements?orgId={org.id}",
-          "optional": true
-        },
-        "collab": {
-          "url": "/api/billing/collaborator-allocations",
-          "method": "POST",
-          "body": {
-            "orgId": "{org.id}",
-            "action": "get"
-          },
-          "optional": true
-        },
-        "pages": {
-          "url": "/api/hosts/usage?hostId={params.siteId}",
-          "optional": true
-        },
-        "layouts": {
-          "query": {
-            "collection": "hosts/{params.siteId}/layouts",
-            "count": true
-          },
-          "optional": true
-        },
-        "variables": {
-          "query": {
-            "collection": "hosts/{params.siteId}/variables",
-            "count": true
-          },
-          "optional": true
-        },
-        "functions": {
-          "query": {
-            "collection": "hosts/{params.siteId}/functions",
-            "count": true
-          },
-          "optional": true
-        },
-        "forms": {
-          "query": {
-            "collection": "hosts/{params.siteId}/forms",
-            "count": true
-          },
-          "optional": true
-        },
-        "componentsAll": {
-          "query": {
-            "collection": "hosts/{params.siteId}/components",
-            "count": true
-          },
-          "optional": true
-        },
-        "componentsGone": {
-          "query": {
-            "collection": "hosts/{params.siteId}/components",
-            "count": true,
-            "where": [
-              [
-                "deletedAt",
-                ">",
-                {
-                  "$date": "1970-01-01T00:00:00Z"
-                }
-              ]
-            ]
-          },
-          "optional": true
-        },
-        "media": {
-          "doc": "hosts/{params.siteId}/counters/media",
-          "optional": true
-        }
-      },
-      "blocks": [
-        {
-          "type": "meters",
-          "title": "This site",
-          "footer": "Per-site collaborators, not end-user accounts, which are never metered.",
-          "meters": [
-            {
-              "label": "Pages",
-              "used": "{data.pages.screens}",
-              "limit": "{data.ent.quotas.screensPerHost}",
-              "format": "number",
-              "when": "data.ent && data.pages"
-            },
-            {
-              "label": "Shared layouts",
-              "used": "{data.layouts.count}",
-              "limit": "{data.ent.quotas.sharedLayoutsPerHost}",
-              "format": "number",
-              "when": "data.ent && data.layouts"
-            },
-            {
-              "label": "Site collaborators",
-              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
-              "limit": "{data.collab.sites[hostId=params.siteId].cap}",
-              "format": "number",
-              "when": "data.collab.sites[hostId=params.siteId] && !data.collab.sites[hostId=params.siteId].capUnlimited"
-            },
-            {
-              "label": "Site collaborators",
-              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
-              "limit": "",
-              "format": "number",
-              "when": "data.collab.sites[hostId=params.siteId].capUnlimited"
-            },
-            {
-              "label": "Saved forms",
-              "used": "{data.forms.count}",
-              "limit": "{data.ent.quotas.formsPerHost}",
-              "format": "number",
-              "when": "data.ent && data.forms"
-            },
-            {
-              "label": "Reusable components",
-              "used": "{data.componentsAll.count - data.componentsGone.count}",
-              "limit": "{data.ent.quotas.componentsPerHost}",
-              "format": "number",
-              "when": "data.ent && data.componentsAll && data.componentsGone"
-            },
-            {
-              "label": "Variables",
-              "used": "{data.variables.count}",
-              "limit": "{data.ent.quotas.variablesPerHost}",
-              "format": "number",
-              "when": "data.ent && data.variables"
-            },
-            {
-              "label": "Functions",
-              "used": "{data.functions.count}",
-              "limit": "{data.ent.quotas.functionsPerHost}",
-              "format": "number",
-              "when": "data.ent && data.functions"
-            }
-          ]
-        },
-        {
-          "type": "fields",
-          "title": "Storage on this site",
-          "footer": "A share of the workspace's storage, not a meter of its own.",
-          "rows": [
-            {
-              "label": "Media",
-              "value": "{data.media.bytes ?? '0':bytes}",
-              "when": "data.media || data.ent"
             }
           ]
         }

@@ -782,6 +782,8 @@ object ScreenValues {
       // A charge: a real amount under a cent reads `<$0.01`, never `$0.00` beside a non-zero total.
       "usd" -> number(value)?.let { if (it > 0 && it < 0.005) "<\$0.01" else formatOrderMoney(round(it * 100), "USD") } ?: text(value)
       "bytes" -> number(value)?.let { bytesText(it) } ?: text(value)
+      // Bytes as megabytes to one decimal, plain so a meter can read it back (the storage band's figure).
+      "megabytes" -> number(value)?.let { numberText(Math.round(it / 1_048_576 * 10) / 10.0) } ?: text(value)
       "number" -> number(value)?.let { grouped(it, 2) } ?: text(value)
       "percent" -> number(value)?.let { "${grouped(it * 100, 1)}%" } ?: text(value)
       "count" -> when (value) {

@@ -290,6 +290,14 @@
       "expect": ""
     },
     {
+      "template": "{data.bytes:megabytes}",
+      "expect": "1.5"
+    },
+    {
+      "template": "{data.nothing:megabytes}",
+      "expect": ""
+    },
+    {
       "template": "{data.groups.*.items.*.key}",
       "expect": "outreach/a, outreach/b, campaign/c"
     },

@@ -837,6 +837,9 @@ public enum ScreenValues {
       return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
     case "bytes":
       return number(value).map(bytesText) ?? text(value)
+    case "megabytes":
+      // Bytes as megabytes to one decimal, plain so a meter can read it back (the storage band's figure).
+      return number(value).map { numberText(($0 / 1_048_576 * 10).rounded() / 10) } ?? text(value)
     case "number":
       return number(value).map { grouped($0, fraction: 2) } ?? text(value)
     case "percent":
