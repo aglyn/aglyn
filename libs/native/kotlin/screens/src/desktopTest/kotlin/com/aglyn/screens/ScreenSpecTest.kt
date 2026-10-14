@@ -467,6 +467,17 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun theForumOffersTheRoutesCategoriesAndFiltersByThem() {
+    val forum = ScreenSpec.parseFile(File(screensDir, "account.screens.json").readText()).first { it.id == "core.support.forum" }
+    val list = forum.blocks.first { it.type == "list" }
+    assertEquals("category", list["chips"].str("field"))
+    val context = Json.parseToJsonElement("""{"data":{"forum":{"categories":["General","Building"]}}}""")
+    assertEquals(listOf("General", "Building"), (ScreenValues.lookup(list["chips"].str("from").orEmpty(), context) as JsonArray).map { ScreenValues.text(it) })
+    val create = ActionSpec.parse(forum.raw.arr("actions").first())!!
+    assertEquals(listOf("General", "Building"), create.prompt.first().choices(context).map { it.first })
+  }
+
+  @Test
   fun theAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() {
     val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }
     val list = spec.blocks.first { it.type == "list" }

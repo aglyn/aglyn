@@ -1054,12 +1054,12 @@
               "label": "Category",
               "kind": "select",
               "initial": "General",
-              "options": [
-                "General",
-                "Building",
-                "Showcase",
-                "Feedback"
-              ]
+              "options": [],
+              "optionsFrom": {
+                "items": "data.forum.categories",
+                "value": "{item}",
+                "label": "{item}"
+              }
             },
             {
               "key": "title",
@@ -1104,7 +1104,12 @@
               "threadId": "{item.$id}"
             }
           },
-          "empty": "No threads yet."
+          "empty": "No threads yet. Start the first one.",
+          "chips": {
+            "field": "category",
+            "from": "data.forum.categories",
+            "label": "Category"
+          }
         }
       ]
     },

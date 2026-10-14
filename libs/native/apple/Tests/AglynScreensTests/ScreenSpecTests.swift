@@ -428,6 +428,17 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testTheForumOffersTheRoutesCategoriesAndFiltersByThem() throws {
+    let forum = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.support.forum" })
+    let list = try XCTUnwrap(forum.blocks.first { $0.type == "list" })
+    XCTAssertEqual(list["chips"]?["field"], "category")
+    let context: JSONValue = ["data": ["forum": ["categories": ["General", "Building"]]]]
+    XCTAssertEqual(ScreenValues.lookup(list["chips"]?["from"]?.stringValue ?? "", in: context).array.map { ScreenValues.text($0) }, ["General", "Building"])
+    let create = try XCTUnwrap(forum.raw["actions"].array.first.flatMap(ActionSpec.init))
+    XCTAssertEqual(create.prompt.first?.choices(in: context).map(\.value), ["General", "Building"])
+  }
+
+  @MainActor
   func testTheAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })
     let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })

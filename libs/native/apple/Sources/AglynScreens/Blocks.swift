@@ -119,13 +119,31 @@ struct ListBlock: View {
   let selection: Binding<ListSelection?>?
   let open: (String, NativeParams) -> Void
   let trigger: (ActionSpec, JSONValue) -> Void
+  /// The choice made in the list's `chips` filter; empty shows every row.
+  @State private var chosen = ""
 
   var body: some View {
+    // `chips: { field, from, label }`: a picker over the values in `from`, narrowing the rows to
+    // those whose `field` equals the choice (the forum's category filter).
+    let chips = block["chips"]
+    let chipField = chips?["field"]?.stringValue
+    let chipValues = chips.map { ScreenValues.lookup($0["from"]?.stringValue ?? "", in: context).array.map { ScreenValues.text($0) } } ?? []
     let rows = ScreenValues.scopes(
       items: block["items"]?.stringValue ?? "", within: block["within"]?.stringValue,
-      filter: block["filter"]?.stringValue, in: context)
+      filter: block["filter"]?.stringValue, in: context
+    ).filter { scope in
+      guard let chipField, !chosen.isEmpty else { return true }
+      return ScreenValues.text(ScreenValues.lookup("item.\(chipField)", in: scope)) == chosen
+    }
     let loadKey = block["load"]?.stringValue
     Section {
+      if !chipValues.isEmpty {
+        Picker(chips?["label"]?.stringValue ?? "Filter", selection: $chosen) {
+          Text("All").tag("")
+          ForEach(chipValues, id: \.self) { Text($0).tag($0) }
+        }
+        .accessibilityIdentifier("list-chips")
+      }
       if rows.isEmpty {
         Text(ScreenValues.render(block["empty"]?.stringValue ?? "Nothing here yet.", in: context))
           .font(AglynFont.subheadline).foregroundStyle(.secondary)
