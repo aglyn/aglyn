@@ -224,7 +224,12 @@ private fun SpecBody(
       }
       is ActionOutcome.Done -> {
         val after = ScreenContext.with(actionScope, "response", outcome.response)
-        outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
+        val instead = action.instead?.takeIf { ScreenValues.condition(it.str("when"), after) }
+        if (instead != null) {
+          revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: action.label) to ScreenValues.render(instead.str("text") ?: "", after)
+        } else {
+          outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
+        }
         action.reveal?.let { path -> ScreenValues.lookup(path, outcome.response ?: JsonNull)?.let { revealed = action.label to ScreenValues.text(it) } }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
@@ -385,7 +390,9 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
     pending.scope, "form",
     JsonObject(inputs.associate { it.key to fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)) }),
   )
-  val missing = inputs.any { it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)), pending.scope) }
+  // A field the person cannot see (its `when` fails) never holds up the action.
+  val visible = filled()
+  val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)), pending.scope) }
   ActionDialog(
     title = ScreenValues.render(pending.action.label, pending.scope),
     body = pending.action.confirm?.let { ScreenValues.render(it, pending.scope) },

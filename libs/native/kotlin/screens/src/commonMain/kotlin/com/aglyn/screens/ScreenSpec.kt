@@ -116,6 +116,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** The route answers with a file (an export), not JSON; the person saves it. Its value names the file when the route names none. */
   val download: String? = json.str("download") ?: if (json.isTrue("download")) "download" else null
+  /** `{ when, title, text }`: when the route's answer meets `when`, `text` (a template over `response`) is shown in place of the success message. */
+  val instead: JsonElement? = json.obj("instead")
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
 
