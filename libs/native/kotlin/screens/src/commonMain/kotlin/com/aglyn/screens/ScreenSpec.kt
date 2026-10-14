@@ -94,6 +94,21 @@ class BlockSpec(val type: String, val raw: JsonElement) {
   fun flag(key: String): Boolean = raw.isTrue(key)
 }
 
+/** Where in a route's answer a support session's custom token and identity pool are. */
+class ImpersonateSpec private constructor(val token: String, val tenantId: String?) {
+  /** The token and pool a route answered, or null when it named no token. */
+  fun resolve(response: JsonElement?): Pair<String, String?>? {
+    val answer = response ?: JsonNull
+    val found = (ScreenValues.lookup(token, answer) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() } ?: return null
+    val pool = tenantId?.let { (ScreenValues.lookup(it, answer) as? JsonPrimitive)?.contentOrNull }?.takeIf { it.isNotEmpty() }
+    return found to pool
+  }
+
+  companion object {
+    fun parse(json: JsonElement): ImpersonateSpec? = json.str("token")?.let { ImpersonateSpec(it, json.str("tenantId")) }
+  }
+}
+
 /**
  * `{ name, type, from }`: the file an action hands to the device. `name` is a template, `type` a MIME type, and `from`
  * the path (over the screen's context and the route's `response`) of the text that is the file.
@@ -223,6 +238,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val arm: String? = json.str("arm")
   /** A key the screen forgets once the action succeeds: the run that spends its preview. */
   val disarm: String? = json.str("disarm")
+  /**
+   * `{ token, tenantId }`: paths in the route's answer. Once the action succeeds the app signs in as the customer with the custom
+   * token found at `token` (a support session), in the identity pool named at `tenantId`. The token is a credential: it goes to the
+   * session and is shown nowhere.
+   */
+  val impersonate: ImpersonateSpec? = json.obj("impersonate")?.let { ImpersonateSpec.parse(it) }
 
   /** Every field the action asks for before it runs: its prompt (a field with `each` becoming one per row), then a reason. */
   fun inputs(scope: JsonElement): List<FieldSpec> {

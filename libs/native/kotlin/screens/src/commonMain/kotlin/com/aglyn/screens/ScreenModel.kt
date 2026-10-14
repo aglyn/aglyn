@@ -46,6 +46,11 @@ data class ScreenSession(
   val openHostedPage: (url: String) -> Unit = {},
   /** Leaves the current screen (an action that ends it, like a delete). */
   val back: () -> Unit = {},
+  /**
+   * Signs in as a customer with the custom token a staff route minted (`/api/admin/impersonate`), in the identity pool it was
+   * minted in; the staff session is set aside and returns when the support session ends. Throws when it is refused.
+   */
+  val impersonate: suspend (token: String, tenantId: String?) -> Unit = { _, _ -> },
 ) {
   fun context(plugin: NativePluginContext?, params: NativeParams): JsonElement {
     val role = orgRole.orEmpty()

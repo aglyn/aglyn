@@ -248,6 +248,23 @@ private fun SpecBody(
           }
         }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
+        action.impersonate?.let { impersonate ->
+          // The route minted a custom token for the customer; the app signs in with it. The token goes to the session and is
+          // shown, logged and kept nowhere else.
+          val resolved = impersonate.resolve(outcome.response)
+          if (resolved == null) {
+            show("The support session could not be opened.", StatusTone.ERROR)
+          } else {
+            try {
+              session.impersonate(resolved.first, resolved.second)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+              throw error
+            } catch (error: Throwable) {
+              show((error as? com.aglyn.core.AuthError)?.message ?: "The support session could not be opened. Try again.", StatusTone.ERROR)
+            }
+          }
+          return
+        }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
         if (action.back) session.back() else if (action.reload) model.load()
       }

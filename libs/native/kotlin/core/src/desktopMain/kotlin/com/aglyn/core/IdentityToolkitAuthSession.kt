@@ -33,6 +33,8 @@ class IdentityToolkitAuthSession(
   private val now: () -> Long = ::nowMillis,
   private val credentials: CredentialStore = InMemoryCredentialStore(),
   private val credentialKey: String = "Aglyn",
+  /** How a support session signs in: over REST, keeping nothing. */
+  private val support: SupportSessions = SupportSessions(RestSupportBackend(http, apiKey, emulatorHost, now)),
 ) : AuthSession {
   private val identityBase = emulatorHost?.let { "http://$it/identitytoolkit.googleapis.com" } ?: "https://identitytoolkit.googleapis.com"
   private val tokenBase = emulatorHost?.let { "http://$it/securetoken.googleapis.com" } ?: "https://securetoken.googleapis.com"
@@ -117,7 +119,32 @@ class IdentityToolkitAuthSession(
     return refreshed
   }
 
-  override suspend fun idToken(forceRefresh: Boolean): String? = lock.withLock {
+  override val impersonation: StateFlow<Impersonation?> = support.impersonation
+
+  /** Signs in as a customer with the custom token a staff route minted; the staff member's own tokens stay as they are. */
+  override suspend fun beginImpersonation(customToken: String, tenantId: String?) {
+    // A support session already on ends first, so the state it set aside is back before the next one starts.
+    if (support.active) endImpersonation()
+    val customer = support.begin(customToken, tenantId, mutable.value)
+    mutable.value = AuthState.SignedIn(customer)
+  }
+
+  /** Ends the support session and returns to the staff member's own sign-in, which was never signed out. */
+  override suspend fun endImpersonation() {
+    mutable.value = support.end() ?: return
+  }
+
+  override suspend fun idToken(forceRefresh: Boolean): String? {
+    if (support.active) {
+      val token = support.idToken(forceRefresh)
+      // A refresh the server refuses (the support session was revoked) ends it, and the staff session returns.
+      if (token == null) endImpersonation()
+      return token
+    }
+    return staffIdToken(forceRefresh)
+  }
+
+  private suspend fun staffIdToken(forceRefresh: Boolean): String? = lock.withLock {
     val current = tokens ?: return@withLock null
     // Refresh a minute early, so a token never expires in flight.
     if (!forceRefresh && current.expiresAt - 60_000 > now()) return@withLock current.idToken
@@ -158,7 +185,11 @@ class IdentityToolkitAuthSession(
     )
   }
 
-  override suspend fun signOut() = lock.withLock { signOutLocked() }
+  override suspend fun signOut() {
+    // Leaving the app from a support session ends it, and then signs the staff member out as well.
+    endImpersonation()
+    lock.withLock { signOutLocked() }
+  }
 
   private fun signOutLocked() {
     tokens = null
