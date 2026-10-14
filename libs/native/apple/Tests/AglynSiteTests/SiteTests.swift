@@ -204,6 +204,48 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(MediaScope.org(orgID: "o", forHostID: nil).cdnScope, "org:o")
   }
 
+  func testChoosesAFileTheWayTheConsolesPickerStoresIt() throws {
+    func file(_ id: String, _ fields: [String: Any] = [:]) throws -> MediaItem {
+      try XCTUnwrap(
+        MediaItem(doc(id, ["fileName": "\(id).jpg", "contentType": "image/jpeg"].merging(fields) { _, new in new })))
+    }
+    // A site's own file: its reference.
+    XCTAssertEqual(
+      ChosenMedia(item: try file("m1", ["cdnPath": "/api/media/cdn/h/m1"]), scope: .site(hostID: "h")).reference,
+      "media:h/m1")
+    // A workspace file shared with only some sites is requested through the form that names this site; an org-wide one is not.
+    let restricted = try file("m2", ["cdnPath": "/api/media/cdn/org:o1/m2", "visibleTo": ["host:h"]])
+    XCTAssertEqual(
+      ChosenMedia(item: restricted, scope: .org(orgID: "o1", forHostID: "h")).reference, "media:org:o1:h/m2")
+    let wide = try file("m3", ["cdnPath": "/api/media/cdn/org:o1/m3", "visibleTo": ["org"]])
+    XCTAssertEqual(ChosenMedia(item: wide, scope: .org(orgID: "o1", forHostID: "h")).reference, "media:org:o1/m3")
+    // No CDN path: the Storage address names the asset; any other address is kept.
+    let storage = "https://firebasestorage.googleapis.com/v0/b/bucket/o/hosts%2Fh%2Fmedia%2Fm4?alt=media"
+    XCTAssertEqual(ChosenMedia(item: try file("m4", ["url": storage]), scope: .site(hostID: "h")).reference, "media:h/m4")
+    XCTAssertEqual(
+      ChosenMedia(item: try file("m5", ["url": "https://elsewhere.test/p.png"]), scope: .site(hostID: "h")).reference,
+      "https://elsewhere.test/p.png")
+    // A film's measured length, in whole seconds.
+    XCTAssertEqual(try file("m6", ["video": ["durationMs": 63_400, "width": 1920, "height": 1080]]).videoSeconds, 63)
+    XCTAssertNil(try file("m7").videoSeconds)
+  }
+
+  func testShowsAStoredPictureFromTheCDNForTheSiteBeingEdited() {
+    XCTAssertEqual(
+      mediaPreviewURL("media:h/m1", origin: "https://console.test/", hostID: "h")?.absoluteString,
+      "https://console.test/api/media/cdn/h/m1?w=320")
+    XCTAssertEqual(
+      mediaPreviewURL("media:org:o1/m2", origin: "https://console.test", hostID: "h9")?.absoluteString,
+      "https://console.test/api/media/cdn/org:o1:h9/m2?w=320")
+    XCTAssertEqual(
+      mediaPreviewURL("https://example.com/a.png", origin: "https://console.test", hostID: "h")?.absoluteString,
+      "https://example.com/a.png")
+    XCTAssertEqual(
+      mediaPreviewURL("/img/a.png", origin: "https://console.test", hostID: "h")?.absoluteString,
+      "https://console.test/img/a.png")
+    XCTAssertNil(mediaPreviewURL("  ", origin: "https://console.test", hostID: "h"))
+  }
+
   func testReadsAFileAndBuildsItsAddresses() throws {
     let item = try XCTUnwrap(
       MediaItem(

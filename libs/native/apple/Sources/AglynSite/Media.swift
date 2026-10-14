@@ -129,6 +129,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let updatedAt: Date?
   public let uploadedBy: String?
   public let visibleTo: [String]
+  /// A film's measured length in whole seconds (`videoMediaProps`); nil for anything else or a film that records none.
+  public let videoSeconds: Int?
 
   /// Nil for a deleted file.
   public init?(_ doc: FirestoreDocument) {
@@ -153,6 +155,7 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     updatedAt = doc.date("updatedAt")
     uploadedBy = doc.string("uploadedBy")
     visibleTo = (doc.data["visibleTo"] as? [Any])?.compactMap { $0 as? String } ?? []
+    videoSeconds = libraryVideoSeconds(doc.data["video"])
   }
 
   private static func trimmedOrigin(_ origin: String) -> String {

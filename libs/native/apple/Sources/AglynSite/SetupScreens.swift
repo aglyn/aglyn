@@ -185,16 +185,11 @@ private struct DetailsSection: View {
   var body: some View {
     HostTextCard(
       title: "Logo", host: host, paths: ["logoUrl", "logoDarkUrl"], api: api, canEdit: canEdit,
-      message: "The brand mark your navigation and error pages show. Paste the address of an image from your media library.",
+      message: "The brand mark your navigation and error pages show. Choose an image from your media library; dark mode falls back to the light logo.",
       clearable: ["logoUrl", "logoDarkUrl"]
     ) { field in
       ForEach([("logoUrl", "Light mode logo"), ("logoDarkUrl", "Dark mode logo")], id: \.0) { path, label in
-        HStack(spacing: AglynSpace.oneAndHalf) {
-          AglynRemoteImage(URL(string: field(path).wrappedValue).flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }, systemImage: "photo")
-            .frame(width: 48, height: 48)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-          AglynCountedField(label, text: field(path), placeholder: "https://…", keyboard: .url, enabled: canEdit)
-        }
+        MediaImageField(context: context, label: label, value: field(path), enabled: canEdit)
       }
     }
     BusinessDetailsCard(host: host, api: api, canEdit: canEdit)
@@ -400,15 +395,10 @@ private struct SeoSection: View {
     }
     HostTextCard(
       title: "Icons and social image", host: host, paths: ["seo.favicon", "seo.appIcon", "seo.image", "seo.imageAlt"], api: api,
-      canEdit: canEdit, message: "Paste the address of each image from your media library."
+      canEdit: canEdit, message: "Choose each image from your media library."
     ) { f in
       ForEach([("seo.favicon", "Favicon"), ("seo.appIcon", "App icon"), ("seo.image", "Social image")], id: \.0) { path, label in
-        HStack(spacing: AglynSpace.oneAndHalf) {
-          AglynRemoteImage(URL(string: f(path).wrappedValue).flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }, systemImage: "photo")
-            .frame(width: 40, height: 40)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-          AglynCountedField(label, text: f(path), placeholder: "https://…", keyboard: .url, enabled: canEdit)
-        }
+        MediaImageField(context: context, label: label, value: f(path), enabled: canEdit)
       }
       AglynCountedField(
         "Image description", text: f("seo.imageAlt"), max: SeoLimits.imageAlt,
@@ -432,7 +422,7 @@ private struct SeoSection: View {
       AglynCountedField("Email", text: f("seo.entity.email"), keyboard: .email, enabled: canEdit)
       AglynCountedField("Telephone", text: f("seo.entity.telephone"), keyboard: .phone, enabled: canEdit)
       AglynCountedField("Contact type", text: f("seo.entity.contactType"), placeholder: "customer service", enabled: canEdit)
-      AglynCountedField("Logo", text: f("seo.entity.logo"), placeholder: "https://…", keyboard: .url, enabled: canEdit)
+      MediaImageField(context: context, label: "Logo", value: f("seo.entity.logo"), enabled: canEdit)
     }
     HostTextCard(
       title: "Business address", host: host, paths: Self.addressFields.map { "seo.entity.address.\($0.0)" }, api: api, canEdit: canEdit
