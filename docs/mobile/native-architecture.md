@@ -980,14 +980,30 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   resource's item keys. `path ~= @other.path` asks whether a list holds, or a text
   contains, what the other path reads.
 - `export: { resource, title, hostId }` opens the platform's export sheet for a records
-  resource (its fields, the format, then the file saved or shared), the sheet every list
-  uses; the Imports and exports hub's lists open it per resource.
+  resource, the sheet every list uses (the Imports and exports hub's lists open it per
+  resource). It is the console's export dialog: a preset (Everything, Re-importable, Minimal,
+  the resource's own, the ones the person saved, or a hand-picked list), the fields searched,
+  grouped, picked and put in order (the catalog, search, presets and reorder are ports of
+  `field-catalog.ts`, replayed from `libs/native/contracts/transfer-catalog-cases.json`),
+  which records (the list's selection or filter, or all), the format the resource takes and
+  a byte-order mark for a CSV, then the file saved or shared. The last choice and the saved
+  presets are kept in the person's own `users/{uid}/transferPrefs/{resource}`, where the
+  console keeps them, and a resource preset for another product writes that product's
+  column names.
 - A path can chain bracket groups (`stash.choices[@field][@value]`), take a quoted literal in a
   selector (`rows[id='crm']`), and read an `@path` after `*` against the whole context
   (`samples.*.[@index]` is one column of every sample row).
 - `libs/native/screens/transfer-resources.screens.json` is generated from the plugins'
   `transferResources` (`generate-native-contracts.mjs`): the hub lists every resource whose
   plugin runs (the `switchboard` load) and whose plan feature the entitlements carry.
+- A field of `kind: "upload"` is the import's Upload step (`maxBytes`, `maxRows` and `formats`
+  are templates over the loaded resource): a chosen file or pasted rows, read on the device to
+  show how they read, with the format, the encoding (a file's bytes can be read again under
+  another), the separator and whether the first row names the columns guessed and changeable,
+  the first five rows, and the file refused before anything is sent when it is larger, or
+  longer, than the import takes. The reading is a port of `transfer-file.ts`, replayed from
+  `libs/native/contracts/transfer-file-cases.json`. Its value is `{ fileName, text, bytes,
+  format, delimiter?, headerRow? }` (`form.<key>.text`, ...), empty until nothing blocks it.
 - `chunk: { field, bytes, idFrom, idKey, firstOnly, until }` sends the file text in `field` of
   the body in parts that each fit `bytes` once JSON-encoded (never cutting a character), each
   with `part` and `parts`, the job the first answer names (`idFrom`) sent back as `idKey`, the
@@ -1012,6 +1028,24 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   the same plan again with its answer added, `{"$merge": ["{stash.importPlanBody}", {"extras": {"$put": …}}]}`, and keeps
   the answers as `stash.importExtras` (the plan's `extras`, by step id), so the steps after it add to them. Today the
   gift card import's Confirm step (commerce) and the email list's two steps (email) use it.
+- A contributed screen may carry a `hook: { when, load, action }`, and an action may name `afterZone: { zone, stash }`:
+  once that action has succeeded (the import's apply), the hook of every screen contributed to `zone` whose `requires`
+  and `when` hold is run, in order: its `load` is read into `data`, then its `action` runs over it (its `when` is checked
+  once the data is there). A hook never fails the action; what each says is kept as `stash.<stash>` for the screen that
+  follows (the import's done screen shows it). The AI plugin's After import step for a products import uses it: the
+  step stores the choice for this import, and the hook reads the created ids from the import's results, works the
+  job out with `aiProductsImportJob` (the console's `aiProductsBulkBrief` and bulk inputs), and starts it on
+  `/api/ai/jobs`, which is where the credits are reserved, as the console's products hub starts it.
+- A field with `mustMatch` is unfinished until the typed text equals it; `mustMatchAs: "dollars"` reads both sides as a
+  dollar amount instead (`60`, `$60.00`, `1,250 USD` all mean 6000 cents, as the gift card Confirm step reads a typed
+  total), and `mismatch` is what is said under the field while something typed does not match.
+- `gate: { when, screen }` on an action: when the route refuses with a body that meets `when` (read as `error`), `screen`
+  opens over this one, and when an action there that carries `resume: true` finishes, the very same action is sent again,
+  once. The Marketplace publish uses it for the Publisher Agreement: the route's structured `agreement` refusal opens the
+  agreement, and accepting sends the publish, as the console's gate does.
+- A list with `page: N` shows N rows and a Show more row for the next N (a list the screen already holds whole, such as
+  a diff). `packageItemChanges` takes a fourth argument, the most record rows to hold, so the records of a dataset are
+  all there to page through.
 - `after` chains: an action's `after` may carry an `after` of its own, each step reading the stash
   the one before made (the site package import works its decisions out, then who is still waiting,
   so every change to a default or a choice shares the two steps).
@@ -1042,6 +1076,14 @@ client data (`https://aglyn.com` on Apple, `android:apk-key-hash:...` on Android
 hashes it lists). `errors` maps a route's reason to words, `otherwise` words any other failure, and closing the
 system prompt is not a failure. The action shows where `user.canAddPasskey` holds: the build has a relying party
 (`app.passkeyRp`), the device a creator, the account no company login and a verified email.
+
+The sign-in page offers the same passkeys, so the shell's sign-in screen does too (a "Sign in with a passkey" button where the
+build has a relying party and the device an asserter): `PasskeySignIn` (Apple, `AglynScreens`) and `PasskeySignIn` (Kotlin,
+`:native-screens`) ask `/api/auth/passkeys/signin/options` with no session and the relying party's own `Origin`, have the
+platform sign the challenge with a discoverable passkey (`PasskeyAsserter`: `ASAuthorizationPlatformPublicKeyCredentialProvider`
+on Apple, the Credential Manager on Android), send the assertion to `/api/auth/passkeys/signin/verify` with the origin the
+platform signed into the credential, and sign in with the Firebase custom token it answers (`AuthSession.signIn(customToken:)`,
+`signInWithCustomToken`). A route's reason becomes the console's sentence; closing the system prompt says no passkey was used.
 
 ### The plugin switchboard
 
