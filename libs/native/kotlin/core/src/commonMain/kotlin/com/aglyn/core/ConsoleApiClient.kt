@@ -81,6 +81,8 @@ class ConsoleApiClient(
     idempotencyKey: String? = null,
     anonymous: Boolean = false,
     rawBody: RawBody? = null,
+    /** Headers a route reads beyond the usual ones (the passkey routes read the ceremony's `Origin`). */
+    headers: Map<String, String> = emptyMap(),
   ): JsonElement? {
     val retryable = method == ApiMethod.GET || idempotencyKey != null
     var forceRefresh = false
@@ -97,6 +99,7 @@ class ConsoleApiClient(
           header("Accept", "application/json")
           if (bearer != null) header("Authorization", "Bearer $bearer")
           if (idempotencyKey != null) header("Idempotency-Key", idempotencyKey)
+          for ((name, value) in headers) header(name, value)
           if (rawBody != null) {
             contentType(ContentType.parse(rawBody.contentType))
             setBody(rawBody.bytes)

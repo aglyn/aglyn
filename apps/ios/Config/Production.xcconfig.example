@@ -17,5 +17,9 @@ AGLYN_FIRESTORE_EMULATOR_HOST =
 AGLYN_GOOGLE_IOS_CLIENT_ID =
 AGLYN_GOOGLE_WEB_CLIENT_ID =
 AGLYN_BRAND_NAME = Aglyn
+// The domain passkeys are made for (aglyn.com). Set it only once the app has the Associated Domains
+// entry webcredentials:aglyn.com and aglyn.com serves an apple-app-site-association that names the app
+// (apps/ios/README.md, "What Zach owes"); until then "Set up a passkey" stays hidden.
+AGLYN_PASSKEY_RP_ID =
 AGLYN_DEBUG_EMAIL =
 AGLYN_DEBUG_PASSWORD =

@@ -106,7 +106,7 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     }
   }
   val back: Boolean = json.isTrue("back")
-  val reload: Boolean = !json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null)
+  val reload: Boolean = !json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null || json.obj("passkey") != null)
   val whenCondition: String? = json.str("when")
   val link: String? = json.str("link")
   /** A Besigner path (whole, from the console root) opened in the app's web view. */
@@ -118,6 +118,13 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** A change to the signed-in person's own sign-in, made through the session (`changePassword`, `updateDisplayName`); its inputs are the body. */
   val account: String? = json.str("account")
+  /**
+   * `passkey: { options, verify, origin, errors, otherwise }`: sets up a passkey on this device. The options route
+   * answers a WebAuthn challenge, the platform makes the credential, and the verify route stores it; `origin` is the
+   * `Origin` the routes check the ceremony against (`https://<relying party>`), `errors` maps a route's reason to the
+   * words shown and `otherwise` words any other failure.
+   */
+  val passkey: JsonElement? = json.obj("passkey")
   /**
    * `{ when, title, text }` (or a list of them, the first that matches wins): when the route's answer
    * meets `when`, `text` (a template over `response`) is shown in place of the success message.

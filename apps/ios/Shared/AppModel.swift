@@ -142,7 +142,7 @@ final class AppModel {
           await self?.refreshClaims(force: true)
         },
         message: { passwordChangeMessage($0) }),
-      googleConfigured: config?.google != nil)
+      googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty)
   }
 
   func signOut() async {

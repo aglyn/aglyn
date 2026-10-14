@@ -32,6 +32,8 @@ kotlin {
       implementation(libs.androidx.activity.compose)
       implementation(libs.androidx.core.ktx)
       implementation(libs.androidx.browser)
+      implementation(libs.androidx.credentials)
+      implementation(libs.androidx.credentials.play.services)
     }
     named("desktopMain") {
       dependencies {

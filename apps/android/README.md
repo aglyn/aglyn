@@ -169,5 +169,10 @@ and properties files from the plugin's `mobile.android` block; the apps load
 - Stripe Terminal live mode, and Tap to Pay on Android for the POS app.
 - `assetlinks.json` on the console origin, with both apps' signing certificate
   fingerprints, so console links open the apps.
+  Passkeys need one more on the apex, `https://aglyn.com/.well-known/assetlinks.json`, with the
+  `delegate_permission/common.get_login_creds` relation for `com.aglyn.app` and its signing certificate (template:
+  `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the certificate's hash is
+  listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden. The fingerprint is
+  the placeholder.
 - Desktop (Windows): code signing (Azure Trusted Signing or an EV certificate)
   and/or a Microsoft Store account.

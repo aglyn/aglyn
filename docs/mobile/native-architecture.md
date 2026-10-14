@@ -843,6 +843,10 @@ each issue's runbook comment:
 - Windows code signing (Azure Trusted Signing or an EV certificate) and/or a
   Microsoft Store account;
 - `apple-app-site-association` and `assetlinks.json` on the console origin.
+- `apple-app-site-association` and `assetlinks.json` on `aglyn.com` for passkeys, the
+  `webcredentials:aglyn.com` Associated Domains entry, the Android certificate hash in
+  `PASSKEY_ANDROID_APK_KEY_HASHES`, and `AGLYN_PASSKEY_RP_ID` / `passkeyRpId` in the builds
+  (`docs/mobile/well-known/`).
 
 ## 13. Console screens as specs (AGL-3671, AGL-3667)
 
@@ -912,6 +916,16 @@ whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
 in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
+
+`passkey: { options, verify, origin, errors, otherwise }` on an action (a platform action beside `account` and `write`) sets up a passkey on this device, as
+the console's `registerPasskey` does: `options` answers a WebAuthn challenge, the platform makes the credential
+(`ASAuthorizationPlatformPublicKeyCredentialProvider` on Apple, the Credential Manager on Android, both behind
+`PasskeyCreator`), and `verify` stores it. The routes derive the relying party from the request's `Origin`, so the options
+call sends `origin` (`https://{app.passkeyRp}`) and the verify call the origin the platform signed into the credential's
+client data (`https://aglyn.com` on Apple, `android:apk-key-hash:...` on Android, which the server accepts only for the
+hashes it lists). `errors` maps a route's reason to words, `otherwise` words any other failure, and closing the
+system prompt is not a failure. The action shows where `user.canAddPasskey` holds: the build has a relying party
+(`app.passkeyRp`), the device a creator, the account no company login and a verified email.
 
 ### The plugin switchboard
 

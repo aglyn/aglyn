@@ -528,7 +528,42 @@
               "success": "Removed"
             }
           ],
-          "empty": "No passkeys. Add one from a browser that supports them."
+          "empty": "No passkeys yet.",
+          "badges": [
+            {
+              "text": "Blocked: possible credential copy",
+              "when": "item.suspectedCloneAt",
+              "tone": "error"
+            }
+          ],
+          "footer": "Sign in with Touch ID, Face ID, or a security key instead of your password. Passkeys are an extra way in — your other sign-in methods keep working."
+        },
+        {
+          "type": "actions",
+          "when": "user.canAddPasskey",
+          "items": [
+            {
+              "id": "addPasskey",
+              "label": "Set up a passkey",
+              "icon": "person.badge.plus|add",
+              "passkey": {
+                "options": "/api/auth/passkeys/register/options",
+                "verify": "/api/auth/passkeys/register/verify",
+                "origin": "https://{app.passkeyRp}",
+                "errors": {
+                  "limit-reached": "Passkey limit reached — remove one first."
+                },
+                "otherwise": "Adding the passkey failed. Try again."
+              },
+              "success": "Passkey \"{response.label}\" added"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!user.canAddPasskey",
+          "text": "This app cannot set up a passkey on this device. Add one from a browser that supports them."
         },
         {
           "type": "list",

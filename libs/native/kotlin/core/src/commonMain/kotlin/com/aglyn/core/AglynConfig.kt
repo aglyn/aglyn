@@ -36,6 +36,8 @@ data class AglynEnv(
   val authEmulatorHost: String? = null,
   val firestoreEmulatorHost: String? = null,
   val brandName: String? = null,
+  /** The domain passkeys are made for (`aglyn.com`); empty until the app is linked to it. */
+  val passkeyRpId: String? = null,
 )
 
 data class AglynConfig(
@@ -49,6 +51,12 @@ data class AglynConfig(
   val firestoreEmulatorHost: String?,
   /** The product name the app's copy says; a white-label build renames it here. */
   val brandName: String = DEFAULT_BRAND_NAME,
+  /**
+   * The relying party passkeys are made for (`aglyn.com`, the registrable domain the console's passkeys belong to), set
+   * once the app is linked to it (an `assetlinks.json` on that domain naming the app's signing certificate); null, and the
+   * "Set up a passkey" action hidden, until then.
+   */
+  val passkeyRelyingParty: String? = null,
 ) {
   /** What is missing for the app to sign anyone in, in words for a build log. */
   fun problems(): List<String> = buildList {
@@ -92,6 +100,14 @@ data class AglynConfig(
       return raw.lowercase()
     }
 
+    private val RELYING_PARTY = Regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+
+    /** A domain name (no scheme, port or path) that is not a local host; null for anything else. */
+    fun relyingParty(value: String?): String? {
+      val raw = (value ?: "").trim().lowercase()
+      return raw.takeIf { RELYING_PARTY.matches(it) && !isLocalHost(it) }
+    }
+
     /** `host:port`, or null for anything else. */
     fun hostPort(value: String?): String? {
       val raw = (value ?: "").trim().replace(Regex("^https?://"), "")
@@ -117,6 +133,7 @@ data class AglynConfig(
         authEmulatorHost = hostPort(env.authEmulatorHost),
         firestoreEmulatorHost = hostPort(env.firestoreEmulatorHost),
         brandName = clean(env.brandName).ifEmpty { DEFAULT_BRAND_NAME },
+        passkeyRelyingParty = relyingParty(env.passkeyRpId),
       )
     }
   }

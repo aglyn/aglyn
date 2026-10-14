@@ -1149,6 +1149,7 @@ environment variable.
 | `AGLYN_FIREBASE_MESSAGING_SENDER_ID` | `firebaseMessagingSenderId` | Optional | As above. |
 | `AGLYN_FIREBASE_STORAGE_BUCKET` | — | Optional | As above. |
 | `AGLYN_GOOGLE_IOS_CLIENT_ID`, `AGLYN_GOOGLE_WEB_CLIENT_ID` | — | Optional | Google sign-in's OAuth client ids. The Google button is hidden until both are set. |
+| `AGLYN_PASSKEY_RP_ID` | `passkeyRpId` | Optional | The domain passkeys are made for: your `NEXT_PUBLIC_WORKSPACE_DOMAIN`, bare (`example.com`). "Set up a passkey" is hidden until it is set. Set it only once the app is linked to that domain: an `apple-app-site-association` file and the `webcredentials:` Associated Domains entry for Apple, an `assetlinks.json` naming the app's signing certificate for Android. |
 | `AGLYN_AUTH_EMULATOR_HOST` | `authEmulatorHost` | Development | `host:port` of a local Auth emulator. Never set in a store build. |
 | `AGLYN_FIRESTORE_EMULATOR_HOST` | `firestoreEmulatorHost` | Development | `host:port` of a local Firestore emulator. Never set in a store build. |
 
@@ -1160,6 +1161,12 @@ The server side of push is configured in your containers:
 | `APNS_KEY_P8` | Feature | Runtime, console and tenant | Your Apple Push Notification service key (the `.p8` file from your Apple Developer account): its PEM text, or that PEM base64-encoded. Without it, and the two below, iOS and macOS devices are not sent a push, and the server logs that once. A secret. |
 | `APNS_KEY_ID` | Feature | Runtime, console and tenant | The 10-character id of that key. |
 | `APNS_TEAM_ID` | Feature | Runtime, console and tenant | Your Apple Developer team id. |
+
+Passkeys set up from the Android app are checked against the app's signing certificate:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `PASSKEY_ANDROID_APK_KEY_HASHES` | Feature | Runtime, console | Comma-separated SHA-256 hashes of the signing certificates of your Android builds, each as base64url without padding (43 characters). An Android passkey is accepted only from an app whose hash is listed; unset, Android passkeys are refused and the web console's are unaffected. |
 
 A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone, iPad or Mac and to Firebase Cloud Messaging for an Android device. The server sends to APNs directly with the key above, and to FCM with the Firebase project credentials it already holds, so FCM needs no variable of its own. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
 

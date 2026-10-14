@@ -26,6 +26,7 @@ public struct SpecScreenView: View {
 
   @Environment(\.aglynScreenSession) private var session
   @Environment(\.webAuthenticationSession) private var webAuthentication
+  @Environment(\.authorizationController) private var authorizationController
   @State private var model: ScreenModel?
   @State private var selection: ListSelection?
 
@@ -80,6 +81,11 @@ public struct SpecScreenView: View {
         account: session.account)
       fresh.authenticate = { [webAuthentication] url, scheme in
         try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
+      }
+      if session.passkeyRelyingParty != nil {
+        fresh.createPasskey = { [authorizationController] options in
+          try await SystemPasskeys.create(options, using: authorizationController)
+        }
       }
       model = fresh
       selection = nil

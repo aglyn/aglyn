@@ -61,13 +61,17 @@ public struct ScreenSession: Sendable {
   public var account: AccountOperations
   /// Whether this build can connect Google (its OAuth client is configured).
   public var googleConfigured: Bool
+  /// The relying party passkeys are made for (`aglyn.com`): set where this build can make a passkey (it is
+  /// configured, linked to that domain, and the device can); nil hides the action.
+  public var passkeyRelyingParty: String?
 
   public init(
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
     siteName: String? = nil, claims: TokenClaims = TokenClaims(), origin: String = "",
     reauthenticate: @escaping @Sendable (String) async throws -> Void = { _ in },
     refreshClaims: @escaping @Sendable () async -> Void = {},
-    account: AccountOperations = AccountOperations(), googleConfigured: Bool = false
+    account: AccountOperations = AccountOperations(), googleConfigured: Bool = false,
+    passkeyRelyingParty: String? = nil
   ) {
     self.email = email
     self.displayName = displayName
@@ -80,6 +84,7 @@ public struct ScreenSession: Sendable {
     self.refreshClaims = refreshClaims
     self.account = account
     self.googleConfigured = googleConfigured
+    self.passkeyRelyingParty = passkeyRelyingParty
   }
 
   /// The base context every template reads.
@@ -111,6 +116,10 @@ public struct ScreenSession: Sendable {
         // login (a tenant), and Google is not connected already.
         "canLinkGoogle": .bool(
           googleConfigured && claims.values["firebase"]?["tenant"] == nil && !claims.signInMethods.contains("google.com")),
+        // A passkey can be set up where this build can make one, the account is not on a company login
+        // (the routes refuse a tenant) and its email is verified (they refuse that too).
+        "canAddPasskey": .bool(
+          passkeyRelyingParty != nil && claims.values["firebase"]?["tenant"] == nil && claims.emailVerified),
         "emailVerified": .bool(claims.emailVerified),
       ],
       "staff": [
@@ -118,7 +127,7 @@ public struct ScreenSession: Sendable {
         "role": claims.staffRole.map(JSONValue.string) ?? .null,
         "super": .bool(claims.isSuper),
       ],
-      "app": ["origin": .string(origin)],
+      "app": ["origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null],
       "now": ScreenSession.now(),
       "params": .object(paramRecord),
       "data": [:],
@@ -180,6 +189,8 @@ public final class ScreenModel {
   @ObservationIgnored private let account: AccountOperations?
   /// Opens a URL in the platform's auth sheet and returns where it came back to; the screen sets it.
   @ObservationIgnored public var authenticate: (@Sendable (URL, String) async throws -> URL)?
+  /// Makes a passkey through the platform; the screen sets it (nil where the device cannot).
+  @ObservationIgnored public var createPasskey: PasskeyCreator?
 
   public init(
     spec: ScreenSpec, context: JSONValue, api: ConsoleAPIClient?, reader: FirestoreReader? = nil,
@@ -362,6 +373,7 @@ public final class ScreenModel {
         return .failed(account.message(error))
       }
     }
+    if let passkey = action.passkey { return await registerPasskey(passkey, action: action, in: scope) }
     if let write = action.write {
       guard let writer, let doc = write["doc"]?.stringValue else { return .failed("Saving is not available here.") }
       do {
@@ -387,6 +399,41 @@ public final class ScreenModel {
       return .failed(error.message)
     } catch {
       return .failed(error.localizedDescription)
+    }
+  }
+
+  /// Sets up a passkey as the console's `registerPasskey` does: the options route answers a challenge, the
+  /// platform makes the credential, the verify route stores it. The routes read the ceremony's `Origin`
+  /// (they derive the relying party from it), so the options call sends the relying party's own origin and
+  /// the verify call the origin the platform signed into the credential.
+  private func registerPasskey(_ passkey: JSONValue, action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
+    guard let api, let createPasskey else { return .failed("Passkeys are not available on this device.") }
+    guard let optionsPath = passkey["options"]?.stringValue, let verifyPath = passkey["verify"]?.stringValue,
+      let origin = passkey["origin"]?.stringValue.map({ ScreenValues.render($0, in: scope) }), !origin.isEmpty
+    else { return .failed("Passkeys are not set up in this build.") }
+    do {
+      let started = try await api.request(
+        ScreenValues.renderURL(optionsPath, in: scope), method: .post, body: [:], headers: ["Origin": origin])
+      guard let challengeId = started?["challengeId"]?.stringValue, let options = started?["options"] else {
+        return .failed(ScreenPasskeys.message(for: ConsoleAPIError(status: 500, message: ""), in: passkey, scope: scope))
+      }
+      let credential = try await createPasskey(options)
+      var body: [String: JSONValue] = ["challengeId": .string(challengeId), "response": credential]
+      let label = ScreenValues.text(ScreenValues.resolveBody(action.body ?? [:], in: scope)["label"]).trimmingCharacters(in: .whitespaces)
+      if !label.isEmpty { body["label"] = .string(label) }
+      let verified = try await api.request(
+        ScreenValues.renderURL(verifyPath, in: scope), method: .post, body: .object(body),
+        headers: ["Origin": ScreenPasskeys.clientDataOrigin(of: credential) ?? origin])
+      let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", verified ?? .null)) }
+      return .done(message: message, response: verified)
+    } catch is PasskeyCancelled {
+      // Closing the prompt is the person's answer, not a failure worth alarming them with.
+      return .done(message: nil, response: nil)
+    } catch let error as ConsoleAPIError {
+      if Self.wantsReauth(error) { return .needsReauth(error.message) }
+      return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
+    } catch {
+      return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
     }
   }
 

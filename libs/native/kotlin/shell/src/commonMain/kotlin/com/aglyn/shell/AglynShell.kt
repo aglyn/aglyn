@@ -137,7 +137,10 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
   val authState by services.auth.state.collectAsState()
   val user = (authState as? AuthState.SignedIn)?.user
+  // A passkey can be made where the app is configured for one and the platform bound a creator.
+  val passkeyRelyingParty = services.config.passkeyRelyingParty.takeIf { com.aglyn.screens.LocalPasskeyCreator.current != null }
   val screenSession = com.aglyn.screens.ScreenSession(
+    passkeyRelyingParty = passkeyRelyingParty,
     email = user?.email,
     displayName = user?.displayName,
     orgName = workspace.org?.name,

@@ -103,6 +103,25 @@ export const CHALLENGE_TTL_MS = 2 * 60 * 1000
 export const MAX_PASSKEYS_PER_USER = 10
 export const MAX_LABEL_LENGTH = 64
 
+/**
+ * An Android app presents `android:apk-key-hash:<base64url SHA-256 of its signing certificate>` as the ceremony's
+ * origin, not a web origin. It is accepted only for the hashes the deployment lists in
+ * `PASSKEY_ANDROID_APK_KEY_HASHES` (comma-separated, base64url without padding): the hash names the one app the
+ * relying party's `assetlinks.json` grants credentials to, so an unlisted hash is any other app on the device.
+ */
+const ANDROID_APK_ORIGIN = /^android:apk-key-hash:([A-Za-z0-9_-]{43})$/
+
+export function listedAndroidHashes(
+  env: Record<string, string | undefined> = process.env,
+): ReadonlySet<string> {
+  return new Set(
+    (env['PASSKEY_ANDROID_APK_KEY_HASHES'] ?? '')
+      .split(',')
+      .map((hash) => hash.trim())
+      .filter(Boolean),
+  )
+}
+
 export interface RpContext {
   rpID: string
   /** The exact origin the ceremony ran on, already allowlisted. */
@@ -113,10 +132,20 @@ export interface RpContext {
  * Derives (and gates) the RP context from the request's Origin header.
  * Returns null for an origin the ceremony must not run on — anything that is
  * not `https://` on `aglyn.com`/`*.aglyn.com`, with an `http://localhost`
- * carve-out for development.
+ * carve-out for development, and an Android app's `android:apk-key-hash:` origin
+ * when its certificate hash is one the deployment lists.
  */
-export function resolveRpContext(originHeader: string | null): RpContext | null {
+export function resolveRpContext(
+  originHeader: string | null,
+  androidHashes: ReadonlySet<string> = listedAndroidHashes(),
+): RpContext | null {
   if (!originHeader) return null
+  const android = ANDROID_APK_ORIGIN.exec(originHeader)
+  if (android) {
+    return androidHashes.has(android[1] as string)
+      ? { rpID: WORKSPACE_DOMAIN, origin: originHeader }
+      : null
+  }
   let url: URL
   try {
     url = new URL(originHeader)

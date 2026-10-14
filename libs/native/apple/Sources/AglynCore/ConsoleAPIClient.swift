@@ -139,7 +139,8 @@ public final class ConsoleAPIClient: Sendable {
     body: JSONValue? = nil,
     idempotencyKey: String? = nil,
     anonymous: Bool = false,
-    rawBody: (data: Data, contentType: String)? = nil
+    rawBody: (data: Data, contentType: String)? = nil,
+    headers: [String: String] = [:]
   ) async throws -> JSONValue? {
     let retryable = method == .get || idempotencyKey != nil
     var forceRefresh = false
@@ -165,6 +166,8 @@ public final class ConsoleAPIClient: Sendable {
         request.httpBody = rawBody.data
       }
       if let idempotencyKey { request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key") }
+      // Headers a route reads beyond the usual ones (the passkey routes read the ceremony's `Origin`).
+      for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
 
       let data: Data
       let response: HTTPURLResponse
