@@ -208,3 +208,14 @@ public func libraryVideoSeconds(_ video: Any?) -> Int? {
   guard width > 0, width <= videoMaxDimension, height > 0, height <= videoMaxDimension else { return nil }
   return max(1, Int((duration / 1000 + 0.5).rounded(.down)))
 }
+
+private let downloadQuery = try! NSRegularExpression(pattern: "[?&]download=1(?:&|$)")
+
+/// The URL of an asset's ORIGINAL bytes: the CDN url with `?download=1`, or the url unchanged when it is not a CDN one.
+/// The bare CDN url is an upright, stripped display copy; the image editor's "Replace original" must start from the file itself
+/// (`mediaOriginalSrc`).
+public func mediaOriginalSrc(_ src: String) -> String {
+  let whole = NSRange(src.startIndex..., in: src)
+  guard src.contains("\(mediaCDNRoute)/"), downloadQuery.firstMatch(in: src, range: whole) == nil else { return src }
+  return src + (src.contains("?") ? "&" : "?") + "download=1"
+}

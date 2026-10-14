@@ -237,3 +237,14 @@ fun libraryVideoSeconds(video: Any?): Long? {
   if (width <= 0 || width > VIDEO_MAX_DIMENSION || height <= 0 || height > VIDEO_MAX_DIMENSION) return null
   return maxOf(1L, floor(duration / 1000 + 0.5).toLong())
 }
+
+private val DOWNLOAD_QUERY = Regex("[?&]download=1(?:&|$)")
+
+/**
+ * The URL of an asset's ORIGINAL bytes: the CDN url with `?download=1`, or the
+ * url unchanged when it is not a CDN one. The bare CDN url is an upright,
+ * stripped display copy; the image editor's "Replace original" must start from
+ * the file itself (`mediaOriginalSrc`).
+ */
+fun mediaOriginalSrc(src: String): String =
+  if (src.contains("$MEDIA_CDN_ROUTE/") && !DOWNLOAD_QUERY.containsMatchIn(src)) src + (if ('?' in src) "&" else "?") + "download=1" else src

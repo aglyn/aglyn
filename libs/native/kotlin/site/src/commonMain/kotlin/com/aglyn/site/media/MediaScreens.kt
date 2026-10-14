@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.MediaSort
+import com.aglyn.contracts.mediaOriginalSrc
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
@@ -83,6 +84,7 @@ import com.aglyn.ui.FieldEditor
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldSpec
 import com.aglyn.ui.ListHeader
+import com.aglyn.ui.LocalImageLoader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LocalMediaPicker
 import com.aglyn.ui.MenuAction
@@ -598,7 +600,9 @@ private fun MediaDetailBody(
   val clipboard = LocalClipboardManager.current
   val uri = LocalUriHandler.current
   val picker = LocalMediaPicker.current
+  val imageLoader = LocalImageLoader.current
   val coroutines = rememberCoroutineScope()
+  var editingImage by remember(item.id) { mutableStateOf(false) }
   var fileName by remember(item.id, item.fileName) { mutableStateOf(item.fileName) }
   var alt by remember(item.id, item.alt) { mutableStateOf(item.alt) }
   var description by remember(item.id, item.description) { mutableStateOf(item.description) }
@@ -674,6 +678,13 @@ private fun MediaDetailBody(
             modifier = Modifier.testTag("media-replace"),
           ) { Text("Replace file") }
         }
+        // Rotate, flip, crop and shrink are for pictures only: there is nothing to crop in a PDF.
+        if (item.contentType.startsWith("image/")) {
+          OutlinedButton(onClick = { runner.clear(); editingImage = true }, enabled = canEdit && !runner.busy, modifier = Modifier.testTag("media-edit-image")) {
+            Icon(AglynIcons.named("edit"), contentDescription = null)
+            Text("Edit image", Modifier.padding(start = space(1f)))
+          }
+        }
       }
       if (orgWideEditor) {
         SwitchRow(
@@ -685,6 +696,26 @@ private fun MediaDetailBody(
           modifier = Modifier.testTag("media-private"),
         )
       }
+    }
+    if (editingImage) {
+      ImageEditorDialog(
+        fileName = item.fileName,
+        // The file itself, not the display copy the library shows: "Replace original" must not save a shrunken copy over it.
+        loadOriginal = {
+          val url = if (item.private && scope is MediaScope.Org) api.signedLink(item.id) else item.src(origin)?.let(::mediaOriginalSrc)
+          url?.let { imageLoader?.load(it) }
+        },
+        busy = runner.busy,
+        error = runner.error,
+        onDismiss = { editingImage = false },
+        onSave = { file, asCopy ->
+          if (asCopy) {
+            runner.run("Saved an edited copy.", onDone = { editingImage = false; onChanged() }) { api.upload(file, item.folderId) }
+          } else {
+            runner.run("Image replaced. Everywhere it is used now shows the edited image.", onDone = { editingImage = false; onChanged() }) { api.replace(item, file) }
+          }
+        },
+      )
     }
     audioReplacement?.let { file ->
       AudioRightsDialog(listOf(file)) { confirmed ->
