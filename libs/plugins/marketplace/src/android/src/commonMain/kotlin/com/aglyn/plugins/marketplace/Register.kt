@@ -2,12 +2,16 @@ package com.aglyn.plugins.marketplace
 
 import com.aglyn.pluginhost.NativePluginRegistrar
 import com.aglyn.pluginhost.ScreenLayout
+import com.aglyn.screens.ScreenSpec
+import com.aglyn.screens.SpecScreens
 
 /**
  * The Marketplace plugin's native registration: the same ids its
  * `mobile.contributes` declares in plugins.config.json. The workspace's
  * Marketplace page (`/{org}/marketplace`): browse, a listing's page, the
- * installed plugins and the licenses; a quick action opens browse.
+ * installed plugins and the licenses; a quick action opens browse. Its spec screens
+ * (screens/marketplace.screens.json) publish the site as a template, from Backup &
+ * restore's `siteTemplate` zone, and present the Publisher Agreement that needs.
  */
 fun registerMarketplaceNative(r: NativePluginRegistrar) {
   r.screen(MARKETPLACE_BROWSE_SCREEN, title = "Marketplace", icon = "storefront", layout = ScreenLayout.LIST_DETAIL) { context, params ->
@@ -22,4 +26,5 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   r.quickAction("marketplace.open", title = "Marketplace", icon = "storefront", order = 60, screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.page", path = "/marketplace", screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.listing-page", path = "/marketplace/:listingId", screen = MARKETPLACE_LISTING_SCREEN)
+  SpecScreens.register(MarketplaceScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
 }

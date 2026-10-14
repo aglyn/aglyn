@@ -1143,6 +1143,12 @@
               "navigate": { "screen": "core.site.import" }
             }
           ]
+        },
+        {
+          "type": "zone",
+          "name": "siteTemplate",
+          "title": "Site template",
+          "footer": "Publish this site — every published page plus the theme — as a template others can start from. Re-publishing bumps the version."
         }
       ]
     },
