@@ -127,6 +127,7 @@ struct SpecScreenBody: View {
   @State private var reauthing: PendingAction?
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
+  @State private var exporting: TransferExportRequest?
   @State private var running: String?
   @State private var searchText = ""
 
@@ -168,6 +169,12 @@ struct SpecScreenBody: View {
           reauthing = nil
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
+        }
+      }
+      .sheet(item: $exporting) { request in
+        TransferExportSheet(context: plugin, request: request) { message in
+          exporting = nil
+          if let message { show(message, .success) }
         }
       }
       .alert(
@@ -386,6 +393,18 @@ struct SpecScreenBody: View {
     if let copy = action.copy {
       copyToClipboard(ScreenValues.render(copy, in: scope))
       show("Copied", .success)
+      return
+    }
+    if let export = action.export {
+      let resource = export["resource"]?.stringValue ?? ""
+      let resolved = { (key: String) in export[key].map { ScreenValues.resolveBody($0, in: scope) } }
+      exporting = TransferExportRequest(
+        resource: resource,
+        title: ScreenValues.render(export["title"]?.stringValue ?? action.label, in: scope),
+        hostID: plugin.hostID,
+        scope: resolved("scope") ?? .object(["kind": .string("all")]),
+        fileStem: ScreenValues.render(export["fileStem"]?.stringValue ?? resource, in: scope),
+        filter: resolved("filter"))
       return
     }
     if let path = action.besigner {

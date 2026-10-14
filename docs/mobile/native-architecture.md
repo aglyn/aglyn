@@ -885,7 +885,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
-reason, success, instead, check, open, navigate, back, reload, when, link, copy,
+reason, success, instead, check, open, navigate, back, reload, when, link, copy, export,
 reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
@@ -902,6 +902,11 @@ that matches wins) shown in place of `success` when the route's answer meets
 (`open` then names the response field holding the invoice page to open).
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
+
+`export` is `{ resource, title, fileStem, scope, filter }`: it makes no request of its own but opens the export
+sheet (`TransferExportSheet`, `TransferExportDialog`) on a transfer resource such as `commerce.products`, which asks for
+the columns and the file type and hands the file to the device. `scope` is `{ "kind": "all" }` unless it names a
+filter; `title`, `fileStem` and `filter` are templates. The site's roles and plan are the server's to enforce.
 
 `headers` names request headers, each a template. `{attempt}` there is one key per
 (action, route, resolved body): sending the same request again, a retry or a second tap,

@@ -179,6 +179,10 @@ public struct ActionSpec: Sendable, Identifiable {
   public let besigner: String?
   /// `copy`: the rendered template goes to the clipboard.
   public let copy: String?
+  /// `{ resource, title, fileStem, scope, filter }`: opens the export sheet on a transfer resource (`commerce.products`),
+  /// which asks for the columns and the format and hands the file to the device. `scope` is `{ "kind": "all" }` unless it
+  /// names a filter; `title`, `fileStem` and `filter` are templates.
+  public let export: JSONValue?
   /// A response field shown once, to be copied (a new API key's secret).
   public let reveal: String?
   /// A Firestore merge the signed-in person makes themselves, where the
@@ -231,6 +235,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.link = json["link"]?.stringValue
     self.besigner = json["besigner"]?.stringValue
     self.copy = json["copy"]?.stringValue
+    self.export = json["export"]
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
     self.instead = json["instead"]

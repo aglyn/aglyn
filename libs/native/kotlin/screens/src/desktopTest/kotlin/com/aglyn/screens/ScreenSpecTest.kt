@@ -218,6 +218,23 @@ class ScreenSpecTest {
     assertNotEquals(keys[1], keys[2])
   }
 
+  /** An `export` action asks nothing of a route: it names the transfer resource, and its title, file name and filter are templates. */
+  @Test
+  fun anExportActionNamesTheResourceAndMakesNoRequestOfItsOwn() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Export","export":{"resource":"forms.submissions","title":"Export {item.name}","fileStem":"{item.slug}","filter":{"formId":"{item.id}"}}}""",
+      ),
+    )!!
+    val export = assertNotNull(action.export)
+    assertEquals("forms.submissions", export.str("resource"))
+    assertEquals(null, action.url)
+    assertTrue(!action.reload, "an export has nothing to reload")
+    val scope = Json.parseToJsonElement("""{"item":{"id":"f1","name":"Contact","slug":"contact"}}""")
+    assertEquals("Export Contact", ScreenValues.render(export.str("title")!!, scope))
+    assertEquals(mapOf("formId" to "f1"), ScreenModel.plain(ScreenValues.resolveBody(export.obj("filter")!!, scope)))
+  }
+
   @Test
   fun anActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() {
     val action = ActionSpec.parse(

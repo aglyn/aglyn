@@ -49,6 +49,7 @@ import {
   LOCAL_FULFILLMENT_QUEUE_TABS,
 } from '@aglyn/plugins-commerce/constants/local-fulfillment-list-query'
 import { STOCK_MOVEMENT_REASON_LABEL } from '@aglyn/plugins-commerce/constants/stock-movement-query'
+import { COMMERCE_TRANSFER_RESOURCES } from '@aglyn/plugins-commerce/transfer/transfer-keys'
 
 /**
  * The Commerce plugin's native screens restate some facts the console works out in code, because a screen spec has no
@@ -176,5 +177,28 @@ describe('native commerce screens', () => {
       [LOCAL_FULFILLMENT_QUEUE_FIELDS.status, 'in'],
     ])
     expect(query.where[2][2]).toEqual([...LOCAL_FULFILLMENT_OPEN_STATUSES])
+  })
+
+  it('export exactly the transfer resources the console declares, by their console names', () => {
+    const config = JSON.parse(
+      readFileSync(join(__dirname, '../../../plugins.config.json'), 'utf8'),
+    ).plugins.find((plugin: { id: string }) => plugin.id === 'commerce')
+    const labels: Record<string, string> = Object.fromEntries(
+      config.transferResources.map((resource: { key: string; label: string }) => [
+        resource.key,
+        resource.label,
+      ]),
+    )
+    const exports = screens['commerce.transfer'].blocks.find(
+      (block: { id: string }) => block.id === 'export',
+    ).items as Array<{ export: { resource: string; title: string } }>
+    expect(exports.map((item) => item.export.resource)).toEqual([
+      ...COMMERCE_TRANSFER_RESOURCES,
+    ])
+    for (const item of exports) {
+      expect(item.export.title).toBe(
+        `Export ${labels[item.export.resource].toLowerCase()}`,
+      )
+    }
   })
 })

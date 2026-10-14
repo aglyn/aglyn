@@ -105,6 +105,9 @@ private data class Selection(val screen: String, val params: NativeParams)
 
 private class Pending(val action: ActionSpec, val scope: JsonElement, val reauthMessage: String? = null)
 
+/** An export the person asked for, resolved against the screen: what to export, narrowed how, and the file's name. */
+private class ExportRequest(val resource: String, val title: String, val scope: Map<String, Any?>, val fileStem: String, val filter: Map<String, Any?>?)
+
 /**
  * Draws a console screen from its spec: sections in cards, list and detail
  * side by side on a wide window when the spec asks, pull to refresh,
@@ -174,6 +177,7 @@ private fun SpecBody(
   var reauthing by remember { mutableStateOf<Pending?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
+  var exporting by remember { mutableStateOf<ExportRequest?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
@@ -194,6 +198,19 @@ private fun SpecBody(
     action.copy?.let {
       clipboard.setText(AnnotatedString(ScreenValues.render(it, actionScope)))
       show("Copied", StatusTone.SUCCESS)
+      return
+    }
+    action.export?.let { spec ->
+      @Suppress("UNCHECKED_CAST")
+      fun plainMap(key: String) = spec.obj(key)?.let { ScreenModel.plain(ScreenValues.resolveBody(it, actionScope)) } as? Map<String, Any?>
+      val resource = spec.str("resource").orEmpty()
+      exporting = ExportRequest(
+        resource = resource,
+        title = ScreenValues.render(spec.str("title") ?: action.label, actionScope),
+        scope = plainMap("scope") ?: mapOf("kind" to "all"),
+        fileStem = ScreenValues.render(spec.str("fileStem") ?: resource, actionScope),
+        filter = plainMap("filter"),
+      )
       return
     }
     action.besigner?.let {
@@ -377,6 +394,14 @@ private fun SpecBody(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
       )
+    }
+  }
+  exporting?.let { request ->
+    com.aglyn.pluginhost.TransferExportDialog(
+      plugin, request.resource, request.title, plugin.hostId, request.scope, request.fileStem, request.filter,
+    ) { message ->
+      exporting = null
+      message?.let { show(it, StatusTone.SUCCESS) }
     }
   }
   revealed?.let { (title, value) ->
