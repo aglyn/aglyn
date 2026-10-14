@@ -9,6 +9,88 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.252 — 2026-10-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.251...v1.0.0-beta.252)
+
+### Added
+
+- **native:** pick setup and cover images on apple
+- **native:** a product's details: address, supplier, tags, tax, billing, search ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** book a walk-in at the front desk, priced and checked like the console's ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** a send and a gift card issue say only what happened ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** buy labels for several ticked orders, from the orders list ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** mark several orders fulfilled from the orders list ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** pickup hours and delivery windows are picked from a week, not typed ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** lists fed by a Firestore query load more, as the console's lists page ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** export the store's records from specs, with an export action ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** sales wait for commerce analytics and grow to 30 days on Apple ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** rewards natively, program to adjustments, with a key per press ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** an order's services: pickup, returns, labels, couriers and more ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** store settings, taxes, payments, shipping and the Store hub ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** recovery and alerts, pickup and delivery queue, reservations ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** discounts, coupons and gift cards, with server sums and plan gates ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** stock movements and catalog organization screens ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** returns and RMA screens, with the grammar they need ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** spec writes can drop the site's cached pages as the console does ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** spec grammar for typed money, gathered rows and plain amounts ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** pick setup and cover images from the library
+- **native:** site settings, date windows and chained prompts for console parity ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** media library filters on apple and android
+- **native:** the Business profile setup section on Apple and Android ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** shipping screens; fields listed from data, row replace, fresh ids ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** the SEO check and target keywords on Apple and Android ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** accounting screens ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** review platforms card; forms no longer send hidden fields ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** opening hours are picked by clicking on Apple and Android ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** live chat, Zapier and ad conversions cards ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** couriers card ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** inventory and ERP card ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** delivery apps card ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** email, sales channel, marketplace and print-on-demand cards ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **console:** settings pages take couriers, review platforms and AI links ([AGL-3713](https://linear.app/aglyn/issue/AGL-3713), [AGL-3736](https://linear.app/aglyn/issue/AGL-3736))
+- **console:** rail section groups; Products > Settings splits into pages ([AGL-3713](https://linear.app/aglyn/issue/AGL-3713))
+
+### Fixed
+
+- **billing:** every staff refund carries a Stripe reason derived from ours ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
+- **billing:** a fraud refund tells Stripe it is fraudulent ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
+- **auth:** verify-email link waits for a press before redeeming ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
+- **forms:** use the american spelling in the submission email docs ([AGL-3785](https://linear.app/aglyn/issue/AGL-3785))
+- **forms:** form submission email lists the submitted answers ([AGL-3785](https://linear.app/aglyn/issue/AGL-3785))
+- **console:** the workspace switcher shows every workspace's logo ([AGL-3784](https://linear.app/aglyn/issue/AGL-3784))
+- **console:** compact card actions stay top right; tile cards share a row's height ([AGL-3784](https://linear.app/aglyn/issue/AGL-3784))
+- **native:** put back the commerce tabs the main merge dropped from the config ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **console:** settings sections as literals; page specs stub the zone plugins ([AGL-3713](https://linear.app/aglyn/issue/AGL-3713))
+- **native:** accounting declares the deep links its paths register ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **email,marketing:** a live list's members are mailed on their contact's opt-in
+
+### Changed
+
+- **tenant:** name the shared consent reader for what it reads, not a plugin
+
+### Documentation
+
+- **native:** tick the commerce integration cards row on both platforms ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** spec grammar path projection, option filter, path comparison ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **email:** live audiences show the contact's opt-in and refresh hourly
+- **commerce:** name each store settings page in place of Products > Settings ([AGL-3713](https://linear.app/aglyn/issue/AGL-3713))
+
+<details>
+<summary>Also in this release: 3 test, 1 chore, 3 ci</summary>
+
+- **native:** judge a PR by its test merge, not a lagging base sha ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
+- **native:** key the swift build cache by runner image and cache manifests ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
+- **native:** refresh main's swift build cache after auto-merges too ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
+- **native:** drop the weekly hours module with the picker
+- **native:** the commerce and rewards screen guards live in their plugins ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** plugin registration tests follow the screens each plugin now declares ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **tenant:** the retained-refusal reader the coverage spec tracks moved to consent-by-address
+
+</details>
+
+3 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.251 — 2026-10-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.250...v1.0.0-beta.251)
