@@ -16,7 +16,13 @@ public enum ScreenValues {
     let trimmed = path.trimmingCharacters(in: .whitespaces)
     if trimmed.isEmpty { return context }
     var current: JSONValue? = context
-    for raw in segments(trimmed) {
+    let parts = segments(trimmed)
+    for (position, raw) in parts.enumerated() {
+      // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+      if raw == "*", case .array(let items)? = current {
+        let rest = parts[(position + 1)...].joined(separator: ".")
+        return .array(items.compactMap { rest.isEmpty ? $0 : lookup(rest, in: $0) })
+      }
       // `rows[field=other.path]`: the first row whose field reads as the text at other.path.
       var segment = raw
       var selector: (field: String, path: String)?
@@ -125,6 +131,28 @@ public enum ScreenValues {
     if let colon = lastUnquotedColon(body) {
       format = String(body[body.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
       body = String(body[..<colon])
+    }
+    // `a + b - c`: a sum of numbers (paths or literals), each operator set apart by spaces. A term
+    // that is missing makes the whole sum missing, so a read that failed never shows as zero.
+    if let terms = arithmeticTerms(body) {
+      var total = 0.0
+      for (sign, term) in terms {
+        // A term ending in `?` is zero where it is missing (an add-on never bought).
+        let optional = term.hasSuffix("?")
+        let path = optional ? String(term.dropLast()) : term
+        let value = Double(path).map { JSONValue.number($0) } ?? lookup(path, in: context)
+        if optional, value == nil || value == .null { continue }
+        // A list (`rows.*.field`) adds up its numbers.
+        if case .array(let items)? = value {
+          total += sign * items.compactMap { number($0) }.reduce(0, +)
+          continue
+        }
+        guard let amount = number(value) else { return nil }
+        total += sign * amount
+      }
+      let sum = JSONValue.number(total)
+      guard let format, !format.isEmpty else { return sum }
+      return .string(formatted(sum, as: format, in: context))
     }
     // `a ?? b`: the first alternative that is present at all (false and 0 count), else the quoted literal.
     if body.contains("??") {
@@ -311,6 +339,27 @@ public enum ScreenValues {
     return truthy(lookup(clause, in: context))
   }
 
+  /// The signed terms of `a + b - c`, or nil where the text is not a sum.
+  static func arithmeticTerms(_ body: String) -> [(sign: Double, term: String)]? {
+    guard !body.contains("'"), body.contains(" + ") || body.contains(" - ") else { return nil }
+    var terms: [(Double, String)] = []
+    var sign = 1.0
+    var current: [Substring] = []
+    for word in body.split(separator: " ", omittingEmptySubsequences: true) {
+      if word == "+" || word == "-" {
+        guard !current.isEmpty else { return nil }
+        terms.append((sign, current.joined(separator: " ")))
+        current = []
+        sign = word == "+" ? 1 : -1
+      } else {
+        current.append(word)
+      }
+    }
+    guard !current.isEmpty else { return nil }
+    terms.append((sign, current.joined(separator: " ")))
+    return terms.count > 1 ? terms : nil
+  }
+
   private static func lastUnquotedColon(_ text: String) -> String.Index? {
     var quoted = false
     var found: String.Index?
@@ -373,6 +422,25 @@ public enum ScreenValues {
 
   /// The time zone dates print in; tests pin it to UTC.
   nonisolated(unsafe) public static var timeZone: TimeZone = .current
+
+  /// The clock `now` reads; tests pin it.
+  nonisolated(unsafe) public static var clock: () -> Date = { Date() }
+
+  /// `now.year`, `now.month` (`2026-10`), `now.prevMonth` and `now.day` (`2026-10-13`) in UTC, the keys the
+  /// console's monthly counters and daily documents are named by.
+  public static func nowObject() -> JSONValue {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let parts = calendar.dateComponents([.year, .month, .day], from: clock())
+    let year = String(format: "%04d", parts.year ?? 1970), month = String(format: "%02d", parts.month ?? 1)
+    let day = String(format: "%02d", parts.day ?? 1)
+    let earlier = calendar.date(byAdding: .month, value: -1, to: clock()).map { calendar.dateComponents([.year, .month], from: $0) } ?? parts
+    let previous = String(format: "%04d-%02d", earlier.year ?? 1970, earlier.month ?? 1)
+    return [
+      "year": .string(year), "month": .string("\(year)-\(month)"), "day": .string("\(year)-\(month)-\(day)"),
+      "prevMonth": .string(previous),
+    ]
+  }
 
   private static func dateText(_ millis: Int64, _ pattern: String) -> String {
     let formatter = DateFormatter()

@@ -131,6 +131,68 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(JSONValue.decode(sent[0].httpBody ?? Data()), ["orgId": "o1", "email": "a@b.c"])
   }
 
+  func testNowNamesTheMonthlyAndDailyKeysInUTC() {
+    let before = ScreenValues.clock
+    defer { ScreenValues.clock = before }
+    ScreenValues.clock = { Date(timeIntervalSince1970: 1_791_385_440) }  // 2026-10-07T15:04:00Z
+    let now = ScreenValues.nowObject()
+    XCTAssertEqual(now["year"], "2026")
+    XCTAssertEqual(now["month"], "2026-10")
+    XCTAssertEqual(now["day"], "2026-10-07")
+    XCTAssertEqual(now["prevMonth"], "2026-09")
+    let context: JSONValue = ["now": now, "data": ["counter": ["2026-10": 4, "2026-09": 9]]]
+    XCTAssertEqual(ScreenValues.render("{data.counter[@now.month]}", in: context), "4")
+  }
+
+  @MainActor
+  func testACountLoadAnswersTheServersCountAndFallsBackToTheRows() async throws {
+    final class Counting: FirestoreReader, @unchecked Sendable {
+      @MainActor func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void) -> FirestoreListening {
+        onChange(.success([]))
+        return Handle()
+      }
+      @MainActor func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void) -> FirestoreListening {
+        onChange(.success(nil))
+        return Handle()
+      }
+      func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
+      func deleteDocument(_ path: [String]) async throws {}
+      func count(_ query: FirestoreQuery) async throws -> Int? { query.collection == ["hosts", "h1", "layouts"] ? 7 : nil }
+      final class Handle: FirestoreListening { func remove() {} }
+    }
+    let context: JSONValue = ["site": ["id": "h1"]]
+    let counted = try await FirestoreLoads.query(Counting(), ["collection": "hosts/{site.id}/layouts", "count": true], in: context)
+    XCTAssertEqual(counted["count"], 7)
+    let rows = try await FirestoreLoads.query(Counting(), ["collection": "hosts/{site.id}/forms", "count": true], in: context)
+    XCTAssertEqual(rows["count"], 0)
+  }
+
+  func testAWhereValueMayBeADate() {
+    XCTAssertEqual(FirestoreLoads.plainValue(["$date": "2026-10-07T15:04:00Z"]) as? Date, Date(timeIntervalSince1970: 1_791_385_440))
+    XCTAssertEqual(FirestoreLoads.plainValue(.number(3)) as? Int64, 3)
+    XCTAssertEqual(FirestoreLoads.plainValue(.string("button")) as? String, "button")
+  }
+
+  @MainActor
+  func testAPerRowLoadRunsOncePerRowAndItsListSums() async throws {
+    let transport = RoutedTransport([
+      ("/api/sites", #"{"sites":[{"id":"a"},{"id":"b"},{"id":"c"}]}"#),
+      ("hostId=a", #"{"bandwidthGb":1.5}"#), ("hostId=b", #"{"bandwidthGb":2}"#),
+    ])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let spec = try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": ["sites": "/api/sites", "traffic": ["url": "/api/usage?hostId={item.id}", "each": "data.sites.sites", "optional": true]],
+      ]))
+    let model = ScreenModel(spec: spec, context: [:], api: api)
+    await model.load()
+    XCTAssertEqual(model.data["traffic"].array.count, 3)
+    // Site c answered nothing useful; a and b add up, and the missing one is left out, not read as zero.
+    XCTAssertEqual(ScreenValues.render("{data.traffic.*.bandwidthGb + 1}", in: model.context), "4.5")
+    XCTAssertEqual(ScreenValues.render("{now.prevMonth}", in: model.context).count, 7)
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
@@ -189,6 +251,19 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
     let (status, body) = queue.isEmpty ? (200, "{}") : queue.removeFirst()
     lock.unlock()
     let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+    return (Data(body.utf8), response)
+  }
+}
+
+/// Answers by what the request's URL contains, so loads that run in parallel get the right body.
+final class RoutedTransport: HTTPTransport, @unchecked Sendable {
+  private let routes: [(String, String)]
+  init(_ routes: [(String, String)]) { self.routes = routes }
+
+  func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    let url = request.url?.absoluteString ?? ""
+    let body = routes.first { url.contains($0.0) }?.1 ?? "{}"
+    let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
     return (Data(body.utf8), response)
   }
 }

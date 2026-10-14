@@ -166,6 +166,83 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun nowNamesTheMonthlyAndDailyKeysInUtc() {
+    val before = ScreenValues.clock
+    try {
+      ScreenValues.clock = { 1_791_385_440_000L } // 2026-10-07T15:04:00Z
+      val now = ScreenValues.nowObject()
+      assertEquals("2026", now.str("year"))
+      assertEquals("2026-10", now.str("month"))
+      assertEquals("2026-10-07", now.str("day"))
+      assertEquals("2026-09", now.str("prevMonth"))
+      val context = Json.parseToJsonElement("""{"now":$now,"data":{"counter":{"2026-10":4,"2026-09":9}}}""")
+      assertEquals("4", ScreenValues.render("{data.counter[@now.month]}", context))
+    } finally {
+      ScreenValues.clock = before
+    }
+  }
+
+  @Test
+  fun aCountLoadAnswersTheServersCountAndFallsBackToTheRows() = runTest {
+    val counted = object : com.aglyn.core.FirestoreReader {
+      override suspend fun get(path: String): com.aglyn.core.FirestoreDoc? = null
+      override suspend fun page(query: com.aglyn.core.FirestoreQuery) = com.aglyn.core.FirestorePage(emptyList(), null)
+      override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+      override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
+      override suspend fun count(query: com.aglyn.core.FirestoreQuery): Long? = if (query.collectionPath == "hosts/h1/layouts") 7L else null
+    }
+    val context = Json.parseToJsonElement("""{"site":{"id":"h1"}}""")
+    val spec = Json.parseToJsonElement("""{"collection":"hosts/{site.id}/layouts","count":true}""")
+    assertEquals(Json.parseToJsonElement("""{"count":7.0}"""), FirestoreLoads.query(counted, spec, context))
+    val rows = Json.parseToJsonElement("""{"collection":"hosts/{site.id}/forms","count":true}""")
+    assertEquals(Json.parseToJsonElement("""{"count":0.0}"""), FirestoreLoads.query(counted, rows, context))
+  }
+
+  @Test
+  fun aWhereClauseCarriesItsOperatorAndADateValue() = runTest {
+    val seen = mutableListOf<com.aglyn.core.FirestoreQuery>()
+    val reader = object : com.aglyn.core.FirestoreReader {
+      override suspend fun get(path: String): com.aglyn.core.FirestoreDoc? = null
+      override suspend fun page(query: com.aglyn.core.FirestoreQuery) = com.aglyn.core.FirestorePage(emptyList(), null)
+      override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+      override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
+      override suspend fun count(query: com.aglyn.core.FirestoreQuery): Long? { seen += query; return 3L }
+    }
+    val spec = Json.parseToJsonElement("""{"collection":"hosts/h1/components","count":true,"where":[["deletedAt",">",{"${'$'}date":"1970-01-01T00:00:00Z"}],["kind","==","button"]]}""")
+    FirestoreLoads.query(reader, spec, JsonObject(emptyMap()))
+    val filters = seen.single().filters
+    assertEquals(com.aglyn.core.FilterOp.GT, filters[0].op)
+    assertEquals(com.aglyn.core.FirestoreTimestamp(0, 0), filters[0].value)
+    assertEquals(com.aglyn.core.FilterOp.EQ, filters[1].op)
+    assertEquals(com.aglyn.core.FirestoreTimestamp(1_791_385_440, 0), FirestoreLoads.isoInstant("2026-10-07T15:04:00Z"))
+  }
+
+  @Test
+  fun aPerRowLoadRunsOncePerRowAndItsListSums() = runTest {
+    val routes = listOf(
+      "/api/sites" to """{"sites":[{"id":"a"},{"id":"b"},{"id":"c"}]}""",
+      "hostId=a" to """{"bandwidthGb":1.5}""",
+      "hostId=b" to """{"bandwidthGb":2}""",
+    )
+    val engine = MockEngine { request ->
+      val url = request.url.toString()
+      respond(routes.firstOrNull { url.contains(it.first) }?.second ?: "{}", HttpStatusCode.OK, headersOf("Content-Type", "application/json"))
+    }
+    val api = ConsoleApiClient("http://localhost", HttpClient(engine) { expectSuccess = false }, { "t" }, sleep = {})
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{"sites":"/api/sites","traffic":{"url":"/api/usage?hostId={item.id}","each":"data.sites.sites","optional":true}}}""",
+      ),
+    )!!
+    val model = ScreenModel(spec, JsonObject(emptyMap()), api)
+    model.load()
+    assertEquals(3, (model.data.obj("traffic") as JsonArray).size)
+    // Site c answered nothing useful; a and b add up, and the missing one is left out, not read as zero.
+    assertEquals("4.5", ScreenValues.render("{data.traffic.*.bandwidthGb + 1}", model.context))
+    assertEquals(7, ScreenValues.render("{now.prevMonth}", model.context).length)
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)

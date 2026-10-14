@@ -21,11 +21,36 @@ object ScreenValues {
   /** The time zone dates print in; tests pin it to UTC. */
   var timeZone: String? = null
 
+  /** The clock `now` reads, in epoch milliseconds; tests pin it. */
+  var clock: () -> Long = { nowMillis() }
+
+  /** `now.year`, `now.month` (`2026-10`), `now.prevMonth` and `now.day` (`2026-10-13`) in UTC, the keys the console's monthly counters and daily documents are named by. */
+  fun nowObject(): JsonElement {
+    val (year, month, day) = localParts(clock(), "UTC")
+    val y = year.toString().padStart(4, '0')
+    val m = month.toString().padStart(2, '0')
+    val d = day.toString().padStart(2, '0')
+    val (priorYear, priorMonth) = if (month == 1) (year - 1) to 12 else year to (month - 1)
+    val prior = "${priorYear.toString().padStart(4, '0')}-${priorMonth.toString().padStart(2, '0')}"
+    return JsonObject(
+      mapOf(
+        "year" to JsonPrimitive(y), "month" to JsonPrimitive("$y-$m"), "day" to JsonPrimitive("$y-$m-$d"),
+        "prevMonth" to JsonPrimitive(prior),
+      ),
+    )
+  }
+
   fun lookup(path: String, context: JsonElement): JsonElement? {
     val trimmed = path.trim()
     if (trimmed.isEmpty()) return context
     var current: JsonElement? = context
-    for (raw in segments(trimmed)) {
+    val parts = segments(trimmed)
+    for ((position, raw) in parts.withIndex()) {
+      // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+      if (raw == "*" && current is JsonArray) {
+        val rest = parts.drop(position + 1).joinToString(".")
+        return JsonArray(current.mapNotNull { if (rest.isEmpty()) it else lookup(rest, it) })
+      }
       val open = raw.indexOf('[')
       if (raw.endsWith("]") && open >= 0) {
         val segment = raw.substring(0, open)
@@ -112,6 +137,28 @@ object ScreenValues {
     lastUnquotedColon(body)?.let { colon ->
       format = body.substring(colon + 1).trim()
       body = body.substring(0, colon)
+    }
+    // `a + b - c`: a sum of numbers (paths or literals), each operator set apart by spaces. A term
+    // that is missing makes the whole sum missing, so a read that failed never shows as zero.
+    arithmeticTerms(body)?.let { terms ->
+      var total = 0.0
+      for ((sign, term) in terms) {
+        // A term ending in `?` is zero where it is missing (an add-on never bought).
+        val optional = term.endsWith("?")
+        val path = if (optional) term.dropLast(1) else term
+        val value = path.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: lookup(path, context)
+        if (optional && (value == null || value == JsonNull)) continue
+        // A list (`rows.*.field`) adds up its numbers.
+        if (value is JsonArray) {
+          total += sign * value.mapNotNull { number(it) }.sum()
+          continue
+        }
+        val amount = number(value) ?: return null
+        total += sign * amount
+      }
+      val sum = JsonPrimitive(total)
+      val named = format
+      return if (named.isNullOrEmpty()) sum else JsonPrimitive(formatted(sum, named, context))
     }
     // `a ?? b`: the first alternative that is present at all (false and 0 count), else the quoted literal.
     if (body.contains("??")) {
@@ -281,6 +328,27 @@ object ScreenValues {
     }
     if (clause.startsWith("!")) return !truthy(lookup(clause.substring(1), context))
     return truthy(lookup(clause, context))
+  }
+
+  /** The signed terms of `a + b - c`, or null where the text is not a sum. */
+  internal fun arithmeticTerms(body: String): List<Pair<Double, String>>? {
+    if ('\'' in body || !(body.contains(" + ") || body.contains(" - "))) return null
+    val terms = mutableListOf<Pair<Double, String>>()
+    var sign = 1.0
+    val current = mutableListOf<String>()
+    for (word in body.split(' ').filter { it.isNotEmpty() }) {
+      if (word == "+" || word == "-") {
+        if (current.isEmpty()) return null
+        terms += sign to current.joinToString(" ")
+        current.clear()
+        sign = if (word == "+") 1.0 else -1.0
+      } else {
+        current += word
+      }
+    }
+    if (current.isEmpty()) return null
+    terms += sign to current.joinToString(" ")
+    return if (terms.size > 1) terms else null
   }
 
   private fun lastUnquotedColon(text: String): Int? {
