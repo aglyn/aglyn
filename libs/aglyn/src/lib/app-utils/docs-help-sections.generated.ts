@@ -239,8 +239,8 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#create-a-company': 'Choose New company above the list. A company needs a name; everything else is optional: Domain — the bare hostname (acme.com).',
     '#the-companies-list': 'The list shows every company your site may see, most recently changed first, with its domain, how many contacts are linked to it, its owner, when it was last changed and its next activity — when the earliest open…',
   },
-  connectQuickbooksOnline: {
-    '#choose-your-books': 'When a connection links more than one set of books, the Accounting page asks which one this workspace posts to: pick it and select Use these books.',
+  connectOtherAccounting: {
+    '#choose-your-books': 'When the connection links more than one set of books, the Choose your books card asks which one this workspace posts to: pick it and select Use these books.',
   },
   connectXero: {
     '#choose-an-organization': 'When your Xero login reaches more than one organization, the Accounting page asks which one this workspace posts to: pick it and select Use this organization.',

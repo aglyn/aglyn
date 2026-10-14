@@ -266,6 +266,9 @@ const PLUGIN_TOPICS = {
   // PLUGIN_UNLISTED_TOPICS.
   connectQuickbooksOnline: '/commerce-and-bookings/commerce/connect-quickbooks-online',
   connectXero: '/commerce-and-bookings/commerce/connect-xero',
+  // A Codat connection's Accounting cards (AGL-3776), unlisted with the other
+  // two ledger guides.
+  connectOtherAccounting: '/commerce-and-bookings/commerce/connect-other-accounting-software',
   // The Shipping labels and Carrier accounts cards under the store's
   // Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
@@ -320,6 +323,7 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // two guides wait on (AGL-3614).
   'connectQuickbooksOnline',
   'connectXero',
+  'connectOtherAccounting',
   // The Couriers card, the order's Courier section and the queue's "Send a
   // courier" draw nothing until the console holds COURIERS_TOKEN_KEY, the gate
   // the guide waits on (AGL-3695).

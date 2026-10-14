@@ -227,6 +227,11 @@ export const PLUGIN_DOCS = {
     title: 'Companies',
     excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.',
   },
+  connectOtherAccounting: {
+    path: '/commerce-and-bookings/commerce/connect-other-accounting-software',
+    title: 'Connect other accounting software',
+    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to accounting software other than QuickBooks Online or Xero, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave. Rolling out.',
+  },
   connectQuickbooksOnline: {
     path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
     title: 'Connect QuickBooks Online',
@@ -566,7 +571,8 @@ export const PLUGIN_DOCS_ANCHORS = {
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
-  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-books', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
+  connectOtherAccounting: ['#before-you-start', '#connect', '#choose-your-books', '#choose-your-accounts', '#what-is-posted', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect', '#related'],
+  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleTour: ['#the-app-bar', '#choose-a-workspace', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#alerts-on-this-device'],
   contactActivities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
@@ -843,7 +849,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#create-a-company': 'Create a company',
     '#the-companies-list': 'The companies list',
   },
-  connectQuickbooksOnline: {
+  connectOtherAccounting: {
     '#choose-your-books': 'Choose your books',
   },
   connectXero: {
