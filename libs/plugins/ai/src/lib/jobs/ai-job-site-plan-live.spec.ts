@@ -32,6 +32,8 @@
  * It calls the provider and costs real money (about 19 credits a brief), so
  * it runs only when asked: `AGLYN_LIVE_AI=1` with `ANTHROPIC_API_KEY` set.
  * Run it before promoting a change to the site job, its prompt or its rules.
+ * `AGLYN_LIVE_AI_BRIEFS=languages` runs the guided starts in other languages
+ * instead (AGL-3779), held to their language and English photo words.
  *
  * THE CHEAP VERIFICATION LADDER (AGL-3660; docs/AI_JOBS.md, "Verifying a
  * prompt change"). Climb it in order and stop at the first rung that can
@@ -101,10 +103,12 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { aiSitePlanIsHome } from '../model/ai-site-job'
+import { aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { createAiJobPlanStep } from './ai-job-plan-step'
+import { aiStockPhotoWordsOf, aiStockPhotoWordsSubject, aiStockSourceTerms } from './ai-layout-stock-photos'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
 const NOW = new Date()
@@ -139,6 +143,83 @@ const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audien
   { businessName: 'Fretwork Lessons', businessType: 'a guitar teacher', audience: 'adults who always wanted to learn', starter: 'business' },
 ]
 
+/**
+ * Guided starts in other languages (AGL-3779), run in place of the briefs
+ * above with `AGLYN_LIVE_AI_BRIEFS=languages`. Each brief is the one the
+ * guided start writes (`aiSiteStartBrief`): English sentences around the
+ * person's own words. Every plan must say its language and, when that is not
+ * English, give English photo words, and the site must then be searched by
+ * its business — the Spanish bakery is Panaderia La Molienda's (job
+ * ih6kVvCGP1), whose plan said `es` and gave none on beta.250. The English
+ * bakery is the control: its photo words may be null.
+ */
+const LANGUAGE_BRIEFS: ReadonlyArray<{
+  businessName: string
+  siteType: string
+  audience: string
+  kind: string
+  language: string
+  /** What the site's photos must be searched by; `null` where no photo words are owed. */
+  subject: RegExp | null
+}> = [
+  {
+    businessName: 'Panaderia La Molienda',
+    siteType: 'Una panadería familiar de San Antonio con pan dulce, conchas y pasteles de tres leches al estilo de Oaxaca',
+    audience: 'Familias de San Antonio que buscan pan fresco cada mañana y pasteles para cumpleaños, bodas y quinceañeras',
+    kind: 'restaurant',
+    language: 'es',
+    subject: /bakery|baker|bread|pastr/,
+  },
+  {
+    businessName: 'Flores del Guadalquivir',
+    siteType: 'Una floristería en Sevilla con ramos de novia y arreglos para eventos',
+    audience: 'Novias y organizadores de eventos',
+    kind: 'business',
+    language: 'es',
+    subject: /florist|flower|floral|bouquet/,
+  },
+  {
+    businessName: 'Le Fournil de Lyon',
+    siteType: 'Une boulangerie artisanale à Lyon, pains au levain et viennoiseries',
+    audience: 'Les habitants du quartier qui veulent du bon pain chaque matin',
+    kind: 'restaurant',
+    language: 'fr',
+    subject: /bakery|baker|bread|pastr/,
+  },
+  {
+    businessName: 'Salão Ribeira',
+    siteType: 'Um salão de cabeleireiro no Porto com cortes, coloração e escovas',
+    audience: 'Mulheres que procuram um corte moderno',
+    kind: 'wellness',
+    language: 'pt',
+    subject: /hair|salon|stylist|barber/,
+  },
+  {
+    businessName: 'Werkstatt Am Ring',
+    siteType: 'Eine Kfz-Werkstatt in Köln für Inspektion, Reifenwechsel und Bremsen',
+    audience: 'Autofahrer, die eine ehrliche Werkstatt suchen',
+    kind: 'trades',
+    language: 'de',
+    subject: /auto|car|mechanic|repair|garage|tire|tyre/,
+  },
+  {
+    businessName: 'Trattoria Da Nonna',
+    siteType: 'Una trattoria di famiglia a Bologna con pasta fresca fatta a mano',
+    audience: 'Famiglie e turisti che cercano la vera cucina bolognese',
+    kind: 'restaurant',
+    language: 'it',
+    subject: /trattoria|restaurant|pasta|italian/,
+  },
+  {
+    businessName: 'Crumb & Co',
+    siteType: 'a family bakery in Tulsa that sells cakes to order',
+    audience: 'people planning a birthday',
+    kind: 'restaurant',
+    language: 'en',
+    subject: null,
+  },
+]
+
 function siteJob(inputs: Record<string, unknown>, index: number): AiJob {
   return {
     $id: `job-live-${index}`,
@@ -166,7 +247,82 @@ const PROVISIONED: AiSiteInventory = {
   screens: [{ id: 'scrStarter', name: 'Home', slug: '/', layoutId: 'laySite', template: false, replaceable: true }],
 }
 
-const describeLive = LIVE ? describe : describe.skip
+/** The briefs in other languages instead of the English sweep (AGL-3779). */
+const LANGUAGES = process.env['AGLYN_LIVE_AI_BRIEFS'] === 'languages'
+const describeLive = LIVE && !LANGUAGES ? describe : describe.skip
+const describeLanguages = LIVE && LANGUAGES ? describe : describe.skip
+
+describeLanguages("a guided start's plan in another language, from the real model (AGL-3779)", () => {
+  jest.setTimeout(10 * 60_000)
+
+  it(`says its language and gives English photo words of its business, on a ${ORG_PLAN} workspace’s provisioned site`, async () => {
+    const capabilities = aiPlanCapabilitiesFrom(ORG, {
+      layout: PROVISIONED.layouts.map((row) => ({ id: row.id, kind: undefined, sourceType: undefined, deletedAt: undefined })),
+      template: [],
+    })
+    const results = await Promise.all(
+      LANGUAGE_BRIEFS.map(async (entry, index) => {
+        const answers: AiSiteStartAnswers = {
+          siteType: entry.siteType,
+          audience: entry.audience,
+          example: null,
+          kind: entry.kind,
+          pages: PAGES,
+          submissions: 'inbox',
+          welcomeEmail: false,
+        }
+        const job = {
+          ...siteJob({}, index),
+          $id: `job-live-language-${index}`,
+          brief: aiSiteStartBrief(answers),
+          inputs: { ...aiSiteStartInputs(answers), businessName: entry.businessName },
+        } as AiJob
+        const outcome = (await createAiJobPlanStep({
+          readInventory: async () => PROVISIONED,
+          findPlansByKey: null,
+          readCapabilities: async () => capabilities,
+          admissionRefusal: async () => null,
+        })({ job, stepIndex: 0, now: NOW, firestore: aiEvalMemoryFirestore({}).firestore, org: ORG })) as unknown as Record<string, unknown>
+        const review = outcome['review'] as { reason?: string } | undefined
+        const plan = outcome['plan'] as AiJobPlan | undefined
+        const subject = aiStockPhotoWordsSubject(plan?.photoWords ?? '')
+        return {
+          brief: entry.siteType,
+          expected: entry.language,
+          planned: Boolean(plan) && (!review || review.reason === 'plan'),
+          refused: outcome['uncredited'] === true || outcome['refused'] === true,
+          language: plan?.language ?? null,
+          photoWords: plan?.photoWords ?? null,
+          subject,
+          // What every slot of the site is searched by, as the build reads the plan.
+          searchedBy: aiStockSourceTerms({ business: entry.siteType, ...aiStockPhotoWordsOf({ plan, inputs: job.inputs }) }).business,
+          estCostUsd: Number(outcome['estCostUsd'] ?? 0),
+          // Every answer the step read, and whether the photo words' re-ask fired.
+          answers: [...mockAnswers.entries()].find(([turn]) => turn.includes(entry.siteType))?.[1] ?? [],
+          generation: [...mockGenerations.entries()].find(([turn]) => turn.includes(entry.siteType))?.[1] ?? null,
+        }
+      }),
+    )
+    // The whole table, every run, so a red run shows every brief's outcome.
+    console.log(JSON.stringify({ run: aiLiveRunLedger(), orgPlan: ORG_PLAN, results }, null, 1))
+    expect(results.filter((result) => !result.planned || result.refused).map((result) => result.brief)).toEqual([])
+    // A plan in another language says so, and names its business in English, which its photos are searched by.
+    const owed = results.flatMap((result, index) => {
+      const subject = LANGUAGE_BRIEFS[index]?.subject
+      return subject ? [{ result, subject }] : []
+    })
+    expect(owed.map(({ result }) => [result.brief, (result.language ?? '').slice(0, 2)])).toEqual(
+      owed.map(({ result }) => [result.brief, result.expected]),
+    )
+    // Held to what the site is searched by, its hero included: a business the
+    // curated table names leads the plan's photo words, whose own subject the
+    // table reports (a florist's "wedding bouquets event flowers" led with
+    // "wedding" on a73af114b8).
+    expect(owed.map(({ result, subject }) => [result.brief, Boolean(result.photoWords) && subject.test(result.searchedBy)])).toEqual(
+      owed.map(({ result }) => [result.brief, true]),
+    )
+  })
+})
 
 describeLive("a guided start's plan from the real model", () => {
   jest.setTimeout(10 * 60_000)
