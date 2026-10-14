@@ -231,6 +231,22 @@ class ScreenSpecTest {
     assertEquals(JsonPrimitive("degraded"), ScreenValues.lookup("data.probe.status", model.context))
   }
 
+  /** A staff list load names its filters; a clause with nothing to filter on is left out. */
+  @Test
+  fun loadFiltersGoInTheQueryOnlyWhenFilled() {
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{"rows":{"url":"/api/x?pageSize=50","filters":[
+           {"field":"status","op":"equals","value":"{params.status}"},{"field":"category","value":"{params.category}"}]}}}""",
+      ),
+    )!!
+    val load = spec.loads.first()
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"params":{"status":"open","category":""}}"""), null)
+    assertEquals("/api/x?pageSize=50&filters=%5B%7B%22field%22%3A%22status%22%2C%22op%22%3A%22equals%22%2C%22value%22%3A%22open%22%7D%5D", model.url(load))
+    val bare = ScreenModel(spec, Json.parseToJsonElement("""{"params":{}}"""), null)
+    assertEquals("/api/x?pageSize=50", bare.url(load))
+  }
+
   @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()

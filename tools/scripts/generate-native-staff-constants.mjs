@@ -54,12 +54,16 @@ export async function staffSources() {
   const options = (codes, labels) => codes.map((value) => ({ value, label: labels[value] }))
   // The AI plugin declares the AI levers the Locks screen lists beside the core ones.
   await jiti.import(join(ROOT, 'libs/plugins/ai/src/lib/declarations.ts'))
+  const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
   const model = (file) => jiti.import(join(ROOT, `libs/plugins/marketplace/src/lib/model/${file}.ts`))
   const checklist = await model('plugin-review-checklist')
   const rejections = await model('plugin-rejection-categories')
   const statuses = await model('plugin-review-status')
   const attestation = await model('publisher-attestation')
   return {
+    abuse: {
+      categories: abuse.ABUSE_REPORT_CATEGORIES.map(({ id, label, severity }) => ({ value: id, label, severity })),
+    },
     lockdown: {
       platformId: lockdown.PLATFORM_LOCKDOWN_DOC_ID,
       platformPhrase: lockdown.PLATFORM_LOCK_CONFIRM_PHRASE,
@@ -239,6 +243,7 @@ const replace = (id, change) => {
   spec.screens[at] = change(spec.screens[at])
 }
 replace('core.staff.health', (screen) => ({ ...screen, constants: { probes: sources.probes } }))
+replace('core.staff.abuse', (screen) => ({ ...screen, constants: sources.abuse }))
 replace('core.staff.lockdown', (screen) => ({ ...screen, constants: sources.lockdown }))
 replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons } }))
 replace('core.staff.pluginReview', (screen) => ({ ...screen, constants: sources.pluginReview }))

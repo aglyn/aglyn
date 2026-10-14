@@ -75,6 +75,8 @@ public struct LoadSpec: Sendable, Hashable {
   public let optional: Bool
   /// Statuses whose body is the answer, not a failure: a health probe answers 503 when it reports degraded.
   public let accept: [Int]
+  /// The staff list routes' `filters`: `{ field, op, value }` clauses, each kept when its value template is not empty.
+  public let filters: [JSONValue]
   /// A Firestore document path to read instead of a route.
   public let doc: String?
   /// A Firestore collection query to read instead of a route.
@@ -97,6 +99,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.body = nil
       self.optional = false
       self.accept = []
+      self.filters = []
     } else {
       self.url = json["url"]?.stringValue ?? ""
       self.when = json["when"]?.stringValue
@@ -110,6 +113,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
       self.accept = json["accept"].array.compactMap { value in value.numberValue.map { Int($0) } }
+      self.filters = json["filters"].array
     }
   }
 }

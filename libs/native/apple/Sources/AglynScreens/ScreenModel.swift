@@ -158,6 +158,14 @@ public final class ScreenModel {
     if let words = search[load.key], !words.trimmingCharacters(in: .whitespaces).isEmpty {
       url += (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(words)
     }
+    let clauses: [JSONValue] = load.filters.compactMap { clause in
+      let value = ScreenValues.render(clause["value"]?.stringValue ?? "", in: context)
+      guard !value.isEmpty, let field = clause["field"]?.stringValue else { return nil }
+      return ["field": .string(field), "op": clause["op"] ?? "equals", "value": .string(value)]
+    }
+    if !clauses.isEmpty, let data = try? JSONValue.array(clauses).encoded(), let json = String(data: data, encoding: .utf8) {
+      url += (url.contains("?") ? "&" : "?") + "filters=" + ScreenValues.encodeComponent(json)
+    }
     if let cursor {
       url += (url.contains("?") ? "&" : "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     }

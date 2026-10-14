@@ -2502,6 +2502,7 @@
     {
       "id": "core.staff.abuse",
       "title": "Abuse reports",
+      "subtitle": "Reports, DMCA put-backs and held sends",
       "icon": "exclamationmark.shield|report",
       "scope": "staff",
       "group": "staff",
@@ -2510,21 +2511,175 @@
       "links": [
         "/admin/abuse-reports"
       ],
+      "constants": {
+        "categories": [
+          {
+            "value": "phishing",
+            "label": "Phishing or fraud",
+            "severity": "urgent"
+          },
+          {
+            "value": "csam",
+            "label": "Child sexual abuse material",
+            "severity": "urgent"
+          },
+          {
+            "value": "malware",
+            "label": "Malware or harmful downloads",
+            "severity": "urgent"
+          },
+          {
+            "value": "dmca",
+            "label": "Copyright infringement (DMCA)",
+            "severity": "high"
+          },
+          {
+            "value": "impersonation",
+            "label": "Impersonation or trademark",
+            "severity": "high"
+          },
+          {
+            "value": "illegal",
+            "label": "Other illegal content",
+            "severity": "high"
+          },
+          {
+            "value": "spam",
+            "label": "Spam or deceptive content",
+            "severity": "normal"
+          },
+          {
+            "value": "other",
+            "label": "Something else",
+            "severity": "normal"
+          }
+        ]
+      },
       "load": {
+        "summary": {
+          "url": "/api/admin/abuse-reports?view=summary",
+          "optional": true
+        },
         "reports": {
           "url": "/api/admin/abuse-reports?pageSize=50",
           "cursor": "nextCursor",
-          "items": "reports"
+          "items": "reports",
+          "filters": [
+            {
+              "field": "status",
+              "op": "equals",
+              "value": "{params.status}"
+            },
+            {
+              "field": "category",
+              "op": "equals",
+              "value": "{params.category}"
+            }
+          ]
+        },
+        "counters": {
+          "url": "/api/admin/abuse-reports?queue=counterNotices&pageSize=50",
+          "cursor": "nextCursor",
+          "items": "counterNotices",
+          "optional": true
         }
       },
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter the queue",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "status",
+              "label": "Status",
+              "kind": "select",
+              "initial": "{params.status}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "open",
+                  "label": "Open"
+                },
+                {
+                  "value": "reviewing",
+                  "label": "Reviewing"
+                },
+                {
+                  "value": "actioned",
+                  "label": "Actioned"
+                },
+                {
+                  "value": "dismissed",
+                  "label": "Dismissed"
+                }
+              ]
+            },
+            {
+              "key": "category",
+              "label": "Category",
+              "kind": "select",
+              "initial": "{params.category}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                }
+              ],
+              "optionsFrom": {
+                "items": "const.categories",
+                "value": "{item.value}",
+                "label": "{item.label}"
+              }
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.abuse",
+            "params": {
+              "status": "{form.status}",
+              "category": "{form.category}"
+            }
+          }
+        }
+      ],
       "blocks": [
         {
+          "type": "notice",
+          "tone": "error",
+          "text": "{data.summary.overdueRestorations} counter-notice put-back(s) are past their statutory deadline. Restore access now, or record why it is lawfully held (a filed court action is the only reason 17 U.S.C. 512(g) recognizes).",
+          "when": "data.summary.overdueRestorations"
+        },
+        {
+          "type": "fields",
+          "title": "The queue now",
+          "object": "data.summary",
+          "rows": [
+            {
+              "label": "Urgent and open",
+              "value": "{item.openUrgent:number}"
+            },
+            {
+              "label": "Counter-notices awaiting forwarding",
+              "value": "{item.awaitingForward:number}"
+            },
+            {
+              "label": "Put-backs past their deadline",
+              "value": "{item.overdueRestorations:number}"
+            }
+          ],
+          "footer": "Reporter details and DMCA signatures show only to super staff."
+        },
+        {
           "type": "list",
+          "title": "Reports",
           "load": "reports",
           "items": "data.reports.reports",
-          "primary": "{item.reportedHostname|item.hostId}",
+          "primary": "{item.reportedHostname|item.url|item.hostId|item.id}",
           "secondary": "{item.categoryLabel|item.category:title} · {item.reference}",
-          "tertiary": "{item.createdAtMs:datetime} · {item.reportCount|'1'} reports",
+          "tertiary": "{item.createdAtMs:datetime} · {item.reportCount|'1'} report(s) · {item.details}",
           "icon": "exclamationmark.shield|report",
           "badges": [
             {
@@ -2537,24 +2692,38 @@
               }
             },
             {
+              "text": "Urgent",
+              "when": "item.severity == urgent",
+              "tone": "error"
+            },
+            {
               "text": "DMCA",
-              "when": "item.dmca",
+              "when": "item.category == dmca",
               "tone": "info"
+            },
+            {
+              "text": "{item.strike.strikes} strike(s)",
+              "when": "item.strike.strikes",
+              "tone": "warning"
+            },
+            {
+              "text": "Receipt failed",
+              "when": "item.receiptStatus == failed",
+              "tone": "warning"
+            },
+            {
+              "text": "Held send",
+              "when": "item.heldSend",
+              "tone": "warning"
             }
           ],
+          "open": {
+            "screen": "core.staff.abuseReport",
+            "params": {
+              "reportId": "{item.id}"
+            }
+          },
           "actions": [
-            {
-              "id": "site",
-              "label": "Open the site",
-              "icon": "globe|public",
-              "when": "item.hostId",
-              "navigate": {
-                "screen": "core.staff.site",
-                "params": {
-                  "hostId": "{item.hostId}"
-                }
-              }
-            },
             {
               "id": "review",
               "label": "Mark reviewing",
@@ -2566,49 +2735,56 @@
                 "status": "reviewing"
               },
               "success": "Reviewing"
-            },
-            {
-              "id": "action",
-              "label": "Resolve: actioned",
-              "icon": "checkmark.shield|verified",
-              "url": "/api/admin/abuse-reports",
-              "prompt": [
-                {
-                  "key": "resolution",
-                  "label": "What you did",
-                  "kind": "multiline",
-                  "required": true
-                }
-              ],
-              "body": {
-                "id": "{item.id}",
-                "status": "actioned",
-                "resolution": "{form.resolution}"
-              },
-              "success": "Actioned"
-            },
-            {
-              "id": "dismiss",
-              "label": "Resolve: dismissed",
-              "icon": "xmark.circle|cancel",
-              "url": "/api/admin/abuse-reports",
-              "prompt": [
-                {
-                  "key": "resolution",
-                  "label": "Why",
-                  "kind": "multiline",
-                  "required": true
-                }
-              ],
-              "body": {
-                "id": "{item.id}",
-                "status": "dismissed",
-                "resolution": "{form.resolution}"
-              },
-              "success": "Dismissed"
             }
           ],
-          "empty": "No reports."
+          "empty": "No reports match."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "A DMCA put-back clock counts from the day the counter-notice was received. The oldest counter-notices are first, the ones closest to their deadline.",
+          "when": "data.counters.counterNotices"
+        },
+        {
+          "type": "list",
+          "title": "Counter-notices (DMCA put-back)",
+          "footer": "A subscriber whose material we removed can answer with a sworn counter-notice. Forward it to the complainant, and unless they tell us they have filed a court action, access goes back on the statutory date. Forwarding is what stamps that date onto the site's own suspension, so the lock lifts itself.",
+          "load": "counters",
+          "items": "data.counters.counterNotices",
+          "primary": "{item.reportedHostname|item.url|item.id}",
+          "secondary": "{item.reference} · re {item.noticeReference}",
+          "tertiary": "Received {item.receivedAtMs:datetime} · restore on {item.restoreAtMs:date}",
+          "icon": "scale.3d|gavel",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Received": "warning",
+                "Forwarded": "info",
+                "Restored": "success",
+                "Withdrawn": "neutral",
+                "Rejected": "neutral",
+                "SuitFiled": "error"
+              }
+            },
+            {
+              "text": "PAST DEADLINE",
+              "when": "item.overdue",
+              "tone": "error"
+            },
+            {
+              "text": "Resubmitted",
+              "when": "item.submissionCount != 1",
+              "tone": "neutral"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.counterNotice",
+            "params": {
+              "noticeId": "{item.id}"
+            }
+          },
+          "empty": "No counter-notices. If a removal was wrong this is where the customer would appear, so a long silence is worth checking against the public form at /api/counter-notice rather than read as agreement."
         }
       ]
     },
@@ -7736,6 +7912,912 @@
               },
               "success": "Restored",
               "reload": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.counterNotice",
+      "title": "{data.notice.counterNotices[id=params.noticeId].reference|'Counter-notice'}",
+      "label": "Counter-notice",
+      "subtitle": "A subscriber's sworn put-back request",
+      "icon": "scale.3d|gavel",
+      "scope": "staff",
+      "requires": "staff.is",
+      "links": [
+        "/admin/abuse-reports/counter-notices/:noticeId"
+      ],
+      "load": {
+        "notice": "/api/admin/abuse-reports?queue=counterNotices&pageSize=100"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "The restoration deadline has passed and access is still not back. Restore it now, or record why it is lawfully held (a filed court action is the only reason 512(g) recognizes).",
+          "when": "data.notice.counterNotices[id=params.noticeId].overdue"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "This counter-notice was not found in the first hundred, the oldest first. Open it from the queue to see its page.",
+          "when": "!data.notice.counterNotices[id=params.noticeId]"
+        },
+        {
+          "type": "fields",
+          "title": "The counter-notice",
+          "object": "data.notice.counterNotices[id=params.noticeId]",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{item.status:title}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "Answers notice",
+              "value": "{item.noticeReference}"
+            },
+            {
+              "label": "Where the material was",
+              "value": "{item.url}"
+            },
+            {
+              "label": "Site",
+              "value": "{item.hostId}"
+            },
+            {
+              "label": "Workspace",
+              "value": "{item.orgId}"
+            },
+            {
+              "label": "What the subscriber says was removed",
+              "value": "{item.material}"
+            },
+            {
+              "label": "Submissions",
+              "value": "{item.submissionCount|'1'}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "The clock",
+          "object": "data.notice.counterNotices[id=params.noticeId]",
+          "footer": "The clock counts from the day it was received, not from when we picked it up. The statute allows the earliest and latest dates shown.",
+          "rows": [
+            {
+              "label": "Received",
+              "value": "{item.receivedAtMs:datetime}"
+            },
+            {
+              "label": "Restore on",
+              "value": "{item.restoreAtMs:datetime}"
+            },
+            {
+              "label": "Earliest the statute allows",
+              "value": "{item.earliestRestoreMs:datetime}"
+            },
+            {
+              "label": "Latest the statute allows",
+              "value": "{item.latestRestoreMs:datetime}"
+            },
+            {
+              "label": "Forwarded to the complainant",
+              "value": "{item.forwardedAtMs:datetime|'Not yet. 512(g)(2)(A) asks us to send a copy promptly.'}"
+            },
+            {
+              "label": "Restored",
+              "value": "{item.restoredAtMs:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Their sworn statements",
+          "object": "data.notice.counterNotices[id=params.noticeId]",
+          "footer": "Claims only. Nothing here adjudicates them.",
+          "rows": [
+            {
+              "label": "Removed by mistake or misidentification, in good faith",
+              "value": "{item.goodFaithMistake:yesno}"
+            },
+            {
+              "label": "Consents to the court's jurisdiction",
+              "value": "{item.consentJurisdiction:yesno}"
+            },
+            {
+              "label": "Accepts service of process",
+              "value": "{item.acceptService:yesno}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "The subscriber",
+          "object": "data.notice.counterNotices[id=params.noticeId]",
+          "footer": "Super staff only: a counter-notice must carry a home address and a phone number.",
+          "rows": [
+            {
+              "label": "Name",
+              "value": "{item.subscriberName|'Hidden at your access level'}"
+            },
+            {
+              "label": "Email",
+              "value": "{item.subscriberEmail}"
+            },
+            {
+              "label": "Address",
+              "value": "{item.subscriberAddress}"
+            },
+            {
+              "label": "Phone",
+              "value": "{item.subscriberPhone}"
+            },
+            {
+              "label": "Signature",
+              "value": "{item.signature}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Record",
+          "object": "data.notice.counterNotices[id=params.noticeId]",
+          "rows": [
+            {
+              "label": "What was done",
+              "value": "{item.resolution}"
+            },
+            {
+              "label": "By",
+              "value": "{item.resolvedBy}"
+            },
+            {
+              "label": "Receipt to the subscriber",
+              "value": "{item.receiptStatus:title} {item.receiptReason}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Next step",
+          "footer": "A step with no note cannot be explained later. Not a judgement on the merits.",
+          "items": [
+            {
+              "id": "forwarded",
+              "label": "Forward to the complainant",
+              "icon": "paperplane|send",
+              "when": "data.notice.counterNotices[id=params.noticeId].status != forwarded",
+              "url": "/api/admin/abuse-reports",
+              "confirm": "Copy sent to the complainant, and the site's suspension stamped with the restore date.",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "What you did and why",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "counterNoticeId": "{params.noticeId}",
+                "counterNoticeStatus": "forwarded",
+                "resolution": "{form.note}"
+              },
+              "reload": true,
+              "success": "Counter-notice is now forwarded",
+              "report": [
+                {
+                  "text": "The restoration is scheduled for {response.counterNotice.restoreAtMs:datetime}.",
+                  "when": "response.scheduling == scheduled"
+                },
+                {
+                  "text": "The site was NOT suspended, so nothing was scheduled.",
+                  "when": "response.scheduling == notSuspended"
+                },
+                {
+                  "text": "The existing suspension already ends sooner; left alone.",
+                  "when": "response.scheduling == alreadySooner"
+                },
+                {
+                  "text": "The scheduled restoration was canceled.",
+                  "when": "response.scheduling == cancelled"
+                },
+                {
+                  "text": "No site resolved, so nothing was scheduled.",
+                  "when": "response.scheduling == noHost"
+                },
+                {
+                  "text": "The counter-notice has no received time, so no clock could be set.",
+                  "when": "response.scheduling == noClock"
+                },
+                {
+                  "text": "The strike from the original notice was {response.strike}.",
+                  "when": "response.strike"
+                },
+                {
+                  "text": "The change did not verify on re-reading. Do not walk away.",
+                  "when": "response.confirmed == false"
+                }
+              ]
+            },
+            {
+              "id": "restored",
+              "label": "Restore access",
+              "icon": "arrow.uturn.backward|undo",
+              "when": "data.notice.counterNotices[id=params.noticeId].status != restored",
+              "url": "/api/admin/abuse-reports",
+              "confirm": "Access put back. Any strike from the original notice is withdrawn.",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "What you did and why",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "counterNoticeId": "{params.noticeId}",
+                "counterNoticeStatus": "restored",
+                "resolution": "{form.note}"
+              },
+              "reload": true,
+              "success": "Counter-notice is now restored",
+              "report": [
+                {
+                  "text": "The restoration is scheduled for {response.counterNotice.restoreAtMs:datetime}.",
+                  "when": "response.scheduling == scheduled"
+                },
+                {
+                  "text": "The site was NOT suspended, so nothing was scheduled.",
+                  "when": "response.scheduling == notSuspended"
+                },
+                {
+                  "text": "The existing suspension already ends sooner; left alone.",
+                  "when": "response.scheduling == alreadySooner"
+                },
+                {
+                  "text": "The scheduled restoration was canceled.",
+                  "when": "response.scheduling == cancelled"
+                },
+                {
+                  "text": "No site resolved, so nothing was scheduled.",
+                  "when": "response.scheduling == noHost"
+                },
+                {
+                  "text": "The counter-notice has no received time, so no clock could be set.",
+                  "when": "response.scheduling == noClock"
+                },
+                {
+                  "text": "The strike from the original notice was {response.strike}.",
+                  "when": "response.strike"
+                },
+                {
+                  "text": "The change did not verify on re-reading. Do not walk away.",
+                  "when": "response.confirmed == false"
+                }
+              ]
+            },
+            {
+              "id": "suitFiled",
+              "label": "The complainant filed a court action",
+              "icon": "scale.3d|gavel",
+              "when": "data.notice.counterNotices[id=params.noticeId].status != suitFiled",
+              "url": "/api/admin/abuse-reports",
+              "confirm": "The material stays down and the scheduled restoration is canceled.",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "What you did and why",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "counterNoticeId": "{params.noticeId}",
+                "counterNoticeStatus": "suitFiled",
+                "resolution": "{form.note}"
+              },
+              "reload": true,
+              "success": "Counter-notice is now suitFiled",
+              "report": [
+                {
+                  "text": "The restoration is scheduled for {response.counterNotice.restoreAtMs:datetime}.",
+                  "when": "response.scheduling == scheduled"
+                },
+                {
+                  "text": "The site was NOT suspended, so nothing was scheduled.",
+                  "when": "response.scheduling == notSuspended"
+                },
+                {
+                  "text": "The existing suspension already ends sooner; left alone.",
+                  "when": "response.scheduling == alreadySooner"
+                },
+                {
+                  "text": "The scheduled restoration was canceled.",
+                  "when": "response.scheduling == cancelled"
+                },
+                {
+                  "text": "No site resolved, so nothing was scheduled.",
+                  "when": "response.scheduling == noHost"
+                },
+                {
+                  "text": "The counter-notice has no received time, so no clock could be set.",
+                  "when": "response.scheduling == noClock"
+                },
+                {
+                  "text": "The strike from the original notice was {response.strike}.",
+                  "when": "response.strike"
+                },
+                {
+                  "text": "The change did not verify on re-reading. Do not walk away.",
+                  "when": "response.confirmed == false"
+                }
+              ]
+            },
+            {
+              "id": "withdrawn",
+              "label": "The subscriber withdrew it",
+              "icon": "minus.circle|remove",
+              "when": "data.notice.counterNotices[id=params.noticeId].status != withdrawn",
+              "url": "/api/admin/abuse-reports",
+              "confirm": "The subscriber took the counter-notice back.",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "What you did and why",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "counterNoticeId": "{params.noticeId}",
+                "counterNoticeStatus": "withdrawn",
+                "resolution": "{form.note}"
+              },
+              "reload": true,
+              "success": "Counter-notice is now withdrawn",
+              "report": [
+                {
+                  "text": "The restoration is scheduled for {response.counterNotice.restoreAtMs:datetime}.",
+                  "when": "response.scheduling == scheduled"
+                },
+                {
+                  "text": "The site was NOT suspended, so nothing was scheduled.",
+                  "when": "response.scheduling == notSuspended"
+                },
+                {
+                  "text": "The existing suspension already ends sooner; left alone.",
+                  "when": "response.scheduling == alreadySooner"
+                },
+                {
+                  "text": "The scheduled restoration was canceled.",
+                  "when": "response.scheduling == cancelled"
+                },
+                {
+                  "text": "No site resolved, so nothing was scheduled.",
+                  "when": "response.scheduling == noHost"
+                },
+                {
+                  "text": "The counter-notice has no received time, so no clock could be set.",
+                  "when": "response.scheduling == noClock"
+                },
+                {
+                  "text": "The strike from the original notice was {response.strike}.",
+                  "when": "response.strike"
+                },
+                {
+                  "text": "The change did not verify on re-reading. Do not walk away.",
+                  "when": "response.confirmed == false"
+                }
+              ]
+            },
+            {
+              "id": "rejected",
+              "label": "Not a counter-notice",
+              "icon": "xmark.circle|cancel",
+              "when": "data.notice.counterNotices[id=params.noticeId].status != rejected",
+              "url": "/api/admin/abuse-reports",
+              "confirm": "A misfiled question, not a judgment on the merits.",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "What you did and why",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "counterNoticeId": "{params.noticeId}",
+                "counterNoticeStatus": "rejected",
+                "resolution": "{form.note}"
+              },
+              "reload": true,
+              "success": "Counter-notice is now rejected",
+              "report": [
+                {
+                  "text": "The restoration is scheduled for {response.counterNotice.restoreAtMs:datetime}.",
+                  "when": "response.scheduling == scheduled"
+                },
+                {
+                  "text": "The site was NOT suspended, so nothing was scheduled.",
+                  "when": "response.scheduling == notSuspended"
+                },
+                {
+                  "text": "The existing suspension already ends sooner; left alone.",
+                  "when": "response.scheduling == alreadySooner"
+                },
+                {
+                  "text": "The scheduled restoration was canceled.",
+                  "when": "response.scheduling == cancelled"
+                },
+                {
+                  "text": "No site resolved, so nothing was scheduled.",
+                  "when": "response.scheduling == noHost"
+                },
+                {
+                  "text": "The counter-notice has no received time, so no clock could be set.",
+                  "when": "response.scheduling == noClock"
+                },
+                {
+                  "text": "The strike from the original notice was {response.strike}.",
+                  "when": "response.strike"
+                },
+                {
+                  "text": "The change did not verify on re-reading. Do not walk away.",
+                  "when": "response.confirmed == false"
+                }
+              ]
+            },
+            {
+              "id": "site",
+              "label": "Open the site",
+              "icon": "globe|public",
+              "when": "data.notice.counterNotices[id=params.noticeId].hostId",
+              "navigate": {
+                "screen": "core.staff.site",
+                "params": {
+                  "hostId": "{data.notice.counterNotices[id=params.noticeId].hostId}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.abuseReport",
+      "title": "{data.report.report.reference|'Abuse report'}",
+      "label": "Abuse report",
+      "subtitle": "One report",
+      "icon": "exclamationmark.shield|report",
+      "scope": "staff",
+      "requires": "staff.is",
+      "links": [
+        "/admin/abuse-reports/:reportId"
+      ],
+      "load": {
+        "report": "/api/admin/abuse-reports?id={params.reportId}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "The reporter's receipt was not delivered: {data.report.report.receiptReason}",
+          "when": "data.report.report.receiptStatus == failed"
+        },
+        {
+          "type": "fields",
+          "title": "The report",
+          "object": "data.report.report",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{item.status:title}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "Category",
+              "value": "{item.categoryLabel|item.category:title}"
+            },
+            {
+              "label": "Severity",
+              "value": "{item.severity:title}"
+            },
+            {
+              "label": "Where",
+              "value": "{item.url|item.reportedHostname}"
+            },
+            {
+              "label": "Site",
+              "value": "{item.hostId}"
+            },
+            {
+              "label": "Workspace",
+              "value": "{item.orgId}"
+            },
+            {
+              "label": "What they said",
+              "value": "{item.details}"
+            },
+            {
+              "label": "Reports about this",
+              "value": "{item.reportCount|'1':number}"
+            },
+            {
+              "label": "Filed",
+              "value": "{item.createdAtMs:datetime}"
+            },
+            {
+              "label": "Updated",
+              "value": "{item.updatedAtMs:datetime}"
+            },
+            {
+              "label": "Source",
+              "value": "{item.source}"
+            },
+            {
+              "label": "Reporter",
+              "value": "{item.reporterName} {item.reporterEmail}"
+            },
+            {
+              "label": "Receipt to the reporter",
+              "value": "{item.receiptStatus:title} {item.receiptAttemptedAtMs:datetime}"
+            }
+          ],
+          "footer": "The address is text, never a link: it can be attacker-supplied. Reporter identity shows to super staff only."
+        },
+        {
+          "type": "fields",
+          "title": "DMCA notice",
+          "when": "data.report.report.dmca",
+          "object": "data.report.report.dmca",
+          "rows": [
+            {
+              "label": "Work claimed",
+              "value": "{item.work}"
+            },
+            {
+              "label": "Signature",
+              "value": "{item.signature|'Hidden at your access level'}"
+            },
+            {
+              "label": "Good-faith statement",
+              "value": "{item.goodFaith:yesno}"
+            },
+            {
+              "label": "Under penalty of perjury",
+              "value": "{item.underPenalty:yesno}"
+            }
+          ],
+          "footer": "The sworn statements are claims. Nothing here adjudicates them."
+        },
+        {
+          "type": "fields",
+          "title": "Resolution",
+          "when": "data.report.report.resolution",
+          "object": "data.report.report",
+          "rows": [
+            {
+              "label": "What was done",
+              "value": "{item.resolution}"
+            },
+            {
+              "label": "By",
+              "value": "{item.resolvedBy}"
+            },
+            {
+              "label": "When",
+              "value": "{item.resolvedAtMs:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Risk notice",
+          "when": "data.report.report.riskNotice",
+          "object": "data.report.report.riskNotice",
+          "rows": [
+            {
+              "label": "What happened",
+              "value": "{item.title}"
+            },
+            {
+              "label": "In short",
+              "value": "{item.summary}"
+            },
+            {
+              "label": "Owners told",
+              "value": "{item.ownersNotifiedAtMs:datetime}"
+            },
+            {
+              "label": "Owner delivery",
+              "value": "{item.ownersDelivery.emailed} emailed of {item.ownersDelivery.recipients}, {item.ownersDelivery.emailFailed} failed, {item.ownersDelivery.inApp} in the app"
+            },
+            {
+              "label": "Email skipped",
+              "value": "{item.ownersDelivery.emailSkipped}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "What staff can do about it",
+          "when": "data.report.report.riskNotice.actions",
+          "items": "data.report.report.riskNotice.actions",
+          "primary": "{item.label}",
+          "secondary": "{item.hint}",
+          "count": false,
+          "footer": "Locks and lifts are on the Locks screen; the Stripe account is named under the seller pattern."
+        },
+        {
+          "type": "fields",
+          "title": "Held outbound send",
+          "when": "data.report.report.heldSend",
+          "object": "data.report.report.heldSend",
+          "rows": [
+            {
+              "label": "State",
+              "value": "{item.state:title}"
+            },
+            {
+              "label": "Kind",
+              "value": "{item.kind}"
+            },
+            {
+              "label": "Subject",
+              "value": "{item.subject}"
+            },
+            {
+              "label": "From name",
+              "value": "{item.fromName}"
+            },
+            {
+              "label": "Account age",
+              "value": "{item.ageDays} days"
+            },
+            {
+              "label": "Held",
+              "value": "{item.heldAtMs:datetime}"
+            },
+            {
+              "label": "Decided",
+              "value": "{item.decidedBy} {item.decidedAtMs:datetime}"
+            },
+            {
+              "label": "Why it was held",
+              "value": "{item.reasons}"
+            }
+          ],
+          "footer": "Dismissing releases the held send; actioning rejects it."
+        },
+        {
+          "type": "fields",
+          "title": "Held page",
+          "when": "data.report.report.heldPage",
+          "object": "data.report.report.heldPage",
+          "rows": [
+            {
+              "label": "Page",
+              "value": "{item.label}"
+            },
+            {
+              "label": "Kind",
+              "value": "{item.kind}"
+            },
+            {
+              "label": "Address",
+              "value": "{item.url}"
+            },
+            {
+              "label": "Details",
+              "value": "{item.details}"
+            },
+            {
+              "label": "What visitors see",
+              "value": "{item.visitorSentence}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Payment signal",
+          "when": "data.report.report.paymentSignal",
+          "object": "data.report.report.paymentSignal",
+          "rows": [
+            {
+              "label": "Signal",
+              "value": "{item.kind:title}"
+            },
+            {
+              "label": "Stripe object",
+              "value": "{item.stripeObjectId}"
+            },
+            {
+              "label": "Charge",
+              "value": "{item.chargeId}"
+            },
+            {
+              "label": "Amount",
+              "value": "{item.amountCents:cents} {item.currency}"
+            },
+            {
+              "label": "Detail",
+              "value": "{item.detail}"
+            },
+            {
+              "label": "Live mode",
+              "value": "{item.livemode:yesno}"
+            },
+            {
+              "label": "Subscription card",
+              "value": "{item.subscriptionCard}"
+            },
+            {
+              "label": "Card checks",
+              "value": "CVC {item.checks.cvcCheck}, postal {item.checks.addressPostalCodeCheck}, country {item.checks.cardCountry}, risk {item.checks.riskLevel}, 3DS {item.checks.threeDSecure}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Signal history",
+          "when": "data.report.report.paymentSignal.signals",
+          "items": "data.report.report.paymentSignal.signals",
+          "primary": "{item.kind:title}",
+          "secondary": "{item.stripeObjectId}",
+          "tertiary": "{item.atMs:datetime} {item.arrivedAfter}",
+          "count": false
+        },
+        {
+          "type": "fields",
+          "title": "Seller pattern",
+          "when": "data.report.report.sellerPattern",
+          "object": "data.report.report.sellerPattern",
+          "rows": [
+            {
+              "label": "Seller account",
+              "value": "{item.sellerAccountId}"
+            },
+            {
+              "label": "Charges",
+              "value": "{item.chargeIds}"
+            },
+            {
+              "label": "Workspaces",
+              "value": "{item.orgIds}"
+            },
+            {
+              "label": "Sites",
+              "value": "{item.hostIds}"
+            },
+            {
+              "label": "Threshold",
+              "value": "{item.threshold} in {item.windowDays} days"
+            },
+            {
+              "label": "Live mode",
+              "value": "{item.livemode:yesno}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Asks from the owners to review",
+          "when": "data.report.report.ownerReviewRequests",
+          "items": "data.report.report.ownerReviewRequests",
+          "primary": "{item.email}",
+          "secondary": "{item.note}",
+          "tertiary": "{item.atMs:datetime}",
+          "count": false
+        },
+        {
+          "type": "actions",
+          "title": "Decide",
+          "footer": "Closing a report needs a note. Dismissing releases a held send; actioning rejects it. A DMCA report on an account at the repeat-infringer threshold asks for a decision too (the queue shows each account's strikes).",
+          "items": [
+            {
+              "id": "site",
+              "label": "Open the site",
+              "icon": "globe|public",
+              "when": "data.report.report.hostId",
+              "navigate": {
+                "screen": "core.staff.site",
+                "params": {
+                  "hostId": "{data.report.report.hostId}"
+                }
+              }
+            },
+            {
+              "id": "org",
+              "label": "Open the workspace",
+              "icon": "building.2|business",
+              "when": "data.report.report.orgId",
+              "navigate": {
+                "screen": "core.staff.org",
+                "params": {
+                  "orgId": "{data.report.report.orgId}"
+                }
+              }
+            },
+            {
+              "id": "reviewing",
+              "label": "Mark reviewing",
+              "icon": "eye|visibility",
+              "url": "/api/admin/abuse-reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "What did you do, and why?",
+                  "kind": "multiline",
+                  "required": false
+                }
+              ],
+              "body": {
+                "id": "{params.reportId}",
+                "status": "reviewing",
+                "resolution": "{form.resolution}"
+              },
+              "reload": true,
+              "success": "Report is now reviewing"
+            },
+            {
+              "id": "actioned",
+              "label": "Resolve: actioned",
+              "icon": "checkmark.shield|verified",
+              "url": "/api/admin/abuse-reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "What did you do, and why?",
+                  "kind": "multiline",
+                  "required": true
+                },
+                {
+                  "key": "decision",
+                  "label": "Repeat-infringer decision (DMCA)",
+                  "kind": "multiline",
+                  "help": "Needed only when the account is at the repeat-infringer threshold: the route answers with the strike count and asks for it."
+                }
+              ],
+              "body": {
+                "id": "{params.reportId}",
+                "status": "actioned",
+                "resolution": "{form.resolution}",
+                "repeatInfringerDecision": "{form.decision}"
+              },
+              "reload": true,
+              "success": "Report is now actioned"
+            },
+            {
+              "id": "dismissed",
+              "label": "Resolve: dismissed",
+              "icon": "xmark.circle|cancel",
+              "url": "/api/admin/abuse-reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "What did you do, and why?",
+                  "kind": "multiline",
+                  "required": true
+                },
+                {
+                  "key": "decision",
+                  "label": "Repeat-infringer decision (DMCA)",
+                  "kind": "multiline",
+                  "help": "Needed only when the account is at the repeat-infringer threshold: the route answers with the strike count and asks for it."
+                }
+              ],
+              "body": {
+                "id": "{params.reportId}",
+                "status": "dismissed",
+                "resolution": "{form.resolution}",
+                "repeatInfringerDecision": "{form.decision}"
+              },
+              "reload": true,
+              "success": "Report is now dismissed"
             }
           ]
         }

@@ -135,6 +135,13 @@ class ScreenModel(
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
       url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
     }
+    val clauses = load.filters.mapNotNull { clause ->
+      val value = ScreenValues.render(clause.str("value").orEmpty(), context)
+      val field = clause.str("field")
+      if (value.isEmpty() || field == null) null
+      else JsonObject(mapOf("field" to JsonPrimitive(field), "op" to JsonPrimitive(clause.str("op") ?: "equals"), "value" to JsonPrimitive(value)))
+    }
+    if (clauses.isNotEmpty()) url += (if ('?' in url) "&" else "?") + "filters=" + ScreenValues.encodeComponent(JsonArray(clauses).toString())
     if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     return url
   }

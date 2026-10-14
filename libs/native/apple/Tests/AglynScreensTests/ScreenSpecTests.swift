@@ -193,6 +193,24 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ScreenValues.lookup("data.probe.status", in: model.context), "degraded")
   }
 
+  /// A staff list load names its filters; a clause with nothing to filter on is left out.
+  @MainActor
+  func testLoadFiltersGoInTheQueryOnlyWhenFilled() throws {
+    let spec = try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": ["rows": ["url": "/api/x?pageSize=50", "filters": [
+          ["field": "status", "op": "equals", "value": "{params.status}"], ["field": "category", "value": "{params.category}"],
+        ]]],
+      ]))
+    let model = ScreenModel(spec: spec, context: ["params": ["status": "open", "category": ""]], api: nil)
+    let load = try XCTUnwrap(spec.loads.first)
+    XCTAssertEqual(
+      model.url(for: load), "/api/x?pageSize=50&filters=%5B%7B%22field%22%3A%22status%22%2C%22op%22%3A%22equals%22%2C%22value%22%3A%22open%22%7D%5D")
+    let bare = ScreenModel(spec: spec, context: ["params": [:]], api: nil)
+    XCTAssertEqual(bare.url(for: load), "/api/x?pageSize=50")
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
