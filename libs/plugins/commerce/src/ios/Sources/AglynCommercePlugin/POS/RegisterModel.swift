@@ -68,6 +68,8 @@ final class RegisterModel {
   @ObservationIgnored let opsAPI: PosOpsAPI
   @ObservationIgnored private var tillCashier: PosCashier!
   @ObservationIgnored private var tillShift: PosShiftModel!
+  /// The last sale this register finished, and its receipt.
+  @ObservationIgnored let lastReceipt: PosLastReceiptModel
   /// Who is ringing: the cashier a PIN switched in, and the idle lock.
   var cashier: PosCashier { tillCashier }
   /// The register's shift and its drawer.
@@ -85,6 +87,7 @@ final class RegisterModel {
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
     store = RegisterStore(defaults: defaults, hostID: hostID)
+    lastReceipt = PosLastReceiptModel(reader: reader, api: sale, store: store, hostID: hostID)
     let ops = self.opsAPI
     let cashier = PosCashier(api: ops, registerID: { [weak self] in self?.register?.id }, autoLockMinutes: { [weak self] in self?.context?.ops.autoLockMinutes ?? 0 })
     cashier.assertionSink = { sale.cashier.assertion = $0 }
@@ -122,6 +125,7 @@ final class RegisterModel {
       self?.categories = sortCategories(docs.map(posCategory))
     }
     loadGrid()
+    if let register { lastReceipt.watch(registerID: register.id) }
     Task { await loadContext() }
     reconnecting?.cancel()
     reconnecting = Task { [weak self] in await self?.reconnectWhileOffline() }
@@ -130,6 +134,7 @@ final class RegisterModel {
   }
 
   func stop() {
+    lastReceipt.stop()
     listeners.values.forEach { $0.remove() }
     listeners = [:]
     reconnecting?.cancel()
@@ -184,6 +189,7 @@ final class RegisterModel {
     register = next
     store.registerID = next.id
     cart = store.cart(next.id)
+    lastReceipt.watch(registerID: next.id)
     resumePendingSale(next)
     Task { await shift.refresh() }
   }
@@ -372,6 +378,7 @@ final class RegisterModel {
 
   /// The sale is paid and the receipt chosen: the next customer.
   func finished() {
+    if let paid = checkout?.opened.orderID { lastReceipt.remember(orderID: paid) }
     if let register { store.savePendingSale(register.id, nil) }
     updateCart(.empty)
     checkout = nil
