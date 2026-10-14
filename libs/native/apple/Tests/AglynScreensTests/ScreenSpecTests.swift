@@ -155,12 +155,12 @@ final class ScreenSpecTests: XCTestCase {
         "body": ["current": "{form.current}", "new": "{form.password}", "confirm": "{form.confirm}"], "success": "Done",
       ]))
     let short: JSONValue = ["form": ["current": "old", "password": "short", "confirm": "short"]]
-    XCTAssertEqual(await model.run(change, in: short), .failed("Use at least 12 characters."))
+    do { let outcome = await model.run(change, in: short); XCTAssertEqual(outcome, .failed("Use at least 12 characters.")) }
     let mismatch: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "different-long-one"]]
-    XCTAssertEqual(await model.run(change, in: mismatch), .failed("The two new passwords do not match."))
+    do { let outcome = await model.run(change, in: mismatch); XCTAssertEqual(outcome, .failed("The two new passwords do not match.")) }
     XCTAssertTrue(calls.passwords.isEmpty)
     let good: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "a-long-enough-one"]]
-    XCTAssertEqual(await model.run(change, in: good), .done(message: "Done", response: nil))
+    do { let outcome = await model.run(change, in: good); XCTAssertEqual(outcome, .done(message: "Done", response: nil)) }
     XCTAssertEqual(calls.passwords, [["old", "a-long-enough-one"]])
     let name = try XCTUnwrap(ActionSpec(["label": "Name", "account": "updateDisplayName", "body": ["name": "{form.first} {form.last}"]]))
     _ = await model.run(name, in: ["form": ["first": "Ada", "last": "Lovelace"]])
