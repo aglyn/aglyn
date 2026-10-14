@@ -406,11 +406,8 @@
           "items": [
             {
               "id": "request", "label": "Delete this workspace", "icon": "trash|delete_forever", "destructive": true, "when": "!data.org.erasureRequestedAt",
-              "url": "/api/orgs/delete",
               "prompt": [{ "key": "typed", "label": "Type the workspace name to confirm", "kind": "text", "required": true, "mustMatch": "{org.name}", "help": "{org.name}" }],
-              "confirm": "This cannot be undone after the grace period.",
-              "body": { "orgId": "{org.id}", "action": "request" },
-              "success": "Deletion requested"
+              "navigate": { "screen": "core.billing.cancel", "params": { "surface": "account_delete" } }
             },
             { "id": "cancel", "label": "Cancel the deletion", "icon": "arrow.uturn.backward|undo", "when": "data.org.erasureRequestedAt", "url": "/api/orgs/delete", "body": { "orgId": "{org.id}", "action": "cancel" }, "success": "Deletion cancelled" }
           ]
