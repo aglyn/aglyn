@@ -9,7 +9,7 @@ unlisted: true
 
 :::caution Rolling out
 Inventory sync is **not yet available** on aglyn.com-hosted workspaces. Until
-it is, no **Inventory and ERP** card appears in your store's settings, and
+it is, no **Inventory and ERP** card appears on **Products → Integrations**, and
 your stock is counted the way it is today.
 :::
 
@@ -32,7 +32,7 @@ A store syncs with one system at a time.
 You need to be an admin of the site to connect, change or disconnect a
 system.
 
-1. Open your store's **Settings** and find the **Inventory and ERP** card.
+1. Open **Products → Integrations** and find the **Inventory and ERP** card.
 2. Connect the system you use:
    - **Cin7 Core:** in Cin7 Core, go to **Integrations → API** and add an API
      application. Paste its **Account ID** and **Application key** into the
@@ -42,7 +42,7 @@ system.
      **Company ID** and **API key** and select **Connect inFlow Inventory**.
    - **Brightpearl:** enter your Brightpearl **account code** (the name in
      your Brightpearl address) and select **Connect Brightpearl**. Sign in to
-     Brightpearl and allow access; you come back to the store settings with it
+     Brightpearl and allow access; you come back to **Integrations** with it
      connected.
 
 Keys are checked with the system before they are saved, and stored

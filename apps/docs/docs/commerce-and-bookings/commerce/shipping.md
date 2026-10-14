@@ -6,14 +6,14 @@ description: Shipping zones and rates, local pickup, and the postal address each
 
 # Shipping
 
-Shipping is set up in the store's settings, on the **Shipping** card. Every
+Shipping is set up on **Products → Shipping & delivery**, on the **Shipping** card. Every
 order that ships is priced from the zones and rates you save there, at the
 storefront's cart, on a product's Buy button, and on a draft order's payment
 link.
 
 ## Zones and rates
 
-The **Shipping** card, in the store's settings, prices every parcel: group the
+The **Shipping** card, on **Products → Shipping & delivery**, prices every parcel: group the
 countries you ship to into zones, then give each zone one or more rates.
 
 1. Under **Zones**, select **Add zone**, enter a **Zone name** and its

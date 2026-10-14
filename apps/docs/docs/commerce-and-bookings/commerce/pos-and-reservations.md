@@ -20,7 +20,7 @@ through a register you've created.
 
 ## Registers
 
-Create your registers under **Commerce → Settings → POS registers** — one
+Create your registers under **Products → Point of sale → POS registers** — one
 per till or device that takes in-person payments. Give each a name (and,
 if you use inventory locations, the location it sells from). Every POS sale
 is tagged with its register so you can reconcile end-of-day takings per
@@ -230,7 +230,7 @@ no card reader controls and the register has no **Card reader** button.
 To add a reader:
 
 1. On the reader, open **Settings** and choose **Generate pairing code**.
-2. In the console, open **Commerce → Settings → POS devices** and choose
+2. In the console, open **Products → Point of sale → POS devices** and choose
    **Add card reader**.
 3. Enter the **registration code** the reader shows, give the reader a
    name (such as "Front counter reader") and, optionally, pick the
@@ -295,7 +295,7 @@ The email address or phone number the customer typed is not kept on the
 display: it is cleared as soon as the receipt is sent. Change the welcome line with **Customer display welcome**
 in the **Commerce settings** card (blank shows "Welcome").
 
-Paired displays are listed under **Commerce → Settings → POS devices**
+Paired displays are listed under **Products → Point of sale → POS devices**
 with a **Connected** or **Not connected** status. **Sign out** there
 unpairs a display, and so does removing its register; it then has to be
 paired again with a new code.

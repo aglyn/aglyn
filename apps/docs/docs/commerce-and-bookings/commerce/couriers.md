@@ -37,7 +37,7 @@ the courier's fee. Your buyers still pay the delivery fee of your
    create an access key. A **test** key reaches DoorDash's sandbox, where no
    Dasher is sent; a **live** key, available once DoorDash has approved your
    account for production, sends real couriers.
-2. In Aglyn, open your store's **Settings** and find the **Couriers** card.
+2. In Aglyn, open **Products → Shipping & delivery** and find the **Couriers** card.
 3. Enter your key's **Developer ID**, **Key ID** and **Signing secret** — your
    live key, your test key, or both — and choose **Connect DoorDash**.
    Aglyn checks each key with DoorDash before saving it, and keeps the signing
@@ -70,7 +70,7 @@ token** and paste the new one in DoorDash.
 3. Choose **Send courier**.
 
 A courier needs a full street address for the location your deliveries leave
-from (**Products → Settings → Inventory locations**) and the buyer's street address and
+from (**Products → Shipping & delivery → Inventory locations**) and the buyer's street address and
 phone number on the order. The order must be paid and not yet out for
 delivery or delivered.
 

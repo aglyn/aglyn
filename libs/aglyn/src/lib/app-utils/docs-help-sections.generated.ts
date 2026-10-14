@@ -546,7 +546,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   salesChannels: {
     '#brand-barcode-and-category': 'Ping: the cheapest rate to each country your shipping zones name, from the same rates checkout charges.',
     '#how-fresh-the-feed-is': 'Number, no description (its name is sent instead), a name longer than the channel shows, clothing without a Color and a Size option, or missing shipping.',
-    '#set-up-sales-channels': 'Ad. Sales channels come with every plan that sells online. They are set up in the store\'s settings, under Sales channels, with one card per channel.',
+    '#set-up-sales-channels': 'Hout another upload. Sales channels come with every plan that sells online.',
     '#turn-on-a-channel': 'The channel. See Turn on a channel. After that, the channel reads your feed on its own schedule, and each card shows when it last did.',
   },
   sandboxSecurity: {

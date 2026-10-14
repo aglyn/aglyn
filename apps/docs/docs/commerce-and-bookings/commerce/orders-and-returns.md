@@ -9,7 +9,8 @@ description: Ship an order in parts with tracking links, run returns from reques
 What happens to an order after it is paid: shipping it, in one parcel or several;
 taking items back; printing its paperwork; and telling your other systems about it.
 Everything here is in the order's dialog on the **Orders** tab of the **Products**
-hub, and under **Returns** and **Settings** beside it.
+hub, under **Returns** beside it, and on its **Checkout** and **Notifications**
+settings pages.
 
 ## Ship an order in parts {#fulfillment}
 
@@ -71,7 +72,7 @@ or **Other** — and can add a note. Only items that have shipped can be returne
 never more than were bought or are already coming back. You and the site's managers
 are told by email and in the console's notifications.
 
-Under **Settings** → **Returns**:
+Under **Checkout** → **Returns**:
 
 - **Accept return requests online** — turn it off to take returns only by contact.
   You can still start a return for a buyer from the order.
@@ -110,7 +111,7 @@ declined** and **Return refunded** — are designed like your other store emails
 ## Order webhooks {#order-webhooks}
 
 An order webhook posts each order event to an address you choose, as it happens: a
-warehouse system, an ERP, a spreadsheet script. Add them under **Settings** →
+warehouse system, an ERP, a spreadsheet script. Add them under **Notifications** →
 **Order webhooks** in the Products hub. Managing webhooks needs the **admin** role
 *and* organization-wide membership, the same as refunds.
 
