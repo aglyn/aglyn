@@ -916,8 +916,6 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#sequences': 'A sequence is the emails, and the tasks between them, one person gets from one rep.',
   },
   shipping: {
-    '#carrier-accounts': 'The Carrier accounts card lists the carriers your labels and checkout rates come from, for every site in the workspace.',
-    '#shipping-labels': 'A label bought on Aglyn\'s carrier accounts is charged to the workspace at the carrier\'s price, with nothing added.',
     '#where-parcels-ship-from': 'Each inventory location (the Inventory locations card in the store\'s settings) can carry a postal address: choose Add address on its row, or Edit address once it has one.',
     '#zones-and-rates': 'The Shipping card, in the store\'s settings, prices every parcel: group the countries you ship to into zones, then give each zone one or more rates.',
   },

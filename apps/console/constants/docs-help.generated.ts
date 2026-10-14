@@ -1082,7 +1082,7 @@ export const DOCS_HELP_ANCHORS = {
   serviceAndLocationPagesFromADataset: ['#1-model-the-data', '#2-design-the-template', '#3-make-it-the-record-template', '#4-link-to-the-pages', '#what-visitors-and-search-engines-get', '#when-records-go-away', '#locations-team-members-portfolio', '#related'],
   settings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],
   sharing: ['#what-a-shared-record-looks-like', '#sharing-card', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
-  shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from', '#carrier-accounts', '#shipping-labels'],
+  shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
   siteLooks: ['#choose-a-style', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
@@ -1784,8 +1784,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#sequences': 'Sequences',
   },
   shipping: {
-    '#carrier-accounts': 'Carrier accounts',
-    '#shipping-labels': 'Shipping labels',
     '#where-parcels-ship-from': 'Where parcels ship from',
     '#zones-and-rates': 'Zones and rates',
   },

@@ -206,6 +206,10 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#1-open-the-workflows-page': 'In the console, go to Automation → Workflows and choose New workflow.',
     '#4-save-and-test': 'Save the workflow. When the trigger fires, the workflow runs and each run counts once toward your tier\'s metered allowance — however many steps it has, and whatever they are.',
   },
+  carrierAccounts: {
+    '#carrier-accounts': 'The Carrier accounts card lists the carriers your labels and checkout rates come from, for every site in the workspace.',
+    '#shipping-labels': 'A label bought on Aglyn\'s carrier accounts is charged to the workspace at the carrier\'s price, with nothing added.',
+  },
   catalog: {
     '#categories-and-tags': 'The Categories & collections card, in the products hub\'s catalog, organizes your products into categories and collections that storefront pages and filters use.',
     '#review-moderation': 'The Review moderation card, in the products hub\'s Promotions section, lists your reviews so you can publish, hide and reply to them.',
@@ -568,8 +572,6 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#sequences': 'A sequence is the emails, and the tasks between them, one person gets from one rep.',
   },
   shipping: {
-    '#carrier-accounts': 'The Carrier accounts card lists the carriers your labels and checkout rates come from, for every site in the workspace.',
-    '#shipping-labels': 'A label bought on Aglyn\'s carrier accounts is charged to the workspace at the carrier\'s price, with nothing added.',
     '#where-parcels-ship-from': 'Each inventory location (the Inventory locations card in the store\'s settings) can carry a postal address: choose Add address on its row, or Edit address once it has one.',
     '#zones-and-rates': 'The Shipping card, in the store\'s settings, prices every parcel: group the countries you ship to into zones, then give each zone one or more rates.',
   },
