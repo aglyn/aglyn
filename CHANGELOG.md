@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **ai:** serve the fast tier from Haiku 5.5, retire Haiku 4.5 and Sonnet 5 ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
+- **ai:** bill the fast tier at the platform's 1.5x markup ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **native:** pick setup and cover images on apple
 - **native:** a product's details: address, supplier, tags, tax, billing, search ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 - **native:** book a walk-in at the front desk, priced and checked like the console's ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
@@ -67,6 +69,11 @@ content on the marketing site and is written separately.
 - **console:** settings sections as literals; page specs stub the zone plugins ([AGL-3713](https://linear.app/aglyn/issue/AGL-3713))
 - **native:** accounting declares the deep links its paths register ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 - **email,marketing:** a live list's members are mailed on their contact's opt-in
+
+### Performance
+
+- **ai-eval:** replay, the hour cache and batches in every live run, effort arms ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
+- **ai-eval:** send the golden eval round as batches, briefs side by side ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 
 ### Changed
 
