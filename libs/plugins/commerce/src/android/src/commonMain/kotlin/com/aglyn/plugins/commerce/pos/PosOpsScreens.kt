@@ -86,6 +86,7 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
           }
         }
         SectionCard("Shift") { ShiftControls(model) }
+        SectionCard("Last receipt") { LastReceiptControls(model) }
         StaffPinsSection(model)
       }
     },
@@ -98,6 +99,46 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
     }
   }
   ShiftDialogs(model)
+}
+
+/** The last sale's receipt: shown, printed again here or as a gift receipt, and sent to the register's receipt printer. */
+@Composable
+private fun LastReceiptControls(model: RegisterModel) {
+  val last = model.lastReceipt
+  last.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { last.notice = null }) { Text("Dismiss") } }) }
+  last.error?.let { NoticeBanner(it, StatusTone.WARNING) }
+  val sale = last.summary
+  if (sale == null) {
+    Text("The next sale you finish shows here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    return
+  }
+  AmountRow("Last sale ${sale.label}", money(sale.totalCents, model.currency), Modifier.testTag("pos-last-sale"))
+  val direct = model.peripherals.printers.isNotEmpty()
+  if (!direct && !last.hasPrinter) {
+    Text(
+      "This register has no receipt printer. Add one in the console, or connect one to this device, to print receipts here.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    return
+  }
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    if (direct) {
+      OutlinedButton(
+        onClick = { last.printHere(gift = false) { receipt, gift -> model.print(receipt, openDrawer = false, gift = gift) } },
+        enabled = !last.busy && last.receipt != null,
+        modifier = Modifier.testTag("pos-last-receipt-print"),
+      ) { Text("Print") }
+      OutlinedButton(
+        onClick = { last.printHere(gift = true) { receipt, gift -> model.print(receipt, openDrawer = false, gift = gift) } },
+        enabled = !last.busy && last.receipt != null,
+        modifier = Modifier.testTag("pos-last-receipt-gift"),
+      ) { Text("Gift receipt") }
+    }
+    if (last.hasPrinter) {
+      OutlinedButton(onClick = last::sendToPrinter, enabled = !last.busy, modifier = Modifier.testTag("pos-last-receipt-cloud")) { Text("Receipt printer") }
+    }
+  }
 }
 
 /** Staff PINs: set, change or remove your own, and a workspace admin's reset of anyone's. */

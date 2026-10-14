@@ -51,6 +51,9 @@ struct PendingSale: Codable, Equatable {
 /// A pending sale older than a day is the console's to clean up, not the till's to resume.
 let pendingSaleMaxAgeMs: Int64 = 24 * 60 * 60 * 1000
 
+/// A last sale older than a week is no longer "the last receipt" to reprint at the till.
+let lastSaleMaxAgeMs: Int64 = 7 * 24 * 60 * 60 * 1000
+
 /// A register's device state, under the plugin's own keys.
 struct RegisterStore {
   let defaults: UserDefaults
@@ -59,6 +62,7 @@ struct RegisterStore {
   private var registerKey: String { "commerce.pos.register.\(hostID)" }
   private func cartKey(_ register: String) -> String { "commerce.pos.cart.\(hostID).\(register)" }
   private func saleKey(_ register: String) -> String { "commerce.pos.sale.\(hostID).\(register)" }
+  private func lastSaleKey(_ register: String) -> String { "commerce.pos.last.\(hostID).\(register)" }
 
   var registerID: String? {
     get { defaults.string(forKey: registerKey) }
@@ -72,6 +76,22 @@ struct RegisterStore {
       defaults.removeObject(forKey: cartKey(register))
     } else {
       defaults.set(cart.encoded(), forKey: cartKey(register))
+    }
+  }
+
+  func lastSale(_ register: String, nowMs: Int64) -> LastSale? {
+    guard let data = defaults.data(forKey: lastSaleKey(register)),
+      let sale = try? JSONDecoder().decode(LastSale.self, from: data), !sale.orderID.isEmpty,
+      (0...lastSaleMaxAgeMs).contains(nowMs - sale.atMs)
+    else { return nil }
+    return sale
+  }
+
+  func saveLastSale(_ register: String, _ sale: LastSale?) {
+    if let sale, let data = try? JSONEncoder().encode(sale) {
+      defaults.set(data, forKey: lastSaleKey(register))
+    } else {
+      defaults.removeObject(forKey: lastSaleKey(register))
     }
   }
 

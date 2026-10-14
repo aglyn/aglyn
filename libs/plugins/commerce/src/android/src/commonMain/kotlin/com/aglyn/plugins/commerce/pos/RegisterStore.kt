@@ -59,6 +59,7 @@ class RegisterStore(private val store: KeyValueStore, private val hostId: String
   private fun registerKey() = "commerce.pos.register.$hostId"
   private fun cartKey(registerId: String) = "commerce.pos.cart.$hostId.$registerId"
   private fun saleKey(registerId: String) = "commerce.pos.sale.$hostId.$registerId"
+  private fun lastSaleKey(registerId: String) = "commerce.pos.last.$hostId.$registerId"
   private fun holdsKey(registerId: String) = "commerce.pos.holds.$hostId.$registerId"
 
   var registerId: String?
@@ -76,6 +77,14 @@ class RegisterStore(private val store: KeyValueStore, private val hostId: String
 
   fun savePendingSale(registerId: String, sale: PendingSale?) =
     store.set(saleKey(registerId), sale?.let { json.encodeToString(PendingSale.serializer(), it) })
+
+  fun lastSale(registerId: String, nowMs: Long): LastSale? {
+    val sale = runCatching { json.decodeFromString(LastSale.serializer(), store.get(lastSaleKey(registerId)) ?: return null) }.getOrNull()
+    return sale?.takeIf { it.orderId.isNotEmpty() && nowMs - it.atMs in 0..LAST_SALE_MAX_AGE_MS }
+  }
+
+  fun saveLastSale(registerId: String, sale: LastSale?) =
+    store.set(lastSaleKey(registerId), sale?.let { json.encodeToString(LastSale.serializer(), it) })
 
   fun holds(registerId: String): List<HeldBasket> = runCatching {
     json.decodeFromString(ListSerializer(HeldBasket.serializer()), store.get(holdsKey(registerId)) ?: return emptyList())

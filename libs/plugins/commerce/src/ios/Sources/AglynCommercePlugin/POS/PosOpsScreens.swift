@@ -45,6 +45,7 @@ struct RegisterOpsSheet: View {
           .accessibilityIdentifier("pos-lock")
         }
         Section("Shift") { ShiftControls(model: model) }
+        LastReceiptSection(model: model)
         StaffPinsSection(model: model)
       }
       .formStyle(.grouped)
@@ -465,6 +466,33 @@ struct LockedRegister: View {
       ) {
         model.cashier.switchTo($0)
         entering = false
+      }
+    }
+  }
+}
+
+/// The last sale's receipt: shown, and sent to the register's receipt printer again.
+private struct LastReceiptSection: View {
+  let model: RegisterModel
+
+  var body: some View {
+    let last = model.lastReceipt
+    Section("Last receipt") {
+      if let notice = last.notice { AglynNotice(notice, tone: .success) { last.notice = nil } }
+      if let error = last.error { AglynNotice(error, tone: .warning) }
+      if let sale = last.summary {
+        AglynAmountRow("Last sale \(sale.label)", amount: model.money(sale.totalCents))
+          .accessibilityIdentifier("pos-last-sale")
+        if last.hasPrinter {
+          Button("Receipt printer") { Task { await last.sendToPrinter() } }
+            .disabled(last.busy)
+            .accessibilityIdentifier("pos-last-receipt-print")
+        } else {
+          Text("This register has no receipt printer. Add one in the console to print receipts here.")
+            .font(AglynFont.caption).foregroundStyle(.secondary)
+        }
+      } else {
+        Text("The next sale you finish shows here.").font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }
   }

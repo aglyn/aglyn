@@ -70,6 +70,8 @@ class RegisterModel(
 
   /** The customer lookup beside the basket. */
   val customers = PosCustomerModel(customersApi, scope)
+  /** The last sale this register finished, and its receipt. */
+  val lastReceipt = PosLastReceiptModel(firestore, api, store, hostId, scope, { receiptContext() })
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
@@ -195,6 +197,7 @@ class RegisterModel(
     store.registerId = next.id
     cart = store.cart(next.id)
     holds = store.holds(next.id)
+    lastReceipt.watch(next.id)
     resumePendingSale(next)
     shift.refresh()
   }
@@ -485,6 +488,7 @@ class RegisterModel(
 
   /** The sale is paid and the receipt chosen: the next customer. */
   fun finished() {
+    checkout?.state?.value?.opened?.orderId?.let(lastReceipt::remember)
     register?.let { store.savePendingSale(it.id, null) }
     updateCart(Cart.EMPTY)
     checkout = null
@@ -495,20 +499,28 @@ class RegisterModel(
   fun loadReceipt(orderId: String) {
     scope.launch {
       val order = runCatching { firestore.get("hosts/$hostId/orders/$orderId") }.getOrNull() ?: return@launch
-      receipt = receiptDataFromOrder(
-        orderId,
-        order.data,
-        ReceiptContext(storeName = storeName, registerName = register?.name, timeZone = timeZone, currency = currency),
-        nowMs(),
-      )
+      receipt = receiptDataFromOrder(orderId, order.data, receiptContext(), nowMs())
     }
   }
 
-  /** Prints the receipt on the register's direct printer, kicking the drawer for cash. */
-  suspend fun print(receiptData: ReceiptData, openDrawer: Boolean): String? {
+  /** The store's receipt header, address and return policy as this register prints them. */
+  private fun receiptContext(): ReceiptContext {
+    val rules = context?.ops
+    return ReceiptContext(
+      storeName = storeName,
+      storeLines = rules?.receiptAddress.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() },
+      registerName = register?.name,
+      timeZone = timeZone,
+      currency = currency,
+      footer = rules?.returnPolicy?.trim()?.ifEmpty { null },
+    )
+  }
+
+  /** Prints the receipt on the register's direct printer, kicking the drawer for cash. A gift receipt drops every price. */
+  suspend fun print(receiptData: ReceiptData, openDrawer: Boolean, gift: Boolean = false): String? {
     val printer = peripherals.printers.firstOrNull() ?: return "No receipt printer is set up on this register."
     return try {
-      printer.print(EscPosEncoder().encode(layoutReceipt(receiptData, ReceiptLayoutOptions(columns = 48, openDrawer = openDrawer))))
+      printer.print(EscPosEncoder().encode(layoutReceipt(receiptData, ReceiptLayoutOptions(columns = 48, openDrawer = openDrawer, gift = gift))))
       null
     } catch (error: Throwable) {
       if (error is CancellationException) throw error
