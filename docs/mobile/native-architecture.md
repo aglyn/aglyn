@@ -948,6 +948,27 @@ shape plus `load: { url, ids, max }` (`{ids}` in the url is the ids of the rows 
 most a request may name) is read for the rows on the screen in batches and answers under `column.<id>`, which its `value` and `sort`
 read. A column that cannot be read leaves its cells blank.
 
+A staff support session is an action with `impersonate: { token, tenantId }`: the paths in the route's answer of the custom token it
+minted and the identity pool it belongs to (`/api/admin/impersonate`, which takes `{ uid, reason }` and refuses a reason under its
+minimum). The token goes to the app's auth session and is shown, logged and kept nowhere. The session signs the customer in over
+REST in that pool, in memory only, and the staff member's own session is set aside untouched: Apple uses a second
+`IdentityToolkitAuth` with a memory credential store and a Firestore reader that switches to the customer's, desktop does the same
+through `SupportSessions` with a REST backend, and Android signs in on a second Firebase app named `support` (a flag in
+SharedPreferences signs out anything left over at launch). While it lasts the shell wears the console's band (`You are
+impersonating {email} (staff: {staff email}). Actions are audited.`) with **Exit impersonation**, navigation starts again from home
+on entering and leaving, device push registration is skipped for the customer, a refresh the server refuses (the session was
+revoked) ends it and returns to the staff member's, and signing out ends it first. A second session replaces the first without
+losing the staff member's.
+
+A prompt field of kind `lookup` searches records and fills the form: `groups` is a list of `{ id, label, url, items, title,
+subtitle, fill, fillWhenSet }`. Opening it lists the first rows of every group and typing asks each group's `url` again with
+`search=<words>`. Picking a row writes `fill` (a map of form field keys to templates over `item`) into the fields the form has,
+whatever they come out as, and `fillWhenSet` only when a template comes out non-blank (a person's address, as the recipient). The
+system email test's "Populate from" uses it; its fills are generated from the console's `system-email-sample-sources.ts`.
+
+A Firestore `query` load with `more: <rows>` offers **Show more** on the list that names it as its `load`: when a read came back with
+its whole `limit`, the query is read again with the limit raised by that many rows, until a read comes back short.
+
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row

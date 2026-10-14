@@ -37,6 +37,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { sampleContext } from '../utils/system-email-sample-sources'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 /**
@@ -181,7 +182,7 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
       group: 'Organizations',
       key: `org:${org.$id}`,
       label: org.name ?? org.$id,
-      context: { 'org.name': String(org.name ?? ''), 'org.id': String(org.$id) },
+      context: sampleContext('org', org),
     }))
     const hostSources: SampleSource[] = (hostDocs ?? []).map((host: any) => ({
       group: 'Hosts',
@@ -189,22 +190,14 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
       label: host.subdomain
         ? `${host.displayName ?? host.$id} (${host.subdomain})`
         : (host.displayName ?? host.$id),
-      context: {
-        'host.name': String(host.displayName ?? ''),
-        'host.subdomain': String(host.subdomain ?? ''),
-        'host.id': String(host.$id),
-      },
+      context: sampleContext('host', host),
     }))
     const userSources: SampleSource[] = users.map((account) => ({
       group: 'Users',
       key: `user:${account.uid}`,
       label: account.email ?? account.displayName ?? account.uid,
       email: account.email ?? undefined,
-      context: {
-        'user.email': String(account.email ?? ''),
-        'user.name': String(account.displayName ?? ''),
-        'user.id': account.uid,
-      },
+      context: sampleContext('user', account),
     }))
     return [...orgSources, ...hostSources, ...userSources]
   }, [orgDocs, hostDocs, users])

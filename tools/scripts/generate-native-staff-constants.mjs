@@ -69,6 +69,7 @@ export async function staffSources() {
   const passwordGenerator = await jiti.import(join(ROOT, 'apps/console/utils/password-generator.ts'))
   const taxFiling = await jiti.import(join(ROOT, 'apps/console/utils/tax-filing-config.ts'))
   const quarantine = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-quarantine.ts'))
+  const samples = await jiti.import(join(ROOT, 'apps/console/utils/system-email-sample-sources.ts'))
   const impersonation = await jiti.import(join(ROOT, 'apps/console/utils/impersonation-reason.ts'))
   const takedown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-takedown-reach.ts'))
   const denyList = await jiti.import(join(ROOT, 'apps/console/utils/media-quarantine-list-query.ts'))
@@ -215,6 +216,14 @@ export async function staffSources() {
       health.HEALTH_PROBES.map(({ id, label, path, auth, meaning, remedy }) => [id, { label, path, auth, meaning, remedy }]),
     ),
     reasonMin: maintenance.MAINTENANCE_REASON_MIN,
+    // What a workspace, a site and a person fill into a system email test: the form field for each merge token, and the
+    // field of the record it reads.
+    sampleFills: Object.fromEntries(
+      Object.entries(samples.SAMPLE_SOURCE_FILLS).map(([kind, tokens]) => [
+        kind,
+        Object.fromEntries(Object.entries(tokens).map(([token, field]) => [`token.${token}`, `{item.${field}}`])),
+      ]),
+    ),
     impersonation: { minReason: impersonation.IMPERSONATION_MIN_REASON_LENGTH },
     jobs: maintenance.MAINTENANCE_JOBS.map(({ id, label, path, destructive, confirmPhrase, what, consequence, previewShows }) => ({
       id,
@@ -501,7 +510,22 @@ replace('core.staff.health', (screen) => ({
   ...screen,
   constants: { probes: sources.probes, gatewayLabels: sources.gatewayLabels, gatewayOptions: sources.gatewayOptions },
 }))
-replace('core.staff.emails', (screen) => ({ ...screen, constants: sources.emails }))
+replace('core.staff.emails', (screen) => ({
+  ...screen,
+  constants: sources.emails,
+  // The "Populate from" picker fills the merge tokens the console's test drawer does.
+  blocks: screen.blocks.map((block) => ({
+    ...block,
+    actions: block.actions?.map((action) => ({
+      ...action,
+      prompt: action.prompt?.map((field) =>
+        field.kind === 'lookup'
+          ? { ...field, groups: field.groups.map((group) => ({ ...group, fill: sources.sampleFills[group.id] })) }
+          : field,
+      ),
+    })),
+  })),
+}))
 replace('core.staff.emailSuppressions', (screen) => ({ ...screen, constants: sources.suppressions }))
 replace('core.staff.orgs', (screen) => ({ ...screen, constants: sources.margin }))
 replace('core.staff.margin', (screen) => ({ ...screen, constants: sources.margin }))

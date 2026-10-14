@@ -2257,35 +2257,40 @@
             "collection": "hosts/{params.hostId}/screens",
             "limit": 200
           },
-          "optional": true
+          "optional": true,
+          "more": 200
         },
         "layouts": {
           "query": {
             "collection": "hosts/{params.hostId}/layouts",
             "limit": 200
           },
-          "optional": true
+          "optional": true,
+          "more": 200
         },
         "components": {
           "query": {
             "collection": "hosts/{params.hostId}/components",
             "limit": 200
           },
-          "optional": true
+          "optional": true,
+          "more": 200
         },
         "templates": {
           "query": {
             "collection": "hosts/{params.hostId}/templates",
             "limit": 200
           },
-          "optional": true
+          "optional": true,
+          "more": 200
         },
         "forms": {
           "query": {
             "collection": "hosts/{params.hostId}/forms",
             "limit": 200
           },
-          "optional": true
+          "optional": true,
+          "more": 200
         },
         "screensCount": {
           "query": {
@@ -2862,7 +2867,8 @@
               "when": "item.deletedAt",
               "tone": "error"
             }
-          ]
+          ],
+          "load": "screens"
         },
         {
           "type": "list",
@@ -2888,7 +2894,8 @@
               "when": "item.deletedAt",
               "tone": "error"
             }
-          ]
+          ],
+          "load": "screens"
         },
         {
           "type": "list",
@@ -2913,7 +2920,8 @@
               "when": "item.deletedAt",
               "tone": "error"
             }
-          ]
+          ],
+          "load": "layouts"
         },
         {
           "type": "list",
@@ -2938,7 +2946,8 @@
               "when": "item.deletedAt",
               "tone": "error"
             }
-          ]
+          ],
+          "load": "components"
         },
         {
           "type": "list",
@@ -2963,7 +2972,8 @@
               "when": "item.deletedAt",
               "tone": "error"
             }
-          ]
+          ],
+          "load": "templates"
         },
         {
           "type": "list",
@@ -2988,7 +2998,8 @@
               "when": "item.deletedAt",
               "tone": "error"
             }
-          ]
+          ],
+          "load": "forms"
         },
         {
           "type": "list",
@@ -8058,6 +8069,55 @@
               "when": "item.editable",
               "url": "/api/admin/emails/test",
               "prompt": [
+                {
+                  "key": "populate",
+                  "label": "Populate from",
+                  "kind": "lookup",
+                  "help": "Fill the variables below from a real workspace, site or person. Choosing a person also sets who it is sent to. Anything you change afterward stays.",
+                  "groups": [
+                    {
+                      "id": "org",
+                      "label": "Workspaces",
+                      "url": "/api/admin/orgs?pageSize=10",
+                      "items": "orgs",
+                      "title": "{item.name|item.$id}",
+                      "subtitle": "{item.$id}",
+                      "fill": {
+                        "token.org.name": "{item.name}",
+                        "token.org.id": "{item.$id}"
+                      }
+                    },
+                    {
+                      "id": "host",
+                      "label": "Sites",
+                      "url": "/api/admin/sites?pageSize=10",
+                      "items": "sites",
+                      "title": "{item.displayName|item.$id}",
+                      "subtitle": "{item.subdomain}",
+                      "fill": {
+                        "token.host.name": "{item.displayName}",
+                        "token.host.subdomain": "{item.subdomain}",
+                        "token.host.id": "{item.$id}"
+                      }
+                    },
+                    {
+                      "id": "user",
+                      "label": "People",
+                      "url": "/api/admin/users?pageSize=10",
+                      "items": "users",
+                      "title": "{item.email|item.displayName|item.uid}",
+                      "subtitle": "{item.displayName}",
+                      "fill": {
+                        "token.user.email": "{item.email}",
+                        "token.user.name": "{item.displayName}",
+                        "token.user.id": "{item.uid}"
+                      },
+                      "fillWhenSet": {
+                        "to": "{item.email}"
+                      }
+                    }
+                  ]
+                },
                 {
                   "key": "to",
                   "label": "Send it to",
