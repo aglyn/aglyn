@@ -198,6 +198,8 @@ class FieldSpec private constructor(
   val integer: Boolean = false,
   /** A regular expression a typed value must contain a match of (an https address); an empty value is left to `required`. */
   val pattern: String? = null,
+  /** An `hours` field's options: `{ noun, sameDay, start, end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets). */
+  val hours: JsonElement? = null,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
@@ -308,6 +310,7 @@ class FieldSpec private constructor(
         max = ScreenValues.number(json.obj("max")),
         integer = json.isTrue("integer"),
         pattern = json.str("pattern"),
+        hours = json.obj("hours"),
       )
     }
   }

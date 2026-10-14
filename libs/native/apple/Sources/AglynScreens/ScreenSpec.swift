@@ -299,7 +299,7 @@ public struct FieldSpec: Sendable, Identifiable {
   public var id: String { key }
   public let key: String
   public let label: String
-  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `date`.
+  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `date`, `hours`.
   public let kind: String
   public let initial: String?
   public let placeholder: String?
@@ -317,6 +317,9 @@ public struct FieldSpec: Sendable, Identifiable {
   public let integer: Bool
   /// A regular expression a typed value must contain a match of (an https address); an empty value is left to `required`.
   public let pattern: String?
+  /// An `hours` field's options: `{ noun, sameDay, start, end }` (what an interval is called, whether it must end the day it
+  /// starts, and the times a newly opened day gets).
+  public let hours: JSONValue?
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
@@ -353,6 +356,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.max = nil
     self.integer = false
     self.pattern = nil
+    self.hours = nil
   }
 
   /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
@@ -417,6 +421,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.max = nil
     self.integer = false
     self.pattern = nil
+    self.hours = nil
   }
 
   init?(_ json: JSONValue) {
@@ -439,6 +444,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.max = ScreenValues.number(json["max"])
     self.integer = json["integer"] == .bool(true)
     self.pattern = json["pattern"]?.stringValue
+    self.hours = json["hours"]
   }
 
   /// The choices for a `select`: the static options, then any read from data.

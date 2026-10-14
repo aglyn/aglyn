@@ -932,6 +932,12 @@ row (`item.classification == bank`); and a comparison's right side may be anothe
 path (`a != @b.c`). A load names the query parameter its route searches by with
 `searchParam` (the catalog route reads `q`, the default is `search`).
 
+A field of kind `hours` is a week of opening hours chosen by touch, as the console's weekly hours picker is: a switch
+for each day and, for an open day, a From and a To time from a menu, with another interval on request. It reads and
+writes the stored text lines (`Mo-Fr 09:00-17:00`), so nobody types them; its `hours` option is `{ noun, sameDay, start,
+end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets, in minutes).
+`libs/native/screens/weekly-hours-cases.json` holds the Swift and Kotlin conversions to the console's own.
+
 A form or prompt can list fields from the data: an entry
 `{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
 field per row (a carrier that names its own credential fields), `kinds` mapping a
