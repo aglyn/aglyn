@@ -42,7 +42,7 @@ export function registerFulfillmentNetworksConsole(): void {
     featureFlag: FULFILLMENT_NETWORKS_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsShipping',
         widgetId: FULFILLMENT_NETWORKS_SETTINGS_WIDGET_ID,
         title: 'Fulfillment networks',
         Component: FulfillmentNetworksCard,

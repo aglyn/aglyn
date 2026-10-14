@@ -63,7 +63,7 @@ import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
  * the PLATFORM BILLING address below (what the org pays Aglyn, and the tax on
  * it); the SELLER PAYOUT identity, which lives in Stripe Connect and reaches
  * it through the hosted onboarding flow under Marketplace → Payouts; and the
- * STOREFRONT TAX ORIGIN, which is per-site and set in Commerce → Settings →
+ * STOREFRONT TAX ORIGIN, which is per-site and set in Products →
  * Taxes. Editing one must never look like editing another, which is why each
  * says at the field what it affects.
  */
@@ -289,7 +289,7 @@ export function OrgProfileCard() {
         'are sent — that identity lives in Stripe, under Marketplace → ' +
         'Payouts — and it is not the origin address sales tax on your ' +
         'own storefront’s orders is calculated from, which is set per ' +
-        'site in Commerce → Settings → Taxes.'}
+        'site in Products → Taxes.'}
     </Typography>
     {/* The stored address and the one Stripe bills from can be out of
         step (AGL-1133). The flag is written from what Stripe was

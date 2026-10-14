@@ -122,6 +122,7 @@ struct MediaLibrary: View {
   @State private var uploading: String?
   @State private var undo: (id: String, name: String)?
   @State private var folderSheet: FolderSheet?
+  @State private var filtersSheet = false
   @State private var deletingFolder: MediaFolder?
 
   private var api: MediaAPI { MediaAPI(api: context.api, scope: scope) }
@@ -173,6 +174,11 @@ struct MediaLibrary: View {
         let files = audioBatch ?? []
         audioBatch = nil
         if confirmed { upload(files, rightsConfirmed: true) }
+      }
+    }
+    .sheet(isPresented: $filtersSheet) {
+      MediaFiltersSheet(context: context, filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
+        filtersSheet = false
       }
     }
     .sheet(item: $folderSheet) { sheet in
@@ -341,6 +347,14 @@ struct MediaLibrary: View {
         .fixedSize()
         .accessibilityIdentifier("media-folder")
         Spacer(minLength: 0)
+        Button {
+          filtersSheet = true
+        } label: {
+          Label(
+            model.filters.count == 0 ? "Filters" : "Filters (\(model.filters.count))",
+            systemImage: "line.3.horizontal.decrease.circle")
+        }
+        .accessibilityIdentifier("media-filters")
         Text(ContractValues.shared.mediaSortLabels[model.sort.rawValue] ?? "")
           .font(AglynFont.caption).foregroundStyle(.secondary)
           .accessibilityLabel("Sorted by \(ContractValues.shared.mediaSortLabels[model.sort.rawValue] ?? "")")
@@ -354,6 +368,12 @@ struct MediaLibrary: View {
         Text(ContractValues.shared.mediaScopedSearchNotice)
           .font(AglynFont.caption).foregroundStyle(.secondary)
           .padding(.horizontal, AglynSpace.two)
+      }
+      ForEach(model.notices, id: \.self) { notice in
+        Text(notice)
+          .font(AglynFont.caption).foregroundStyle(AglynColor.error)
+          .padding(.horizontal, AglynSpace.two)
+          .accessibilityIdentifier("media-filter-notice")
       }
     }
   }
@@ -377,11 +397,11 @@ struct MediaLibrary: View {
       }
     case .ready(let items) where items.isEmpty:
       AglynEmptyState(
-        model.search.isEmpty && model.type == nil ? "No files here yet" : "No files match",
+        model.search.isEmpty && model.type == nil && model.filters.count == 0 ? "No files here yet" : "No files match",
         systemImage: SiteSymbols.media,
         message: canEdit ? "Upload photos, videos and documents to use on your pages." : nil
       ) {
-        if canEdit && model.search.isEmpty && model.type == nil {
+        if canEdit && model.search.isEmpty && model.type == nil && model.filters.count == 0 {
           Button("Upload") { pickSource = PickSource.available.first }.buttonStyle(.borderedProminent)
         }
       }
@@ -545,6 +565,7 @@ struct MediaDetailBody: View {
   @State private var deleting = false
   @State private var replaceSource: PickSource?
   @State private var audioReplacement: PickedFile?
+  @State private var editingImage = false
   @State private var references: [MediaReference]?
 
   private var origin: String { context.api.origin }
@@ -735,6 +756,7 @@ struct MediaDetailBody: View {
       }
     }
     .sheet(isPresented: $moving) { moveSheet }
+    .sheet(isPresented: $editingImage) { imageEditor }
     .confirmationDialog("Delete \(item.fileName)?", isPresented: $deleting, titleVisibility: .visible) {
       Button("Delete", role: .destructive) {
         let (id, name) = (item.id, item.fileName)
@@ -782,6 +804,45 @@ struct MediaDetailBody: View {
     .buttonStyle(.bordered)
     .disabled(!canEdit || runner.busy)
     .accessibilityIdentifier("media-replace")
+    // Rotate, flip, crop and shrink are for pictures only: there is nothing to crop in a PDF.
+    if item.contentType.hasPrefix("image/") {
+      Button {
+        runner.clear()
+        editingImage = true
+      } label: {
+        Label("Edit image", systemImage: "crop.rotate")
+      }
+      .buttonStyle(.bordered)
+      .disabled(!canEdit || runner.busy)
+      .accessibilityIdentifier("media-edit-image")
+    }
+  }
+
+  /// The image editor, over the file itself rather than the display copy the library shows, so "Replace original"
+  /// never saves a shrunken copy over it.
+  private var imageEditor: some View {
+    let (api, item, scope, origin) = (api, item, scope, origin)
+    return ImageEditorSheet(
+      fileName: item.fileName,
+      loadOriginal: {
+        let link: String?
+        if item.isPrivate && scope.isOrg { link = try? await api.signedLink(item.id) } else { link = item.src(origin: origin).map(mediaOriginalSrc) }
+        guard let link, let url = URL(string: link), let (data, response) = try? await URLSession.shared.data(from: url),
+          (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return data
+      },
+      busy: runner.busy, error: runner.error,
+      onCancel: { editingImage = false },
+      onSave: { file, asCopy in
+        if asCopy {
+          runner.run("Saved an edited copy.", onDone: { editingImage = false }) { _ = try await api.upload(file, folderID: item.folderID) }
+        } else {
+          runner.run("Image replaced. Everywhere it is used now shows the edited image.", onDone: { editingImage = false }) {
+            try await api.replace(item, with: file, rightsConfirmed: false)
+          }
+        }
+      })
   }
 
   private var moveSheet: some View {

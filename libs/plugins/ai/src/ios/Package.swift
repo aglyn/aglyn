@@ -26,8 +26,10 @@ let package = Package(
     .target(
       name: "AglynAiPlugin",
       dependencies: [
+        .product(name: "AglynCore", package: "apple"),
         .product(name: "AglynPluginHost", package: "apple"),
         .product(name: "AglynScreens", package: "apple"),
+        .product(name: "AglynUI", package: "apple"),
       ],
       resources: [.copy("Resources/ai.screens.json")]
     ),

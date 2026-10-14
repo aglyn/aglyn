@@ -295,7 +295,8 @@
         "LOCAL_BUSINESS_TYPE_OPTIONS",
         "AREA_SERVED_MAX",
         "PRICE_RANGE_MAX_LENGTH",
-        "PAYMENT_ACCEPTED_MAX_LENGTH"
+        "PAYMENT_ACCEPTED_MAX_LENGTH",
+        "AREA_SERVED_NAME_MAX_LENGTH"
       ]
     },
     "libs/aglyn/src/lib/app-utils/search-engine-verification.ts": {
@@ -663,6 +664,52 @@
         "POS_DISPLAY_PAIRING_TTL_MS",
         "POS_DISPLAY_THANKS_MS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/business-profile.ts": {
+      "values": [
+        "BUSINESS_TONE_LABELS",
+        "BUSINESS_PROFILE_MAX_CHARS",
+        "BUSINESS_PROFILE_MAX_SERVICES",
+        "BUSINESS_PROFILE_ORIGIN_LABELS",
+        "BUSINESS_PROFILE_SUBCOLLECTION",
+        "BUSINESS_PROFILE_SITE_DOC",
+        "BUSINESS_PROFILE_WORKSPACE_DOC",
+        "BUSINESS_TONE_ORDER",
+        "BUSINESS_PROFILE_FIELD_ORDER"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/content-authors.ts": {
+      "values": [
+        "AUTHOR_SAME_AS_MAX"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/seo-audit.ts": {
+      "types": [
+        "SeoAuditReport",
+        "SeoPageReport",
+        "SeoFinding",
+        "SeoFindingCode",
+        "SeoSeverity"
+      ],
+      "values": [
+        "SEO_FINDING_LABELS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/seo-keywords.ts": {
+      "types": [
+        "SeoKeywordCoverage"
+      ],
+      "values": [
+        "SEO_MAX_KEYWORDS",
+        "SEO_KEYWORD_LINES_MAX_CHARS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/image-edit.ts": {
+      "values": [
+        "IMAGE_EDIT_ASPECTS_JSON",
+        "IMAGE_EDIT_PREVIEW_MAX",
+        "IMAGE_EDIT_JPEG_QUALITY"
+      ]
     }
   },
   "ints": [
@@ -707,7 +754,9 @@
     "FunnelResult.entered",
     "FunnelResult.completed",
     "FunnelResult.journeysRead",
-    "FunnelResult.computedAt"
+    "FunnelResult.computedAt",
+    "SeoAuditReport.skipped",
+    "SeoPageReport.score"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -759,7 +808,8 @@
       "base": "TEMPLATE_LIST_BASE"
     },
     "ENTRY_LIST_QUERY": {},
-    "MARKETPLACE_BROWSE_QUERY": {}
+    "MARKETPLACE_BROWSE_QUERY": {},
+    "MEDIA_LIST_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -12220,6 +12270,1340 @@
         ]
       ]
     },
+    "mediaNodeSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          {
+            "cdnPath": "/api/media/cdn/h1/m1",
+            "url": "https://example.com/a.png"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/org:o1/m2"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/org:o1:h1/m3",
+            "url": "https://example.com/b.png",
+            "private": false
+          }
+        ],
+        [
+          {
+            "cdnPath": "https://console.aglyn.com/api/media/cdn/h1/m4?w=320",
+            "url": "https://example.com/c.png"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/bad scope/m",
+            "url": "https://example.com/d.png"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+            "private": false
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media",
+            "private": true
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://example.com/photo.jpg"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "cdnPath": null,
+            "url": null,
+            "private": null
+          }
+        ]
+      ]
+    },
+    "resolveMediaSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          "media:h1/m1"
+        ],
+        [
+          "media:h1/m1",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1:h1/m2",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "bad host"
+          }
+        ],
+        [
+          "media:h1/m1@abc123"
+        ],
+        [
+          "media:h1/m1@bad hash"
+        ],
+        [
+          "media:bad scope/m1"
+        ],
+        [
+          "media:h1/"
+        ],
+        [
+          "media:"
+        ],
+        [
+          "/api/media/cdn/h1/m1"
+        ],
+        [
+          "https://example.com/photo.jpg",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+          {
+            "hostId": "h2"
+          }
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "inheritedMediaAlt": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "My own words",
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "   ",
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "",
+            "assetAlt": "  spaced out  "
+          }
+        ],
+        [
+          {
+            "decorative": true,
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "assetAlt": "   "
+          }
+        ],
+        [
+          {
+            "assetAlt": 5
+          }
+        ],
+        [
+          {
+            "assetAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      ]
+    },
+    "hostQualifiedCdnPath": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "org"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "org",
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1:h2/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/h1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1/abc123",
+          [
+            "host:h1",
+            "host:h2"
+          ],
+          "h2"
+        ],
+        [
+          "https://console.aglyn.com/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          null
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          null,
+          "h1"
+        ],
+        [
+          "/somewhere/else.png",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          null,
+          [
+            "host:h1"
+          ],
+          "h1"
+        ]
+      ]
+    },
+    "videoMediaProps": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 63400,
+              "width": 1920,
+              "height": 1080
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 400,
+              "width": 640,
+              "height": 360
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 90500,
+              "width": 640,
+              "height": 360,
+              "codec": "avc1.640028"
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": "61000",
+              "width": "640",
+              "height": "360"
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 86400000,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 86400001,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 0,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": -5,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 1280
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 0,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 16385,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": "wide",
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {}
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": null
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": "video"
+          }
+        ]
+      ]
+    },
+    "mediaQueryRequest": {
+      "module": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "args": [
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "2.5"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": "<=",
+            "value": "10"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">",
+            "value": " 0.001 "
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": "<",
+            "value": "1e2"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": ""
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "  "
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "abc"
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "image"
+          }
+        ],
+        [
+          {
+            "field": "orientation",
+            "op": "equals",
+            "value": "landscape"
+          }
+        ]
+      ]
+    },
+    "resolveBusinessProfile": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          {
+            "host": null
+          }
+        ],
+        [
+          {
+            "host": {}
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Paws & Co",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": "Paws and Company Grooming",
+                  "description": "Dog grooming with a calm, gentle hand.",
+                  "telephone": "(512) 555-0100",
+                  "email": "hello@paws.example",
+                  "openingHours": "Mo-Fr 09:00-17:00",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX"
+                  },
+                  "areaServed": [
+                    "Austin",
+                    "Round Rock"
+                  ],
+                  "businessType": "PetStore",
+                  "sameAs": [
+                    "https://facebook.com/paws",
+                    "http://nope.example",
+                    "https://facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "support@paws.example",
+                "address": "2 Side St\nAustin",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "url": "http://insecure.example"
+                  },
+                  null
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Paws & Co",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": "Paws and Company Grooming",
+                  "description": "Dog grooming with a calm, gentle hand.",
+                  "telephone": "(512) 555-0100",
+                  "email": "hello@paws.example",
+                  "openingHours": "Mo-Fr 09:00-17:00",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX"
+                  },
+                  "areaServed": [
+                    "Austin",
+                    "Round Rock"
+                  ],
+                  "businessType": "PetStore",
+                  "sameAs": [
+                    "https://facebook.com/paws",
+                    "http://nope.example",
+                    "https://facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "support@paws.example",
+                "address": "2 Side St\nAustin",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "url": "http://insecure.example"
+                  },
+                  null
+                ]
+              }
+            },
+            "site": {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "site": {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "site": {
+              "whatYouDo": "A guess",
+              "services": [
+                "Full groom"
+              ],
+              "sources": {
+                "whatYouDo": "ai",
+                "services": "ai"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "seo": {
+                "entity": {
+                  "areaServed": "A\nB\nA"
+                }
+              },
+              "logoUrl": "  ",
+              "displayName": " x "
+            }
+          }
+        ]
+      ]
+    },
+    "businessProfileSourceOf": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          null,
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "services"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "audience"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "tone"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "serviceArea"
+        ],
+        [
+          {
+            "whatYouDo": "x"
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "x",
+            "sources": {
+              "whatYouDo": "junk"
+            }
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "tone": "loud"
+          },
+          "tone"
+        ]
+      ]
+    },
+    "sanitizeBusinessProfileValues": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "whatYouDo": "  one   sentence  ",
+            "services": "a, b\nc, A",
+            "tone": "plain",
+            "toneNotes": "x"
+          }
+        ],
+        [
+          {
+            "services": [
+              "  Bath  ",
+              "",
+              "bath",
+              "B"
+            ],
+            "tone": "loud",
+            "audience": 42
+          }
+        ],
+        [
+          {
+            "whatYouDo": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "services": [
+              "s0",
+              "s1",
+              "s2",
+              "s3",
+              "s4",
+              "s5",
+              "s6",
+              "s7",
+              "s8",
+              "s9",
+              "s10",
+              "s11",
+              "s12",
+              "s13",
+              "s14",
+              "s15",
+              "s16",
+              "s17",
+              "s18",
+              "s19"
+            ],
+            "serviceArea": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+          }
+        ]
+      ]
+    },
+    "businessProfileOwnerWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          null,
+          {
+            "whatYouDo": "Hi",
+            "services": "a\nb",
+            "tone": "plain"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {
+            "whatYouDo": "Changed",
+            "audience": "",
+            "tone": null
+          }
+        ],
+        [
+          {
+            "whatYouDo": "A guess",
+            "services": [
+              "Full groom"
+            ],
+            "sources": {
+              "whatYouDo": "ai",
+              "services": "ai"
+            }
+          },
+          {
+            "whatYouDo": "A guess",
+            "services": [
+              "Full groom",
+              "New"
+            ]
+          }
+        ],
+        [
+          {
+            "whatYouDo": "",
+            "sources": {
+              "whatYouDo": "owner"
+            }
+          },
+          {
+            "whatYouDo": ""
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {}
+        ]
+      ]
+    },
+    "normalizeAreaServed": {
+      "module": "libs/aglyn/src/lib/app-utils/local-business.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          "A\nB\r\na"
+        ],
+        [
+          [
+            "x",
+            " y ",
+            "x",
+            4
+          ]
+        ],
+        [
+          [
+            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+          ]
+        ],
+        [
+          [
+            "c0",
+            "c1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10",
+            "c11",
+            "c12",
+            "c13",
+            "c14",
+            "c15",
+            "c16",
+            "c17",
+            "c18",
+            "c19",
+            "c20",
+            "c21",
+            "c22",
+            "c23",
+            "c24",
+            "c25",
+            "c26",
+            "c27",
+            "c28",
+            "c29"
+          ]
+        ]
+      ]
+    },
+    "siteProfileUrls": {
+      "module": "libs/aglyn/src/lib/app-utils/content-authors.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "displayName": "Paws & Co",
+            "logoUrl": "https://cdn.example/logo.png",
+            "seo": {
+              "entity": {
+                "name": "Paws and Company Grooming",
+                "description": "Dog grooming with a calm, gentle hand.",
+                "telephone": "(512) 555-0100",
+                "email": "hello@paws.example",
+                "openingHours": "Mo-Fr 09:00-17:00",
+                "address": {
+                  "streetAddress": "1 Main St",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX"
+                },
+                "areaServed": [
+                  "Austin",
+                  "Round Rock"
+                ],
+                "businessType": "PetStore",
+                "sameAs": [
+                  "https://facebook.com/paws",
+                  "http://nope.example",
+                  "https://facebook.com/paws"
+                ]
+              }
+            },
+            "business": {
+              "supportEmail": "support@paws.example",
+              "address": "2 Side St\nAustin",
+              "socialLinks": [
+                {
+                  "label": "Instagram",
+                  "url": "https://instagram.com/paws"
+                },
+                {
+                  "url": "http://insecure.example"
+                },
+                null
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "business": {
+              "socialLinks": [
+                {
+                  "url": "https://a.example"
+                },
+                {
+                  "url": "https://a.example"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "sameAs": [
+                  "https://s0.example",
+                  "https://s1.example",
+                  "https://s2.example",
+                  "https://s3.example",
+                  "https://s4.example",
+                  "https://s5.example",
+                  "https://s6.example",
+                  "https://s7.example",
+                  "https://s8.example",
+                  "https://s9.example",
+                  "https://s10.example",
+                  "https://s11.example",
+                  "https://s12.example",
+                  "https://s13.example",
+                  "https://s14.example",
+                  "https://s15.example",
+                  "https://s16.example",
+                  "https://s17.example",
+                  "https://s18.example",
+                  "https://s19.example"
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "seoNormalizePath": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          "/"
+        ],
+        [
+          "pricing"
+        ],
+        [
+          "/pricing/"
+        ],
+        [
+          "//a//"
+        ],
+        [
+          "  /about  "
+        ],
+        [
+          "/a/b/"
+        ]
+      ]
+    },
+    "readSeoKeywordLines": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "/pricing: plans, pricing"
+        ],
+        [
+          "/pricing: plans\n/pricing: pricing, plans"
+        ],
+        [
+          "no colon here"
+        ],
+        [
+          ": noPath"
+        ],
+        [
+          "/: home, welcome\nabout: team, story, crew, staff, owners, founders"
+        ],
+        [
+          "/x: a, , A, b"
+        ],
+        [
+          "/x: ,  ,"
+        ],
+        [
+          "/a: one\n/b: two, three"
+        ]
+      ]
+    },
+    "seoKeywordSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          "a, b\nc"
+        ],
+        [
+          "a, A, b, c, d, e, f, g"
+        ],
+        [
+          [
+            "x",
+            " y ",
+            "x"
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          "  spaced   out ,word"
+        ]
+      ]
+    },
+    "seoAuditFindingCount": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          {
+            "pages": [],
+            "site": []
+          }
+        ],
+        [
+          {
+            "pages": [
+              {
+                "findings": [
+                  {
+                    "code": "orphan"
+                  }
+                ]
+              },
+              {
+                "findings": []
+              },
+              {
+                "findings": [
+                  {
+                    "code": "orphan"
+                  },
+                  {
+                    "code": "title-missing"
+                  }
+                ]
+              }
+            ],
+            "site": [
+              {
+                "code": "search-discouraged"
+              }
+            ]
+          }
+        ]
+      ]
+    },
     "parseStructuredValue": {
       "module": "libs/plugins/logic/src/lib/model/structured-value.ts",
       "args": [
@@ -13852,6 +15236,375 @@
         ]
       ]
     },
+    "weeklyHoursFromText": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "   \n  "
+        ],
+        [
+          "Mo-Fr 09:00-17:00"
+        ],
+        [
+          "Mo-Fr 09:00-17:00\nSa 10:00-14:00"
+        ],
+        [
+          "Mo-Fr 09:00-12:00\nMo-Fr 13:00-17:00"
+        ],
+        [
+          "Mo,We,Fr 08:30-11:45"
+        ],
+        [
+          "Fr-Mo 10:00-14:00"
+        ],
+        [
+          "Sa-Su 10:00-16:00\nSu 18:00-22:00"
+        ],
+        [
+          "Mon-Fri 9:00-17:00"
+        ],
+        [
+          "Monday–Friday 09:00—17:00"
+        ],
+        [
+          "Mo-Fr 22:00-02:00"
+        ],
+        [
+          "Mo-Fr 09:00-17:00\nclosed on holidays\nSa 25:00-26:00\nTu 09:00-17:00"
+        ],
+        [
+          "Mo 09:00-17:00\nMo 09:00-17:00\nMo 08:00-09:00"
+        ],
+        [
+          "M 09:00-17:00"
+        ],
+        [
+          "Mo-Tu-We 09:00-17:00"
+        ],
+        [
+          "Xx 09:00-17:00"
+        ],
+        [
+          "Su 00:00-23:59\r\nMo 09:00-17:00"
+        ],
+        [
+          42
+        ]
+      ]
+    },
+    "weeklyHoursToText": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "args": [
+        [
+          [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ]
+        ],
+        [
+          [
+            [],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            []
+          ]
+        ],
+        [
+          [
+            [],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 600,
+                "end": 840
+              }
+            ]
+          ]
+        ],
+        [
+          [
+            [],
+            [
+              {
+                "start": 540,
+                "end": 720
+              },
+              {
+                "start": 780,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 780,
+                "end": 1020
+              },
+              {
+                "start": 540,
+                "end": 720
+              }
+            ],
+            [],
+            [],
+            [],
+            []
+          ]
+        ],
+        [
+          [
+            [],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            []
+          ]
+        ],
+        [
+          [
+            [
+              {
+                "start": 600,
+                "end": 960
+              }
+            ],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [
+              {
+                "start": 600,
+                "end": 960
+              }
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              {
+                "start": 600,
+                "end": 840
+              }
+            ],
+            [
+              {
+                "start": 600,
+                "end": 840
+              }
+            ],
+            [],
+            [],
+            [],
+            [
+              {
+                "start": 600,
+                "end": 840
+              }
+            ],
+            [
+              {
+                "start": 600,
+                "end": 840
+              }
+            ]
+          ]
+        ],
+        [
+          [
+            [],
+            [
+              {
+                "start": 1320,
+                "end": 120
+              }
+            ],
+            [],
+            [],
+            [],
+            [],
+            []
+          ]
+        ],
+        [
+          [
+            [],
+            [],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 540,
+                "end": 1020
+              }
+            ],
+            [
+              {
+                "start": 480,
+                "end": 1020
+              }
+            ],
+            [],
+            []
+          ]
+        ],
+        [
+          [
+            [
+              {
+                "start": 0,
+                "end": 1439
+              }
+            ],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ]
+        ]
+      ]
+    },
+    "formatClockMinutes": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "args": [
+        [
+          0
+        ],
+        [
+          5
+        ],
+        [
+          540
+        ],
+        [
+          725
+        ],
+        [
+          1439
+        ]
+      ]
+    },
+    "clockLabel": {
+      "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "args": [
+        [
+          0
+        ],
+        [
+          60
+        ],
+        [
+          540
+        ],
+        [
+          720
+        ],
+        [
+          725
+        ],
+        [
+          780
+        ],
+        [
+          1425
+        ],
+        [
+          1439
+        ]
+      ]
+    },
     "posDisplayEmail": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
       "args": [
@@ -13937,6 +15690,1863 @@
         [
           0,
           0
+        ]
+      ]
+    },
+    "summarizeShippingCoverage": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "North America",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  " us ",
+                  "ca"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "International",
+                "kind": "flat",
+                "amountCents": 2500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "Europe",
+                "countries": [
+                  "GB",
+                  "DE",
+                  "FR"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "Europe",
+                "kind": "flat",
+                "amountCents": 1800
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "localPickup": true
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ],
+            "localPickup": true
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": []
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "gone",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Free shipping",
+                "kind": "free_over",
+                "amountCents": 700,
+                "freeOverCents": 5000
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By price",
+                "kind": "price_tiers",
+                "tiers": [
+                  {
+                    "upTo": 5000,
+                    "amountCents": 800
+                  },
+                  {
+                    "upTo": 20000,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": [
+                  {
+                    "upTo": 2000,
+                    "amountCents": 900
+                  },
+                  {
+                    "upTo": 500,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": []
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier",
+                "carrier": {
+                  "markupPct": 10
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier"
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "CA",
+                "countries": [
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r1",
+                "zoneId": "z2",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 900
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Rate 1",
+                "kind": "flat",
+                "amountCents": 100
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Rate 2",
+                "kind": "flat",
+                "amountCents": 200
+              },
+              {
+                "id": "r3",
+                "zoneId": "z1",
+                "name": "Rate 3",
+                "kind": "flat",
+                "amountCents": 300
+              },
+              {
+                "id": "r4",
+                "zoneId": "z1",
+                "name": "Rate 4",
+                "kind": "flat",
+                "amountCents": 400
+              },
+              {
+                "id": "r5",
+                "zoneId": "z1",
+                "name": "Rate 5",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r6",
+                "zoneId": "z1",
+                "name": "Rate 6",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 549.6
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": -300
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1000
+              }
+            ],
+            "localPickup": true
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "Nowhere",
+                "countries": []
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "describeShippingCoverage": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "args": [
+        [
+          {
+            "served": [
+              "US"
+            ],
+            "unserved": [
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": false
+          }
+        ],
+        [
+          {
+            "served": [
+              "US"
+            ],
+            "unserved": [
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": false
+          }
+        ],
+        [
+          {
+            "served": [
+              "US",
+              "CA"
+            ],
+            "unserved": [
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [
+              "US"
+            ],
+            "unserved": [
+              "CA"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [
+              "US",
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "unserved": [],
+            "shipsNowhere": false,
+            "asksDestination": false,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [
+              "US",
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "unserved": [],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [],
+            "unserved": [],
+            "shipsNowhere": true,
+            "asksDestination": false,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": false
+          }
+        ],
+        [
+          {
+            "served": [],
+            "unserved": [],
+            "shipsNowhere": true,
+            "asksDestination": false,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": false
+          }
+        ]
+      ]
+    },
+    "resolveCheckoutShippingOptions": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "argsProduct": [
+        [
+          null,
+          {},
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "North America",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  " us ",
+                  "ca"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "International",
+                "kind": "flat",
+                "amountCents": 2500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "Europe",
+                "countries": [
+                  "GB",
+                  "DE",
+                  "FR"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "Europe",
+                "kind": "flat",
+                "amountCents": 1800
+              }
+            ]
+          },
+          {
+            "localPickup": true
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ],
+            "localPickup": true
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": []
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "gone",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Free shipping",
+                "kind": "free_over",
+                "amountCents": 700,
+                "freeOverCents": 5000
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By price",
+                "kind": "price_tiers",
+                "tiers": [
+                  {
+                    "upTo": 5000,
+                    "amountCents": 800
+                  },
+                  {
+                    "upTo": 20000,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": [
+                  {
+                    "upTo": 2000,
+                    "amountCents": 900
+                  },
+                  {
+                    "upTo": 500,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": []
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier",
+                "carrier": {
+                  "markupPct": 10
+                }
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier"
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "CA",
+                "countries": [
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r1",
+                "zoneId": "z2",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 900
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Rate 1",
+                "kind": "flat",
+                "amountCents": 100
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Rate 2",
+                "kind": "flat",
+                "amountCents": 200
+              },
+              {
+                "id": "r3",
+                "zoneId": "z1",
+                "name": "Rate 3",
+                "kind": "flat",
+                "amountCents": 300
+              },
+              {
+                "id": "r4",
+                "zoneId": "z1",
+                "name": "Rate 4",
+                "kind": "flat",
+                "amountCents": 400
+              },
+              {
+                "id": "r5",
+                "zoneId": "z1",
+                "name": "Rate 5",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r6",
+                "zoneId": "z1",
+                "name": "Rate 6",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 549.6
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": -300
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1000
+              }
+            ],
+            "localPickup": true
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "Nowhere",
+                "countries": []
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          [
+            "US"
+          ],
+          [
+            "CA"
+          ],
+          [
+            "GB"
+          ],
+          [
+            "AU"
+          ],
+          [
+            "DE"
+          ],
+          [
+            "FR"
+          ],
+          [
+            "US",
+            "CA",
+            "GB",
+            "AU",
+            "DE",
+            "FR"
+          ]
+        ],
+        [
+          {
+            "subtotalCents": 0,
+            "totalGrams": 0
+          },
+          {
+            "subtotalCents": 30000,
+            "totalGrams": 9000
+          }
+        ]
+      ]
+    },
+    "mediaPosterSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          "media:h1/m1"
+        ],
+        [
+          "media:h1/m1",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "h9",
+            "width": 640
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "width": 320.4
+          }
+        ],
+        [
+          "media:h1/m1",
+          {
+            "width": 0
+          }
+        ],
+        [
+          "media:h1/m1",
+          {
+            "width": -5
+          }
+        ],
+        [
+          "/api/media/cdn/h1/m1?x=1"
+        ],
+        [
+          "/api/media/cdn/h1/m1"
+        ],
+        [
+          "https://example.com/v.mp4"
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media"
+        ],
+        [
+          "media:bad scope/m1"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "imageEditWorkedSize": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          400,
+          300,
+          0
+        ],
+        [
+          400,
+          300,
+          90
+        ],
+        [
+          400,
+          300,
+          180
+        ],
+        [
+          400,
+          300,
+          270
+        ],
+        [
+          300,
+          400,
+          0
+        ],
+        [
+          300,
+          400,
+          90
+        ],
+        [
+          300,
+          400,
+          180
+        ],
+        [
+          300,
+          400,
+          270
+        ],
+        [
+          1,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          90
+        ],
+        [
+          1,
+          1,
+          180
+        ],
+        [
+          1,
+          1,
+          270
+        ],
+        [
+          4000,
+          3000,
+          0
+        ],
+        [
+          4000,
+          3000,
+          90
+        ],
+        [
+          4000,
+          3000,
+          180
+        ],
+        [
+          4000,
+          3000,
+          270
+        ]
+      ]
+    },
+    "imageEditPreviewScale": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          960,
+          480
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          480,
+          480
+        ],
+        [
+          481,
+          100
+        ],
+        [
+          4000,
+          3000
+        ],
+        [
+          3000,
+          4000
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    "imageEditCropFromDrag": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          {
+            "x": 10,
+            "y": 20
+          },
+          {
+            "x": 110,
+            "y": 90
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 110,
+            "y": 90
+          },
+          {
+            "x": 10,
+            "y": 20
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 400,
+            "y": 250
+          },
+          {
+            "x": 600,
+            "y": 400
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 160,
+            "y": 10
+          },
+          1.7777777777777777,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 100,
+            "y": 10
+          },
+          1,
+          480,
+          60
+        ],
+        [
+          {
+            "x": 50,
+            "y": 50
+          },
+          {
+            "x": 150,
+            "y": 50
+          },
+          1.3333333333333333,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 200,
+            "y": 100
+          },
+          {
+            "x": 100,
+            "y": 300
+          },
+          1.5,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 470,
+            "y": 10
+          },
+          {
+            "x": 480,
+            "y": 20
+          },
+          1,
+          480,
+          300
+        ]
+      ]
+    },
+    "imageEditOutput": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          null,
+          0.5,
+          0
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          {
+            "x": 10,
+            "y": 20,
+            "w": 100,
+            "h": 50
+          },
+          0.5,
+          0
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          {
+            "x": 10,
+            "y": 20,
+            "w": 100,
+            "h": 50
+          },
+          0.5,
+          100
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          null,
+          0.5,
+          960
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          null,
+          0.5,
+          5000
+        ],
+        [
+          {
+            "w": 1000,
+            "h": 667
+          },
+          null,
+          1,
+          333
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          {
+            "x": 0,
+            "y": 0,
+            "w": 0,
+            "h": 0
+          },
+          0.5,
+          0
+        ],
+        [
+          {
+            "w": 4000,
+            "h": 3000
+          },
+          {
+            "x": 12.5,
+            "y": 7.5,
+            "w": 99.5,
+            "h": 80.25
+          },
+          0.12,
+          1200
+        ],
+        [
+          {
+            "w": 300,
+            "h": 400
+          },
+          {
+            "x": 0,
+            "y": 0,
+            "w": 360,
+            "h": 480
+          },
+          1.0,
+          -5
+        ]
+      ]
+    },
+    "imageEditCopyName": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          "photo.png"
+        ],
+        [
+          "a.b.jpeg"
+        ],
+        [
+          "photo"
+        ],
+        [
+          ".hidden"
+        ],
+        [
+          "Team Photo.JPG"
+        ],
+        [
+          "x.tar.gz"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "imageEditContentType": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          "Logo.PNG"
+        ],
+        [
+          "photo.webp"
+        ],
+        [
+          "a.png.jpg"
+        ],
+        [
+          "noext"
+        ],
+        [
+          "x.png"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "mediaOriginalSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          "https://aglyn.com/api/media/cdn/h1/m1"
+        ],
+        [
+          "/api/media/cdn/h1/m1"
+        ],
+        [
+          "/api/media/cdn/h1/m1?w=320"
+        ],
+        [
+          "/api/media/cdn/h1/m1?download=1"
+        ],
+        [
+          "/api/media/cdn/h1/m1?w=320&download=1"
+        ],
+        [
+          "/api/media/cdn/h1/m1?download=10"
+        ],
+        [
+          "https://example.com/photo.png"
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/x/o/a.png?alt=media"
+        ],
+        [
+          ""
         ]
       ]
     }

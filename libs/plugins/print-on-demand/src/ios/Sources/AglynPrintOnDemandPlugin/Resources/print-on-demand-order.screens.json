@@ -1,0 +1,188 @@
+{
+  "$comment": "The parts of one order made by a print-on-demand service, in the order's services: where each stands and what can be done next. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "print-on-demand.order",
+      "title": "Print on demand",
+      "label": "Print on demand",
+      "icon": "printer|print",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "actions": {
+          "send": "send",
+          "retry": "retry",
+          "confirm": "confirm",
+          "refresh": "refresh",
+          "cancel": "cancel"
+        },
+        "statuses": [
+          {
+            "id": "queued",
+            "label": "Sending"
+          },
+          {
+            "id": "draft",
+            "label": "Draft at the service"
+          },
+          {
+            "id": "submitted",
+            "label": "Sent"
+          },
+          {
+            "id": "on_hold",
+            "label": "On hold"
+          },
+          {
+            "id": "in_production",
+            "label": "In production"
+          },
+          {
+            "id": "partially_shipped",
+            "label": "Partly shipped"
+          },
+          {
+            "id": "shipped",
+            "label": "Shipped"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled"
+          },
+          {
+            "id": "failed",
+            "label": "Not sent"
+          }
+        ]
+      },
+      "load": {
+        "view": {
+          "url": "/api/print-on-demand/order?hostId={site.id}&orderId={params.orderId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.view.parts.0",
+          "text": "No part of this order is made by a print-on-demand service."
+        },
+        {
+          "type": "list",
+          "id": "parts",
+          "items": "data.view.parts",
+          "icon": "printer|print",
+          "primary": "{item.providerLabel}",
+          "secondary": "{item.lines.*.name}",
+          "tertiary": "{item.lastError}",
+          "badges": [
+            {
+              "text": "{const.statuses[id=item.status].label}",
+              "tone": "neutral"
+            },
+            {
+              "text": "Test order — never made",
+              "tone": "warning",
+              "when": "item.testMode"
+            },
+            {
+              "text": "{item.providerLabel} charged {item.costs.totalMinor:cents/item.costs.currency}",
+              "tone": "neutral",
+              "when": "item.costs"
+            },
+            {
+              "text": "The buyer paid {item.retailMinor:cents/item.retailCurrency}",
+              "tone": "neutral",
+              "when": "item.costs"
+            },
+            {
+              "text": "{item.shipments.*.carrier} {item.shipments.*.trackingNumber}",
+              "tone": "neutral",
+              "when": "item.shipments.0"
+            }
+          ],
+          "actions": [
+            {
+              "id": "open",
+              "label": "Open in {item.providerLabel}",
+              "icon": "open_in_new|open_in_new",
+              "when": "item.dashboardUrl",
+              "link": "{item.dashboardUrl}"
+            },
+            {
+              "id": "send",
+              "label": "Send now",
+              "when": "item.actions[=const.actions.send]",
+              "url": "/api/print-on-demand/order/action",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "provider": "{item.provider}",
+                "action": "send"
+              },
+              "success": "Send now requested"
+            },
+            {
+              "id": "retry",
+              "label": "Send again",
+              "when": "item.actions[=const.actions.retry]",
+              "url": "/api/print-on-demand/order/action",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "provider": "{item.provider}",
+                "action": "retry"
+              },
+              "success": "Send again requested"
+            },
+            {
+              "id": "confirm",
+              "label": "Confirm for production",
+              "when": "item.actions[=const.actions.confirm]",
+              "url": "/api/print-on-demand/order/action",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "provider": "{item.provider}",
+                "action": "confirm"
+              },
+              "success": "Confirm for production requested"
+            },
+            {
+              "id": "refresh",
+              "label": "Check for updates",
+              "when": "item.actions[=const.actions.refresh]",
+              "url": "/api/print-on-demand/order/action",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "provider": "{item.provider}",
+                "action": "refresh"
+              },
+              "success": "Check for updates requested"
+            },
+            {
+              "id": "cancel",
+              "label": "Cancel at the service",
+              "when": "item.actions[=const.actions.cancel]",
+              "url": "/api/print-on-demand/order/action",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "provider": "{item.provider}",
+                "action": "cancel"
+              },
+              "success": "Cancel at the service requested",
+              "destructive": true,
+              "confirm": "Cancel at {item.providerLabel}?"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

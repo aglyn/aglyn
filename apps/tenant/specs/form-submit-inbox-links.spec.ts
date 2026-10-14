@@ -31,7 +31,9 @@
  *  2. the lead or contact the person was filed as, by the id the record
  *     system answered with;
  *  3. an alert that opens this submission and names the campaigns, asked of
- *     the crediting plugin only when there is something to name.
+ *     the crediting plugin only when there is something to name;
+ *  4. an email beside that alert that lists the answers under the form's own
+ *     labels, which the alert itself never carries.
  */
 
 const HOST_ID = 'site-1'
@@ -44,6 +46,8 @@ let mockRowUpdates: Record<string, any>[] = []
 /** Every document read, by path. */
 let mockReads: string[] = []
 let mockNotifications: Record<string, any>[] = []
+/** The options each notification was raised with: what its email alone carries. */
+let mockNotifyOptions: Array<Record<string, any> | undefined> = []
 let mockDescribes: Record<string, any>[] = []
 let mockResolved: Record<string, any> | null = null
 let mockDescription: Record<string, any> | null = null
@@ -118,8 +122,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     degraded: false,
   }),
   getOrgForHost: async () => ({ org: { plan: 'business' } }),
-  notifyHostManagers: async (_hostId: string, payload: Record<string, any>) => {
+  notifyHostManagers: async (
+    _hostId: string,
+    payload: Record<string, any>,
+    options?: Record<string, any>,
+  ) => {
     mockNotifications.push(payload)
+    mockNotifyOptions.push(options)
   },
   orgDataCollectionForHost: async () => mockCollectionHandle('orgs/org-1/datasets'),
   dataStorageRefusal: async () => null,
@@ -208,6 +217,7 @@ beforeEach(() => {
   mockRowUpdates = []
   mockReads = []
   mockNotifications = []
+  mockNotifyOptions = []
   mockDescribes = []
   mockResolved = null
   mockDescription = null
@@ -319,5 +329,41 @@ describe('the alert', () => {
     expect(mockNotifications[0].body).toBe(
       'Someone submitted “AI website draft” on {site} (page /contact).',
     )
+  })
+})
+
+describe('the email beside the alert', () => {
+  it('lists every answer under the label the form declares, else the field name', async () => {
+    mockStore[`hosts/${HOST_ID}/forms/f1`].fields = [
+      { fieldName: 'email', label: 'Your email', fieldType: 'email' },
+      { fieldName: 'message', fieldType: 'textarea' },
+    ]
+
+    await submit({
+      formId: 'f1',
+      fields: { email: 'visitor@example.com', message: 'hello\nthere', phone: '555-0100' },
+    })
+
+    expect(mockNotifyOptions[0]?.emailDetails).toEqual([
+      { label: 'Your email', value: 'visitor@example.com' },
+      { label: 'message', value: 'hello\nthere' },
+      { label: 'phone', value: '555-0100' },
+    ])
+  })
+
+  it('an unbound form lists its answers by field name', async () => {
+    await submit()
+
+    expect(mockNotifyOptions[0]?.emailDetails).toEqual([
+      { label: 'email', value: 'visitor@example.com' },
+      { label: 'message', value: 'hello' },
+    ])
+  })
+
+  it('the alert itself never carries the answers', async () => {
+    await submit({ formId: 'f1' })
+
+    expect(JSON.stringify(mockNotifications[0])).not.toContain('visitor@example.com')
+    expect(JSON.stringify(mockNotifications[0])).not.toContain('hello')
   })
 })

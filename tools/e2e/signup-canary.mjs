@@ -690,7 +690,7 @@ async function walk(page, db, auth, identity, created) {
    *
    * A mail client opens the link in the browser the person is already using,
    * and `/verify-email?mode=verifyEmail&oobCode=…` is an Aglyn page that
-   * redeems the code and carries the session straight on to the workspace it
+   * redeems the code once confirmed and carries the session straight on to the workspace it
    * provisions. Redeeming in a sibling tab instead leaves the original signed
    * out at `/signin` and no org is ever created — measured, both ways.
    *
@@ -703,6 +703,17 @@ async function walk(page, db, auth, identity, created) {
     `${new URL(page.url()).origin}/verify-email?mode=verifyEmail&oobCode=${encodeURIComponent(oobCode)}`,
     { waitUntil: 'domcontentloaded', timeout: 45_000 },
   )
+  // Opening the link redeems nothing until a person confirms (AGL-3786): mail
+  // scanners render every link they deliver, so the code waits for a press.
+  // Pressed when it shows and passed over when it doesn't: the canary runs
+  // from main against whatever production serves, and a build from before the
+  // confirm screen redeems on load. The verified-account poll below is the
+  // verdict either way, so a page that neither shows the button nor redeems
+  // still fails, with the screen it was left on.
+  await page
+    .getByRole('button', { name: 'Confirm my email' })
+    .click({ timeout: 20_000 })
+    .catch(() => undefined)
   /**
    * Poll the FACTS, and grade the RIGHT fact.
    *

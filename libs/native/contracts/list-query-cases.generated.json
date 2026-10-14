@@ -12062,6 +12062,1158 @@
         ],
         "notices": []
       }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "no clauses",
+      "request": {
+        "clauses": []
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "type equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "kind",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "type isAnyOf",
+      "request": {
+        "clauses": [
+          {
+            "field": "type",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "kind",
+            "op": "in",
+            "value": [
+              "alpha",
+              "beta"
+            ]
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "type",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "tags contains",
+      "request": {
+        "clauses": [
+          {
+            "field": "tags",
+            "op": "contains",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "tags",
+            "op": "array-contains",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "tags",
+            "op": "contains",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "tags isAnyOf",
+      "request": {
+        "clauses": [
+          {
+            "field": "tags",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "tags",
+            "op": "array-contains-any",
+            "value": [
+              "alpha",
+              "beta"
+            ]
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "tags",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "uploaded is",
+      "request": {
+        "clauses": [
+          {
+            "field": "uploaded",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          },
+          {
+            "path": "createdAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "uploaded",
+            "op": "is",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "uploaded after",
+      "request": {
+        "clauses": [
+          {
+            "field": "uploaded",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "uploaded",
+            "op": "after",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "uploaded onOrAfter",
+      "request": {
+        "clauses": [
+          {
+            "field": "uploaded",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": ">=",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "uploaded",
+            "op": "onOrAfter",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "uploaded before",
+      "request": {
+        "clauses": [
+          {
+            "field": "uploaded",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-14T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "uploaded",
+            "op": "before",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "uploaded onOrBefore",
+      "request": {
+        "clauses": [
+          {
+            "field": "uploaded",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "createdAt",
+            "op": "<",
+            "value": {
+              "$date": "2026-03-15T00:00:00.000Z"
+            }
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "uploaded",
+            "op": "onOrBefore",
+            "value": "2026-03-14"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sizeMb >",
+      "request": {
+        "clauses": [
+          {
+            "field": "sizeMb",
+            "op": ">",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "sizeBytes",
+            "op": ">",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "column": "size",
+          "direction": "desc",
+          "path": "sizeBytes"
+        },
+        "served": [
+          {
+            "field": "sizeMb",
+            "op": ">",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sizeMb >=",
+      "request": {
+        "clauses": [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "sizeBytes",
+            "op": ">=",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "column": "size",
+          "direction": "desc",
+          "path": "sizeBytes"
+        },
+        "served": [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sizeMb <",
+      "request": {
+        "clauses": [
+          {
+            "field": "sizeMb",
+            "op": "<",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "sizeBytes",
+            "op": "<",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "column": "size",
+          "direction": "desc",
+          "path": "sizeBytes"
+        },
+        "served": [
+          {
+            "field": "sizeMb",
+            "op": "<",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sizeMb <=",
+      "request": {
+        "clauses": [
+          {
+            "field": "sizeMb",
+            "op": "<=",
+            "value": "42"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "sizeBytes",
+            "op": "<=",
+            "value": 42
+          }
+        ],
+        "orderBy": {
+          "column": "size",
+          "direction": "desc",
+          "path": "sizeBytes"
+        },
+        "served": [
+          {
+            "field": "sizeMb",
+            "op": "<=",
+            "value": "42"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "uploadedBy equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "uploadedBy",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "uploadedBy",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "uploadedBy",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "uploadedBy isAnyOf",
+      "request": {
+        "clauses": [
+          {
+            "field": "uploadedBy",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "uploadedBy",
+            "op": "in",
+            "value": [
+              "alpha",
+              "beta"
+            ]
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "uploadedBy",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "alt equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "alt",
+            "op": "equals",
+            "value": "true"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "hasAlt",
+            "op": "==",
+            "value": true
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "alt",
+            "op": "equals",
+            "value": "true"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "orientation equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "orientation",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "orientation",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "orientation",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "orientation isAnyOf",
+      "request": {
+        "clauses": [
+          {
+            "field": "orientation",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "orientation",
+            "op": "in",
+            "value": [
+              "alpha",
+              "beta"
+            ]
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "orientation",
+            "op": "isAnyOf",
+            "value": "alpha,beta"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "fileName startsWith",
+      "request": {
+        "clauses": [
+          {
+            "field": "fileName",
+            "op": "startsWith",
+            "value": "Acme Widgets"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "nameLower",
+            "op": ">=",
+            "value": "acme widgets"
+          },
+          {
+            "path": "nameLower",
+            "op": "<=",
+            "value": "acme widgets"
+          }
+        ],
+        "orderBy": {
+          "column": "fileName",
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [
+          {
+            "field": "fileName",
+            "op": "startsWith",
+            "value": "Acme Widgets"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "uploaded",
+          "direction": "asc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "asc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort createdAt asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "uploaded",
+          "direction": "asc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "asc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort nameLower asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "fileName",
+          "direction": "asc",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "fileName",
+          "direction": "asc",
+          "path": "nameLower"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort nameLower reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "fileName",
+          "direction": "desc",
+          "path": "nameLower"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort sizeBytes desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "size",
+          "direction": "desc",
+          "path": "sizeBytes"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "size",
+          "direction": "desc",
+          "path": "sizeBytes"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "sort sizeBytes reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "column": "size",
+          "direction": "asc",
+          "path": "sizeBytes"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "nameTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "nameTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "search with an exact clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "nameTokens",
+            "op": "array-contains",
+            "value": "acme"
+          },
+          {
+            "path": "kind",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "search with a contains clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "tags",
+            "op": "contains",
+            "value": "widget"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "nameTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [
+          {
+            "clause": {
+              "field": "tags",
+              "op": "contains",
+              "value": "widget"
+            },
+            "reason": "cannot be combined with the search — clear the search to use it"
+          }
+        ],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MEDIA_LIST_QUERY",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "column": "uploaded",
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
     }
   ]
 }

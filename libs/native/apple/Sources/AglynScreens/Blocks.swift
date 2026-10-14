@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
@@ -300,12 +301,20 @@ enum FieldValue: Equatable {
   }
 }
 
+/// The scope a form or prompt runs its action with: `form` holds only the fields the person could see (their
+/// `when` holds), so a field the screen hid is never sent, as a console form that never drew it would not send it.
+func visibleOnly(_ filled: JSONValue, _ fields: [FieldSpec]) -> JSONValue {
+  guard case .object(let form)? = filled["form"] else { return filled }
+  let keep = Set(fields.filter { ScreenValues.condition($0.when, in: filled) }.map(\.key))
+  return ScreenContext.with(filled, "form", .object(form.filter { keep.contains($0.key) }))
+}
+
 func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   switch (field.kind, value) {
   case ("toggle", .flag(let flag)?): return .bool(flag)
   case ("number", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
-    return trimmed.isEmpty ? .null : Double(trimmed).map(JSONValue.number) ?? .string(trimmed)
+    return trimmed.isEmpty ? .null : Double(trimmed).map { .number(field.integer ? $0.rounded() : $0) } ?? .string(trimmed)
   case (_, .text(let text)?):
     return .string(field.kind == "multiline" || field.kind == "password" ? text : text.trimmingCharacters(in: .whitespaces))
   case (_, .flag(let flag)?): return .bool(flag)
@@ -347,6 +356,8 @@ struct FieldInput: View {
         Picker(field.label, selection: text) {
           ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
         }
+      case "hours":
+        HoursInput(field: field, text: text)
       case "multiline":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)
@@ -373,7 +384,7 @@ struct FieldInput: View {
       switch field.kind {
       case "email": .emailAddress
       case "url": .URL
-      case "number": .decimalPad
+      case "number": field.integer ? .numberPad : .decimalPad
       default: .default
       }
     }
@@ -391,7 +402,7 @@ struct FormBlock: View {
   @State private var seededFrom: JSONValue?
 
   private var fields: [FieldSpec] {
-    block["fields"].array.compactMap(FieldSpec.init)
+    FieldSpec.parseAll(block["fields"].array, in: scope)
   }
 
   private var scope: JSONValue {
@@ -420,7 +431,7 @@ struct FormBlock: View {
       }
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         Button {
-          submit(action, filled)
+          submit(action, visibleOnly(filled, fields))
         } label: {
           HStack {
             Spacer()
@@ -459,7 +470,7 @@ struct ActionInputSheet: View {
   @Environment(\.dismiss) private var dismiss
   @State private var values: [String: FieldValue] = [:]
 
-  private var inputs: [FieldSpec] { pending.action.inputs }
+  private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
 
   private var filled: JSONValue {
     var form: [String: JSONValue] = [:]
@@ -500,7 +511,7 @@ struct ActionInputSheet: View {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
           Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
-            run(filled)
+            run(visibleOnly(filled, inputs))
           }
           .disabled(missing)
           .accessibilityIdentifier("prompt-submit")
@@ -554,5 +565,22 @@ struct ReauthSheet: View {
       }
     }
     .frame(minWidth: 360, minHeight: 260)
+  }
+}
+
+/// A week of hours chosen by touch: the plugin host's picker (the console's weekly hours picker) over the stored text lines
+/// (`Mo-Fr 09:00-17:00`), so nobody types them. The field's `hours` object sets the noun, the opening and closing time of a
+/// day switched on, and `sameDay`.
+struct HoursInput: View {
+  let field: FieldSpec
+  @Binding var text: String
+
+  var body: some View {
+    OpeningHoursPicker(
+      text: $text, label: field.label,
+      defaultInterval: WeeklyHoursInterval(
+        start: field.hours.flatMap { ScreenValues.number($0["start"]) }.map { Int($0) } ?? 9 * 60,
+        end: field.hours.flatMap { ScreenValues.number($0["end"]) }.map { Int($0) } ?? 17 * 60),
+      intervalNoun: field.hours?["noun"]?.stringValue ?? "hours", sameDay: field.hours?["sameDay"] == .bool(true))
   }
 }

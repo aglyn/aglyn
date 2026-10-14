@@ -48,7 +48,7 @@ import {
 } from '@aglyn/aglyn'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
-import { useOrgPlans } from '../hooks/use-org-plans'
+import { useOrgRows } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { usePinnedOrgs } from '../hooks/use-pinned-orgs'
 import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
@@ -143,7 +143,9 @@ export function OrgSwitcherNav() {
     () => filtered.slice(0, revealed).map((item) => item.$id),
     [filtered, revealed],
   )
-  const plans = useOrgPlans(revealedIds, Boolean(anchor))
+  // The same read gives each row its workspace's logo, so every row shows
+  // its own and not only the workspace the reader is in.
+  const rows = useOrgRows(revealedIds, Boolean(anchor))
 
   // Scrolling to the end of the list reveals the next page of badges, and —
   // when the membership window itself is truncated — pulls the next page of
@@ -423,7 +425,7 @@ export function OrgSwitcherNav() {
               // known immediately, others resolve as the reads land. Same
               // AGL-887 guard: no resolved doc, no tier.
               const tier = titleCase(
-                plans[item.$id] ??
+                rows[item.$id]?.plan ??
                   (isCurrent && orgReady ? plan ?? 'free' : undefined),
               )
               return (
@@ -435,8 +437,8 @@ export function OrgSwitcherNav() {
                 >
                   <ListItemIcon sx={{ minWidth: 0 }}>
                     {orgAvatar(
-                      isCurrent ? logoUrl : undefined,
-                      isCurrent ? logoDarkUrl : undefined,
+                      isCurrent ? logoUrl : rows[item.$id]?.logoUrl,
+                      isCurrent ? logoDarkUrl : rows[item.$id]?.logoDarkUrl,
                     )}
                   </ListItemIcon>
                   <ListItemText

@@ -1,0 +1,474 @@
+{
+  "$comment": "The Email platforms plugin's native screens: the Mailchimp, Klaviyo, Omnisend and Attentive connections a site can hold (with the platform's API key or by signing in), each one's status, audience or list, tag, what is synced and its sync log. Routes: GET /api/marketing-platforms/connections and log, POST connections (API key), oauth/start and sync-now, PATCH and DELETE connection. Signing in opens the platform's consent page in the secure browser; the server finishes the connection when the platform sends the person back. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "marketing-platforms.service",
+      "title": "Email platforms",
+      "label": "Email platforms",
+      "subtitle": "Mailchimp, Klaviyo, Omnisend and Attentive",
+      "icon": "envelope.badge|mark_email_read",
+      "scope": "site",
+      "order": 60,
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "requires": "params.pluginId == marketing-platforms",
+      "load": {
+        "conn": "/api/marketing-platforms/connections?hostId={site.id}"
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "mailchimp",
+            "label": "Mailchimp",
+            "reads": "Contacts, tags and unsubscribes, both ways.",
+            "keyHelp": "In Mailchimp: Profile, Extras, API keys, Create a key. It ends in your data center, like -us21.",
+            "listNoun": "audience",
+            "events": false,
+            "hasKey": true
+          },
+          {
+            "id": "klaviyo",
+            "label": "Klaviyo",
+            "reads": "Contacts and unsubscribes both ways, plus orders and started checkouts for your flows.",
+            "keyHelp": "In Klaviyo: Settings, API keys, Create private API key, with full access to Profiles, Lists, Subscriptions and Events.",
+            "listNoun": "list",
+            "events": true,
+            "hasKey": true
+          },
+          {
+            "id": "omnisend",
+            "label": "Omnisend",
+            "reads": "Contacts out, unsubscribes back, plus orders and started checkouts for your flows.",
+            "keyHelp": "In Omnisend: Store settings, API keys, Create API key, with access to Contacts and Events.",
+            "listNoun": "",
+            "events": true,
+            "hasKey": true
+          },
+          {
+            "id": "attentive",
+            "label": "Attentive",
+            "reads": "Contacts and orders out. Attentive does not report unsubscribes back.",
+            "keyHelp": "",
+            "listNoun": "",
+            "events": true,
+            "hasKey": false
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "platforms",
+          "title": "Platforms",
+          "items": "const.providers",
+          "filter": "data.conn.available[id=item.id] || data.conn.connections[provider=item.id]",
+          "primary": "{item.label}",
+          "secondary": "{item.reads}",
+          "icon": "envelope|mail",
+          "badges": [
+            {
+              "text": "{data.conn.connections[provider=item.id].status:title}",
+              "when": "data.conn.connections[provider=item.id]",
+              "tones": {
+                "Active": "success",
+                "Paused": "neutral",
+                "Error": "error",
+                "Reconnect": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Not connected",
+              "tone": "neutral",
+              "when": "!data.conn.connections[provider=item.id]"
+            }
+          ],
+          "empty": "No email platform is available for this site yet.",
+          "open": {
+            "screen": "marketing-platforms.platform",
+            "params": {
+              "provider": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "marketing-platforms.platform",
+      "title": "{const.providers[id=params.provider].label|'Email platform'}",
+      "label": "Email platform",
+      "icon": "envelope.badge|mark_email_read",
+      "scope": "site",
+      "load": {
+        "conn": "/api/marketing-platforms/connections?hostId={site.id}",
+        "log": {
+          "url": "/api/marketing-platforms/log?hostId={site.id}&provider={params.provider}",
+          "optional": true
+        }
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "mailchimp",
+            "label": "Mailchimp",
+            "reads": "Contacts, tags and unsubscribes, both ways.",
+            "keyHelp": "In Mailchimp: Profile, Extras, API keys, Create a key. It ends in your data center, like -us21.",
+            "listNoun": "audience",
+            "events": false,
+            "hasKey": true
+          },
+          {
+            "id": "klaviyo",
+            "label": "Klaviyo",
+            "reads": "Contacts and unsubscribes both ways, plus orders and started checkouts for your flows.",
+            "keyHelp": "In Klaviyo: Settings, API keys, Create private API key, with full access to Profiles, Lists, Subscriptions and Events.",
+            "listNoun": "list",
+            "events": true,
+            "hasKey": true
+          },
+          {
+            "id": "omnisend",
+            "label": "Omnisend",
+            "reads": "Contacts out, unsubscribes back, plus orders and started checkouts for your flows.",
+            "keyHelp": "In Omnisend: Store settings, API keys, Create API key, with access to Contacts and Events.",
+            "listNoun": "",
+            "events": true,
+            "hasKey": true
+          },
+          {
+            "id": "attentive",
+            "label": "Attentive",
+            "reads": "Contacts and orders out. Attentive does not report unsubscribes back.",
+            "keyHelp": "",
+            "listNoun": "",
+            "events": true,
+            "hasKey": false
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "summary",
+          "tone": "info",
+          "text": "{const.providers[id=params.provider].reads}"
+        },
+        {
+          "type": "notice",
+          "id": "failing",
+          "tone": "error",
+          "when": "data.conn.connections[provider=params.provider].lastError && data.conn.connections[provider=params.provider].status != active",
+          "text": "{data.conn.connections[provider=params.provider].lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "warning",
+          "tone": "warning",
+          "when": "data.conn.connections[provider=params.provider].lastError && data.conn.connections[provider=params.provider].status == active",
+          "text": "{data.conn.connections[provider=params.provider].lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "reconnect",
+          "tone": "warning",
+          "when": "data.conn.connections[provider=params.provider].status == reconnect",
+          "text": "The platform refused the stored credential. Nothing moves until you connect again."
+        },
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "when": "!data.conn.connections[provider=params.provider]",
+          "text": "Not connected. Connect your own {const.providers[id=params.provider].label} account; Aglyn never asks for your password."
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Connection",
+          "when": "data.conn.connections[provider=params.provider]",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{data.conn.connections[provider=params.provider].status:title}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Paused": "neutral",
+                "Error": "error",
+                "Reconnect": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Account",
+              "value": "{data.conn.connections[provider=params.provider].accountName}",
+              "when": "data.conn.connections[provider=params.provider].accountName"
+            },
+            {
+              "label": "Last synced",
+              "value": "{data.conn.connections[provider=params.provider].lastSuccessAtMs:datetime|'Not yet'}"
+            },
+            {
+              "label": "First copy of your contacts",
+              "value": "Finished",
+              "when": "data.conn.connections[provider=params.provider].backfillDone"
+            },
+            {
+              "label": "First copy of your contacts",
+              "value": "In progress",
+              "when": "!data.conn.connections[provider=params.provider].backfillDone"
+            },
+            {
+              "label": "Contacts sent",
+              "value": "{data.conn.connections[provider=params.provider].totals.contactsPushed:number}"
+            },
+            {
+              "label": "Subscription changes read back",
+              "value": "{data.conn.connections[provider=params.provider].totals.consentPulled:number}"
+            },
+            {
+              "label": "Events sent",
+              "value": "{data.conn.connections[provider=params.provider].totals.eventsSent:number}",
+              "when": "const.providers[id=params.provider].events"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "when": "data.conn.available[id=params.provider] || data.conn.connections[provider=params.provider]",
+          "items": [
+            {
+              "id": "connectKey",
+              "label": "Connect with an API key",
+              "icon": "key|key",
+              "when": "!data.conn.connections[provider=params.provider] && data.conn.available[id=params.provider].apiKey && const.providers[id=params.provider].hasKey",
+              "url": "/api/marketing-platforms/connections",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "{const.providers[id=params.provider].keyHelp} Stored encrypted; it is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "apiKey": "{form.apiKey}"
+              },
+              "success": "Connected. The first sync starts within 15 minutes."
+            },
+            {
+              "id": "connectOAuth",
+              "label": "Connect with {const.providers[id=params.provider].label}",
+              "icon": "link|link",
+              "when": "!data.conn.connections[provider=params.provider] && data.conn.available[id=params.provider].oauth",
+              "url": "/api/marketing-platforms/oauth/start",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "reconnectKey",
+              "label": "Connect again with an API key",
+              "icon": "key|key",
+              "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.available[id=params.provider].apiKey && const.providers[id=params.provider].hasKey",
+              "url": "/api/marketing-platforms/connections",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "{const.providers[id=params.provider].keyHelp} Stored encrypted; it is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "apiKey": "{form.apiKey}"
+              },
+              "success": "Connected again. The first sync starts within 15 minutes."
+            },
+            {
+              "id": "reconnectOAuth",
+              "label": "Connect again with {const.providers[id=params.provider].label}",
+              "icon": "link|link",
+              "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.available[id=params.provider].oauth",
+              "url": "/api/marketing-platforms/oauth/start",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "sync",
+              "label": "Sync now",
+              "icon": "arrow.triangle.2.circlepath|sync",
+              "when": "data.conn.connections[provider=params.provider].status == active,error",
+              "url": "/api/marketing-platforms/sync-now",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "success": "Synced. Anything left continues in the background."
+            },
+            {
+              "id": "pause",
+              "label": "Pause",
+              "icon": "pause.circle|pause_circle",
+              "when": "data.conn.connections[provider=params.provider].status == active",
+              "method": "PATCH",
+              "url": "/api/marketing-platforms/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": true
+              },
+              "success": "Paused."
+            },
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play.circle|play_circle",
+              "when": "data.conn.connections[provider=params.provider].status == paused",
+              "method": "PATCH",
+              "url": "/api/marketing-platforms/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": false
+              },
+              "success": "Resumed."
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.conn.connections[provider=params.provider]",
+              "confirm": "Disconnect {const.providers[id=params.provider].label}? Nothing more is sent to it, and the stored key, the sync log and any orders not yet sent are deleted. Contacts already in {const.providers[id=params.provider].label} stay there, and unsubscribes already read back stay on this site's list.",
+              "method": "DELETE",
+              "url": "/api/marketing-platforms/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "back": true,
+              "success": "Disconnected."
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "list",
+          "title": "{const.providers[id=params.provider].listNoun:title} contacts go into",
+          "when": "data.conn.connections[provider=params.provider] && const.providers[id=params.provider].listNoun && data.conn.connections[provider=params.provider].status != reconnect",
+          "fields": [
+            {
+              "key": "listId",
+              "label": "Choose",
+              "kind": "select",
+              "initial": "{data.conn.connections[provider=params.provider].listId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "None"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.conn.connections[provider=params.provider].lists",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              }
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "method": "PATCH",
+            "url": "/api/marketing-platforms/connection",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "{params.provider}",
+              "listId": "{form.listId}"
+            },
+            "success": "Saved. Everyone is copied to it on the next sync."
+          }
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Settings",
+          "when": "data.conn.connections[provider=params.provider] && data.conn.connections[provider=params.provider].status != reconnect",
+          "fields": [
+            {
+              "key": "tag",
+              "label": "Tag",
+              "kind": "text",
+              "initial": "{data.conn.connections[provider=params.provider].tag}",
+              "help": "Every contact this site sends carries it, so you can segment them."
+            },
+            {
+              "key": "syncContacts",
+              "label": "Sync contacts and unsubscribes",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[provider=params.provider].syncContacts}"
+            },
+            {
+              "key": "syncEvents",
+              "label": "Send orders and started checkouts",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[provider=params.provider].syncEvents}",
+              "when": "const.providers[id=params.provider].events"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "method": "PATCH",
+            "url": "/api/marketing-platforms/connection",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "{params.provider}",
+              "tag": "{form.tag}",
+              "syncContacts": "{form.syncContacts}",
+              "syncEvents": "{form.syncEvents}"
+            },
+            "success": "Saved."
+          }
+        },
+        {
+          "type": "list",
+          "id": "log",
+          "title": "Sync log",
+          "when": "data.conn.connections[provider=params.provider]",
+          "items": "data.log.entries",
+          "primary": "{item.message}",
+          "secondary": "{item.atMs:datetime}",
+          "badges": [
+            {
+              "text": "{item.kind:title}",
+              "tones": {
+                "Run": "success",
+                "Error": "error",
+                "Event-failed": "warning",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "Nothing has run yet."
+        }
+      ]
+    }
+  ]
+}

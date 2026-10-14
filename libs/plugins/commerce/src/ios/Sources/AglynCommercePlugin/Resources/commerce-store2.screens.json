@@ -1,0 +1,1978 @@
+{
+  "$comment": "The Commerce plugin's shipping, local delivery, member updates and storefront sales tax pages, natively, writing the store's documents or calling the console's route as the console's card does. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.memberPosts",
+      "title": "Member updates",
+      "label": "Member updates",
+      "subtitle": "Posts only your subscribers can see",
+      "icon": "forum|forum",
+      "scope": "site",
+      "load": {
+        "gate": {
+          "entitlement": "contentGating"
+        },
+        "posts": {
+          "query": {
+            "collection": "hosts/{site.id}/memberPosts",
+            "limit": 50,
+            "orderBy": "createdAtMs desc"
+          }
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 200
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "locked",
+          "tone": "info",
+          "when": "!data.gate.carried",
+          "text": "Memberships and gated content keep posts, pages and video behind a subscription, and publish updates to the members entitled to them. Included from {data.gate.label}."
+        },
+        {
+          "type": "list",
+          "id": "posts",
+          "when": "data.gate.carried",
+          "items": "data.posts.items",
+          "empty": "Post updates only your subscribers can see (and optionally email them). Add a Member feed block to a members-only page.",
+          "icon": "forum|forum",
+          "primary": "{item.title}",
+          "secondary": "{item.createdAtMs:date}",
+          "actions": [
+            {
+              "id": "delete",
+              "label": "Delete",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Delete {item.title}?",
+              "write": {
+                "delete": "hosts/{site.id}/memberPosts/{item.$id}"
+              },
+              "success": "Deleted"
+            }
+          ],
+          "load": "posts"
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "when": "data.gate.carried",
+          "items": [
+            {
+              "id": "publish",
+              "label": "New update",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "title",
+                  "label": "Title",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "body",
+                  "label": "Body",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "productId",
+                  "label": "Audience",
+                  "kind": "select",
+                  "initial": "",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "All live subscribers"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.products.items",
+                    "where": "item.subscription",
+                    "value": "{item.$id}",
+                    "label": "Subscribers of {item.name}"
+                  }
+                },
+                {
+                  "key": "emailSubscribers",
+                  "label": "Email subscribers",
+                  "kind": "toggle",
+                  "initial": "true"
+                }
+              ],
+              "url": "/api/commerce/member-post",
+              "body": {
+                "hostId": "{site.id}",
+                "title": "{form.title}",
+                "body": "{form.body}",
+                "productId": "{form.productId}",
+                "emailSubscribers": "{form.emailSubscribers}"
+              },
+              "instead": [
+                {
+                  "when": "response.emailed",
+                  "text": "Published — emailed {response.emailed} subscribers"
+                }
+              ],
+              "success": "Published"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.taxSummary",
+      "title": "Storefront sales tax",
+      "label": "Storefront sales tax",
+      "subtitle": "What your storefront collected, by how it was calculated",
+      "icon": "receipt_long|receipt_long",
+      "scope": "site",
+      "constants": {
+        "jurisdictions": [
+          {
+            "id": "unknown",
+            "label": "Not stated"
+          }
+        ]
+      },
+      "load": {
+        "report": {
+          "url": "/api/commerce/tax-summary?hostId={site.id}&from={params.from|now.months.0.from}&to={params.to|now.months.0.to}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "period",
+          "rows": [
+            {
+              "label": "Period",
+              "value": "{now.months[from=params.from].label|now.months.0.label}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "pick",
+          "items": [
+            {
+              "id": "period",
+              "label": "Choose another period",
+              "icon": "calendar_month|calendar_month",
+              "prompt": [
+                {
+                  "key": "period",
+                  "label": "Period",
+                  "kind": "select",
+                  "initial": "{params.from|now.months.0.from}",
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "now.months",
+                    "value": "{item.from}",
+                    "label": "{item.label}"
+                  }
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.taxSummary",
+                "params": {
+                  "from": "{form.period}",
+                  "to": "{now.months[from=form.period].to}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "advice",
+          "tone": "info",
+          "text": "These figures show what was collected and how each was calculated. For storefront sales Aglyn acts as a marketplace facilitator: where applicable law gives Aglyn a collection obligation, the tax it calculated is added on top at checkout, held by Aglyn rather than transferred to your connected payment account, and remitted by Aglyn. Tax calculated at a rate you configured yourself stays yours. See Terms of Service §10.7. Aglyn does not provide tax advice. Please confirm your obligations with a qualified tax professional."
+        },
+        {
+          "type": "fields",
+          "id": "count",
+          "rows": [
+            {
+              "label": "Taxed sales",
+              "value": "{data.report.summary.transactionCount:plural/sale} in this period."
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.report.summary.transactionCount",
+          "text": "No storefront sale carried tax in this period."
+        },
+        {
+          "type": "fields",
+          "id": "aglynLiable",
+          "when": "data.report.summary.aglynLiable.transactionCount > 0",
+          "title": "Tax Stripe calculated against Aglyn’s registrations",
+          "rows": [
+            {
+              "label": "Tax collected",
+              "value": "{data.report.summary.aglynLiable.taxCollectedCents:cents}"
+            },
+            {
+              "label": "Gross, tax included",
+              "value": "{data.report.summary.aglynLiable.grossCents:cents}"
+            },
+            {
+              "label": "Sales",
+              "value": "{data.report.summary.aglynLiable.transactionCount}"
+            }
+          ],
+          "footer": "Automatic tax was on for these sales. Stripe computed the rate against the tax registrations on Aglyn’s platform account, and Aglyn holds what was collected."
+        },
+        {
+          "type": "list",
+          "id": "aglynLiableJurisdictions",
+          "when": "data.report.summary.aglynLiable.transactionCount > 0",
+          "items": "data.report.summary.aglynLiable.byJurisdiction",
+          "icon": "public|public",
+          "primary": "{const.jurisdictions[id=item.key].label|item.key}",
+          "secondary": "Sales {item.value.totalSalesCents:cents} · Taxable base {item.value.taxableSalesCents:cents} · Tax {item.value.taxCollectedCents:cents}"
+        },
+        {
+          "type": "fields",
+          "id": "merchantManual",
+          "when": "data.report.summary.merchantManual.transactionCount > 0",
+          "title": "Tax your store calculated at your own rate",
+          "rows": [
+            {
+              "label": "Tax collected",
+              "value": "{data.report.summary.merchantManual.taxCollectedCents:cents}"
+            },
+            {
+              "label": "Gross, tax included",
+              "value": "{data.report.summary.merchantManual.grossCents:cents}"
+            },
+            {
+              "label": "Sales",
+              "value": "{data.report.summary.merchantManual.transactionCount}"
+            }
+          ],
+          "footer": "Automatic tax was off for these sales. The rate came from the tax settings you configured on this store, applied to your own declared origin."
+        },
+        {
+          "type": "list",
+          "id": "merchantManualJurisdictions",
+          "when": "data.report.summary.merchantManual.transactionCount > 0",
+          "items": "data.report.summary.merchantManual.byJurisdiction",
+          "icon": "public|public",
+          "primary": "{const.jurisdictions[id=item.key].label|item.key}",
+          "secondary": "Sales {item.value.totalSalesCents:cents} · Taxable base {item.value.taxableSalesCents:cents} · Tax {item.value.taxCollectedCents:cents}"
+        },
+        {
+          "type": "fields",
+          "id": "connectedAccountLiable",
+          "when": "data.report.summary.connectedAccountLiable.transactionCount > 0",
+          "title": "Tax Stripe calculated against your connected account",
+          "rows": [
+            {
+              "label": "Tax collected",
+              "value": "{data.report.summary.connectedAccountLiable.taxCollectedCents:cents}"
+            },
+            {
+              "label": "Gross, tax included",
+              "value": "{data.report.summary.connectedAccountLiable.grossCents:cents}"
+            },
+            {
+              "label": "Sales",
+              "value": "{data.report.summary.connectedAccountLiable.transactionCount}"
+            }
+          ],
+          "footer": "Automatic tax was on and Stripe named your connected account as the liable party for these sales."
+        },
+        {
+          "type": "list",
+          "id": "connectedAccountLiableJurisdictions",
+          "when": "data.report.summary.connectedAccountLiable.transactionCount > 0",
+          "items": "data.report.summary.connectedAccountLiable.byJurisdiction",
+          "icon": "public|public",
+          "primary": "{const.jurisdictions[id=item.key].label|item.key}",
+          "secondary": "Sales {item.value.totalSalesCents:cents} · Taxable base {item.value.taxableSalesCents:cents} · Tax {item.value.taxCollectedCents:cents}"
+        },
+        {
+          "type": "notice",
+          "id": "refunds",
+          "tone": "info",
+          "text": "Refunds are not reflected. A refunded sale keeps its full tax here, so these figures over-state whenever you have refunded in this period."
+        },
+        {
+          "type": "notice",
+          "id": "noBase",
+          "tone": "info",
+          "when": "data.report.summary.attention.rowsMissingTaxableBase > 0",
+          "text": "{data.report.summary.attention.rowsMissingTaxableBase} sale(s) collected tax but Stripe did not state the amount the rate was applied to. Their tax is counted; their taxable base is not, so “Taxable base” above is understated."
+        },
+        {
+          "type": "notice",
+          "id": "noAddress",
+          "tone": "info",
+          "when": "data.report.summary.attention.rowsMissingAddress > 0",
+          "text": "{data.report.summary.attention.rowsMissingAddress} sale(s) carried no customer address and are grouped under “Not stated”."
+        },
+        {
+          "type": "notice",
+          "id": "nonUsd",
+          "tone": "info",
+          "when": "data.report.summary.attention.nonUsdRows > 0",
+          "text": "{data.report.summary.attention.nonUsdRows} sale(s) were in a currency other than USD and are summed here without conversion."
+        },
+        {
+          "type": "notice",
+          "id": "unclassified",
+          "tone": "info",
+          "when": "data.report.summary.attention.rowsUnclassified > 0",
+          "text": "{data.report.summary.attention.rowsUnclassified} sale(s) could not be classified and are excluded from every group above rather than guessed into one."
+        },
+        {
+          "type": "notice",
+          "id": "undated",
+          "tone": "info",
+          "when": "data.report.undatedRows > 0",
+          "text": "{data.report.undatedRows} recorded sale(s) carry no payment date and fall outside every period, including this one."
+        },
+        {
+          "type": "notice",
+          "id": "truncated",
+          "tone": "warning",
+          "when": "data.report.truncated",
+          "text": "This period has more sales than one report can read. The figures above are PARTIAL — narrow the period."
+        }
+      ]
+    },
+    {
+      "id": "commerce.shipping",
+      "title": "Shipping",
+      "label": "Shipping",
+      "subtitle": "Zones, rates and local pickup",
+      "icon": "local_shipping|local_shipping",
+      "scope": "site",
+      "constants": {
+        "kinds": [
+          {
+            "id": "flat",
+            "label": "Flat"
+          },
+          {
+            "id": "free_over",
+            "label": "Free over subtotal"
+          },
+          {
+            "id": "price_tiers",
+            "label": "Subtotal tiers"
+          },
+          {
+            "id": "weight_tiers",
+            "label": "Weight tiers"
+          },
+          {
+            "id": "carrier",
+            "label": "Carrier rates"
+          }
+        ]
+      },
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        },
+        "carrier": {
+          "optional": true,
+          "url": "/api/commerce/shipping/carrier-rates?hostId={site.id}"
+        },
+        "coverage": {
+          "derive": "shippingCoverage",
+          "from": "store.shipping"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "zones",
+          "title": "Zones",
+          "items": "data.store.shipping.zones",
+          "empty": "No zones yet. A zone names the countries you ship to.",
+          "icon": "public|public",
+          "primary": "{item.name|item.countries}",
+          "secondary": "{item.countries}",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Zone name",
+                  "kind": "text",
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "countries",
+                  "label": "Countries",
+                  "kind": "text",
+                  "placeholder": "US, CA — or * for everywhere else",
+                  "initial": "{item.countries}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "zones": {
+                      "$replace": {
+                        "list": "{data.store.shipping.zones}",
+                        "key": "id",
+                        "match": "{item.id}",
+                        "value": {
+                          "id": "{item.id}",
+                          "name": "{form.name}",
+                          "countries": {
+                            "$codes": "{form.countries}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Zone saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.name|item.countries}? Its rates go with it.",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "zones": {
+                      "$without": {
+                        "list": "{data.store.shipping.zones}",
+                        "item": "{item}"
+                      }
+                    },
+                    "rates": {
+                      "$reject": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "zoneId",
+                        "match": "{item.id}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "addZone",
+          "items": [
+            {
+              "id": "add",
+              "label": "Add zone",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Zone name",
+                  "kind": "text"
+                },
+                {
+                  "key": "countries",
+                  "label": "Countries",
+                  "kind": "text",
+                  "placeholder": "US, CA — or * for everywhere else"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "zones": {
+                      "$append": {
+                        "list": "{data.store.shipping.zones}",
+                        "item": {
+                          "id": {
+                            "$uuid": "zone_"
+                          },
+                          "name": "{form.name}",
+                          "countries": {
+                            "$codes": "{form.countries}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Zone saved"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "carrierDown",
+          "tone": "info",
+          "when": "data.carrier.available == false && data.store.shipping.rates.*.kind == carrier",
+          "text": "Live carrier rates are not available on this site right now, so checkout offers the fallback rate."
+        },
+        {
+          "type": "list",
+          "id": "rates",
+          "title": "Rates",
+          "items": "data.store.shipping.rates",
+          "empty": "No rates yet. A rate prices shipping to a zone.",
+          "icon": "payments|payments",
+          "primary": "{item.name}",
+          "secondary": "{data.store.shipping.zones[id=item.zoneId].name|data.store.shipping.zones[id=item.zoneId].countries}",
+          "badges": [
+            {
+              "text": "{const.kinds[id=item.kind].label}",
+              "tone": "neutral"
+            },
+            {
+              "text": "{item.amountCents:cents}",
+              "tone": "neutral",
+              "when": "item.kind == flat,free_over"
+            },
+            {
+              "text": "Free at {item.freeOverCents:cents}",
+              "tone": "neutral",
+              "when": "item.kind == free_over"
+            },
+            {
+              "text": "{item.tiers:plural/tier}",
+              "tone": "neutral",
+              "when": "item.kind == price_tiers,weight_tiers"
+            },
+            {
+              "text": "No name: checkout drops it",
+              "tone": "error",
+              "when": "!item.name"
+            }
+          ],
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "when": "item.kind != carrier",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "placeholder": "Standard",
+                  "help": "Needed — checkout drops a rate without one.",
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "zoneId",
+                  "label": "Zone",
+                  "kind": "select",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "data.store.shipping.zones",
+                    "value": "{item.id}",
+                    "label": "{item.name|item.countries}"
+                  },
+                  "initial": "{item.zoneId}"
+                },
+                {
+                  "key": "kind",
+                  "label": "Type",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "flat",
+                      "label": "Flat"
+                    },
+                    {
+                      "value": "free_over",
+                      "label": "Free over subtotal"
+                    },
+                    {
+                      "value": "price_tiers",
+                      "label": "Subtotal tiers"
+                    },
+                    {
+                      "value": "weight_tiers",
+                      "label": "Weight tiers"
+                    }
+                  ],
+                  "initial": "{item.kind}"
+                },
+                {
+                  "key": "amount",
+                  "label": "Price ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "when": "form.kind == flat,free_over",
+                  "initial": "{item.amountCents:amount}"
+                },
+                {
+                  "key": "freeOver",
+                  "label": "Free at subtotal ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "when": "form.kind == free_over",
+                  "initial": "{item.freeOverCents:amount}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{item.id}",
+                        "value": {
+                          "id": "{item.id}",
+                          "zoneId": "{form.zoneId}",
+                          "name": "{form.name}",
+                          "kind": "{form.kind}",
+                          "amountCents": {
+                            "$cents": "{form.amount}"
+                          },
+                          "freeOverCents": {
+                            "$cents": "{form.freeOver}"
+                          },
+                          "tiers": "{item.tiers}"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Rate saved"
+            },
+            {
+              "id": "tiers",
+              "label": "Tiers",
+              "icon": "list|list",
+              "when": "item.kind == price_tiers,weight_tiers",
+              "navigate": {
+                "screen": "commerce.shippingTiers",
+                "params": {
+                  "rateId": "{item.id}"
+                }
+              }
+            },
+            {
+              "id": "editCarrier",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "when": "item.kind == carrier",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "placeholder": "Carrier rates",
+                  "help": "Needed — checkout drops a rate without one.",
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "zoneId",
+                  "label": "Zone",
+                  "kind": "select",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "data.store.shipping.zones",
+                    "value": "{item.id}",
+                    "label": "{item.name|item.countries}"
+                  },
+                  "initial": "{item.zoneId}",
+                  "help": "Shoppers see each carrier’s price for their address. Leave every service unticked to offer all of them."
+                },
+                {
+                  "fieldsFrom": {
+                    "items": "data.carrier.services",
+                    "each": [
+                      {
+                        "key": "svc_{item.serviceKey}",
+                        "label": "{item.label}",
+                        "kind": "toggle",
+                        "initial": "{?parent.carrier.services[=item.serviceKey]}"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "markupPct",
+                  "label": "Markup (%)",
+                  "kind": "number",
+                  "min": 0,
+                  "max": 500,
+                  "initial": "{item.carrier.markupPct}"
+                },
+                {
+                  "key": "handling",
+                  "label": "Handling fee ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "initial": "{item.carrier.handlingCents:amount}"
+                },
+                {
+                  "key": "fallback",
+                  "label": "If no live rate",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{item.carrier.fallbackRateId}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "None"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.store.shipping.rates",
+                    "where": "item.kind != carrier && item.zoneId == @parent.zoneId",
+                    "value": "{item.id}",
+                    "label": "{item.name|'Unnamed rate'}"
+                  },
+                  "help": "Pick a rate of this zone, or checkout can’t price without a quote."
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{item.id}",
+                        "value": {
+                          "id": "{item.id}",
+                          "zoneId": "{form.zoneId}",
+                          "name": "{form.name}",
+                          "kind": "carrier",
+                          "carrier": {
+                            "services": {
+                              "$gather": {
+                                "from": "{form}",
+                                "prefix": "svc_",
+                                "keys": true
+                              }
+                            },
+                            "markupPct": "{form.markupPct}",
+                            "handlingCents": {
+                              "$cents": "{form.handling}"
+                            },
+                            "fallbackRateId": "{form.fallback}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Rate saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.name|'this rate'}?",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$without": {
+                        "list": "{data.store.shipping.rates}",
+                        "item": "{item}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "addRate",
+          "when": "data.store.shipping.zones.0",
+          "items": [
+            {
+              "id": "add",
+              "label": "Add rate",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "placeholder": "Standard",
+                  "help": "Needed — checkout drops a rate without one."
+                },
+                {
+                  "key": "zoneId",
+                  "label": "Zone",
+                  "kind": "select",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "data.store.shipping.zones",
+                    "value": "{item.id}",
+                    "label": "{item.name|item.countries}"
+                  },
+                  "initial": "{data.store.shipping.zones.0.id}"
+                },
+                {
+                  "key": "kind",
+                  "label": "Type",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "flat",
+                      "label": "Flat"
+                    },
+                    {
+                      "value": "free_over",
+                      "label": "Free over subtotal"
+                    },
+                    {
+                      "value": "price_tiers",
+                      "label": "Subtotal tiers"
+                    },
+                    {
+                      "value": "weight_tiers",
+                      "label": "Weight tiers"
+                    }
+                  ],
+                  "initial": "flat"
+                },
+                {
+                  "key": "amount",
+                  "label": "Price ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "when": "form.kind == flat,free_over"
+                },
+                {
+                  "key": "freeOver",
+                  "label": "Free at subtotal ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "when": "form.kind == free_over"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$append": {
+                        "list": "{data.store.shipping.rates}",
+                        "item": {
+                          "id": {
+                            "$uuid": "rate_"
+                          },
+                          "zoneId": "{form.zoneId}",
+                          "name": "{form.name}",
+                          "kind": "{form.kind}",
+                          "amountCents": {
+                            "$cents": "{form.amount}"
+                          },
+                          "freeOverCents": {
+                            "$cents": "{form.freeOver}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Rate saved"
+            },
+            {
+              "id": "addCarrier",
+              "label": "Add carrier rates",
+              "icon": "plus|add",
+              "when": "data.carrier.available",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "placeholder": "Carrier rates",
+                  "help": "Needed — checkout drops a rate without one."
+                },
+                {
+                  "key": "zoneId",
+                  "label": "Zone",
+                  "kind": "select",
+                  "required": true,
+                  "optionsFrom": {
+                    "items": "data.store.shipping.zones",
+                    "value": "{item.id}",
+                    "label": "{item.name|item.countries}"
+                  },
+                  "initial": "{data.store.shipping.zones.0.id}",
+                  "help": "Shoppers see each carrier’s price for their address. Leave every service unticked to offer all of them."
+                },
+                {
+                  "fieldsFrom": {
+                    "items": "data.carrier.services",
+                    "each": [
+                      {
+                        "key": "svc_{item.serviceKey}",
+                        "label": "{item.label}",
+                        "kind": "toggle",
+                        "initial": "false"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "markupPct",
+                  "label": "Markup (%)",
+                  "kind": "number",
+                  "min": 0,
+                  "max": 500
+                },
+                {
+                  "key": "handling",
+                  "label": "Handling fee ($)",
+                  "kind": "number",
+                  "min": 0
+                },
+                {
+                  "key": "fallback",
+                  "label": "If no live rate",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "None"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.store.shipping.rates",
+                    "where": "item.kind != carrier",
+                    "value": "{item.id}",
+                    "label": "{item.name|'Unnamed rate'}"
+                  },
+                  "help": "Pick a rate of this zone, or checkout can’t price without a quote."
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$append": {
+                        "list": "{data.store.shipping.rates}",
+                        "item": {
+                          "id": {
+                            "$uuid": "rate_"
+                          },
+                          "zoneId": "{form.zoneId}",
+                          "name": "{form.name}",
+                          "kind": "carrier",
+                          "carrier": {
+                            "services": {
+                              "$gather": {
+                                "from": "{form}",
+                                "prefix": "svc_",
+                                "keys": true
+                              }
+                            },
+                            "markupPct": "{form.markupPct}",
+                            "handlingCents": {
+                              "$cents": "{form.handling}"
+                            },
+                            "fallbackRateId": "{form.fallback}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Rate saved"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "pickup",
+          "title": "Local pickup",
+          "fields": [
+            {
+              "key": "localPickup",
+              "label": "Offer free local pickup",
+              "kind": "toggle",
+              "initial": "{?data.store.shipping.localPickup == true}",
+              "help": "A free collection choice at checkout. It does not widen where you ship — a destination none of your rates reaches is still turned away. To let buyers choose WHERE to collect, with hours and a ready-for-pickup email, turn on pickup for a location under Inventory locations; this choice then gives way to it."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "fields": {
+                "shipping": {
+                  "localPickup": "{form.localPickup}"
+                }
+              }
+            },
+            "success": "Shipping settings saved"
+          }
+        },
+        {
+          "type": "notice",
+          "id": "coverageGap",
+          "title": "{data.coverage.headline}",
+          "tone": "warning",
+          "when": "data.coverage.headline",
+          "text": "{data.coverage.detail}"
+        },
+        {
+          "type": "actions",
+          "id": "coverageFix",
+          "when": "data.coverage.headline && !data.coverage.hasRestOfWorldZone",
+          "items": [
+            {
+              "id": "restOfWorld",
+              "label": "Add rest-of-world zone",
+              "icon": "public|public",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "zones": {
+                      "$append": {
+                        "list": "{data.store.shipping.zones}",
+                        "item": {
+                          "id": {
+                            "$uuid": "zone_"
+                          },
+                          "name": "Rest of world",
+                          "countries": [
+                            "*"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Zone saved"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "coverageOk",
+          "title": "Coverage",
+          "tone": "info",
+          "when": "!data.coverage.headline",
+          "text": "{data.coverage.note}"
+        },
+        {
+          "type": "notice",
+          "id": "coverageAsks",
+          "tone": "info",
+          "when": "data.coverage.asks",
+          "text": "{data.coverage.asks}"
+        }
+      ]
+    },
+    {
+      "id": "commerce.shippingTiers",
+      "title": "{data.store.shipping.rates[id=params.rateId].name|'Rate'} tiers",
+      "label": "Rate tiers",
+      "icon": "list|list",
+      "scope": "site",
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "tiers_price_tiers",
+          "when": "data.store.shipping.rates[id=params.rateId].kind == price_tiers",
+          "title": "Tiers",
+          "items": "data.store.shipping.rates[id=params.rateId].tiers",
+          "empty": "No tiers yet.",
+          "icon": "list|list",
+          "primary": "Up to {item.upTo:cents}",
+          "secondary": "{item.amountCents:cents}",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "upTo",
+                  "label": "Up to subtotal ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0,
+                  "initial": "{item.upTo:amount}"
+                },
+                {
+                  "key": "price",
+                  "label": "Price ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0,
+                  "initial": "{item.amountCents:amount}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{params.rateId}",
+                        "value": {
+                          "$put": {
+                            "map": "{data.store.shipping.rates[id=params.rateId]}",
+                            "key": "tiers",
+                            "value": {
+                              "$replace": {
+                                "list": "{data.store.shipping.rates[id=params.rateId].tiers}",
+                                "key": "*",
+                                "match": "{item}",
+                                "value": {
+                                  "upTo": {
+                                    "$cents": "{form.upTo}"
+                                  },
+                                  "amountCents": {
+                                    "$cents": "{form.price}"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Tier saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{params.rateId}",
+                        "value": {
+                          "$put": {
+                            "map": "{data.store.shipping.rates[id=params.rateId]}",
+                            "key": "tiers",
+                            "value": {
+                              "$without": {
+                                "list": "{data.store.shipping.rates[id=params.rateId].tiers}",
+                                "item": "{item}"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add_price_tiers",
+          "when": "data.store.shipping.rates[id=params.rateId].kind == price_tiers",
+          "items": [
+            {
+              "id": "add",
+              "label": "Add tier",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "upTo",
+                  "label": "Up to subtotal ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0
+                },
+                {
+                  "key": "price",
+                  "label": "Price ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{params.rateId}",
+                        "value": {
+                          "$put": {
+                            "map": "{data.store.shipping.rates[id=params.rateId]}",
+                            "key": "tiers",
+                            "value": {
+                              "$append": {
+                                "list": "{data.store.shipping.rates[id=params.rateId].tiers}",
+                                "item": {
+                                  "upTo": {
+                                    "$cents": "{form.upTo}"
+                                  },
+                                  "amountCents": {
+                                    "$cents": "{form.price}"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Tier saved"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "tiers_weight_tiers",
+          "when": "data.store.shipping.rates[id=params.rateId].kind == weight_tiers",
+          "title": "Tiers",
+          "items": "data.store.shipping.rates[id=params.rateId].tiers",
+          "empty": "No tiers yet.",
+          "icon": "list|list",
+          "primary": "Up to {item.upTo} g",
+          "secondary": "{item.amountCents:cents}",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "upTo",
+                  "label": "Up to (g)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0,
+                  "integer": true,
+                  "initial": "{item.upTo}"
+                },
+                {
+                  "key": "price",
+                  "label": "Price ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0,
+                  "initial": "{item.amountCents:amount}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{params.rateId}",
+                        "value": {
+                          "$put": {
+                            "map": "{data.store.shipping.rates[id=params.rateId]}",
+                            "key": "tiers",
+                            "value": {
+                              "$replace": {
+                                "list": "{data.store.shipping.rates[id=params.rateId].tiers}",
+                                "key": "*",
+                                "match": "{item}",
+                                "value": {
+                                  "upTo": "{form.upTo}",
+                                  "amountCents": {
+                                    "$cents": "{form.price}"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Tier saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{params.rateId}",
+                        "value": {
+                          "$put": {
+                            "map": "{data.store.shipping.rates[id=params.rateId]}",
+                            "key": "tiers",
+                            "value": {
+                              "$without": {
+                                "list": "{data.store.shipping.rates[id=params.rateId].tiers}",
+                                "item": "{item}"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add_weight_tiers",
+          "when": "data.store.shipping.rates[id=params.rateId].kind == weight_tiers",
+          "items": [
+            {
+              "id": "add",
+              "label": "Add tier",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "upTo",
+                  "label": "Up to (g)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0,
+                  "integer": true
+                },
+                {
+                  "key": "price",
+                  "label": "Price ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "rates": {
+                      "$replace": {
+                        "list": "{data.store.shipping.rates}",
+                        "key": "id",
+                        "match": "{params.rateId}",
+                        "value": {
+                          "$put": {
+                            "map": "{data.store.shipping.rates[id=params.rateId]}",
+                            "key": "tiers",
+                            "value": {
+                              "$append": {
+                                "list": "{data.store.shipping.rates[id=params.rateId].tiers}",
+                                "item": {
+                                  "upTo": "{form.upTo}",
+                                  "amountCents": {
+                                    "$cents": "{form.price}"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Tier saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.localDelivery",
+      "title": "Local delivery",
+      "label": "Local delivery",
+      "subtitle": "Deliver orders yourself",
+      "icon": "local_shipping|local_shipping",
+      "scope": "site",
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        },
+        "locations": {
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "limit": 25,
+            "orderBy": "name"
+          }
+        },
+        "radius": {
+          "optional": true,
+          "url": "/api/commerce/local-fulfillment?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "noCountry",
+          "tone": "warning",
+          "when": "data.store.localDelivery.enabled == true && !data.store.localDelivery.country",
+          "text": "Checkout won’t offer delivery yet: Choose the country you deliver in."
+        },
+        {
+          "type": "notice",
+          "id": "noZones",
+          "tone": "warning",
+          "when": "data.store.localDelivery.enabled == true && !data.store.localDelivery.zones.0",
+          "text": "Checkout won’t offer delivery yet: Add at least one delivery zone."
+        },
+        {
+          "type": "notice",
+          "id": "noWindows",
+          "tone": "warning",
+          "when": "data.store.localDelivery.enabled == true && !data.store.localDelivery.windows",
+          "text": "Checkout won’t offer delivery yet: Add at least one delivery window."
+        },
+        {
+          "type": "notice",
+          "id": "noOrigin",
+          "tone": "warning",
+          "when": "data.store.localDelivery.enabled == true && data.store.localDelivery.zones.*.kind == radius && !data.store.localDelivery.origin",
+          "text": "Checkout won’t offer delivery yet: a zone measures distance, but your store has no map position yet."
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Local delivery",
+          "fields": [
+            {
+              "key": "enabled",
+              "label": "Deliver orders yourself",
+              "kind": "toggle",
+              "initial": "{?data.store.localDelivery.enabled == true}",
+              "help": "Buyers choose local delivery at the cart, enter their postal code and book a delivery time. You mark each order out for delivery and delivered, and the buyer is told at each step."
+            },
+            {
+              "key": "country",
+              "label": "Country",
+              "kind": "text",
+              "initial": "{data.store.localDelivery.country}",
+              "placeholder": "US",
+              "pattern": "^[A-Za-z]{2}$",
+              "help": "Two letters"
+            },
+            {
+              "key": "locationId",
+              "label": "Leaves from",
+              "kind": "select",
+              "initial": "{data.store.localDelivery.locationId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "No particular location"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.locations.items",
+                "value": "{item.$id}",
+                "label": "{item.name}"
+              },
+              "help": "Its stock is reserved and sold for delivery orders"
+            },
+            {
+              "key": "windows",
+              "label": "Delivery windows",
+              "kind": "hours",
+              "initial": "{data.store.localDelivery.windows}",
+              "hours": {
+                "noun": "window",
+                "start": 540,
+                "end": 720
+              },
+              "help": "Switch on each day you deliver, then pick its windows. Each window is offered on its day."
+            },
+            {
+              "key": "leadTime",
+              "label": "Order at least",
+              "kind": "select",
+              "initial": "{data.store.localDelivery.leadTimeMinutes ?? '120'}",
+              "options": [
+                {
+                  "value": "0",
+                  "label": "No notice"
+                },
+                {
+                  "value": "60",
+                  "label": "1 hour"
+                },
+                {
+                  "value": "120",
+                  "label": "2 hours"
+                },
+                {
+                  "value": "240",
+                  "label": "4 hours"
+                },
+                {
+                  "value": "1440",
+                  "label": "1 day"
+                },
+                {
+                  "value": "2880",
+                  "label": "2 days"
+                }
+              ],
+              "help": "Before a window starts"
+            },
+            {
+              "key": "daysAhead",
+              "label": "Book up to (days ahead)",
+              "kind": "number",
+              "integer": true,
+              "min": 1,
+              "max": 30,
+              "initial": "{data.store.localDelivery.daysAhead|'7'}"
+            },
+            {
+              "key": "instructions",
+              "label": "What buyers should know",
+              "kind": "multiline",
+              "initial": "{data.store.localDelivery.instructions}",
+              "placeholder": "We text when we’re 10 minutes away."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "fields": {
+                "localDelivery": {
+                  "enabled": "{form.enabled}",
+                  "country": {
+                    "$orNull": "{form.country:upper/2}"
+                  },
+                  "locationId": {
+                    "$orNull": "{form.locationId}"
+                  },
+                  "windows": {
+                    "$orNull": "{form.windows:take/600}"
+                  },
+                  "leadTimeMinutes": {
+                    "$orNull": {
+                      "$number": "{form.leadTime}"
+                    }
+                  },
+                  "daysAhead": "{form.daysAhead}",
+                  "instructions": {
+                    "$orNull": "{form.instructions:take/400}"
+                  }
+                }
+              }
+            },
+            "success": "Local delivery saved"
+          }
+        },
+        {
+          "type": "list",
+          "id": "zones",
+          "title": "Zones",
+          "items": "data.store.localDelivery.zones",
+          "empty": "No zones yet. A zone names the postal codes (or the distance) you deliver to, and its fee.",
+          "icon": "public|public",
+          "primary": "{item.name}",
+          "secondary": "Fee {item.feeCents|'0':cents}",
+          "badges": [
+            {
+              "text": "Postal codes",
+              "tone": "neutral",
+              "when": "item.kind != radius"
+            },
+            {
+              "text": "Within {item.radiusKm} km",
+              "tone": "neutral",
+              "when": "item.kind == radius"
+            },
+            {
+              "text": "Lists no postal codes",
+              "tone": "warning",
+              "when": "item.kind != radius && !item.postcodes.0"
+            },
+            {
+              "text": "Minimum {item.minimumCents:cents}",
+              "tone": "neutral",
+              "when": "item.minimumCents"
+            },
+            {
+              "text": "Free over {item.freeOverCents:cents}",
+              "tone": "neutral",
+              "when": "item.freeOverCents"
+            }
+          ],
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Zone name",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "kind",
+                  "label": "Matched by",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "postcode",
+                      "label": "Postal codes"
+                    },
+                    {
+                      "value": "radius",
+                      "label": "Distance"
+                    }
+                  ],
+                  "initial": "{item.kind}",
+                  "when": "data.radius.radius || item.kind == radius"
+                },
+                {
+                  "key": "postcodes",
+                  "label": "Postal codes",
+                  "kind": "text",
+                  "placeholder": "10001, 100*, 10010-10020",
+                  "help": "Exact codes, a prefix ending in *, or a range",
+                  "when": "form.kind != radius",
+                  "initial": "{item.postcodes}"
+                },
+                {
+                  "key": "radiusKm",
+                  "label": "Within (km)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "max": 200,
+                  "when": "form.kind == radius",
+                  "initial": "{item.radiusKm}"
+                },
+                {
+                  "key": "fee",
+                  "label": "Fee ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "initial": "{item.feeCents:amount}"
+                },
+                {
+                  "key": "minimum",
+                  "label": "Minimum order ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "initial": "{item.minimumCents:amount}"
+                },
+                {
+                  "key": "freeOver",
+                  "label": "Free over ($)",
+                  "kind": "number",
+                  "min": 0,
+                  "initial": "{item.freeOverCents:amount}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "localDelivery": {
+                    "zones": {
+                      "$replace": {
+                        "list": "{data.store.localDelivery.zones}",
+                        "key": "id",
+                        "match": "{item.id}",
+                        "value": {
+                          "id": "{item.id}",
+                          "name": "{form.name:take/80}",
+                          "kind": "{form.kind|'postcode'}",
+                          "postcodes": {
+                            "$codes": "{form.postcodes}"
+                          },
+                          "radiusKm": "{form.radiusKm}",
+                          "feeCents": {
+                            "$cents": "{form.fee}"
+                          },
+                          "minimumCents": {
+                            "$cents": "{form.minimum}"
+                          },
+                          "freeOverCents": {
+                            "$cents": "{form.freeOver}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Zone saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.name}?",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "localDelivery": {
+                    "zones": {
+                      "$without": {
+                        "list": "{data.store.localDelivery.zones}",
+                        "item": "{item}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "addZone",
+          "items": [
+            {
+              "id": "add",
+              "label": "Add zone",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Zone name",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "kind",
+                  "label": "Matched by",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "postcode",
+                      "label": "Postal codes"
+                    },
+                    {
+                      "value": "radius",
+                      "label": "Distance"
+                    }
+                  ],
+                  "initial": "postcode",
+                  "when": "data.radius.radius || item.kind == radius"
+                },
+                {
+                  "key": "postcodes",
+                  "label": "Postal codes",
+                  "kind": "text",
+                  "placeholder": "10001, 100*, 10010-10020",
+                  "help": "Exact codes, a prefix ending in *, or a range",
+                  "when": "form.kind != radius"
+                },
+                {
+                  "key": "radiusKm",
+                  "label": "Within (km)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "max": 200,
+                  "when": "form.kind == radius"
+                },
+                {
+                  "key": "fee",
+                  "label": "Fee ($)",
+                  "kind": "number",
+                  "min": 0
+                },
+                {
+                  "key": "minimum",
+                  "label": "Minimum order ($)",
+                  "kind": "number",
+                  "min": 0
+                },
+                {
+                  "key": "freeOver",
+                  "label": "Free over ($)",
+                  "kind": "number",
+                  "min": 0
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "localDelivery": {
+                    "zones": {
+                      "$append": {
+                        "list": "{data.store.localDelivery.zones}",
+                        "item": {
+                          "id": {
+                            "$uuid": "zone_"
+                          },
+                          "name": "{form.name:take/80}",
+                          "kind": "{form.kind|'postcode'}",
+                          "postcodes": {
+                            "$codes": "{form.postcodes}"
+                          },
+                          "radiusKm": "{form.radiusKm}",
+                          "feeCents": {
+                            "$cents": "{form.fee}"
+                          },
+                          "minimumCents": {
+                            "$cents": "{form.minimum}"
+                          },
+                          "freeOverCents": {
+                            "$cents": "{form.freeOver}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Zone saved"
+            },
+            {
+              "id": "locate",
+              "label": "Place on map",
+              "icon": "location_on|location_on",
+              "when": "data.store.localDelivery.zones.*.kind == radius && !data.store.localDelivery.origin",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "locate",
+                "locationId": "{data.store.localDelivery.locationId}"
+              },
+              "then": {
+                "label": "Save the position",
+                "write": {
+                  "doc": "hosts/{site.id}/settings/store",
+                  "fields": {
+                    "localDelivery": {
+                      "origin": {
+                        "lat": "{response.origin.lat}",
+                        "lng": "{response.origin.lng}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Placed on the map"
+            },
+            {
+              "id": "relocate",
+              "label": "Place again",
+              "icon": "location_on|location_on",
+              "when": "data.store.localDelivery.zones.*.kind == radius && data.store.localDelivery.origin",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "locate",
+                "locationId": "{data.store.localDelivery.locationId}"
+              },
+              "then": {
+                "label": "Save the position",
+                "write": {
+                  "doc": "hosts/{site.id}/settings/store",
+                  "fields": {
+                    "localDelivery": {
+                      "origin": {
+                        "lat": "{response.origin.lat}",
+                        "lng": "{response.origin.lng}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Placed on the map"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "origin",
+          "when": "data.store.localDelivery.zones.*.kind == radius",
+          "rows": [
+            {
+              "label": "Distances measure from",
+              "value": "{data.store.localDelivery.origin.lat}, {data.store.localDelivery.origin.lng}",
+              "when": "data.store.localDelivery.origin"
+            }
+          ],
+          "footer": "Distance zones measure from the location deliveries leave from, once it is placed on a map."
+        }
+      ]
+    }
+  ]
+}

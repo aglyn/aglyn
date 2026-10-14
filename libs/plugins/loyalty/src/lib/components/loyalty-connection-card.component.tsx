@@ -45,21 +45,13 @@ import {
   LOYALTY_CONNECTOR_IDS,
   LOYALTY_CONNECTOR_LABELS,
   LOYALTY_DISCONNECT_EXPLANATION,
+  LOYALTY_SYNC_STATUS_WORDS,
   type LoyaltyConnectionAnswer,
   type LoyaltyConnectorId,
   type LoyaltySyncRowView,
 } from '../model/loyalty-connectors'
 import { formatPoints } from '../model/loyalty-math'
 import { useLoyaltyFetch } from './loyalty-api'
-
-const STATUS_WORDS: Record<LoyaltySyncRowView['status'], string> = {
-  pending: 'Waiting to send',
-  sending: 'Sending',
-  synced: 'Sent',
-  retry: 'Not sent yet',
-  unmatched: 'Not a member there',
-  skipped: 'Not sent',
-}
 
 function rowLine(row: LoyaltySyncRowView): string {
   const points = `${row.points > 0 ? '+' : '−'}${formatPoints(Math.abs(row.points))} points`
@@ -187,7 +179,7 @@ export function LoyaltyConnectionCard(props: {
                 <ListItem key={row.id} disableGutters>
                   <ListItemText
                     primary={rowLine(row)}
-                    secondary={`${STATUS_WORDS[row.status]}${row.error ? ` · ${row.error}` : ''}`}
+                    secondary={`${LOYALTY_SYNC_STATUS_WORDS[row.status]}${row.error ? ` · ${row.error}` : ''}`}
                   />
                 </ListItem>
               ))}

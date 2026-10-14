@@ -43,19 +43,19 @@ export function registerShippingConsole(): void {
     featureFlag: SHIPPING_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsShipping',
         widgetId: 'shipping-label-settings',
         title: 'Shipping labels',
         Component: ShippingSettingsCard,
       },
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsShipping',
         widgetId: 'shipping-own-accounts',
         title: 'Your shipping accounts',
         Component: OwnAccountsCard,
       },
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsShipping',
         widgetId: 'shipping-carrier-accounts',
         title: 'Carrier accounts',
         Component: CarrierAccountsCard,

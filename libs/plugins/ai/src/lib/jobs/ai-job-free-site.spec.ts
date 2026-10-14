@@ -113,7 +113,7 @@ import {
 } from '../model/ai-site-job'
 import { AI_SITE_START_ANSWERS, aiSiteStartRefusal } from '../model/ai-site-start'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
-import { AI_MODEL_CATALOG, AI_STEP_TIERS, aiCatalogEntry, estimateAiBilledUsd } from '../providers/catalog'
+import { AI_MODEL_CATALOG, AI_STEP_TIERS, aiCatalogEntry, aiModelCacheMinTokens, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiUsage } from '../providers/contract'
 import { validateAiBuildPlan } from '../runtime/ai-doctrine-validators'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
@@ -414,7 +414,7 @@ describe('a Free workspace’s site start is one or two pages', () => {
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     const [first, second] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
     expect(aiCatalogEntry(first.model)?.tier).toBe('fast')
-    expect(first.model).toBe('claude-haiku-4-5')
+    expect(first.model).toBe('claude-haiku-5-5')
     expect(first.thinking).toBe('off')
     expect(first.maxTokens).toBe(AI_SITE_PLAN_MAX_TOKENS.free)
     const turn = String(first.messages[0].content)
@@ -724,7 +724,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     const outcome = await planStepFor(FREE_ORG, FREE, yogaJob())
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     const [first, second] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
-    expect([first.model, second.model]).toEqual(['claude-haiku-4-5', 'claude-haiku-4-5'])
+    expect([first.model, second.model]).toEqual(['claude-haiku-5-5', 'claude-haiku-5-5'])
     expect([first.maxTokens, second.maxTokens]).toEqual([AI_SITE_PLAN_MAX_TOKENS.free, AI_SITE_PLAN_MAX_TOKENS.free])
     expect(String(second.messages.at(-1)?.content)).toContain('The home page has 2 sections')
     const plan = outcome.plan as AiJobPlan
@@ -902,22 +902,24 @@ const usd = (usage: AiUsage, model: string) => estimateAiBilledUsd(usage, model)
 
 /**
  * A plan's requests at their worst: each answered at its ceiling, the first
- * writing the cached prefix and every later one paying for it as plain input
- * — the fast tier caches only past 4,096 tokens, so its read discount is not
- * counted on — each never under what the measured plan sent.
+ * writing the cached prefix and every later one reading it where the model
+ * caches a prefix that long (the fast tier from 512 tokens since AGL-3781),
+ * else paying for it as plain input — each never under what the measured plan
+ * sent.
  */
 function planCredits(requests: SentRequest[]): number {
   const total = requests.reduce((sum, request, index) => {
     const { cached, uncached } = spans(request)
     const prefix = Math.max(realTokens(cached), MEASURED_SITE_PLAN.usage.cacheWriteTokens)
     const input = Math.max(realTokens(uncached), MEASURED_SITE_PLAN.usage.inputTokens)
+    const reads = index > 0 && prefix >= aiModelCacheMinTokens(request.model)
     return (
       sum +
       usd(
         {
-          inputTokens: input + (index === 0 ? 0 : prefix),
+          inputTokens: input + (index === 0 || reads ? 0 : prefix),
           outputTokens: request.maxTokens,
-          cacheReadTokens: 0,
+          cacheReadTokens: reads ? prefix : 0,
           cacheWriteTokens: index === 0 ? prefix : 0,
         },
         request.model,
@@ -949,13 +951,29 @@ async function lookCredits(): Promise<number> {
       request.model,
     ),
   )
-  // Never under what a real look spent: the live eval's look that wrote the
-  // cache came to 7 credits on 2026-10-07; the rest read it, at 4.
-  return Math.max(derived, MEASURED_SITE_LOOK_CREDITS)
+  // Never under what a real look spent: the dearest production look,
+  // counted the way the look's model counts it, all of it uncached.
+  const measured = assistCreditsFromUsd(
+    usd(
+      {
+        inputTokens: Math.ceil(MEASURED_SITE_LOOK.inputTokens * MEASURED_SITE_LOOK.tokensOnTheFastTier),
+        outputTokens: Math.min(request.maxTokens, Math.ceil(MEASURED_SITE_LOOK.outputTokens * MEASURED_SITE_LOOK.tokensOnTheFastTier)),
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+      request.model,
+    ),
+  )
+  return Math.max(derived, measured)
 }
 
-/** The dearest look the live eval measured (AGL-3660). */
-const MEASURED_SITE_LOOK_CREDITS = 7
+/**
+ * The dearest look production served from October 8 to 14, 2026 (AGL-3781),
+ * on claude-haiku-4-5 with nothing cached: 4,870 input and 467 output tokens.
+ * The fast tier's model since then counts the same text as about 30% more
+ * tokens.
+ */
+const MEASURED_SITE_LOOK = { inputTokens: 4_870, outputTokens: 467, tokensOnTheFastTier: 1.3 } as const
 
 /**
  * What the layout language's live runs metered (AGL-3660), the floors the
@@ -1156,7 +1174,7 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     expect([credits, notes.includes(`a site plan's one answer comes to at most ${credits} credits`)]).toEqual([credits, true])
   })
 
-  it('writes a Free blog no first posts and a Free store no products: one post at its worst needs more than the wall leaves (AGL-3676)', async () => {
+  it('writes a Free blog no first posts and a Free store no products, though one post at its worst now fits what the wall leaves (AGL-3676, AGL-3781)', async () => {
     // A post at its worst on the model a Free site runs on: its answer at the
     // post's own ceiling, writing its cached prefix, and its one re-ask
     // reading it — the two exchanges the wall counts for the plan, too.
@@ -1190,10 +1208,13 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     const pages = AI_SITE_FREE_PAGES.max
     const sections = aiFreeSiteSectionsWithin({ layouts: 1, pages, forms: 1 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
     const left = FREE_AI_TASTE_CREDITS_PER_MONTH - aiFreeSiteWorstCaseCredits({ layouts: 1, pages, forms: 1 }, sections)
-    expect({ post, left, fits: post <= left }).toEqual({ post, left, fits: false })
+    // The fast tier's markup on Claude Haiku 5.5 (AGL-3781) puts a post inside
+    // what the wall leaves; whether a Free site writes one is the guided
+    // start's content part, below, and not the wall.
+    expect({ post, left, fits: post <= left }).toEqual({ post, left, fits: true })
     const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
-    expect([post, notes.includes(`its re-ask — is ${post}, so a Free blog writes no first posts`)]).toEqual([post, true])
-    // So the guided start owes a Free blog and a Free store no part of their own.
+    expect([post, left, notes.includes(`its re-ask — is ${post}, within the ${left} the wall leaves since AGL-3781; a Free blog still writes no first posts`)]).toEqual([post, left, true])
+    // The guided start owes a Free blog and a Free store no part of their own.
     expect(aiSiteContentPart({ siteKind: 'blog' }, true)).toBeNull()
     expect(aiSiteContentPart({ siteKind: 'store' }, true)).toBeNull()
     expect(aiSiteContentPart({ siteKind: 'blog' }, false)).toBe('posts')
@@ -1226,7 +1247,9 @@ describe('a plan our checks still refuse', () => {
     const edited: AiBuildPlan = { ...TWO_PAGES, screens: [HOME, { ...BOOK, slug: '/' }] }
     mockRunAiRequest.mockReset()
     mockRunAiRequest.mockResolvedValueOnce(toolAnswer(edited)).mockResolvedValueOnce(toolAnswer(edited))
-    const spent = 290 * 0.001
+    // One credit short of a plan at its worst.
+    const left = AI_FREE_SITE_WORST_CASE_CREDITS.plan - 1
+    const spent = (300 - left) * 0.001
     const outcome = await planStepFor(FREE_ORG, FREE, siteJob(), NEW_SITE, {
       'users/owner-1/aiUsage/2026-10': { estCostUsd: spent },
     })
@@ -1237,7 +1260,7 @@ describe('a plan our checks still refuse', () => {
       // Whether the credits came back is the job's to say (refundedCredits), not this sentence.
       message: 'Something went wrong planning your site. Try again.',
       detail: expect.stringContaining('Rule 10'),
-      retryRefusal: `You have 10 AI credits left this month, and a plan needs up to ${AI_FREE_SITE_WORST_CASE_CREDITS.plan}. Your credits refresh next month, or upgrade for more.`,
+      retryRefusal: `You have ${left} AI credits left this month, and a plan needs up to ${AI_FREE_SITE_WORST_CASE_CREDITS.plan}. Your credits refresh next month, or upgrade for more.`,
     })
     expect(outcome.review?.message).not.toMatch(/Rule|rule/)
     // With the allowance a new workspace has, Try again stays on.
@@ -1250,6 +1273,6 @@ describe('a plan our checks still refuse', () => {
 
 // Each catalog id this suite names is one the catalog still carries.
 it('names models the catalog carries', () => {
-  expect(AI_MODEL_CATALOG.map((entry) => entry.id)).toEqual(expect.arrayContaining(['claude-haiku-4-5', 'claude-sonnet-5']))
+  expect(AI_MODEL_CATALOG.map((entry) => entry.id)).toEqual(expect.arrayContaining(['claude-haiku-5-5', 'claude-sonnet-5']))
   expect(AI_STEP_TIERS['job.plan']).toBe('balanced')
 })

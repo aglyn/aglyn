@@ -168,7 +168,7 @@ that does not change it.
 A service is not goods: the sales-tax rate configured for your store is a goods
 rate, and whether a service is taxable is a different question with frequently
 the opposite answer. So Aglyn does not apply your store's sales rate to an
-appointment. Instead, **Service tax**, on the **Taxes** card in the store's settings, is where
+appointment. Instead, **Service tax**, on the **Taxes** card (**Products → Taxes**), is where
 you set your own rate for it.
 
 When you set one, Aglyn adds it to the booking charge as its own receipt line

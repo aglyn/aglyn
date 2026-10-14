@@ -180,6 +180,10 @@ export async function generateAiMediaSvg(input: {
     messages: [{ role: 'user', content: aiMediaSvgPrompt(input) }],
     tool: aiMediaSvgTool(),
     maxTokens: AI_MEDIA_SVG_MAX_TOKENS,
+    // The ceiling holds the drawing alone, as it did on a fast tier that
+    // could not think; the fast tier's model now thinks unless told not to
+    // (AGL-3781).
+    thinking: 'off',
     check: (answer) => checkAiMediaSvgAnswer(answer, input.aspectRatio, input.style),
   }
   const result = (await runValidatedGeneration(

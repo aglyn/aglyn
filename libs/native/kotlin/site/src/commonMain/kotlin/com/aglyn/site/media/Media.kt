@@ -7,8 +7,11 @@ import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.ListFilterRequest
 import com.aglyn.contracts.ListQueryFilter
 import com.aglyn.contracts.ListQueryOp
+import com.aglyn.contracts.ListQueryPlan
 import com.aglyn.contracts.ListQueryRequest
+import com.aglyn.contracts.libraryVideoSeconds
 import com.aglyn.contracts.MediaSort
+import com.aglyn.contracts.mediaQueryRequest
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreDoc
@@ -33,6 +36,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -136,6 +140,10 @@ data class MediaItem(
   val updatedAt: FirestoreTimestamp?,
   val uploadedBy: String?,
   val visibleTo: List<String>,
+  /** A film's measured length in whole seconds (`videoMediaProps`); null for anything else or a film that records none. */
+  val videoSeconds: Long? = null,
+  /** Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404). */
+  val hasPoster: Boolean = false,
 ) {
   /** Where the file is served from: its CDN path on the console origin, else its stored URL. */
   fun src(origin: String): String? = cdnPath?.let { origin.trimEnd('/') + it } ?: url
@@ -171,6 +179,8 @@ data class MediaItem(
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
         uploadedBy = doc.string("uploadedBy"),
         visibleTo = (doc.data["visibleTo"] as? List<*>)?.filterIsInstance<String>().orEmpty(),
+        videoSeconds = libraryVideoSeconds(doc.data["video"]),
+        hasPoster = doc.data["poster"] is Map<*, *>,
       )
     }
   }
@@ -202,12 +212,68 @@ fun formatBytes(bytes: Long?): String {
 fun mediaTypeChoices(): List<Pair<String?, String>> = listOf<Pair<String?, String>>(null to "All") + Contracts.mediaTypeOptions.map { it.value to it.label }
 
 /**
- * The library's request for one view, as `mediaQuery` builds it: the folder
- * and the scope as base filters, the type as a clause, and the search on
- * the name tokens, or, for a reader limited to some sites, a "starts with"
- * on the name (the scope already holds the query's one array clause).
+ * The library's Filters beyond the type chips and the search, the console's
+ * own fields (`MEDIA_FILTER_FIELDS`): orientation, whether alt text is set,
+ * a tag, and a size range in megabytes. A blank one is not asked.
  */
-fun mediaRequest(folder: FolderPick, scopeTokens: List<String>?, type: String?, sort: MediaSort, search: String): ListQueryRequest {
+data class MediaFilters(
+  val orientation: String? = null,
+  val alt: String? = null,
+  val tag: String = "",
+  val minMegabytes: String = "",
+  val maxMegabytes: String = "",
+  /** The day a file was uploaded on or after, and on or before (`yyyy-MM-dd`, the site's day), or blank. */
+  val uploadedAfter: String = "",
+  val uploadedBefore: String = "",
+  /** The member who uploaded it (a user id, or `api:…` for a key), or null for anyone. */
+  val uploadedBy: String? = null,
+) {
+  /** How many are set, for the Filters button. */
+  val count: Int
+    get() = listOf(
+      orientation != null, alt != null, tag.isNotBlank(), minMegabytes.isNotBlank(), maxMegabytes.isNotBlank(),
+      uploadedAfter.isNotBlank(), uploadedBefore.isNotBlank(), uploadedBy != null,
+    ).count { it }
+
+  /**
+   * The clauses the query plan reads. A reader limited to some sites has no
+   * Tags filter: the scope already holds the query's one array clause
+   * (`mediaFilterFields`). Tags are stored trimmed and lower-cased
+   * (`normalizeMediaTags`), so the one asked for is too.
+   */
+  fun clauses(scoped: Boolean): List<ListFilterRequest> = buildList {
+    orientation?.let { add(ListFilterRequest("orientation", "equals", it)) }
+    alt?.let { add(ListFilterRequest("alt", "equals", it)) }
+    if (!scoped) tag.trim().lowercase().takeIf { it.isNotEmpty() }?.let { add(ListFilterRequest("tags", "contains", it)) }
+    minMegabytes.trim().takeIf { it.isNotEmpty() }?.let { add(mediaQueryRequest(ListFilterRequest("sizeMb", ">=", it))) }
+    maxMegabytes.trim().takeIf { it.isNotEmpty() }?.let { add(mediaQueryRequest(ListFilterRequest("sizeMb", "<=", it))) }
+    uploadedAfter.trim().takeIf { it.isNotEmpty() }?.let { add(ListFilterRequest("uploaded", "onOrAfter", it)) }
+    uploadedBefore.trim().takeIf { it.isNotEmpty() }?.let { add(ListFilterRequest("uploaded", "onOrBefore", it)) }
+    uploadedBy?.let { add(ListFilterRequest("uploadedBy", "equals", it)) }
+  }
+}
+
+/** What a size box takes: digits and one decimal point. */
+fun megabytesInput(text: String): String {
+  var point = false
+  return text.filter { char -> char.isDigit() || (char == '.' && !point).also { if (it) point = true } }.take(8)
+}
+
+/**
+ * The library's request for one view, as `mediaQuery` builds it: the folder
+ * and the scope as base filters, the type and the other filters as clauses,
+ * and the search on the name tokens, or, for a reader limited to some sites,
+ * a "starts with" on the name (the scope already holds the query's one array
+ * clause).
+ */
+fun mediaRequest(
+  folder: FolderPick,
+  scopeTokens: List<String>?,
+  type: String?,
+  sort: MediaSort,
+  search: String,
+  filters: MediaFilters = MediaFilters(),
+): ListQueryRequest {
   val base = buildList {
     when (folder) {
       FolderPick.All -> Unit
@@ -220,15 +286,51 @@ fun mediaRequest(folder: FolderPick, scopeTokens: List<String>?, type: String?, 
   val scopedSearch = if (scopeTokens != null && typed.isNotEmpty()) ListFilterRequest("fileName", "startsWith", typed) else null
   return ListQueryRequest(
     base = base,
-    clauses = listOfNotNull(scopedSearch, type?.let { ListFilterRequest("type", "equals", it) }),
+    clauses = listOfNotNull(scopedSearch, type?.let { ListFilterRequest("type", "equals", it) }) + filters.clauses(scoped = scopeTokens != null),
     search = if (scopedSearch == null) typed.ifEmpty { null }?.let { listOf(it) } else null,
     sort = Contracts.mediaSortOrder[sort.raw],
   )
 }
 
-fun mediaQuery(scope: MediaScope, folder: FolderPick, scopeTokens: List<String>?, type: String?, sort: MediaSort, search: String, startAfter: List<Any?>? = null): FirestoreQuery =
-  planListQuery(Contracts.mediaListQuery, mediaRequest(folder, scopeTokens, type, sort, search), MediaNameNormalizers)
-    .toFirestoreQuery("${scope.path}/media", MEDIA_PAGE_SIZE, startAfter)
+/** What the console's plan makes of one view: the query, and what it left out and why. */
+fun mediaPlan(folder: FolderPick, scopeTokens: List<String>?, type: String?, sort: MediaSort, search: String, filters: MediaFilters = MediaFilters()): ListQueryPlan =
+  planListQuery(Contracts.mediaListQuery, mediaRequest(folder, scopeTokens, type, sort, search, filters), MediaNameNormalizers)
+
+fun mediaQuery(
+  scope: MediaScope,
+  folder: FolderPick,
+  scopeTokens: List<String>?,
+  type: String?,
+  sort: MediaSort,
+  search: String,
+  startAfter: List<Any?>? = null,
+  filters: MediaFilters = MediaFilters(),
+): FirestoreQuery = mediaPlan(folder, scopeTokens, type, sort, search, filters).toFirestoreQuery("${scope.path}/media", MEDIA_PAGE_SIZE, startAfter)
+
+/**
+ * What the plan could not honor, in words: a clause it refused (two array
+ * filters cannot share a query, a number that is not one) and its own notices.
+ */
+fun mediaPlanNotices(plan: ListQueryPlan): List<String> =
+  plan.notices + plan.refused.map { refusal ->
+    val column = ((refusal.clause as? JsonObject)?.get("field") as? JsonPrimitive)?.contentOrNull
+    "${Contracts.mediaFilterHeaders[column] ?: column ?: "A filter"}: ${refusal.reason}"
+  }
+
+/** A member of the workspace, for the Uploaded by filter: their id, and the name or email they are shown as. */
+data class UploaderOption(val uid: String, val label: String)
+
+/** The workspace's members (`GET /api/orgs/members`), as the Uploaded by filter lists them; none when the route answers no. */
+suspend fun uploaderOptions(api: ConsoleApiClient, orgId: String): List<UploaderOption> {
+  val answer = runCatching { api.request("/api/orgs/members", ApiMethod.GET, query = mapOf("orgId" to orgId)) }.getOrNull() as? JsonObject ?: return emptyList()
+  return (answer["members"] as? JsonArray).orEmpty().mapNotNull { entry ->
+    val member = entry as? JsonObject ?: return@mapNotNull null
+    val uid = (member["\$id"] as? JsonPrimitive)?.contentOrNull ?: (member["uid"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+    val email = (member["email"] as? JsonPrimitive)?.contentOrNull
+    val name = (member["displayName"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+    UploaderOption(uid, name ?: email ?: uid)
+  }.sortedBy { it.label.lowercase() }
+}
 
 /** One library view: its folder, filters and the files read so far. */
 class MediaListModel(
@@ -240,6 +342,11 @@ class MediaListModel(
   var folder by mutableStateOf<FolderPick>(FolderPick.All)
     private set
   var type by mutableStateOf(initialType)
+    private set
+  var filters by mutableStateOf(MediaFilters())
+    private set
+  /** What the last view's plan left out, shown under the filters. */
+  var notices by mutableStateOf<List<String>>(emptyList())
     private set
   var sort by mutableStateOf(MediaSort.NEWEST)
     private set
@@ -266,10 +373,14 @@ class MediaListModel(
     reload()
   }
 
-  private fun query(after: List<Any?>? = null) = mediaQuery(scope, folder, scopeTokens, type, sort, search, after)
+  private fun query(after: List<Any?>? = null): FirestoreQuery {
+    notices = mediaPlanNotices(mediaPlan(folder, scopeTokens, type, sort, search, filters))
+    return mediaQuery(scope, folder, scopeTokens, type, sort, search, after, filters)
+  }
 
   fun open(next: FolderPick) { if (next != folder) { folder = next; reload() } }
   fun pick(next: String?) { if (next != type) { type = next; reload() } }
+  fun filter(next: MediaFilters) { if (next != filters) { filters = next; reload() } }
   fun order(next: MediaSort) { if (next != sort) { sort = next; reload() } }
   fun type(next: String) { if (next != search) { search = next; reload(debounce = true) } }
 

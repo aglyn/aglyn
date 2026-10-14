@@ -27,7 +27,7 @@ import {
   type AiStepKind,
 } from './catalog'
 import type { AiUsage } from './contract'
-import { resolveAiRoute, type AiPluginSettings } from './routing'
+import { aiServingModelId, resolveAiRoute, type AiPluginSettings } from './routing'
 
 /**
  * THE MODEL SWITCH (AGL-2942): what a person may pick, what "Auto" means,
@@ -94,7 +94,9 @@ export const AI_MODEL_RESTRICTION_PLANS: readonly OrgPlan[] = ['agency', 'enterp
  */
 export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'assist.chat': { inputTokens: 900, outputTokens: 450, cacheReadTokens: 1_050, cacheWriteTokens: 0 },
-  'copy.element': { inputTokens: 350, outputTokens: 120, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  // One element's rewrite on the fast tier, counted as Claude Haiku 5.5 counts
+  // it: about 30% more tokens than Haiku 4.5 for the same text (AGL-3781).
+  'copy.element': { inputTokens: 455, outputTokens: 156, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'copy.section': { inputTokens: 700, outputTokens: 1_400, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'copy.blog': { inputTokens: 600, outputTokens: 1_100, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'generate.section': { inputTokens: 700, outputTokens: 1_400, cacheReadTokens: 0, cacheWriteTokens: 0 },
@@ -118,14 +120,15 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // answer — its tree and declared props as JSON — is about 1,700 characters.
   // The component step's spec measures the prefix and the answer against this.
   'job.component': { inputTokens: 700, outputTokens: 600, cacheReadTokens: 5_800, cacheWriteTokens: 0 },
-  // The CRM step's exchange (AGL-2917). NOTHING is cached: the step runs on
-  // the fast tier, whose cacheable minimum is far above what its prompt
-  // reaches — the doctrine's field rules, the CRM rules and the tool come to
-  // 650 to 913 tokens, as `runtime/ai-prompt-cache.spec.ts` measures — so
-  // every byte is billed as input. A record's facts ride with them, a
-  // timeline cut to its newest twelve entries, and the typical answer is a
-  // summary and a next step of a few sentences, with no thinking.
-  'job.crm': { inputTokens: 1_800, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  // The CRM step's exchange (AGL-2917), counted as the fast tier's Claude
+  // Haiku 5.5 counts it, about 30% more tokens than Haiku 4.5 (AGL-3781). The
+  // doctrine's field rules, the CRM rules and the tool come to 650 to 913
+  // tokens, as `runtime/ai-prompt-cache.spec.ts` measures them, which caches on
+  // that model; one question about a record writes it, so it is counted as
+  // input. A record's facts ride with them, a timeline cut to its newest twelve
+  // entries, and the typical answer is a summary and a next step of a few
+  // sentences, with no thinking.
+  'job.crm': { inputTokens: 2_340, outputTokens: 325, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // A layout: a tree layout's 1,000 output tokens until AGL-3660, now a
   // site's header and footer in the layout language — 442 to 583 output
   // tokens live on 2026-10-07 — with up to 1,500 more for the adaptive
@@ -152,17 +155,18 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // categories and option names, about 1,300 characters of JSON.
   'job.products': { inputTokens: 1_500, outputTokens: 450, cacheReadTokens: 2_400, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
-  // exactly one of. NOTHING is cached here, whatever the breakpoints say: the
-  // step runs on the fast tier, whose cacheable minimum is four times what
-  // this prompt reaches, so every static byte is billed as input on every
-  // attempt — the doctrine's block in its field scope, the listing rules and
-  // the tool's schema, about 760 tokens together. The page text, capped at
-  // 2,000 characters, rides with the current listing and a dozen other titles
-  // for about another 750. The largest answer the tool accepts is about 600
-  // characters of JSON, and the request asks for no thinking. An audit pass
-  // is heavier: eight pages' findings and text, about 9,000 characters, with
-  // up to about 8,000 back.
-  'job.seo': { inputTokens: 1_500, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  // exactly one of: the median of 146 production listings of October 8–14
+  // (2,255 input and 213 output tokens on Claude Haiku 4.5), counted as the
+  // fast tier's Claude Haiku 5.5 counts them, about 30% more (AGL-3781). The
+  // doctrine's block in its field scope, the listing rules and the tool's
+  // schema are its prefix, which caches on that model and which a site's next
+  // listing reads; a lone listing writes it, so it is counted as input. The
+  // page text, capped at 2,000 characters, rides with the current listing and a
+  // dozen other titles. The largest answer the tool accepts is about 600
+  // characters of JSON, and the request asks for no thinking. An audit pass is
+  // heavier: eight pages' findings and text, about 9,000 characters, with up to
+  // about 8,000 back.
+  'job.seo': { inputTokens: 2_930, outputTokens: 277, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // The experiment step (AGL-2914). NOTHING is cached: the A/B test rules
   // and the acceptable-use block come to about 2,300 characters, under the
   // balanced tier's cacheable minimum, so they are billed as input every
@@ -221,13 +225,18 @@ export interface AiModelBounds {
   orgModels?: readonly string[] | null
 }
 
+/** Whether a list names a model, a retired id on it naming its successor (AGL-3781). */
+function names(list: readonly string[], id: string): boolean {
+  return list.some((listed) => aiServingModelId(listed) === id)
+}
+
 function onLists(entry: AiCatalogEntry, bounds: AiModelBounds): boolean {
-  if (bounds.orgModels?.length && !bounds.orgModels.includes(entry.id)) return false
-  if (bounds.allotmentModels && !bounds.allotmentModels.includes(entry.id)) return false
+  if (bounds.orgModels?.length && !names(bounds.orgModels, entry.id)) return false
+  if (bounds.allotmentModels && !names(bounds.allotmentModels, entry.id)) return false
   return true
 }
 
-/** The catalog models a manual pick may name on a provider under these bounds. */
+/** The current catalog models a manual pick may name on a provider under these bounds. */
 export function aiModelsSelectable(
   providerId: string,
   bounds: AiModelBounds,
@@ -235,7 +244,10 @@ export function aiModelsSelectable(
   const tiers = AI_PLAN_MODEL_TIERS[bounds.plan] ?? []
   return AI_MODEL_CATALOG.filter(
     (entry) =>
-      entry.provider === providerId && tiers.includes(entry.tier) && onLists(entry, bounds),
+      entry.provider === providerId &&
+      !entry.successor &&
+      tiers.includes(entry.tier) &&
+      onLists(entry, bounds),
   )
 }
 
@@ -275,9 +287,11 @@ export function resolveAiModelChoice(
 ): AiModelChoice | null {
   const route = resolveAiRoute(kind, settings)
   if (!route) return null
+  // A pick of a retired model, from a job made before it retired, is a pick
+  // of the model that serves in its place.
   const wanted =
     typeof requested === 'string' && requested.trim() && requested.trim() !== AI_MODEL_AUTO
-      ? requested.trim()
+      ? aiServingModelId(requested.trim())
       : null
   if (wanted && aiModelsSelectable(route.provider.id, bounds).some((entry) => entry.id === wanted)) {
     return { model: wanted, auto: false, declined: null }
@@ -286,7 +300,7 @@ export function resolveAiModelChoice(
   let model = route.model
   if (restricted) {
     const allowed = AI_MODEL_CATALOG.filter(
-      (entry) => entry.provider === route.provider.id && onLists(entry, bounds),
+      (entry) => entry.provider === route.provider.id && !entry.successor && onLists(entry, bounds),
     )
     if (allowed.length && !allowed.some((entry) => entry.id === model)) {
       const tier = aiCatalogEntry(model)?.tier ?? AI_STEP_TIERS[kind]

@@ -74,20 +74,24 @@ fun SalesScreen(context: NativePluginContext) {
   var range by rememberSaveable { mutableIntStateOf(7) }
   var refresh by remember { mutableIntStateOf(0) }
   val report = loaded(hostId, range, refresh = refresh) {
+    val access = salesAccess(context.firestore, context.orgId.orEmpty())
+    if (!access.carried) return@loaded SalesRead(access, null)
     val now = nowMillis()
     val (orders, capped) = ordersSince(context.firestore, hostId, reportSinceMs(now, range))
-    salesReport(orders, range, now, capped)
+    SalesRead(access, salesReport(orders, range, now, capped))
   }
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
       Modifier.widthIn(max = 840.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("sales"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
-      ChoiceChipRow(
-        options = listOf(ChipOption("7", "Last 7 days"), ChipOption("30", "Last 30 days")),
-        selected = range.toString(),
-        onSelect = { range = it.toInt() },
-      )
+      if ((report as? Load.Ready)?.value?.report != null || report !is Load.Ready) {
+        ChoiceChipRow(
+          options = listOf(ChipOption("7", "Last 7 days"), ChipOption("30", "Last 30 days")),
+          selected = range.toString(),
+          onSelect = { range = it.toInt() },
+        )
+      }
       when (report) {
         Load.Loading -> SkeletonList(rows = 6)
         is Load.Failed -> EmptyState(
@@ -96,11 +100,15 @@ fun SalesScreen(context: NativePluginContext) {
           icon = AglynIcons.named("error"),
           action = { OutlinedButton(onClick = { refresh++ }) { Text("Try again") } },
         )
-        is Load.Ready -> SalesReportView(report.value)
+        is Load.Ready -> report.value.report?.let { SalesReportView(it) }
+          ?: NoticeBanner(salesLockedText(report.value.access.plan), StatusTone.INFO, Modifier.testTag("sales-locked"))
       }
     }
   }
 }
+
+/** What a sales screen read: the plan's access, and the figures when it has them. */
+private class SalesRead(val access: SalesAccess, val report: SalesReport?)
 
 @Composable
 private fun SalesReportView(report: SalesReport) {
@@ -150,15 +158,20 @@ private fun SalesReportView(report: SalesReport) {
 fun TodaySalesWidget(context: NativePluginContext) {
   val hostId = context.hostId ?: return
   val today = loaded(hostId, refresh = 0) {
+    val access = salesAccess(context.firestore, context.orgId.orEmpty())
     val now = nowMillis()
     val (orders, capped) = ordersSince(context.firestore, hostId, com.aglyn.contracts.startOfLocalDay(now))
-    todaySales(orders, now, capped)
+    access to todaySales(orders, now, capped)
   }
   val ready = (today as? Load.Ready)?.value
   MetricCard(
     title = "Today",
-    value = ready?.let { money(it.figures.revenueCents) },
-    caption = ready?.let { "${it.figures.orders} ${if (it.figures.orders == 1L) "order" else "orders"}" + if (it.toFulfill > 0) " · ${it.toFulfill} to ship" else "" },
+    value = ready?.let { (access, sales) -> if (access.carried) money(sales.figures.revenueCents) else "\u2014" },
+    caption = ready?.let { (access, sales) ->
+      val toShip = if (sales.toFulfill > 0) "${sales.toFulfill} to ship" else null
+      val orders = "${sales.figures.orders} ${if (sales.figures.orders == 1L) "order" else "orders"}".takeIf { access.carried }
+      listOfNotNull(orders ?: "Included from ${access.plan ?: "a higher plan"}", toShip).joinToString(" \u00b7 ")
+    },
     icon = "payments",
     actionLabel = "Open sales",
     modifier = Modifier.fillMaxSize().testTag("sales-today"),
@@ -173,25 +186,27 @@ fun TodaySalesWidget(context: NativePluginContext) {
 fun SalesTrendWidget(context: NativePluginContext) {
   val hostId = context.hostId ?: return
   val report = loaded(hostId, refresh = 0) {
+    val access = salesAccess(context.firestore, context.orgId.orEmpty())
+    if (!access.carried) return@loaded SalesRead(access, null)
     val now = nowMillis()
     val (orders, capped) = ordersSince(context.firestore, hostId, reportSinceMs(now, 7))
-    salesReport(orders, 7, now, capped)
+    SalesRead(access, salesReport(orders, 7, now, capped))
   }
   SectionCard("Last 7 days", Modifier.fillMaxWidth().testTag("sales-trend"), onClick = { context.navigate(COMMERCE_SALES_SCREEN) }) {
     when (report) {
       Load.Loading -> SkeletonList(rows = 2)
       is Load.Failed -> Text(report.message, color = MaterialTheme.colorScheme.error)
-      is Load.Ready -> {
-        Text(money(report.value.current.revenueCents), style = MaterialTheme.typography.headlineSmall)
-        change(report.value.revenueDeltaPct)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      is Load.Ready -> report.value.report?.let { week ->
+        Text(money(week.current.revenueCents), style = MaterialTheme.typography.headlineSmall)
+        change(week.revenueDeltaPct)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         TrendBars(
-          report.value.days.map { day ->
+          week.days.map { day ->
             TrendBar(day.revenueCents, formatLocalDay(day.startMs, "EEE"), "${formatLocalDay(day.startMs, "EEEE")}: ${money(day.revenueCents)}")
           },
           modifier = Modifier.fillMaxWidth(),
           height = 80.dp,
         )
-      }
+      } ?: Text("Included from ${report.value.access.plan ?: "a higher plan"}.", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 }

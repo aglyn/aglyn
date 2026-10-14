@@ -38,7 +38,7 @@ export function registerTaxEnginesConsole(): void {
     featureFlag: TAX_ENGINES_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsTaxes',
         widgetId: 'tax-engines-connection',
         title: 'Tax service',
         Component: TaxEngineCard,

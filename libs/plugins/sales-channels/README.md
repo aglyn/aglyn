@@ -22,7 +22,7 @@ Pinterest, Snapchat and Microsoft Shopping, read through core's
   commerce's route and answers through core's `core.catalog-feed`, which this
   plugin registers from `declarations.server.ts`.
 - **Console** (`consoleApi`, `console`): a card per channel in commerce's
-  `commerceSettings` zone and the channel fields in its `productEditor` zone.
+  `commerceSettingsChannels` zone (the store's Sales channels settings page) and the channel fields in its `productEditor` zone.
   State lives in `hosts/{hostId}/salesChannels`, which no client may read or
   write (`cloud/firebase-firestore.rules`).
 - **Shipping**: prices come from commerce's own zone table; countries priced by

@@ -518,6 +518,33 @@ describe('runValidatedGeneration — a plan', () => {
     expect(result.violations.map((violation) => violation.code)).toEqual(['answer-cut-off'])
   })
 
+  it('asks a step at a development run’s effort A/B arm, and records the effort it asked (AGL-3781)', async () => {
+    const generation = (fake: AiProvider) =>
+      runValidatedGeneration('theme-ish', {
+        step: 'job.form',
+        model: 'test-model',
+        provider: fake,
+        effort: 'high' as const,
+        instructions: [{ text: 'Change the theme.' }],
+        messages: [{ role: 'user' as const, content: 'Brief' }],
+        tool: { name: 'submit_theme', description: 'x', strict: true, inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false } },
+        check: (answer: Record<string, unknown>) => ({ value: answer, violations: [] }),
+      })
+    process.env['AGLYN_AI_EFFORT'] = 'job.form:low'
+    try {
+      const { fake, requests } = provider([toolAnswer('submit_theme', { ok: true })])
+      const result = await generation(fake)
+      expect([requests[0].effort, result.effort]).toEqual(['low', 'low'])
+      // An arm that names other steps leaves this one at its own.
+      process.env['AGLYN_AI_EFFORT'] = 'job.page:low'
+      const other = provider([toolAnswer('submit_theme', { ok: true })])
+      expect((await generation(other.fake)).effort).toBe('high')
+      expect(other.requests[0].effort).toBe('high')
+    } finally {
+      delete process.env['AGLYN_AI_EFFORT']
+    }
+  })
+
   it('offers no lookup to a kind that builds from no site at all', async () => {
     const { fake, requests } = provider([toolAnswer('submit_theme', { ok: true })])
     await runValidatedGeneration('theme-ish', {

@@ -1,0 +1,1710 @@
+{
+  "$comment": "The Commerce plugin's catalog organization, natively: a product's details (address, supplier, tags, categories, stock and tax settings, billing and search listing, saved through the product route with the stored product under the edits); the category tree (add, rename, move, delete with its children moved up) written to the store's productCategories as the console writes them, and manual and smart collections through the console's /api/hosts/collections route (name and mode, the products a manual one holds, the rules a smart one matches, delete) with the membership refreshed afterwards. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.categories",
+      "title": "Categories",
+      "label": "Categories",
+      "subtitle": "Group products into a browsable tree",
+      "icon": "folder|category",
+      "scope": "site",
+      "order": 47,
+      "load": {
+        "categories": {
+          "query": {
+            "collection": "hosts/{site.id}/productCategories",
+            "limit": 250,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "constants": {
+        "fields": [
+          {
+            "id": "tag",
+            "label": "Tag"
+          },
+          {
+            "id": "categoryId",
+            "label": "Category"
+          },
+          {
+            "id": "priceUsd",
+            "label": "Price"
+          },
+          {
+            "id": "name",
+            "label": "Name"
+          },
+          {
+            "id": "type",
+            "label": "Type"
+          }
+        ],
+        "ops": [
+          {
+            "id": "eq",
+            "label": "is"
+          },
+          {
+            "id": "neq",
+            "label": "is not"
+          },
+          {
+            "id": "lt",
+            "label": "below"
+          },
+          {
+            "id": "gt",
+            "label": "above"
+          },
+          {
+            "id": "contains",
+            "label": "contains"
+          }
+        ],
+        "modes": [
+          {
+            "id": "manual",
+            "label": "Manual"
+          },
+          {
+            "id": "smart",
+            "label": "Smart"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "categories",
+          "title": "Categories",
+          "items": "data.categories.items",
+          "primary": "{item.name}",
+          "secondary": "/{item.slug}",
+          "icon": "folder|category",
+          "badges": [
+            {
+              "text": "In {data.categories.items[$id=item.parentId].name}",
+              "tone": "neutral",
+              "when": "item.parentId"
+            }
+          ],
+          "empty": "Group products into a browsable tree (e.g. Brakes → Pads).",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "parentId",
+                  "label": "Inside",
+                  "kind": "select",
+                  "initial": "{item.parentId}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Top level"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.categories.items",
+                    "where": "item.$id != @parent.$id",
+                    "value": "{item.$id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/productCategories/{item.$id}",
+                "fields": {
+                  "name": "{form.name}",
+                  "slug": {
+                    "$slug": "{form.name}"
+                  },
+                  "parentId": {
+                    "$orNull": "{form.parentId}"
+                  },
+                  "updatedAt": {
+                    "$timestamp": true
+                  }
+                }
+              },
+              "success": "Category saved"
+            },
+            {
+              "id": "delete",
+              "label": "Delete",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Delete {item.name}? Products keep their other categories; its children move to the top level.",
+              "write": {
+                "steps": [
+                  {
+                    "each": {
+                      "items": "data.categories.items",
+                      "filter": "item.parentId == @parent.$id"
+                    },
+                    "doc": "hosts/{site.id}/productCategories/{item.$id}",
+                    "fields": {
+                      "parentId": {
+                        "$orNull": ""
+                      }
+                    }
+                  },
+                  {
+                    "delete": "hosts/{site.id}/productCategories/{item.$id}"
+                  }
+                ]
+              },
+              "success": "Category deleted"
+            }
+          ],
+          "load": "categories"
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addCategory",
+              "label": "Add a category",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "parentId",
+                  "label": "Inside",
+                  "kind": "select",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Top level"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.categories.items",
+                    "value": "{item.$id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "write": {
+                "add": "hosts/{site.id}/productCategories",
+                "fields": {
+                  "name": "{form.name}",
+                  "slug": {
+                    "$slug": "{form.name}"
+                  },
+                  "parentId": {
+                    "$orNull": "{form.parentId}"
+                  },
+                  "order": 0,
+                  "createdAt": {
+                    "$timestamp": true
+                  },
+                  "updatedAt": {
+                    "$timestamp": true
+                  }
+                }
+              },
+              "success": "Category saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.collections",
+      "title": "Collections",
+      "label": "Collections",
+      "subtitle": "Manual and smart groups of products",
+      "icon": "square.stack.3d.up|category",
+      "scope": "site",
+      "order": 48,
+      "load": {
+        "collections": {
+          "query": {
+            "collection": "hosts/{site.id}/collections",
+            "limit": 250
+          }
+        }
+      },
+      "constants": {
+        "fields": [
+          {
+            "id": "tag",
+            "label": "Tag"
+          },
+          {
+            "id": "categoryId",
+            "label": "Category"
+          },
+          {
+            "id": "priceUsd",
+            "label": "Price"
+          },
+          {
+            "id": "name",
+            "label": "Name"
+          },
+          {
+            "id": "type",
+            "label": "Type"
+          }
+        ],
+        "ops": [
+          {
+            "id": "eq",
+            "label": "is"
+          },
+          {
+            "id": "neq",
+            "label": "is not"
+          },
+          {
+            "id": "lt",
+            "label": "below"
+          },
+          {
+            "id": "gt",
+            "label": "above"
+          },
+          {
+            "id": "contains",
+            "label": "contains"
+          }
+        ],
+        "modes": [
+          {
+            "id": "manual",
+            "label": "Manual"
+          },
+          {
+            "id": "smart",
+            "label": "Smart"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "collections",
+          "title": "Collections",
+          "items": "data.collections.items",
+          "filter": "item.mode",
+          "primary": "{item.name}",
+          "secondary": "/collections/{item.slug}",
+          "icon": "square.stack.3d.up|category",
+          "badges": [
+            {
+              "text": "{const.modes[id=item.mode].label}",
+              "tone": "info"
+            },
+            {
+              "text": "{item.productIds.length} products",
+              "tone": "neutral",
+              "when": "item.mode == manual"
+            },
+            {
+              "text": "{item.rules.length} rules",
+              "tone": "neutral",
+              "when": "item.mode == smart"
+            }
+          ],
+          "empty": "No collections yet. A collection groups products on the storefront at /collections/<address>.",
+          "open": {
+            "screen": "commerce.collection",
+            "params": {
+              "collectionId": "{item.$id}"
+            }
+          },
+          "load": "collections"
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addCollection",
+              "label": "New collection",
+              "icon": "plus|add",
+              "url": "/api/hosts/collections",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "help": "Its address is /collections/ and the name in lower case."
+                },
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "kind": "select",
+                  "initial": "manual",
+                  "options": [
+                    {
+                      "value": "manual",
+                      "label": "Manual: pick products"
+                    },
+                    {
+                      "value": "smart",
+                      "label": "Smart: rule based"
+                    }
+                  ]
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "action": "create",
+                "kind": "catalog",
+                "data": {
+                  "name": "{form.name}",
+                  "slug": {
+                    "$slug": "{form.name}"
+                  },
+                  "mode": "{form.mode}"
+                }
+              },
+              "navigate": {
+                "screen": "commerce.collection",
+                "params": {
+                  "collectionId": "{response.id}"
+                }
+              },
+              "then": {
+                "label": "Update memberships",
+                "url": "/api/commerce/collection-membership",
+                "body": {
+                  "hostId": "{site.id}",
+                  "collectionId": "{response.id}"
+                },
+                "loop": {
+                  "cursor": "after",
+                  "param": "after",
+                  "until": "done"
+                }
+              },
+              "success": "Collection saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.collection",
+      "title": "{data.col.name|'Collection'}",
+      "label": "Collection",
+      "icon": "square.stack.3d.up|category",
+      "scope": "site",
+      "load": {
+        "col": {
+          "doc": "hosts/{site.id}/collections/{params.collectionId}"
+        }
+      },
+      "constants": {
+        "fields": [
+          {
+            "id": "tag",
+            "label": "Tag"
+          },
+          {
+            "id": "categoryId",
+            "label": "Category"
+          },
+          {
+            "id": "priceUsd",
+            "label": "Price"
+          },
+          {
+            "id": "name",
+            "label": "Name"
+          },
+          {
+            "id": "type",
+            "label": "Type"
+          }
+        ],
+        "ops": [
+          {
+            "id": "eq",
+            "label": "is"
+          },
+          {
+            "id": "neq",
+            "label": "is not"
+          },
+          {
+            "id": "lt",
+            "label": "below"
+          },
+          {
+            "id": "gt",
+            "label": "above"
+          },
+          {
+            "id": "contains",
+            "label": "contains"
+          }
+        ],
+        "modes": [
+          {
+            "id": "manual",
+            "label": "Manual"
+          },
+          {
+            "id": "smart",
+            "label": "Smart"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "summary",
+          "title": "Collection",
+          "rows": [
+            {
+              "label": "Address",
+              "value": "/collections/{data.col.slug}"
+            },
+            {
+              "label": "Mode",
+              "value": "{const.modes[id=data.col.mode].label}"
+            },
+            {
+              "label": "Products",
+              "value": "{data.col.productIds.length}",
+              "when": "data.col.mode == manual"
+            },
+            {
+              "label": "Rules",
+              "value": "Every rule must match",
+              "when": "data.col.mode == smart && data.col.matchAll != false"
+            },
+            {
+              "label": "Rules",
+              "value": "Any rule may match",
+              "when": "data.col.mode == smart && data.col.matchAll == false"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "parts",
+          "items": [
+            {
+              "title": "Products",
+              "subtitle": "Pick the products this collection holds",
+              "icon": "shippingbox|inventory_2",
+              "screen": "commerce.collectionProducts",
+              "params": {
+                "collectionId": "{params.collectionId}"
+              },
+              "when": "data.col.mode == manual"
+            },
+            {
+              "title": "Rules",
+              "subtitle": "The conditions a product must meet",
+              "icon": "slider.horizontal.3|tune",
+              "screen": "commerce.collectionRules",
+              "params": {
+                "collectionId": "{params.collectionId}"
+              },
+              "when": "data.col.mode == smart"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "edit",
+          "title": "Name and mode",
+          "fields": [
+            {
+              "key": "name",
+              "label": "Name",
+              "kind": "text",
+              "required": true,
+              "initial": "{data.col.name}"
+            },
+            {
+              "key": "mode",
+              "label": "Mode",
+              "kind": "select",
+              "initial": "{data.col.mode}",
+              "options": [
+                {
+                  "value": "manual",
+                  "label": "Manual: pick products"
+                },
+                {
+                  "value": "smart",
+                  "label": "Smart: rule based"
+                }
+              ]
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/collections",
+            "body": {
+              "hostId": "{site.id}",
+              "action": "update",
+              "kind": "catalog",
+              "id": "{params.collectionId}",
+              "data": {
+                "name": "{form.name}",
+                "slug": "{data.col.slug}",
+                "mode": "{form.mode}",
+                "description": "{data.col.description}",
+                "productIds": "{data.col.productIds}",
+                "rules": "{data.col.rules}",
+                "matchAll": "{data.col.matchAll}",
+                "imageUrl": "{data.col.imageUrl}",
+                "order": "{data.col.order}"
+              }
+            },
+            "then": {
+              "label": "Update memberships",
+              "url": "/api/commerce/collection-membership",
+              "body": {
+                "hostId": "{site.id}",
+                "collectionId": "{params.collectionId}"
+              },
+              "loop": {
+                "cursor": "after",
+                "param": "after",
+                "until": "done"
+              }
+            },
+            "success": "Collection saved"
+          }
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "items": [
+            {
+              "id": "delete",
+              "label": "Delete collection",
+              "icon": "trash|delete",
+              "destructive": true,
+              "url": "/api/resources/erase",
+              "back": true,
+              "confirm": "Delete {data.col.name}? Storefront blocks pointing at it go empty. The delete is refused while the collection still has entries, or while a page uses it as a list or entry template. It also takes the site admin role.",
+              "body": {
+                "scope": "hosts",
+                "scopeId": "{site.id}",
+                "kind": "collections",
+                "id": "{params.collectionId}",
+                "collectionKind": "catalog"
+              },
+              "then": {
+                "label": "Update memberships",
+                "url": "/api/commerce/collection-membership",
+                "body": {
+                  "hostId": "{site.id}",
+                  "collectionId": "{params.collectionId}"
+                },
+                "loop": {
+                  "cursor": "after",
+                  "param": "after",
+                  "until": "done"
+                }
+              },
+              "success": "Collection deleted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.collectionProducts",
+      "title": "Products",
+      "label": "Collection products",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "load": {
+        "col": {
+          "doc": "hosts/{site.id}/collections/{params.collectionId}"
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 500,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "text": "Turn on the products this collection holds."
+        },
+        {
+          "type": "list",
+          "id": "products",
+          "title": "Products",
+          "items": "data.products.items",
+          "filter": "!item.deletedAt",
+          "primary": "{item.name}",
+          "secondary": "{item.status:title}",
+          "count": false,
+          "icon": "shippingbox|inventory_2",
+          "toggle": {
+            "value": "{data.col.productIds[=item.$id]}",
+            "label": "{item.name}",
+            "on": {
+              "label": "Add",
+              "url": "/api/hosts/collections",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "kind": "catalog",
+                "id": "{params.collectionId}",
+                "data": {
+                  "name": "{data.col.name}",
+                  "slug": "{data.col.slug}",
+                  "mode": "{data.col.mode}",
+                  "description": "{data.col.description}",
+                  "productIds": {
+                    "$append": {
+                      "list": "{data.col.productIds}",
+                      "item": "{item.$id}"
+                    }
+                  },
+                  "rules": "{data.col.rules}",
+                  "matchAll": "{data.col.matchAll}",
+                  "imageUrl": "{data.col.imageUrl}",
+                  "order": "{data.col.order}"
+                }
+              },
+              "then": {
+                "label": "Update memberships",
+                "url": "/api/commerce/collection-membership",
+                "body": {
+                  "hostId": "{site.id}",
+                  "collectionId": "{params.collectionId}"
+                },
+                "loop": {
+                  "cursor": "after",
+                  "param": "after",
+                  "until": "done"
+                }
+              },
+              "success": "Saved"
+            },
+            "off": {
+              "label": "Remove",
+              "url": "/api/hosts/collections",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "kind": "catalog",
+                "id": "{params.collectionId}",
+                "data": {
+                  "name": "{data.col.name}",
+                  "slug": "{data.col.slug}",
+                  "mode": "{data.col.mode}",
+                  "description": "{data.col.description}",
+                  "productIds": {
+                    "$without": {
+                      "list": "{data.col.productIds}",
+                      "item": "{item.$id}"
+                    }
+                  },
+                  "rules": "{data.col.rules}",
+                  "matchAll": "{data.col.matchAll}",
+                  "imageUrl": "{data.col.imageUrl}",
+                  "order": "{data.col.order}"
+                }
+              },
+              "then": {
+                "label": "Update memberships",
+                "url": "/api/commerce/collection-membership",
+                "body": {
+                  "hostId": "{site.id}",
+                  "collectionId": "{params.collectionId}"
+                },
+                "loop": {
+                  "cursor": "after",
+                  "param": "after",
+                  "until": "done"
+                }
+              },
+              "success": "Saved"
+            }
+          },
+          "empty": "No products yet."
+        }
+      ]
+    },
+    {
+      "id": "commerce.collectionRules",
+      "title": "Rules",
+      "label": "Collection rules",
+      "icon": "slider.horizontal.3|tune",
+      "scope": "site",
+      "load": {
+        "col": {
+          "doc": "hosts/{site.id}/collections/{params.collectionId}"
+        },
+        "categories": {
+          "query": {
+            "collection": "hosts/{site.id}/productCategories",
+            "limit": 250,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "constants": {
+        "fields": [
+          {
+            "id": "tag",
+            "label": "Tag"
+          },
+          {
+            "id": "categoryId",
+            "label": "Category"
+          },
+          {
+            "id": "priceUsd",
+            "label": "Price"
+          },
+          {
+            "id": "name",
+            "label": "Name"
+          },
+          {
+            "id": "type",
+            "label": "Type"
+          }
+        ],
+        "ops": [
+          {
+            "id": "eq",
+            "label": "is"
+          },
+          {
+            "id": "neq",
+            "label": "is not"
+          },
+          {
+            "id": "lt",
+            "label": "below"
+          },
+          {
+            "id": "gt",
+            "label": "above"
+          },
+          {
+            "id": "contains",
+            "label": "contains"
+          }
+        ],
+        "modes": [
+          {
+            "id": "manual",
+            "label": "Manual"
+          },
+          {
+            "id": "smart",
+            "label": "Smart"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "match",
+          "title": "A product is in when",
+          "fields": [
+            {
+              "key": "matchAll",
+              "label": "Every rule must match",
+              "kind": "toggle",
+              "initial": "{?data.col.matchAll != false}",
+              "help": "Off: a product is in when any one rule matches."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/collections",
+            "body": {
+              "hostId": "{site.id}",
+              "action": "update",
+              "kind": "catalog",
+              "id": "{params.collectionId}",
+              "data": {
+                "name": "{data.col.name}",
+                "slug": "{data.col.slug}",
+                "mode": "{data.col.mode}",
+                "description": "{data.col.description}",
+                "productIds": "{data.col.productIds}",
+                "rules": "{data.col.rules}",
+                "matchAll": "{form.matchAll}",
+                "imageUrl": "{data.col.imageUrl}",
+                "order": "{data.col.order}"
+              }
+            },
+            "then": {
+              "label": "Update memberships",
+              "url": "/api/commerce/collection-membership",
+              "body": {
+                "hostId": "{site.id}",
+                "collectionId": "{params.collectionId}"
+              },
+              "loop": {
+                "cursor": "after",
+                "param": "after",
+                "until": "done"
+              }
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "list",
+          "id": "rules",
+          "title": "Rules",
+          "items": "data.col.rules",
+          "count": false,
+          "icon": "slider.horizontal.3|tune",
+          "primary": "{const.fields[id=item.field].label} {const.ops[id=item.op].label} {item.value}",
+          "empty": "No rules yet. A smart collection with no rules holds nothing.",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "url": "/api/hosts/collections",
+              "prompt": [
+                {
+                  "key": "field",
+                  "label": "Match on",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "tag",
+                      "label": "Tag"
+                    },
+                    {
+                      "value": "categoryId",
+                      "label": "Category"
+                    },
+                    {
+                      "value": "priceUsd",
+                      "label": "Price"
+                    },
+                    {
+                      "value": "name",
+                      "label": "Name"
+                    },
+                    {
+                      "value": "type",
+                      "label": "Type"
+                    }
+                  ],
+                  "initial": "{item.field}"
+                },
+                {
+                  "key": "op",
+                  "label": "Condition",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "eq",
+                      "label": "is"
+                    },
+                    {
+                      "value": "neq",
+                      "label": "is not"
+                    },
+                    {
+                      "value": "lt",
+                      "label": "below"
+                    },
+                    {
+                      "value": "gt",
+                      "label": "above"
+                    },
+                    {
+                      "value": "contains",
+                      "label": "contains"
+                    }
+                  ],
+                  "initial": "{item.op}"
+                },
+                {
+                  "key": "valueText",
+                  "label": "Value",
+                  "kind": "text",
+                  "when": "form.field != categoryId",
+                  "initial": "{item.value}"
+                },
+                {
+                  "key": "valueCategory",
+                  "label": "Category",
+                  "kind": "select",
+                  "when": "form.field == categoryId",
+                  "optionsFrom": {
+                    "items": "data.categories.items",
+                    "value": "{item.$id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "kind": "catalog",
+                "id": "{params.collectionId}",
+                "data": {
+                  "name": "{data.col.name}",
+                  "slug": "{data.col.slug}",
+                  "mode": "{data.col.mode}",
+                  "description": "{data.col.description}",
+                  "productIds": "{data.col.productIds}",
+                  "rules": {
+                    "$replace": {
+                      "list": "{data.col.rules}",
+                      "key": "*",
+                      "match": "{item}",
+                      "value": {
+                        "field": "{form.field}",
+                        "op": "{form.op}",
+                        "value": "{form.valueText|form.valueCategory}"
+                      }
+                    }
+                  },
+                  "matchAll": "{data.col.matchAll}",
+                  "imageUrl": "{data.col.imageUrl}",
+                  "order": "{data.col.order}"
+                }
+              },
+              "then": {
+                "label": "Update memberships",
+                "url": "/api/commerce/collection-membership",
+                "body": {
+                  "hostId": "{site.id}",
+                  "collectionId": "{params.collectionId}"
+                },
+                "loop": {
+                  "cursor": "after",
+                  "param": "after",
+                  "until": "done"
+                }
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "url": "/api/hosts/collections",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "kind": "catalog",
+                "id": "{params.collectionId}",
+                "data": {
+                  "name": "{data.col.name}",
+                  "slug": "{data.col.slug}",
+                  "mode": "{data.col.mode}",
+                  "description": "{data.col.description}",
+                  "productIds": "{data.col.productIds}",
+                  "rules": {
+                    "$without": {
+                      "list": "{data.col.rules}",
+                      "item": "{item}"
+                    }
+                  },
+                  "matchAll": "{data.col.matchAll}",
+                  "imageUrl": "{data.col.imageUrl}",
+                  "order": "{data.col.order}"
+                }
+              },
+              "then": {
+                "label": "Update memberships",
+                "url": "/api/commerce/collection-membership",
+                "body": {
+                  "hostId": "{site.id}",
+                  "collectionId": "{params.collectionId}"
+                },
+                "loop": {
+                  "cursor": "after",
+                  "param": "after",
+                  "until": "done"
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addRule",
+              "label": "Add a rule",
+              "icon": "plus|add",
+              "url": "/api/hosts/collections",
+              "prompt": [
+                {
+                  "key": "field",
+                  "label": "Match on",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "tag",
+                      "label": "Tag"
+                    },
+                    {
+                      "value": "categoryId",
+                      "label": "Category"
+                    },
+                    {
+                      "value": "priceUsd",
+                      "label": "Price"
+                    },
+                    {
+                      "value": "name",
+                      "label": "Name"
+                    },
+                    {
+                      "value": "type",
+                      "label": "Type"
+                    }
+                  ],
+                  "initial": "tag"
+                },
+                {
+                  "key": "op",
+                  "label": "Condition",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "eq",
+                      "label": "is"
+                    },
+                    {
+                      "value": "neq",
+                      "label": "is not"
+                    },
+                    {
+                      "value": "lt",
+                      "label": "below"
+                    },
+                    {
+                      "value": "gt",
+                      "label": "above"
+                    },
+                    {
+                      "value": "contains",
+                      "label": "contains"
+                    }
+                  ],
+                  "initial": "eq"
+                },
+                {
+                  "key": "valueText",
+                  "label": "Value",
+                  "kind": "text",
+                  "when": "form.field != categoryId"
+                },
+                {
+                  "key": "valueCategory",
+                  "label": "Category",
+                  "kind": "select",
+                  "when": "form.field == categoryId",
+                  "optionsFrom": {
+                    "items": "data.categories.items",
+                    "value": "{item.$id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "action": "update",
+                "kind": "catalog",
+                "id": "{params.collectionId}",
+                "data": {
+                  "name": "{data.col.name}",
+                  "slug": "{data.col.slug}",
+                  "mode": "{data.col.mode}",
+                  "description": "{data.col.description}",
+                  "productIds": "{data.col.productIds}",
+                  "rules": {
+                    "$append": {
+                      "list": "{data.col.rules}",
+                      "item": {
+                        "field": "{form.field}",
+                        "op": "{form.op}",
+                        "value": "{form.valueText|form.valueCategory}"
+                      }
+                    }
+                  },
+                  "matchAll": "{data.col.matchAll}",
+                  "imageUrl": "{data.col.imageUrl}",
+                  "order": "{data.col.order}"
+                }
+              },
+              "then": {
+                "label": "Update memberships",
+                "url": "/api/commerce/collection-membership",
+                "body": {
+                  "hostId": "{site.id}",
+                  "collectionId": "{params.collectionId}"
+                },
+                "loop": {
+                  "cursor": "after",
+                  "param": "after",
+                  "until": "done"
+                }
+              },
+              "success": "Saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.productDetails",
+      "title": "{data.product.name|'Product'}",
+      "label": "Product details",
+      "subtitle": "Address, supplier, tags, categories, stock, tax, billing and search listing",
+      "icon": "tune|tune",
+      "scope": "site",
+      "load": {
+        "product": {
+          "doc": "hosts/{site.id}/products/{params.productId}",
+          "optional": true
+        },
+        "suppliers": {
+          "query": {
+            "collection": "hosts/{site.id}/suppliers",
+            "limit": 100
+          }
+        },
+        "categories": {
+          "query": {
+            "collection": "hosts/{site.id}/productCategories",
+            "limit": 250,
+            "orderBy": "name asc"
+          }
+        },
+        "gifts": {
+          "entitlement": "giftCards"
+        },
+        "subs": {
+          "entitlement": "storefrontSubscriptions"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "missing",
+          "tone": "info",
+          "when": "!data.product",
+          "text": "This product could not be found. It may have been deleted."
+        },
+        {
+          "type": "form",
+          "id": "details",
+          "title": "Details",
+          "when": "data.product",
+          "fields": [
+            {
+              "key": "slug",
+              "label": "Address",
+              "kind": "text",
+              "initial": "{data.product.slug}",
+              "help": "The product page is at /products/ and then this."
+            },
+            {
+              "key": "supplierId",
+              "label": "Supplier",
+              "kind": "select",
+              "when": "data.suppliers.items.0",
+              "initial": "{data.product.supplierId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "None"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.suppliers.items",
+                "value": "{item.$id}",
+                "label": "{item.name}"
+              },
+              "help": "Routes paid orders"
+            },
+            {
+              "key": "tags",
+              "label": "Tags",
+              "kind": "text",
+              "initial": "{data.product.tags}",
+              "help": "Separate tags with commas."
+            },
+            {
+              "fieldsFrom": {
+                "items": "data.categories.items",
+                "each": [
+                  {
+                    "key": "cat_{item.$id}",
+                    "label": "Category: {item.name}",
+                    "kind": "toggle",
+                    "initial": "{?data.product.categoryIds[=item.$id]}"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "oversellPolicy",
+              "label": "When out of stock",
+              "kind": "select",
+              "initial": "{data.product.oversellPolicy|'deny'}",
+              "options": [
+                {
+                  "value": "deny",
+                  "label": "Stop selling (sold out)"
+                },
+                {
+                  "value": "backorder",
+                  "label": "Keep selling (backorder)"
+                }
+              ]
+            },
+            {
+              "key": "giftCard",
+              "label": "Sell as a gift card (issues a code)",
+              "kind": "toggle",
+              "when": "data.gifts.carried || data.product.giftCard",
+              "initial": "{?data.product.giftCard == true}"
+            },
+            {
+              "key": "taxExempt",
+              "label": "Tax exempt",
+              "kind": "toggle",
+              "initial": "{?data.product.taxExempt == true}"
+            },
+            {
+              "key": "lowStock",
+              "label": "Low-stock alert at (blank = off)",
+              "kind": "number",
+              "integer": true,
+              "min": 0,
+              "initial": "{data.product.lowStockThreshold}",
+              "help": "Notifies managers"
+            },
+            {
+              "key": "seoTitle",
+              "label": "Search title",
+              "kind": "text",
+              "initial": "{data.product.seo.title}",
+              "help": "A search result shows about 60 characters."
+            },
+            {
+              "key": "seoDescription",
+              "label": "Search description",
+              "kind": "multiline",
+              "initial": "{data.product.seo.description}",
+              "help": "A search result shows about 155 characters."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "success": "Product saved",
+            "url": "/api/commerce/products/save",
+            "overlay": "hosts/{site.id}/products/{params.productId}",
+            "body": {
+              "hostId": "{site.id}",
+              "productId": "{params.productId}",
+              "create": false,
+              "product": {
+                "$overlay": {
+                  "base": "{overlay}",
+                  "set": {
+                    "slug": {
+                      "$slug": "{form.slug}"
+                    },
+                    "supplierId": {
+                      "$orNull": "{form.supplierId}"
+                    },
+                    "tags": {
+                      "$split": "{form.tags}"
+                    },
+                    "categoryIds": {
+                      "$gather": {
+                        "from": "{form}",
+                        "prefix": "cat_",
+                        "keys": true
+                      }
+                    },
+                    "oversellPolicy": "{form.oversellPolicy}",
+                    "giftCard": "{form.giftCard}",
+                    "taxExempt": "{form.taxExempt}",
+                    "lowStockThreshold": {
+                      "$orNull": "{form.lowStock}"
+                    },
+                    "seo": {
+                      "$overlay": {
+                        "base": "{overlay.seo}",
+                        "set": {
+                          "title": {
+                            "$orNull": "{form.seoTitle}"
+                          },
+                          "description": {
+                            "$orNull": "{form.seoDescription}"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "fields",
+          "id": "billing",
+          "title": "Billing",
+          "when": "data.product",
+          "rows": [
+            {
+              "label": "Billing",
+              "value": "One-time purchase",
+              "when": "!data.product.subscription"
+            },
+            {
+              "label": "Billing",
+              "value": "Monthly subscription",
+              "when": "data.product.subscription.interval == month && !data.product.subscriptionOptional"
+            },
+            {
+              "label": "Billing",
+              "value": "Yearly subscription",
+              "when": "data.product.subscription.interval == year && !data.product.subscriptionOptional"
+            },
+            {
+              "label": "Billing",
+              "value": "Buyer chooses: one-time or {data.product.subscription.interval}ly",
+              "when": "data.product.subscription && data.product.subscriptionOptional"
+            },
+            {
+              "label": "Free trial",
+              "value": "{data.product.subscription.trialDays:plural/day}",
+              "when": "data.product.subscription.trialDays"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "subsLocked",
+          "tone": "info",
+          "when": "data.product && !data.subs.carried",
+          "text": "Subscriptions are on {data.subs.label|'a higher plan'}. A subscription this product already has keeps working."
+        },
+        {
+          "type": "links",
+          "id": "related",
+          "when": "data.product",
+          "items": [
+            {
+              "title": "Related products (upsells)",
+              "subtitle": "Shown by the Related products block; blank falls back to frequently-bought-together",
+              "icon": "shippingbox|inventory_2",
+              "screen": "commerce.productRelated",
+              "params": {
+                "productId": "{params.productId}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "billingChange",
+          "title": "Change billing",
+          "when": "data.product",
+          "items": [
+            {
+              "id": "once",
+              "label": "One-time purchase",
+              "icon": "payments|payments",
+              "when": "data.product.subscription",
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": null,
+                      "subscriptionOptional": null
+                    }
+                  }
+                }
+              },
+              "success": "Now a one-time purchase"
+            },
+            {
+              "id": "month",
+              "label": "Monthly subscription",
+              "icon": "autorenew|autorenew",
+              "when": "data.subs.carried",
+              "prompt": [
+                {
+                  "key": "trialDays",
+                  "label": "Free trial (days, blank = none)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{data.product.subscription.trialDays}"
+                }
+              ],
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": {
+                        "interval": "month",
+                        "trialDays": "{form.trialDays}"
+                      },
+                      "subscriptionOptional": null
+                    }
+                  }
+                }
+              },
+              "success": "Now a monthly subscription"
+            },
+            {
+              "id": "year",
+              "label": "Yearly subscription",
+              "icon": "autorenew|autorenew",
+              "when": "data.subs.carried",
+              "prompt": [
+                {
+                  "key": "trialDays",
+                  "label": "Free trial (days, blank = none)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{data.product.subscription.trialDays}"
+                }
+              ],
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": {
+                        "interval": "year",
+                        "trialDays": "{form.trialDays}"
+                      },
+                      "subscriptionOptional": null
+                    }
+                  }
+                }
+              },
+              "success": "Now a yearly subscription"
+            },
+            {
+              "id": "both",
+              "label": "Buyer chooses: one-time or subscription",
+              "icon": "autorenew|autorenew",
+              "when": "data.subs.carried",
+              "prompt": [
+                {
+                  "key": "interval",
+                  "label": "Subscription interval",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.product.subscription.interval|'month'}",
+                  "options": [
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    },
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    }
+                  ]
+                },
+                {
+                  "key": "trialDays",
+                  "label": "Free trial (days, blank = none)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{data.product.subscription.trialDays}"
+                }
+              ],
+              "url": "/api/commerce/products/save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "subscription": {
+                        "interval": "{form.interval}",
+                        "trialDays": "{form.trialDays}"
+                      },
+                      "subscriptionOptional": true
+                    }
+                  }
+                }
+              },
+              "success": "Buyers can now choose"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.productRelated",
+      "title": "Related products",
+      "label": "Related products",
+      "subtitle": "Shown by the Related products block",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "load": {
+        "product": {
+          "doc": "hosts/{site.id}/products/{params.productId}",
+          "optional": true
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 300,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "missing",
+          "tone": "info",
+          "when": "!data.product",
+          "text": "This product could not be found. It may have been deleted."
+        },
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "when": "data.product",
+          "text": "Turn on the products to show beside this one. Blank falls back to frequently-bought-together."
+        },
+        {
+          "type": "list",
+          "id": "products",
+          "title": "Related products (upsells)",
+          "when": "data.product",
+          "items": "data.products.items",
+          "filter": "!item.deletedAt && item.$id != @params.productId",
+          "primary": "{item.name}",
+          "secondary": "{item.status:title}",
+          "count": false,
+          "icon": "shippingbox|inventory_2",
+          "toggle": {
+            "value": "{data.product.relatedProductIds[=item.$id]}",
+            "label": "{item.name}",
+            "on": {
+              "label": "Save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "url": "/api/commerce/products/save",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "relatedProductIds": {
+                        "$append": {
+                          "list": "{overlay.relatedProductIds}",
+                          "item": "{item.$id}"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Saved"
+            },
+            "off": {
+              "label": "Save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "url": "/api/commerce/products/save",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "relatedProductIds": {
+                        "$without": {
+                          "list": "{overlay.relatedProductIds}",
+                          "item": "{item.$id}"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Saved"
+            }
+          },
+          "empty": "No other products yet."
+        }
+      ]
+    }
+  ]
+}

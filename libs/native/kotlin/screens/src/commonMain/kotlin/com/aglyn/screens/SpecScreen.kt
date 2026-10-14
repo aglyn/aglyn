@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.WeeklyHoursInterval
 import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
@@ -65,6 +66,7 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
@@ -104,6 +106,9 @@ internal fun renderParams(params: JsonElement?, context: JsonElement): NativePar
 private data class Selection(val screen: String, val params: NativeParams)
 
 private class Pending(val action: ActionSpec, val scope: JsonElement, val reauthMessage: String? = null)
+
+/** An export the person asked for, resolved against the screen: what to export, narrowed how, and the file's name. */
+private class ExportRequest(val resource: String, val title: String, val scope: Map<String, Any?>, val fileStem: String, val filter: Map<String, Any?>?)
 
 /**
  * Draws a console screen from its spec: sections in cards, list and detail
@@ -174,6 +179,7 @@ private fun SpecBody(
   var reauthing by remember { mutableStateOf<Pending?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
+  var exporting by remember { mutableStateOf<ExportRequest?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
@@ -194,6 +200,19 @@ private fun SpecBody(
     action.copy?.let {
       clipboard.setText(AnnotatedString(ScreenValues.render(it, actionScope)))
       show("Copied", StatusTone.SUCCESS)
+      return
+    }
+    action.export?.let { spec ->
+      @Suppress("UNCHECKED_CAST")
+      fun plainMap(key: String) = spec.obj(key)?.let { ScreenModel.plain(ScreenValues.resolveBody(it, actionScope)) } as? Map<String, Any?>
+      val resource = spec.str("resource").orEmpty()
+      exporting = ExportRequest(
+        resource = resource,
+        title = ScreenValues.render(spec.str("title") ?: action.label, actionScope),
+        scope = plainMap("scope") ?: mapOf("kind" to "all"),
+        fileStem = ScreenValues.render(spec.str("fileStem") ?: resource, actionScope),
+        filter = plainMap("filter"),
+      )
       return
     }
     action.besigner?.let {
@@ -237,9 +256,11 @@ private fun SpecBody(
         } else {
           outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
         }
-        action.reveal?.let { path -> ScreenValues.lookup(path, outcome.response ?: JsonNull)?.let { revealed = action.label to ScreenValues.text(it) } }
+        // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
+        action.reveal?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) ?: ScreenValues.lookup(path, after))?.let { revealed = action.label to ScreenValues.text(it) } }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
+        model.followUp?.let { follow -> model.followUp = null; prompting = Pending(follow.action, follow.scope) }
         if (action.back) session.back() else if (action.reload) model.load()
       }
     }
@@ -247,7 +268,7 @@ private fun SpecBody(
 
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
-      action.inputs.isNotEmpty() -> prompting = Pending(action, actionScope)
+      action.asksInputs -> prompting = Pending(action, actionScope)
       action.asksConfirmation && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
@@ -377,6 +398,14 @@ private fun SpecBody(
       )
     }
   }
+  exporting?.let { request ->
+    com.aglyn.pluginhost.TransferExportDialog(
+      plugin, request.resource, request.title, plugin.hostId, request.scope, request.fileStem, request.filter,
+    ) { message ->
+      exporting = null
+      message?.let { show(it, StatusTone.SUCCESS) }
+    }
+  }
   revealed?.let { (title, value) ->
     ActionDialog(
       title = title,
@@ -392,7 +421,7 @@ private fun SpecBody(
 @Composable
 private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
   val values = remember(pending) { mutableStateMapOf<String, FieldValue>() }
-  val inputs = pending.action.inputs
+  val inputs = pending.action.inputsFor(pending.scope)
   fun filled(): JsonElement = ScreenContext.with(
     pending.scope, "form",
     JsonObject(inputs.associate { it.key to fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)) }),
@@ -407,7 +436,7 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
     destructive = pending.action.destructive,
     confirmEnabled = !missing,
     dismissLabel = "Cancel",
-    onConfirm = { onRun(filled()) },
+    onConfirm = { onRun(visibleOnly(filled(), inputs)) },
     onDismiss = onDismiss,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -442,21 +471,15 @@ private fun Block(
       val contributions = ScreenCatalog.zone(name).filter { ScreenValues.condition(it.requires, context) }
       // Native widgets other plugins put in the same slot sit beside the spec screens.
       val widgets = plugin.slotWidgets(name)
+      // `empty`: what to say when no plugin has put anything in the zone.
+      if (contributions.isEmpty() && widgets.isEmpty()) block.string("empty")?.let { NoticeBanner(ScreenValues.render(it, context), StatusTone.INFO) }
       if (contributions.isNotEmpty() || widgets.isNotEmpty()) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
           if (contributions.isNotEmpty()) {
             SectionCard(title) {
               Column(Modifier.fillMaxWidth()) {
                 contributions.forEachIndexed { index, spec ->
-                  if (index > 0) HorizontalDivider()
-                  AglynListItem(
-                    title = spec.label,
-                    supporting = spec.subtitle,
-                    icon = AglynIcons.named(spec.icon),
-                    trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
-                    onClick = { open(spec.id, renderParams(block["params"], context)) },
-                    modifier = Modifier.testTag("zone-${spec.id}"),
-                  )
+                  ZoneRow(spec, plugin, renderParams(block["params"], context), divider = index > 0) { open(spec.id, it) }
                 }
               }
             }
@@ -724,10 +747,20 @@ internal sealed interface FieldValue {
 
 internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when {
   field.kind == "toggle" && value is FieldValue.Flag -> JsonPrimitive(value.value)
-  field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
+  field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(if (field.integer) kotlin.math.round(it) else it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
   else -> if (field.kind == "toggle") JsonPrimitive(false) else JsonNull
+}
+
+/**
+ * The scope a form or prompt runs its action with: `form` holds only the fields the person could see (their `when`
+ * holds), so a field the screen hid is never sent, as a console form that never drew it would not send it.
+ */
+internal fun visibleOnly(filled: JsonElement, fields: List<FieldSpec>): JsonElement {
+  val all = (filled as? JsonObject)?.get("form") as? JsonObject ?: return filled
+  val keep = fields.filter { ScreenValues.condition(it.whenCondition, filled) }.map { it.key }.toSet()
+  return ScreenContext.with(filled, "form", JsonObject(all.filterKeys { it in keep }))
 }
 
 internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
@@ -748,6 +781,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
       "toggle" -> SwitchRow(field.label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
+      "hours" -> HoursInput(field, text) { onChange(FieldValue.Text(it)) }
       "select" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }
@@ -779,7 +813,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
           keyboardType = when (field.kind) {
             "email" -> KeyboardType.Email
             "url" -> KeyboardType.Uri
-            "number" -> KeyboardType.Decimal
+            "number" -> if (field.integer) KeyboardType.Number else KeyboardType.Decimal
             "password" -> KeyboardType.Password
             else -> KeyboardType.Text
           },
@@ -795,7 +829,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
 
 @Composable
 private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, submit: (ActionSpec, JsonElement) -> Unit) {
-  val fields = block.raw.arr("fields").mapNotNull { FieldSpec.parse(it) }
+  val fields = FieldSpec.parseAll(block.raw.arr("fields"), context)
   val base = block.string("object")?.let { ScreenValues.lookup(it, context) }
   val scope = base?.let { ScreenContext.withItem(context, it) } ?: context
   // Re-seeded whenever the loaded data changes, as after a save.
@@ -808,7 +842,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
     }
     ActionSpec.parse(block["submit"])?.takeIf { ScreenValues.condition(it.whenCondition, scope) }?.let { action ->
       FilledTonalButton(
-        onClick = { submit(action, filled) },
+        onClick = { submit(action, visibleOnly(filled, fields)) },
         enabled = !busy && !missing,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
@@ -817,4 +851,51 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       }
     }
   }
+}
+
+/**
+ * A week of hours chosen by touch: the UI kit's opening hours picker (the console's weekly hours picker) over the stored text
+ * lines (`Mo-Fr 09:00-17:00`), so nobody types them. The field's `hours` object sets the noun, the opening and closing time of
+ * a day switched on, and `sameDay`.
+ */
+@Composable
+private fun HoursInput(field: FieldSpec, text: String, onChange: (String) -> Unit) {
+  OpeningHoursPicker(
+    value = text,
+    onChange = onChange,
+    modifier = Modifier.testTag("hours-${field.key}"),
+    label = field.label,
+    defaultInterval = WeeklyHoursInterval(
+      ScreenValues.number(field.hours.obj("start"))?.toInt() ?: (9 * 60),
+      ScreenValues.number(field.hours.obj("end"))?.toInt() ?: (17 * 60),
+    ),
+    intervalNoun = field.hours.str("noun") ?: "hours",
+    sameDay = field.hours.isTrue("sameDay"),
+  )
+}
+
+/**
+ * One screen's row in a zone. A screen with a `showWhen` reads its own loads first and is listed only while the condition holds,
+ * so a widget with nothing to say to this store leaves no row; one without is listed at once.
+ */
+@Composable
+private fun ZoneRow(spec: ScreenSpec, plugin: NativePluginContext, params: NativeParams, divider: Boolean, open: (NativeParams) -> Unit) {
+  val session = LocalScreenSession.current
+  val shown = if (spec.showWhen == null) {
+    true
+  } else {
+    val model = remember(spec.id, params) { ScreenModel(spec, session.context(plugin, params), plugin.api, plugin.firestore, null, session.account) }
+    LaunchedEffect(model) { model.load() }
+    model.phase == ScreenModel.Phase.Ready && ScreenValues.condition(spec.showWhen, model.context)
+  }
+  if (!shown) return
+  if (divider) HorizontalDivider()
+  AglynListItem(
+    title = spec.label,
+    supporting = spec.subtitle,
+    icon = AglynIcons.named(spec.icon),
+    trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+    onClick = { open(params) },
+    modifier = Modifier.testTag("zone-${spec.id}"),
+  )
 }

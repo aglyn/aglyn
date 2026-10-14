@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,6 +28,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,10 +57,14 @@ import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.ConsoleScope
+import com.aglyn.pluginhost.LocalSeoZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SeoZone
+import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -74,7 +78,6 @@ import com.aglyn.ui.LoadContent
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
-import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
@@ -142,7 +145,8 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
               if (!canEdit) NoticeBanner("You can view this site's setup. Changing it needs the author, editor or admin role.", StatusTone.INFO)
               when (section) {
                 SetupSection.DETAILS -> DetailsSection(context, hostId, doc.data, api, canEdit)
-                SetupSection.SEO -> SeoSection(doc.data, api, canEdit)
+                SetupSection.BUSINESS -> BusinessSection(context, hostId, doc.data, canEdit)
+                SetupSection.SEO -> SeoSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.TRACKING -> TrackingSection(doc.data, api, canEdit)
                 SetupSection.THEME -> ThemeSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.EMAILS -> EmailsSection(context, hostId, api, canEdit)
@@ -180,11 +184,16 @@ private fun HostTextCard(
   clearable: Set<String> = emptySet(),
   validate: (Map<String, String>) -> Boolean = { true },
   transform: (Map<String, String>) -> Map<String, Any?> = { it },
+  /** Values a plugin's widget proposed for this page's form, staged over the stored ones. */
+  draft: FormDraft? = null,
   content: @Composable (SnapshotStateMap<String, String>) -> Unit,
 ) {
   val stored = remember(host) { paths.associateWith { host.text(it) } }
   val fields = rememberFields(stored)
   val runner = rememberRunner()
+  if (draft != null) {
+    LaunchedEffect(draft.version) { paths.forEach { path -> draft.values[path]?.let { fields[path] = it } } }
+  }
   FormCard(
     title = title,
     description = description,
@@ -208,14 +217,11 @@ private fun DetailsSection(context: NativePluginContext, hostId: String, host: M
     listOf("logoUrl", "logoDarkUrl"),
     api,
     canEdit,
-    description = "The brand mark your navigation and error pages show. Paste the address of an image from your media library.",
+    description = "The brand mark your navigation and error pages show. Choose an image from your media library; dark mode falls back to the light logo.",
     clearable = setOf("logoUrl", "logoDarkUrl"),
   ) { fields ->
     for ((path, label) in listOf("logoUrl" to "Light mode logo", "logoDarkUrl" to "Dark mode logo")) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
-        RemoteImage(fields[path]?.takeIf { it.startsWith("http") }, null, Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), icon = "image")
-        CountedTextField(label, fields[path].orEmpty(), { fields[path] = it }, Modifier.weight(1f), enabled = canEdit, keyboardType = KeyboardType.Uri, placeholder = "https://…")
-      }
+      MediaImageField(context, label, fields[path].orEmpty(), { fields[path] = it }, enabled = canEdit)
     }
   }
   BusinessDetailsCard(host, api, canEdit)
@@ -326,8 +332,15 @@ private fun LanguagesCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit
 // --- SEO ------------------------------------------------------------------
 
 @Composable
-private fun SeoSection(host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
+private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
   val c = Contracts
+  // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
+  SeoCheckCard(context, hostId, host)
+  // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
+  val draft = remember { FormDraft() }
+  @Suppress("UNCHECKED_CAST")
+  val zone = remember(host, draft) { SeoZone(host.at("seo") as? Map<String, Any?>, draft::propose) }
+  CompositionLocalProvider(LocalSeoZone provides zone) { SlotCards(context, "hostSeo") }
   HostTextCard(
     "Search appearance",
     host,
@@ -337,6 +350,7 @@ private fun SeoSection(host: Map<String, Any?>, api: HostSettingsApi, canEdit: B
     description = "How your site reads in search results and link previews.",
     clearable = setOf("seo.titlePattern"),
     validate = { f -> listOf("seo.title", "seo.description", "seo.separator").all { !f[it].isNullOrBlank() } },
+    draft = draft,
   ) { f ->
     CountedTextField("Title", f["seo.title"].orEmpty(), { f["seo.title"] = it }, max = SeoLimits.TITLE, required = true, enabled = canEdit)
     CountedTextField("Description", f["seo.description"].orEmpty(), { f["seo.description"] = it }, max = SeoLimits.DESCRIPTION, required = true, multiline = true, minLines = 2, enabled = canEdit)
@@ -357,18 +371,15 @@ private fun SeoSection(host: Map<String, Any?>, api: HostSettingsApi, canEdit: B
     listOf("seo.favicon", "seo.appIcon", "seo.image", "seo.imageAlt"),
     api,
     canEdit,
-    description = "Paste the address of each image from your media library.",
+    description = "Choose each image from your media library.",
   ) { f ->
     for ((path, label) in listOf("seo.favicon" to "Favicon", "seo.appIcon" to "App icon", "seo.image" to "Social image")) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
-        RemoteImage(f[path]?.takeIf { it.startsWith("http") }, null, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)), icon = "image")
-        CountedTextField(label, f[path].orEmpty(), { f[path] = it }, Modifier.weight(1f), enabled = canEdit, keyboardType = KeyboardType.Uri, placeholder = "https://…")
-      }
+      MediaImageField(context, label, f[path].orEmpty(), { f[path] = it }, enabled = canEdit)
     }
     CountedTextField("Image description", f["seo.imageAlt"].orEmpty(), { f["seo.imageAlt"] = it }, max = SeoLimits.IMAGE_ALT, enabled = canEdit, supporting = "What the social image shows, for screen readers")
   }
   val entityPaths = listOf("seo.entity.type", "seo.entity.name", "seo.entity.description", "seo.entity.url", "seo.entity.email", "seo.entity.telephone", "seo.entity.contactType", "seo.entity.logo")
-  HostTextCard("Business profile", host, entityPaths, api, canEdit, description = "Who runs the site, as search engines read it.") { f ->
+  HostTextCard("Business profile", host, entityPaths, api, canEdit, description = "Who runs the site, as search engines read it.", draft = draft) { f ->
     SelectField("This site is run by", ENTITY_TYPES.map { SelectOption(it.first, it.second) }, f["seo.entity.type"]?.ifEmpty { null }, { f["seo.entity.type"] = it.orEmpty() }, enabled = canEdit, noneLabel = "Not set")
     CountedTextField("Name", f["seo.entity.name"].orEmpty(), { f["seo.entity.name"] = it }, enabled = canEdit)
     CountedTextField("Description", f["seo.entity.description"].orEmpty(), { f["seo.entity.description"] = it }, max = SeoLimits.ENTITY_DESCRIPTION, multiline = true, enabled = canEdit)
@@ -376,7 +387,7 @@ private fun SeoSection(host: Map<String, Any?>, api: HostSettingsApi, canEdit: B
     CountedTextField("Email", f["seo.entity.email"].orEmpty(), { f["seo.entity.email"] = it }, enabled = canEdit, keyboardType = KeyboardType.Email)
     CountedTextField("Telephone", f["seo.entity.telephone"].orEmpty(), { f["seo.entity.telephone"] = it }, enabled = canEdit, keyboardType = KeyboardType.Phone)
     CountedTextField("Contact type", f["seo.entity.contactType"].orEmpty(), { f["seo.entity.contactType"] = it }, enabled = canEdit, placeholder = "customer service")
-    CountedTextField("Logo", f["seo.entity.logo"].orEmpty(), { f["seo.entity.logo"] = it }, enabled = canEdit, keyboardType = KeyboardType.Uri, placeholder = "https://…")
+    MediaImageField(context, "Logo", f["seo.entity.logo"].orEmpty(), { f["seo.entity.logo"] = it }, enabled = canEdit)
   }
   val addressPaths = listOf("streetAddress" to "Street", "addressLocality" to "City", "addressRegion" to "Region", "postalCode" to "Postal code", "addressCountry" to "Country")
   HostTextCard("Business address", host, addressPaths.map { "seo.entity.address.${it.first}" }, api, canEdit) { f ->
@@ -393,6 +404,7 @@ private fun SeoSection(host: Map<String, Any?>, api: HostSettingsApi, canEdit: B
     api,
     canEdit,
     description = "What AI assistants read about when and how to send people to your site (llms.txt).",
+    draft = draft,
   ) { f ->
     CountedTextField("When to use this site", f["seo.agent.whenToUse"].orEmpty(), { f["seo.agent.whenToUse"] = it }, max = SeoLimits.AGENT, multiline = true, enabled = canEdit)
     CountedTextField("How to use this site", f["seo.agent.howToUse"].orEmpty(), { f["seo.agent.howToUse"] = it }, max = SeoLimits.AGENT, multiline = true, enabled = canEdit)
@@ -460,7 +472,8 @@ private fun LocalBusinessCard(host: Map<String, Any?>, api: HostSettingsApi, can
         supporting = "One place per line, up to ${c.areaServedMax}",
         error = if (area.size > c.areaServedMax) "At most ${c.areaServedMax} places" else null,
       )
-      CountedTextField("Opening hours", f["seo.entity.openingHours"].orEmpty(), { f["seo.entity.openingHours"] = it }, multiline = true, enabled = canEdit, supporting = "One line per day or range, like Mo-Fr 09:00-17:00")
+      // Picked by clicking, never typed; what is saved is the same `Mo-Fr 09:00-17:00` lines.
+      OpeningHoursPicker(f["seo.entity.openingHours"].orEmpty(), { f["seo.entity.openingHours"] = it }, label = "Opening hours", enabled = canEdit)
       CountedTextField("Price range", f["seo.entity.priceRange"].orEmpty(), { f["seo.entity.priceRange"] = it }, max = c.priceRangeMaxLength.toInt(), enabled = canEdit, placeholder = "$$")
       CountedTextField("Payment accepted", f["seo.entity.paymentAccepted"].orEmpty(), { f["seo.entity.paymentAccepted"] = it }, max = c.paymentAcceptedMaxLength.toInt(), enabled = canEdit, placeholder = "Cash, Credit Card")
     }

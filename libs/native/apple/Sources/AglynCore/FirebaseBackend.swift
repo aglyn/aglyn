@@ -91,6 +91,14 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     return snapshot.count.intValue
   }
 
+  public func sum(_ query: FirestoreQuery, field: String) async throws -> Double? {
+    let total = AggregateField.sum(field)
+    var whole = query
+    whole.limit = nil
+    let snapshot = try await built(whole).aggregate([total]).getAggregation(source: .server)
+    return (snapshot.get(total) as? NSNumber)?.doubleValue
+  }
+
   @MainActor
   public func listen(
     _ query: FirestoreQuery,

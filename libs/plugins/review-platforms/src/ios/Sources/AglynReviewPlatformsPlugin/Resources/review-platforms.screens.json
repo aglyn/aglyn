@@ -1,0 +1,325 @@
+{
+  "$comment": "The Review platforms plugin's native screen: Trustpilot invitations (by the store's invitation address, or by its own API key where the deployment can keep one) and Yotpo Reviews with the store's app key and secret. Credentials go in and never come back; the screen shows only whether one is stored. Routes: GET and POST /api/review-platforms/settings. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "review-platforms.service",
+      "title": "Review platforms",
+      "label": "Review platforms",
+      "subtitle": "Trustpilot and Yotpo Reviews invitations",
+      "icon": "star.bubble|star",
+      "scope": "site",
+      "order": 55,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "settings": "/api/review-platforms/settings?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "trustpilotStatus",
+          "title": "Trustpilot",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "On",
+              "chip": true,
+              "tones": {
+                "On": "success",
+                "Off": "neutral",
+                "Connected": "info",
+                "Not connected": "neutral"
+              },
+              "when": "data.settings.settings.trustpilot.mode != off"
+            },
+            {
+              "label": "Status",
+              "value": "Off",
+              "chip": true,
+              "tones": {
+                "On": "success",
+                "Off": "neutral",
+                "Connected": "info",
+                "Not connected": "neutral"
+              },
+              "when": "data.settings.settings.trustpilot.mode == off"
+            },
+            {
+              "label": "API key",
+              "value": "Stored",
+              "when": "data.settings.settings.trustpilot.apiConnected"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "trustpilot",
+          "title": "Trustpilot",
+          "footer": "Invite customers to review your store on Trustpilot after their order ships or arrives. Only customers who agreed to marketing email from your store are invited, and never for a test, canceled or fully refunded order. Each order is invited once.",
+          "fields": [
+            {
+              "key": "mode",
+              "label": "How Trustpilot hears about orders",
+              "kind": "select",
+              "initial": "{data.settings.settings.trustpilot.mode}",
+              "when": "data.settings.settings.apiAvailable || data.settings.settings.trustpilot.mode == api",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Off"
+                },
+                {
+                  "value": "bcc",
+                  "label": "Copy an order email to my Trustpilot invitation address"
+                },
+                {
+                  "value": "api",
+                  "label": "Trustpilot API, with my API key"
+                }
+              ]
+            },
+            {
+              "key": "mode",
+              "label": "How Trustpilot hears about orders",
+              "kind": "select",
+              "initial": "{data.settings.settings.trustpilot.mode}",
+              "when": "!data.settings.settings.apiAvailable && data.settings.settings.trustpilot.mode != api",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Off"
+                },
+                {
+                  "value": "bcc",
+                  "label": "Copy an order email to my Trustpilot invitation address"
+                }
+              ]
+            },
+            {
+              "key": "sendOn",
+              "label": "When to invite",
+              "kind": "select",
+              "initial": "{data.settings.settings.trustpilot.sendOn}",
+              "options": [
+                {
+                  "value": "shipped",
+                  "label": "When the order ships, goes out for delivery or is picked up"
+                },
+                {
+                  "value": "delivered",
+                  "label": "When the order is delivered or picked up"
+                }
+              ],
+              "when": "form.mode == bcc,api"
+            },
+            {
+              "key": "bccAddress",
+              "label": "Trustpilot invitation address",
+              "kind": "email",
+              "initial": "{data.settings.settings.trustpilot.bccAddress}",
+              "when": "form.mode == bcc",
+              "help": "Your Automatic Feedback Service address from Trustpilot Business. It ends in @invite.trustpilot.com. The order shipped, delivered or picked-up email goes to it as a blind copy, so keep that email on under Order notifications."
+            },
+            {
+              "key": "apiKey",
+              "label": "API key",
+              "kind": "password",
+              "when": "form.mode == api",
+              "help": "Stored encrypted. Leave blank to keep the stored one."
+            },
+            {
+              "key": "apiSecret",
+              "label": "API secret",
+              "kind": "password",
+              "when": "form.mode == api",
+              "help": "Stored encrypted. Leave blank to keep the stored one."
+            },
+            {
+              "key": "businessUnitId",
+              "label": "Business unit ID",
+              "kind": "text",
+              "initial": "{data.settings.settings.trustpilot.businessUnitId}",
+              "when": "form.mode == api"
+            },
+            {
+              "key": "businessUserId",
+              "label": "Business user ID",
+              "kind": "text",
+              "initial": "{data.settings.settings.trustpilot.businessUserId}",
+              "when": "form.mode == api",
+              "help": "The Trustpilot user the invitations are sent as. Optional."
+            },
+            {
+              "key": "locale",
+              "label": "Language",
+              "kind": "text",
+              "initial": "{data.settings.settings.trustpilot.locale}",
+              "when": "form.mode == api",
+              "help": "A code like en-US. Blank uses en-US."
+            },
+            {
+              "key": "templateId",
+              "label": "Invitation template ID",
+              "kind": "text",
+              "initial": "{data.settings.settings.trustpilot.templateId}",
+              "when": "form.mode == api",
+              "help": "Blank uses your Trustpilot account's default template."
+            }
+          ],
+          "submit": {
+            "label": "Save Trustpilot",
+            "url": "/api/review-platforms/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "change": {
+                "platform": "trustpilot",
+                "mode": "{form.mode}",
+                "sendOn": "{form.sendOn}",
+                "bccAddress": "{form.bccAddress}",
+                "apiKey": "{form.apiKey}",
+                "apiSecret": "{form.apiSecret}",
+                "businessUnitId": "{form.businessUnitId}",
+                "businessUserId": "{form.businessUserId}",
+                "locale": "{form.locale}",
+                "templateId": "{form.templateId}"
+              }
+            },
+            "success": "Trustpilot saved"
+          }
+        },
+        {
+          "type": "actions",
+          "id": "trustpilotManage",
+          "when": "data.settings.settings.trustpilot.apiConnected",
+          "items": [
+            {
+              "id": "trustpilotDisconnect",
+              "label": "Disconnect Trustpilot API",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Remove the stored Trustpilot API key and switch the API path off?",
+              "url": "/api/review-platforms/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "change": {
+                  "platform": "trustpilot",
+                  "disconnect": true
+                }
+              },
+              "success": "Trustpilot API key removed"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "yotpoStatus",
+          "title": "Yotpo Reviews",
+          "when": "data.settings.settings.apiAvailable",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "On",
+              "chip": true,
+              "tones": {
+                "On": "success",
+                "Off": "neutral",
+                "Connected": "info",
+                "Not connected": "neutral"
+              },
+              "when": "data.settings.settings.yotpo.enabled"
+            },
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "On": "success",
+                "Off": "neutral",
+                "Connected": "info",
+                "Not connected": "neutral"
+              },
+              "when": "!data.settings.settings.yotpo.enabled && data.settings.settings.yotpo.connected"
+            },
+            {
+              "label": "Status",
+              "value": "Not connected",
+              "chip": true,
+              "tones": {
+                "On": "success",
+                "Off": "neutral",
+                "Connected": "info",
+                "Not connected": "neutral"
+              },
+              "when": "!data.settings.settings.yotpo.enabled && !data.settings.settings.yotpo.connected"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "yotpo",
+          "title": "Yotpo Reviews",
+          "when": "data.settings.settings.apiAvailable",
+          "footer": "Send each shipped order to your Yotpo account, so Yotpo asks the customer for a review. Only customers who agreed to marketing email from your store are invited, and never for a test, canceled or fully refunded order. Each order is invited once. Your product pages keep showing your store's own reviews.",
+          "fields": [
+            {
+              "key": "appKey",
+              "label": "App key",
+              "kind": "text",
+              "initial": "{data.settings.settings.yotpo.appKey}"
+            },
+            {
+              "key": "secretKey",
+              "label": "Secret key",
+              "kind": "password",
+              "help": "Stored encrypted. Leave blank to keep the stored one."
+            },
+            {
+              "key": "enabled",
+              "label": "Send shipped orders to Yotpo for review requests",
+              "kind": "toggle",
+              "initial": "{data.settings.settings.yotpo.enabled}"
+            }
+          ],
+          "submit": {
+            "label": "Save Yotpo",
+            "url": "/api/review-platforms/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "change": {
+                "platform": "yotpo",
+                "appKey": "{form.appKey}",
+                "secretKey": "{form.secretKey}",
+                "enabled": "{form.enabled}"
+              }
+            },
+            "success": "Yotpo saved"
+          }
+        },
+        {
+          "type": "actions",
+          "id": "yotpoManage",
+          "when": "data.settings.settings.apiAvailable && data.settings.settings.yotpo.connected",
+          "items": [
+            {
+              "id": "yotpoDisconnect",
+              "label": "Disconnect Yotpo",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect Yotpo? The stored secret key is removed and review requests stop.",
+              "url": "/api/review-platforms/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "change": {
+                  "platform": "yotpo",
+                  "disconnect": true
+                }
+              },
+              "success": "Yotpo disconnected"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

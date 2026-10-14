@@ -759,7 +759,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               // That decision was recorded in the source and in the
               // `storefrontTaxCollected` ledger, and in neither place can the
               // merchant see it. A service business is one of the three named
-              // ICPs, and one who configured a rate in Commerce → Settings →
+              // ICPs, and one who configured a rate in Products →
               // Taxes has every reason to assume it covers the appointments
               // they sell on the same site. Saying so here is the half of
               // AGL-2028 that holds however the rate question is answered.

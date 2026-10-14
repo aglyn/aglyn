@@ -1,0 +1,210 @@
+{
+  "$comment": "A courier on one order, in the order's services: the quote, sending the courier, refreshing and calling it off. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "couriers.order",
+      "title": "Courier",
+      "label": "Courier",
+      "icon": "bicycle|local_shipping",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "requires": "data.order.fulfillmentMethod == local_delivery",
+      "load": {
+        "order": {
+          "orderZone": "{params.orderId}"
+        },
+        "conn": {
+          "optional": true,
+          "url": "/api/couriers/connection?hostId={site.id}"
+        },
+        "view": {
+          "optional": true,
+          "url": "/api/couriers/order?hostId={site.id}&orderId={params.orderId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "off",
+          "tone": "info",
+          "when": "!data.conn.available || !data.conn.connection",
+          "text": "Couriers are not set up on this site. Connect one in Commerce settings."
+        },
+        {
+          "type": "notice",
+          "id": "test",
+          "tone": "info",
+          "when": "data.order.testMode && data.conn.connection",
+          "text": "This order was paid in test mode, so it uses your {data.conn.connection.providerLabel} test keys: nobody is sent."
+        },
+        {
+          "type": "fields",
+          "id": "current",
+          "when": "data.conn.connection && data.view.run && data.view.run.state != delivered,cancelled,returned",
+          "title": "{data.view.run.providerLabel}",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{data.view.run.stateLabel}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "Arriving about",
+              "value": "{data.view.run.etaMs:clock}",
+              "when": "data.view.run.etaMs"
+            },
+            {
+              "label": "Fee",
+              "value": "{data.view.run.feeCents:cents/data.view.run.currency}",
+              "when": "data.view.run.feeCents >= 0"
+            }
+          ],
+          "footer": "The fee is charged to your own courier account, not to Aglyn."
+        },
+        {
+          "type": "notice",
+          "id": "pending",
+          "tone": "info",
+          "when": "data.conn.connection && data.view.run && data.view.run.state != delivered,cancelled,returned && data.view.run.pending",
+          "text": "Waiting for {data.view.run.providerLabel} to confirm the booking. Don’t book again."
+        },
+        {
+          "type": "notice",
+          "id": "cancelRequested",
+          "tone": "info",
+          "when": "data.conn.connection && data.view.run && data.view.run.state != delivered,cancelled,returned && data.view.run.cancelRequested",
+          "text": "The order was canceled or refunded, so the courier is being called off."
+        },
+        {
+          "type": "actions",
+          "id": "running",
+          "when": "data.conn.connection && data.view.run && data.view.run.state != delivered,cancelled,returned",
+          "items": [
+            {
+              "id": "track",
+              "label": "Track the courier",
+              "icon": "open_in_new|open_in_new",
+              "when": "data.view.run.trackingUrl",
+              "link": "{data.view.run.trackingUrl}"
+            },
+            {
+              "id": "refresh",
+              "label": "Refresh",
+              "url": "/api/couriers/refresh",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}"
+              },
+              "icon": "refresh|refresh"
+            },
+            {
+              "id": "cancel",
+              "label": "Cancel courier",
+              "url": "/api/couriers/cancel",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}"
+              },
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "confirm": "Cancel the courier? {data.view.run.providerLabel} is asked to call the courier off. The delivery goes back to your own queue; {data.view.run.providerLabel} may still charge your account if the courier was already on the way.",
+              "success": "Courier canceled"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "last",
+          "tone": "info",
+          "when": "data.conn.connection && data.view.run.state == delivered,cancelled,returned",
+          "text": "Last courier: {data.view.run.stateLabel} {data.view.run.reason}"
+        },
+        {
+          "type": "notice",
+          "id": "keysTest",
+          "tone": "info",
+          "when": "data.conn.connection && !data.view.run && data.order.testMode && !data.conn.connection.test.configured || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && !data.conn.connection.test.configured",
+          "text": "Add your {data.conn.connection.providerLabel} test keys in Commerce settings → Couriers to send a test courier."
+        },
+        {
+          "type": "notice",
+          "id": "keysLive",
+          "tone": "info",
+          "when": "data.conn.connection && !data.view.run && !data.order.testMode && !data.conn.connection.live.configured || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && !data.conn.connection.live.configured",
+          "text": "Add your {data.conn.connection.providerLabel} live keys in Commerce settings → Couriers to send a courier."
+        },
+        {
+          "type": "fields",
+          "id": "quote",
+          "when": "data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms",
+          "title": "{data.view.quote.providerLabel} quote",
+          "rows": [
+            {
+              "label": "Fee",
+              "value": "{data.view.quote.feeCents:cents/data.view.quote.currency}"
+            },
+            {
+              "label": "Arriving about",
+              "value": "{data.view.quote.dropoffEtaMs:clock}",
+              "when": "data.view.quote.dropoffEtaMs"
+            },
+            {
+              "label": "Price good until",
+              "value": "{data.view.quote.expiresAtMs:clock}"
+            }
+          ],
+          "footer": "Charged to your own courier account. The courier is sent now."
+        },
+        {
+          "type": "actions",
+          "id": "book",
+          "items": [
+            {
+              "id": "send",
+              "label": "Send courier",
+              "url": "/api/couriers/dispatch",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "idempotencyKey": "{params.orderId}-{data.view.quote.expiresAtMs}"
+              },
+              "icon": "send|send",
+              "when": "data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms",
+              "success": "{data.conn.connection.providerLabel} courier requested"
+            },
+            {
+              "id": "requote",
+              "label": "New quote",
+              "url": "/api/couriers/quote",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "provider": "{data.conn.connection.provider}"
+              },
+              "icon": "refresh|refresh",
+              "when": "data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs > @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs > @now.ms",
+              "success": "New quote"
+            },
+            {
+              "id": "quote",
+              "label": "Get a quote",
+              "url": "/api/couriers/quote",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "provider": "{data.conn.connection.provider}"
+              },
+              "icon": "request_quote|request_quote",
+              "when": "data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && !data.view.quote || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && !data.view.quote || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && !data.view.quote || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && !data.view.quote || data.conn.connection && !data.view.run && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs <= @now.ms || data.conn.connection && !data.view.run && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs <= @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && data.order.testMode && data.conn.connection.test.configured && data.view.quote.expiresAtMs <= @now.ms || data.conn.connection && data.view.run.state == delivered,cancelled,returned && !data.order.testMode && data.conn.connection.live.configured && data.view.quote.expiresAtMs <= @now.ms",
+              "success": "Quote ready"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

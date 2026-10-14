@@ -41,12 +41,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.inheritedMediaAlt
+import com.aglyn.contracts.mediaPosterSrc
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.site.media.MediaPickField
 import com.aglyn.site.pages.livePageUrl
 import com.aglyn.site.pages.SiteRouting
 import com.aglyn.ui.ActionDialog
@@ -376,9 +379,33 @@ private fun EntryEditor(
           CountedTextField("Body", draft.body, { draft = draft.copy(body = it) }, Modifier.heightIn(min = 200.dp), multiline = true, minLines = 8, enabled = canWrite, supporting = "Markdown: # headings, **bold**, [links](https://…)")
         }
         SectionCard("Media") {
-          CountedTextField("Cover image", draft.coverImage, { draft = draft.copy(coverImage = it) }, enabled = canWrite, keyboardType = KeyboardType.Uri, placeholder = "https://… or media:{id}")
+          // A pick stores the asset's reference, and the description follows the picture unless the author wrote one (`inheritedMediaAlt`).
+          MediaPickField(
+            context,
+            "Cover image",
+            draft.coverImage,
+            onPick = { chosen -> draft = draft.copy(coverImage = chosen.reference, coverImageAlt = inheritedMediaAlt(draft.coverImageAlt, chosen.item.alt) ?: draft.coverImageAlt) },
+            onClear = { draft = draft.copy(coverImage = "") },
+            enabled = canWrite,
+            onLink = { draft = draft.copy(coverImage = it) },
+          )
           CountedTextField("Cover image description", draft.coverImageAlt, { draft = draft.copy(coverImageAlt = it) }, enabled = canWrite && draft.coverImage.isNotBlank())
-          CountedTextField("Cover video", draft.coverVideo, { draft = draft.copy(coverVideo = it) }, enabled = canWrite, keyboardType = KeyboardType.Uri, placeholder = "https://… or media:{id}")
+          // The film's length goes with it (the library's measurement, else blank: one typed for another film does not describe this one).
+          MediaPickField(
+            context,
+            "Cover video",
+            draft.coverVideo,
+            onPick = { chosen ->
+              draft = draft.copy(coverVideo = chosen.reference, coverVideoDuration = chosen.item.videoSeconds?.toString().orEmpty())
+              // A film with a captured frame and an entry with no cover of its own: the frame is the cover (and its description follows).
+              val poster = if (draft.coverImage.isBlank() && chosen.item.hasPoster) mediaPosterSrc(chosen.reference, context.hostId) else null
+              if (poster != null) draft = draft.copy(coverImage = poster, coverImageAlt = inheritedMediaAlt(draft.coverImageAlt, chosen.item.alt) ?: draft.coverImageAlt)
+            },
+            onClear = { draft = draft.copy(coverVideo = "") },
+            kind = "video",
+            enabled = canWrite,
+            onLink = { draft = draft.copy(coverVideo = it) },
+          )
           CountedTextField("Video length (seconds)", draft.coverVideoDuration, { draft = draft.copy(coverVideoDuration = it.filter(Char::isDigit)) }, enabled = canWrite && draft.coverVideo.isNotBlank(), keyboardType = KeyboardType.Number)
           Text("Save the entry card to keep media changes.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

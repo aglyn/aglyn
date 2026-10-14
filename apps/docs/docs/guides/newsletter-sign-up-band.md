@@ -192,20 +192,18 @@ a sign-up form records the opt-in for this site alone.
 
 ![The Edit audience page: Membership Live — keeps growing, People from Form submissions, Submitted form Product updates, and the This audience summary](/img/guides/newsletter-audience-rule.png)
 
-The audience refreshes about **every fifteen minutes**. Its chip reads *Rule ·
-not yet evaluated* until the first refresh. After that, everyone who has
+The audience refreshes about **once an hour** (sooner right after you save
+it). Its chip reads *Rule · not yet evaluated* until the first refresh. After that, everyone who has
 submitted the form is on it. **Submitted form** matches the form's display name
 exactly (ignoring case), so if you rename the form, update the audience too.
 
 ![The Product updates audience page with one member who joined by Rule](/img/guides/newsletter-audience-members.png)
 
 :::info The Consent column on a live audience
-The members table shows the consent recorded **on the membership**. A live
-audience never writes consent onto its members, because matching a rule is not
-an opt-in. So its rows read **No basis on record** even for people who signed up.
-
-Their opt-in is on their **contact** (step 8), and that is what a campaign
-checks before it sends. See
+Matching a rule is not an opt-in, so a live audience records no consent of its
+own. For the people it added, the **Consent** column shows the opt-in on their
+**contact** (step 8), and that is the same opt-in a campaign checks before it
+sends. Someone who signed up through the form reads **Opted in**. See
 [Lists built from a rule](../marketing-and-automation/email-campaigns/overview.md#lists-built-from-a-rule).
 :::
 
@@ -297,15 +295,15 @@ contact. Check two things:
 
 ![The contact's Relationship card with Marketing email Opted in and the Product updates submission on the timeline](/img/guides/newsletter-contact.png)
 
-Within about fifteen minutes the address also appears on the **Product
-updates** audience. It is ready for your next
+Within about an hour the address also appears on the **Product updates**
+audience, with **Opted in** in its **Consent** column. It is ready for your next
 [email campaign](../marketing-and-automation/email-campaigns/overview.md).
 
 ## Troubleshooting
 
 | What you see | Why, and what to do |
 | --- | --- |
-| The audience stays empty | Wait for the fifteen-minute refresh. Then check that **Submitted form** matches the form's **Display name** exactly. A rename breaks the match. |
+| The audience stays empty | Wait for the hourly refresh. Then check that **Submitted form** matches the form's **Display name** exactly. A rename breaks the match. |
 | The contact has no opt-in | The sign-up switch was off, or not saved, when they submitted. Turn it on and **Save**. It applies to new submissions, not past ones. |
 | The field and button stack on a wide screen | **Flex direction** *row* is set at the wrong breakpoint. Select the saved form's **Form**, switch the breakpoint picker to **SM – Tablet**, and check Flexbox & Grid. Then publish the form. |
 | Two buttons show | The Button's **Type** is not **Submit**. Only a Submit button replaces the form's built-in one. |

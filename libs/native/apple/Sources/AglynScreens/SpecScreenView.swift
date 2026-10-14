@@ -128,6 +128,7 @@ struct SpecScreenBody: View {
   @State private var reauthing: PendingAction?
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
+  @State private var exporting: TransferExportRequest?
   @State private var running: String?
   @State private var searchText = ""
 
@@ -169,6 +170,12 @@ struct SpecScreenBody: View {
           reauthing = nil
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
+        }
+      }
+      .sheet(item: $exporting) { request in
+        TransferExportSheet(context: plugin, request: request) { message in
+          exporting = nil
+          if let message { show(message, .success) }
         }
       }
       .alert(
@@ -314,15 +321,7 @@ struct SpecScreenBody: View {
       if !contributions.isEmpty {
         section(title, footer) {
           ForEach(contributions) { spec in
-            Button {
-              openScreen(spec.id, renderParams(block["params"], in: context))
-            } label: {
-              AglynRow(spec.label, subtitle: spec.subtitle, systemImage: spec.icon) {
-                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
-              }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("zone-\(spec.id)")
+            ZoneRow(spec: spec, plugin: plugin, params: renderParams(block["params"], in: context)) { openScreen(spec.id, $0) }
           }
         }
       }
@@ -330,6 +329,14 @@ struct SpecScreenBody: View {
         Section {
           widget.make(plugin)
             .accessibilityIdentifier("zone-widget-\(widget.id)")
+        }
+      }
+      // `empty`: what to say when no plugin has put anything in the zone.
+      if contributions.isEmpty, widgets.isEmpty, let empty = block["empty"]?.stringValue {
+        Section {
+          AglynNotice(ScreenValues.render(empty, in: context), tone: .info)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
         }
       }
     case "notice":
@@ -366,7 +373,7 @@ struct SpecScreenBody: View {
   }
 
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
-    if !action.inputs.isEmpty {
+    if action.asksInputs {
       prompting = PendingAction(action: action, scope: scope)
     } else if action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
       confirming = PendingAction(action: action, scope: scope)
@@ -379,6 +386,18 @@ struct SpecScreenBody: View {
     if let copy = action.copy {
       copyToClipboard(ScreenValues.render(copy, in: scope))
       show("Copied", .success)
+      return
+    }
+    if let export = action.export {
+      let resource = export["resource"]?.stringValue ?? ""
+      let resolved = { (key: String) in export[key].map { ScreenValues.resolveBody($0, in: scope) } }
+      exporting = TransferExportRequest(
+        resource: resource,
+        title: ScreenValues.render(export["title"]?.stringValue ?? action.label, in: scope),
+        hostID: plugin.hostID,
+        scope: resolved("scope") ?? .object(["kind": .string("all")]),
+        fileStem: ScreenValues.render(export["fileStem"]?.stringValue ?? resource, in: scope),
+        filter: resolved("filter"))
       return
     }
     if let path = action.besigner {
@@ -442,7 +461,8 @@ struct SpecScreenBody: View {
       } else if let message, !message.isEmpty {
         show(message, .success)
       }
-      if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) {
+      // A path the route's answer does not hold is read from the screen (`item.body`): an action that only shows a value.
+      if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) ?? ScreenValues.lookup(reveal, in: after) {
         revealed = (action.label, ScreenValues.text(value))
       }
       if let openPath = action.openURL, let link = ScreenValues.lookup(openPath, in: response ?? .null)?.stringValue,
@@ -456,6 +476,10 @@ struct SpecScreenBody: View {
       if action.back {
         dismiss()
         return
+      }
+      if let follow = model.followUp {
+        model.followUp = nil
+        prompting = PendingAction(action: follow.action, scope: follow.scope)
       }
       if action.reload { await model.load() }
     }
@@ -510,6 +534,48 @@ struct SearchModifier: ViewModifier {
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {
       content
+    }
+  }
+}
+
+/// One screen's row in a zone. A screen with a `showWhen` reads its own loads first and is listed only while the condition holds,
+/// so a widget with nothing to say to this store leaves no row; one without is listed at once.
+struct ZoneRow: View {
+  let spec: ScreenSpec
+  let plugin: NativePluginContext
+  let params: NativeParams
+  let open: (NativeParams) -> Void
+
+  @Environment(\.aglynScreenSession) private var session
+  @State private var model: ScreenModel?
+
+  private var shown: Bool {
+    guard spec.showWhen != nil else { return true }
+    guard let model, model.phase == .ready else { return false }
+    return ScreenValues.condition(spec.showWhen, in: model.context)
+  }
+
+  var body: some View {
+    Group {
+      if shown {
+        Button {
+          open(params)
+        } label: {
+          AglynRow(spec.label, subtitle: spec.subtitle, systemImage: spec.icon) {
+            Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+          }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("zone-\(spec.id)")
+      }
+    }
+    .task(id: params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }) {
+      guard spec.showWhen != nil else { return }
+      let fresh = ScreenModel(
+        spec: spec, context: session.context(plugin, params: params), api: plugin.api, reader: plugin.firestore, writer: nil,
+        account: session.account)
+      model = fresh
+      await fresh.load()
     }
   }
 }

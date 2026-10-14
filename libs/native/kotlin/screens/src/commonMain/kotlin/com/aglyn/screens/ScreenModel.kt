@@ -98,12 +98,31 @@ data class ScreenSession(
         put("month", "$year-${month.toString().padStart(2, '0')}")
         put("quarter", "$year-Q${(month - 1) / 3 + 1}")
         put("ms", nowMillis().toDouble())
+        // The last twelve months, newest first, as a report picks them: `{ from, to, label }` with ISO instants in UTC.
+        put("months", JsonArray(recentMonths(year, month)))
       })
       put("params", JsonObject(params.mapValues { JsonPrimitive(it.value) }))
       put("data", JsonObject(emptyMap()))
       put("form", JsonObject(emptyMap()))
     }
   }
+}
+
+private val MONTH_NAMES = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+internal fun recentMonths(year: Int, month: Int, count: Int = 12): List<JsonElement> = (0 until count).map { back ->
+  val total = year * 12 + (month - 1) - back
+  val y = total / 12
+  val m = total % 12 + 1
+  val next = total + 1
+  fun iso(yearValue: Int, monthValue: Int) = "${yearValue.toString().padStart(4, '0')}-${monthValue.toString().padStart(2, '0')}-01T00:00:00.000Z"
+  JsonObject(
+    mapOf(
+      "from" to JsonPrimitive(iso(y, m)),
+      "to" to JsonPrimitive(iso(next / 12, next % 12 + 1)),
+      "label" to JsonPrimitive("${MONTH_NAMES[m - 1]} $y"),
+    ),
+  )
 }
 
 val LocalScreenSession = compositionLocalOf { ScreenSession() }
@@ -135,6 +154,8 @@ class ScreenModel(
   var context: JsonElement by mutableStateOf(spec.raw.obj("constants")?.let { ScreenContext.with(initial, "const", it) } ?: initial)
     private set
   val cursors = mutableStateMapOf<String, String>()
+  /** How many rows each grown Firestore query load reads now: a list that was asked for more asks for its page size again. */
+  private val queryLimits = mutableMapOf<String, Int>()
   val loadingMore = mutableStateMapOf<String, Boolean>()
   val search = mutableStateMapOf<String, String>()
   /** The `{attempt}` key of each action's last request, by action, path and body: a retry reuses it. */
@@ -151,7 +172,7 @@ class ScreenModel(
   internal fun url(load: LoadSpec, cursor: String? = null): String {
     var url = ScreenValues.renderUrl(load.url, context)
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
-      url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
+      url += (if ('?' in url) "&" else "?") + load.searchParam + "=" + ScreenValues.encodeComponent(it)
     }
     if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     return url
@@ -163,7 +184,9 @@ class ScreenModel(
       phase = Phase.Failed("Sign in to continue.")
       return
     }
-    val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
+    val wanted = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
+    // A derived value is worked out from the others once they have answered.
+    val loads = wanted.filter { it.derive == null }
     val results = try {
       coroutineScope {
         loads.map { load ->
@@ -187,10 +210,21 @@ class ScreenModel(
       phase = Phase.Failed(error.message ?: "This did not load.")
       return
     }
-    context = ScreenContext.with(context, "data", JsonObject(results.associate { it.first to it.second }))
+    val answered = results.associate { it.first to it.second }
+    val derived = wanted.filter { it.derive != null }.associate { it.key to derive(it, JsonObject(answered)) }
+    context = ScreenContext.with(context, "data", JsonObject(answered + derived))
     cursors.clear()
     for ((key, _, cursor) in results) if (!cursor.isNullOrEmpty()) cursors[key] = cursor
     phase = Phase.Ready
+  }
+
+  /** A derived load's value, from what the screen's other loads answered. */
+  internal fun derive(load: LoadSpec, data: JsonElement): JsonElement {
+    val source = load.from?.let { ScreenValues.lookup(it, data) }
+    return when (load.derive) {
+      "shippingCoverage" -> ShippingCoverage.summary(source)
+      else -> JsonNull
+    }
   }
 
   private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec): Triple<String, JsonElement, String?> {
@@ -198,7 +232,20 @@ class ScreenModel(
       return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
     }
     load.query?.let { query ->
-      return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      val limit = queryLimits[load.key] ?: FirestoreLoads.queryLimit(query)
+      val answer = FirestoreLoads.query(reader, query, context, limit)
+      // A window that came back full may have more behind it; the list offers "Load more" with this as its cursor.
+      val full = query.obj("aggregate") == null && ((answer as? JsonObject)?.get("items") as? JsonArray)?.size.let { it != null && it >= limit }
+      return Triple(load.key, answer, if (full) limit.toString() else null)
+    }
+    load.orderZone?.let { id ->
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      return Triple(load.key, FirestoreLoads.orderZone(reader, ScreenValues.render("{site.id}", context), ScreenValues.render(id, context)), null)
+    }
+    load.entitlement?.let { feature ->
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      return Triple(load.key, FirestoreLoads.entitlement(reader, feature, ScreenValues.render("{org.id}", context)), null)
     }
     load.switchboard?.let { scope ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
@@ -215,6 +262,25 @@ class ScreenModel(
     val client = api ?: return
     val load = spec.loads.firstOrNull { it.key == key } ?: return
     val cursor = cursors[key] ?: return
+    // A Firestore query has no cursor to continue from here: it reads a bigger window (the page size again) and replaces its rows.
+    load.query?.let { query ->
+      if (loadingMore[key] == true) return
+      loadingMore[key] = true
+      try {
+        queryLimits[key] = (cursor.toIntOrNull() ?: FirestoreLoads.queryLimit(query)) + FirestoreLoads.queryLimit(query)
+        val (_, grown, next) = fetch(client, load)
+        val record = (data as? JsonObject)?.toMutableMap() ?: return
+        record[key] = grown
+        context = ScreenContext.with(context, "data", JsonObject(record))
+        if (next.isNullOrEmpty()) cursors.remove(key) else cursors[key] = next
+      } catch (error: CancellationException) {
+        throw error
+      } catch (_: Throwable) {
+      } finally {
+        loadingMore.remove(key)
+      }
+      return
+    }
     val itemsPath = load.items ?: return
     if (loadingMore[key] == true) return
     loadingMore[key] = true
@@ -235,10 +301,106 @@ class ScreenModel(
     }
   }
 
+  /** A step the person is asked to finish next: the previous step's answer is its `response`, its form its `previous`. */
+  data class FollowUp(val action: ActionSpec, val scope: JsonElement)
+
+  /** Set by [run] when the action that ran has a `then` that asks for inputs (a chained prompt); the screen takes it. */
+  var followUp: FollowUp? by mutableStateOf(null)
+
+  /** The action that actually made the request last, which may be the `else` of the one that was pressed. */
+  private var performed: ActionSpec? = null
+
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
+    performed = null
     val outcome = perform(action, scope)
-    if (outcome is ActionOutcome.Done) action.then?.let { perform(it, ScreenContext.with(scope, "response", outcome.response)) }
+    if (outcome is ActionOutcome.Done) {
+      (performed ?: action).then?.let { then ->
+        val next = ScreenContext.with(ScreenContext.with(scope, "response", outcome.response), "previous", (scope as? JsonObject)?.get("form"))
+        if (then.asksInputs) followUp = FollowUp(then, next) else perform(then, next)
+      }
+    }
     return outcome
+  }
+
+  /**
+   * A write the person makes themselves, as the console does: `{ doc, fields }` merges a document, `{ add, fields }`
+   * adds one to a collection, `{ delete }` removes one, and `{ steps: [...] }` does several in order. Any step may
+   * carry `each: { items, filter }` to repeat for every row of a list (`item` is the row, `parent` the outer item).
+   */
+  private suspend fun runWrite(write: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+    val steps = write.arr("steps")
+    if (steps.isNotEmpty()) {
+      for (step in steps) runWrite(step, scope, target)
+      return
+    }
+    val each = write.obj("each")
+    if (each != null) {
+      val rows = ScreenValues.rows(ScreenValues.lookup(each.str("items").orEmpty(), scope))
+        .filter { ScreenValues.condition(each.str("filter"), ScreenContext.withItem(scope, it)) }
+      for (row in rows) writeOne(write, ScreenContext.withItem(scope, row), target)
+      return
+    }
+    writeOne(write, scope, target)
+  }
+
+  /**
+   * A walk-in at the front desk, as the console's reservations card books one: `{ stay: { resource, checkIn, checkOut,
+   * guestName } }` prices the stay, checks the dates against every live stay of that resource and its blocks, and only then
+   * adds the confirmed reservation. Anything it cannot book is said in words, and nothing is written.
+   */
+  private suspend fun bookStay(stay: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+    fun text(key: String) = ScreenValues.render(stay.str(key).orEmpty(), scope).trim()
+    val reader = reader ?: throw IllegalStateException("Those dates could not be checked. Try again.")
+    val hostId = ScreenValues.render("{site.id}", scope)
+    val resourceId = text("resource")
+    val checkIn = Stays.dayMs(text("checkIn"))
+    val checkOut = Stays.dayMs(text("checkOut"))
+    if (resourceId.isEmpty() || checkIn == null || checkOut == null) throw IllegalStateException("Choose a resource and both dates.")
+    val resource = Stays.resource(reader.get("hosts/$hostId/resources/$resourceId")?.data) ?: throw IllegalStateException("That resource is gone.")
+    val quote = Stays.quote(resource, checkIn, checkOut)
+    quote.problem?.let { throw IllegalStateException(it) }
+    // The same query the booking door checks against: every stay of this resource that ends after the walk-in arrives.
+    val overlapping = try {
+      reader.page(
+        com.aglyn.core.FirestoreQuery(
+          "hosts/$hostId/reservations",
+          listOf(com.aglyn.core.FirestoreFilter("resourceId", com.aglyn.core.FilterOp.EQ, resourceId), com.aglyn.core.FirestoreFilter("checkOutDayMs", com.aglyn.core.FilterOp.GT, checkIn)),
+          listOf(com.aglyn.core.FirestoreOrder("checkOutDayMs")),
+          500,
+        ),
+      ).docs
+    } catch (error: CancellationException) {
+      throw error
+    } catch (_: Throwable) {
+      throw IllegalStateException("Could not check those dates. Try again.")
+    }
+    if (!Stays.isRangeAvailable(resource, overlapping.mapNotNull { Stays.booked(it.data) }, checkIn, checkOut, nowMillis())) throw IllegalStateException("Those dates are taken")
+    target.add(
+      "hosts/$hostId/reservations",
+      mapOf(
+        "resourceId" to resourceId,
+        "status" to "confirmed",
+        "checkInDayMs" to checkIn,
+        "checkOutDayMs" to checkOut,
+        "guestName" to text("guestName").ifEmpty { null },
+        "guestEmail" to null,
+        "nights" to quote.nights,
+        "totalCents" to quote.totalCents,
+        "depositCents" to 0,
+        "paidCents" to 0,
+        "createdAtMs" to nowMillis(),
+      ),
+    )
+  }
+
+  private suspend fun writeOne(write: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+    write.obj("stay")?.let { bookStay(it, scope, target); return }
+    write.str("delete")?.let { target.delete(ScreenValues.render(it, scope)); return }
+    val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
+    @Suppress("UNCHECKED_CAST")
+    val data = (plain(fields) as? Map<String, Any?>) ?: emptyMap()
+    write.str("add")?.let { target.add(ScreenValues.render(it, scope), data); return }
+    write.str("doc")?.let { target.merge(ScreenValues.render(it, scope), data) }
   }
 
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
@@ -268,12 +430,14 @@ class ScreenModel(
       }
     }
     action.write?.let { write ->
-      val doc = write.str("doc") ?: return ActionOutcome.Failed("Saving is not available here.")
       val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
+      if (write.str("doc") == null && write.str("add") == null && write.str("delete") == null && write.obj("stay") == null && write.arr("steps").isEmpty()) {
+        return ActionOutcome.Failed("Saving is not available here.")
+      }
       return try {
-        val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
-        @Suppress("UNCHECKED_CAST")
-        target.merge(ScreenValues.render(doc, scope), (plain(fields) as? Map<String, Any?>) ?: emptyMap())
+        runWrite(write, scope, target)
+        // `siteWide`: the write changes every page of the site, so its cached pages are dropped as the console does.
+        if (write.isTrue("siteWide")) api?.let { com.aglyn.core.publishSiteWideChange(it, target, ScreenValues.render("{site.id}", scope)) }
         ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)
       } catch (error: CancellationException) {
         throw error
@@ -283,17 +447,28 @@ class ScreenModel(
     }
     val template = action.url ?: return ActionOutcome.Done(null, null)
     val client = api ?: return ActionOutcome.Failed("Sign in to continue.")
+    val scope = action.overlay?.let { doc ->
+      val stored = try {
+        reader?.get(ScreenValues.render(doc, scope))?.data
+      } catch (error: CancellationException) {
+        throw error
+      } catch (_: Throwable) {
+        null
+      }
+      ScreenContext.with(scope, "overlay", FirestoreLoads.stored(stored ?: return ActionOutcome.Failed("That could not be read. Try again.")))
+    } ?: scope
     val path = ScreenValues.renderUrl(template, scope)
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {
       val response = client.request(path, action.method, body, headers = headers(action, path, body, scope))
+      performed = action
       ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {
       when {
         wantsReauth(error) -> ActionOutcome.NeedsReauth(error.body.str("message") ?: error.message)
-        error.status == 404 && action.otherwise != null -> perform(action.otherwise, scope)
+        error.status == action.elseStatus && action.otherwise != null -> perform(action.otherwise, scope)
         else -> ActionOutcome.Failed(error.message)
       }
     } catch (error: Throwable) {
@@ -307,7 +482,8 @@ class ScreenModel(
     if (action.headers.isEmpty()) return emptyMap()
     val signature = "${action.id}|$path|${body ?: ""}"
     val key = attempts.getOrPut(signature) { Uuid.random().toString() }
-    val withAttempt = ScreenContext.with(scope, "attempt", JsonPrimitive(key))
+    // `{press}`: a key for this one press alone (its own retries share it); a second tap of the same request gets a new one.
+    val withAttempt = ScreenContext.with(ScreenContext.with(scope, "attempt", JsonPrimitive(key)), "press", JsonPrimitive(Uuid.random().toString()))
     return action.headers.mapValues { (_, template) -> ScreenValues.render(template, withAttempt) }
   }
 
@@ -322,8 +498,8 @@ class ScreenModel(
       }
       is JsonArray -> value.map { plain(it) }
       is JsonObject -> when {
-        // `{"$serverTimestamp": true}` and `{"$delete": true}` are the web SDK's sentinels.
-        value.size == 1 && value["\$serverTimestamp"] != null -> com.aglyn.core.ServerTimestamp
+        // `{"$timestamp": true}` and `{"$serverTimestamp": true}` are the server's time, `{"$delete": true}` removes the field (the web SDK's sentinels).
+        value.size == 1 && (value["\$timestamp"] != null || value["\$serverTimestamp"] != null) -> com.aglyn.core.ServerTimestamp
         value.size == 1 && value["\$delete"] != null -> com.aglyn.core.FirestoreDelete
         else -> value.mapValues { plain(it.value) }
       }

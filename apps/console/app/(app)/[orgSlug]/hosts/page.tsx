@@ -94,23 +94,38 @@ import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { usePendingInvites } from '../../../../hooks/use-pending-invites'
 
-function HostInfoItem({ label, value }) {
+/**
+ * One labelled address on a site card. The address is one unbroken piece: it
+ * moves under its label when the two do not fit on a line, and an address
+ * wider than the card ends in an ellipsis (its full text on hover) instead of
+ * splitting mid-word at a hyphen.
+ */
+function HostInfoItem({ label, value }: { label: string; value?: string | null }) {
   return (
-    <>
-      <Typography component="div">
-        <Typography
-          variant="caption"
-          sx={{
-            display: "inline",
-            textTransform: 'uppercase'
-          }}>
-          <b>{label}:</b>
-        </Typography>{' '}
-        <Typography
-          variant="body1"
-          sx={[{
-            display: "inline"
-          }, (theme) => {
+    <Typography component="div" sx={{ lineHeight: 1.9 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          display: 'inline',
+          textTransform: 'uppercase',
+          mr: 0.5,
+        }}
+      >
+        <b>{label}:</b>
+      </Typography>
+      <Typography
+        variant="body1"
+        title={value || undefined}
+        sx={[
+          {
+            display: 'inline-block',
+            maxWidth: '100%',
+            verticalAlign: 'bottom',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          },
+          (theme) => {
             const tv = (theme as any).vars || theme
             return {
               bgcolor: `rgba(${tv.palette.secondary.lightChannel} / 0.18)`,
@@ -118,15 +133,16 @@ function HostInfoItem({ label, value }) {
               borderRadius: '0.3em',
               px: 0.5,
               py: 0.15,
-              wordBreak: 'break-word',
               fontSize: '0.8rem',
+              lineHeight: 1.4,
             }
-          }]}>
-          {value || <i>{'None'}</i>}
-        </Typography>
+          },
+        ]}
+      >
+        {value || <i>{'None'}</i>}
       </Typography>
-    </>
-  );
+    </Typography>
+  )
 }
 
 interface SiteCardProps {
@@ -144,6 +160,7 @@ function SiteCard(props: SiteCardProps) {
       contentGutterX
       contentGutterY
       contentBordered="bottom"
+      fullHeight
       HeaderProps={{
         // The site's own favicon when it has one (AGL-647),
         // falling back to the generic glyph. This list reads real
@@ -194,7 +211,10 @@ function SiteCard(props: SiteCardProps) {
             },
           },
           subheader: {
+            noWrap: true,
             sx: {
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
               fontSize: ({ typography }) =>
                 typography.caption.fontSize,
             },

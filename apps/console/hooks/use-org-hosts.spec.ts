@@ -29,19 +29,27 @@ let mockHostHandlers: Map<string, Handler> = new Map()
 let mockWhereCalls = 0
 const mockUnsubscribe = jest.fn()
 const mockGetDocsFromServer = jest.fn()
+// The one-shot server ask for a host the cache calls missing (AGL-3789),
+// told apart from the membership confirm by the collection it reads.
+const mockConfirmHost = jest.fn()
 
 jest.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => ({
     __kind: 'collection',
     path: args.slice(1).join('/'),
   }),
-  query: (ref: unknown) => ({ __kind: 'query', ref }),
-  // Counted, not implemented: the point of AGL-1190 is that no predicate is
-  // used at all, so any call here is a regression.
-  where: () => {
+  query: (ref: unknown, ...constraints: unknown[]) => ({
+    __kind: 'query',
+    ref,
+    constraints,
+  }),
+  // Counted: the point of AGL-1190 is that no LIVE read uses a predicate, so
+  // a call outside the AGL-3789 confirm is a regression.
+  where: (field: unknown, op: unknown, value: unknown) => {
     mockWhereCalls += 1
-    return {}
+    return { field, op, value }
   },
+  documentId: () => '__name__',
   doc: (...args: unknown[]) => ({
     __kind: 'doc',
     id: String(args[args.length - 1]),
@@ -59,7 +67,8 @@ jest.mock('firebase/firestore', () => ({
     mockMembershipHandlers.push({ onNext, onError })
     return mockUnsubscribe
   },
-  getDocsFromServer: (q: unknown) => mockGetDocsFromServer(q),
+  getDocsFromServer: (q: { ref: { path: string } }) =>
+    q.ref.path === 'hosts' ? mockConfirmHost(q) : mockGetDocsFromServer(q),
 }))
 
 const RETRY_DELAY_MS = 400
@@ -106,6 +115,9 @@ describe('useOrgHosts (AGL-813 / AGL-827 / AGL-929 / AGL-1190)', () => {
     mockGetDocsFromServer.mockReset()
     // Default: the backend confirms an empty membership list.
     mockGetDocsFromServer.mockResolvedValue(rowSnap([]))
+    mockConfirmHost.mockReset()
+    // Default: the server has no host the cache called missing.
+    mockConfirmHost.mockResolvedValue({ docs: [] })
   })
 
   /**
@@ -250,7 +262,7 @@ describe('useOrgHosts (AGL-813 / AGL-827 / AGL-929 / AGL-1190)', () => {
     expect(result.current.error).toBe(false)
   })
 
-  it('drops a host whose document does not exist', async () => {
+  it('drops a host the server confirms does not exist', async () => {
     const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
     emitMemberships([
       { id: 'h1', orgId: 'org1' },
@@ -261,6 +273,115 @@ describe('useOrgHosts (AGL-813 / AGL-827 / AGL-929 / AGL-1190)', () => {
 
     await waitFor(() => expect(result.current.ready).toBe(true))
     expect(result.current.hosts.map((h) => h.$id)).toEqual(['h1'])
+  })
+
+  /**
+   * AGL-3789. A tombstone two primaries wrote into the shared cache (AGL-3788)
+   * says a live host does not exist, and it outlives reloads. The mirror still
+   * lists the host, so the server is asked — and what it says wins.
+   */
+  describe('a host the cache calls missing (AGL-3789)', () => {
+    const serverHas = (id: string, data: Record<string, unknown>) =>
+      mockConfirmHost.mockResolvedValue({ docs: [{ id, data: () => data }] })
+
+    it('shows the host the server still has, never "No sites yet"', async () => {
+      serverHas('h1', { subdomain: 'shop' })
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+
+      await waitFor(() => expect(result.current.ready).toBe(true))
+      expect(result.current.hosts).toEqual([{ $id: 'h1', subdomain: 'shop' }])
+      expect(result.current.error).toBe(false)
+    })
+
+    it('asks with the rules-provable shape: the id plus the access roles', async () => {
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+      await waitFor(() => expect(result.current.ready).toBe(true))
+
+      expect(mockConfirmHost).toHaveBeenCalledTimes(1)
+      const [{ constraints }] = mockConfirmHost.mock.calls[0]
+      expect(constraints).toEqual([
+        { field: '__name__', op: '==', value: 'h1' },
+        {
+          field: 'memberRoles.u1',
+          op: 'in',
+          value: expect.arrayContaining(['admin', 'editor', 'author', 'viewer']),
+        },
+      ])
+    })
+
+    it('holds `ready` while the server is being asked', () => {
+      mockConfirmHost.mockReturnValue(new Promise(() => undefined))
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+
+      expect(result.current.ready).toBe(false)
+    })
+
+    it('an ask that fails is an error with a retry, never a clean empty', async () => {
+      mockConfirmHost.mockRejectedValue(new Error('offline'))
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+
+      await waitFor(() => expect(result.current.ready).toBe(true))
+      expect(result.current.hosts).toEqual([])
+      expect(result.current.error).toBe(true)
+    })
+
+    it('stays an error when the cache repeats itself after a failed ask', async () => {
+      mockConfirmHost.mockRejectedValue(new Error('offline'))
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+      await waitFor(() => expect(result.current.error).toBe(true))
+
+      emitHost('h1', null)
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      await waitFor(() => expect(result.current.ready).toBe(true))
+      expect(result.current.error).toBe(true)
+      expect(mockConfirmHost).toHaveBeenCalledTimes(1)
+    })
+
+    it('asks once per attempt and keeps the answer over a repeated tombstone', async () => {
+      serverHas('h1', { subdomain: 'shop' })
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+      await waitFor(() => expect(result.current.hosts).toHaveLength(1))
+
+      emitHost('h1', null)
+      await waitFor(() => expect(result.current.hosts).toHaveLength(1))
+      expect(mockConfirmHost).toHaveBeenCalledTimes(1)
+
+      // The healed cache's own document then takes over.
+      emitHost('h1', { subdomain: 'shop', name: 'Shop' })
+      await waitFor(() =>
+        expect(result.current.hosts).toEqual([
+          { $id: 'h1', subdomain: 'shop', name: 'Shop' },
+        ]),
+      )
+    })
+
+    it('asks again on a retry', async () => {
+      mockConfirmHost.mockRejectedValue(new Error('offline'))
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+      await waitFor(() => expect(result.current.error).toBe(true))
+
+      serverHas('h1', { subdomain: 'shop' })
+      act(() => result.current.retry())
+      emitMemberships([{ id: 'h1', orgId: 'org1' }])
+      emitHost('h1', null)
+      await waitFor(() => expect(result.current.hosts).toHaveLength(1))
+      expect(result.current.error).toBe(false)
+      expect(mockConfirmHost).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('stops listening to a host that leaves the membership list', async () => {

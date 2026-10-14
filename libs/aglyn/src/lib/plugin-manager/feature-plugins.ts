@@ -443,6 +443,30 @@ export interface ConsoleNavSection {
    * takes over.
    */
   landsOnQuery?: readonly string[]
+  /**
+   * The group this section belongs to in the rail (AGL-3713), as the words
+   * drawn above it.
+   *
+   * Consecutive sections that name the same group are drawn together: the
+   * rail puts a divider between two runs and the group's name above its run,
+   * the way MUI divides the sections of a list. A section that names none
+   * belongs to the unnamed group, which is drawn without words — so a hub
+   * whose last few sections say `group: 'Settings'` gets one divider and one
+   * subheader, and a hub that names no group is drawn exactly as before.
+   */
+  group?: string
+  /**
+   * Plugin zones that are this section's ONLY content (AGL-3713).
+   *
+   * Declared, the section is offered only while at least one of these zones
+   * has a widget for this reader — registered, enabled for the workspace and
+   * site, entitled and permitted — and is left out of the rail otherwise, as
+   * a section with nothing to show. A section that draws content of its own
+   * beside a zone does not declare it: it always has something to show.
+   * Until the zones' plugins have loaded the section is left out, the way an
+   * unsettled widget is withheld rather than drawn and taken away.
+   */
+  onlyWithZones?: readonly string[]
 }
 
 /** A {@link ConsoleNavSection} with the shell's answers filled in. */
@@ -474,6 +498,9 @@ export interface ResolvedConsoleNavSection {
   /** The section's declared {@link ConsoleNavSection.landsOnQuery}, carried
    * through so the shell's landing rule can read it (AGL-3080). */
   landsOnQuery?: readonly string[]
+  /** The section's declared {@link ConsoleNavSection.group}, carried through
+   * so the rail can divide its groups (AGL-3713). */
+  group?: string
 }
 
 export interface ConsoleNavItem {
@@ -575,6 +602,18 @@ export interface ConsoleNavItem {
    * rather than leave a moved page living at two.
    */
   legacyHrefs?: readonly string[]
+  /**
+   * Section ids this nav item no longer declares, each mapped to the
+   * section that took its place (AGL-3713).
+   *
+   * A section id is in links people keep, so a section that is split or
+   * renamed would otherwise turn every one of them into the shell's 404.
+   * A retired id resolves as its replacement, with `legacy: true`, so the
+   * shell replaces the address with the current one exactly as it does for
+   * a {@link legacyHrefs} match — deeper segments carried over. A mapping
+   * to an id `sections` does not declare matches nothing.
+   */
+  retiredSections?: Readonly<Record<string, string>>
   /**
    * Where this item's tab sits among the plugin tabs of its strip
    * (AGL-3294): lower first, absent is 0, and a tie keeps registration
@@ -2289,7 +2328,7 @@ function matchNavItemHref(
   navItem: ConsoleNavItem,
   itemHref: string,
   href: string,
-): { section?: ConsoleNavSection; segments: readonly string[] } | undefined {
+): { section?: ConsoleNavSection; segments: readonly string[]; legacy?: boolean } | undefined {
   if (itemHref === href) return { segments: [] }
   if (!navItem.sections?.length && !navItem.ownsSubtree) return undefined
   // On a separator boundary, so `/products` cannot claim `/products-archive`.
@@ -2297,6 +2336,20 @@ function matchNavItemHref(
   const segments = href.slice(itemHref.length + 1).split('/').filter(Boolean)
   const section = navItem.sections?.find((item) => item.id === segments[0])
   if (section) return { section, segments }
+  // A retired id (AGL-3713) answers as the section that replaced it, and is
+  // flagged so the shell moves the address on rather than serving it twice.
+  const successorId = segments[0]
+    ? navItem.retiredSections?.[segments[0]]
+    : undefined
+  const successor = successorId
+    ? navItem.sections?.find((item) => item.id === successorId)
+    : undefined
+  if (successor)
+    return {
+      section: successor,
+      segments: [successor.id, ...segments.slice(1)],
+      legacy: true,
+    }
   // An id the nav item never declared is NOT this page — unless the surface
   // claimed the subtree, in which case the deeper segments are its own
   // entity ids and it answers for them. Returning the nav item otherwise

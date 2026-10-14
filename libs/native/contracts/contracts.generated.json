@@ -4,6 +4,7 @@
     "Values from the pure modules tools/scripts/native-contracts.json names."
   ],
   "AREA_SERVED_MAX": 20,
+  "AREA_SERVED_NAME_MAX_LENGTH": 120,
   "ARTIFACT_TYPE_LABELS": {
     "component": "Component",
     "datasetSchema": "Dataset schema",
@@ -14,6 +15,7 @@
     "template": "Site template",
     "theme": "Theme"
   },
+  "AUTHOR_SAME_AS_MAX": 12,
   "BOOKING_FIELD_ASKS": [
     "off",
     "optional",
@@ -64,6 +66,46 @@
       "path": "ratingAverage"
     }
   },
+  "BUSINESS_PROFILE_FIELD_ORDER": [
+    "whatYouDo",
+    "services",
+    "serviceArea",
+    "audience",
+    "tone",
+    "toneNotes"
+  ],
+  "BUSINESS_PROFILE_MAX_CHARS": {
+    "audience": 160,
+    "serviceArea": 120,
+    "services": 60,
+    "toneNotes": 200,
+    "whatYouDo": 200
+  },
+  "BUSINESS_PROFILE_MAX_SERVICES": 12,
+  "BUSINESS_PROFILE_ORIGIN_LABELS": {
+    "ai": "Suggested by Aglyn AI",
+    "owner": "You",
+    "site": "Site settings",
+    "start": "Your answers when the site was started",
+    "workspace": "Workspace default"
+  },
+  "BUSINESS_PROFILE_SITE_DOC": "profile",
+  "BUSINESS_PROFILE_SUBCOLLECTION": "businessProfile",
+  "BUSINESS_PROFILE_WORKSPACE_DOC": "defaults",
+  "BUSINESS_TONE_LABELS": {
+    "friendly": "Friendly and warm",
+    "plain": "Plain and direct",
+    "playful": "Playful and upbeat",
+    "premium": "Premium and refined",
+    "professional": "Professional and clear"
+  },
+  "BUSINESS_TONE_ORDER": [
+    "friendly",
+    "professional",
+    "playful",
+    "premium",
+    "plain"
+  ],
   "CAMPAIGN_EMAILS_QUERY": {
     "fields": [
       {
@@ -2161,6 +2203,9 @@
     "text": "Plain text",
     "time": "Time"
   },
+  "IMAGE_EDIT_ASPECTS_JSON": "[{\"label\":\"Free\",\"ratio\":null},{\"label\":\"1:1\",\"ratio\":1},{\"label\":\"4:3\",\"ratio\":1.3333333333333333},{\"label\":\"3:2\",\"ratio\":1.5},{\"label\":\"16:9\",\"ratio\":1.7777777777777777}]",
+  "IMAGE_EDIT_JPEG_QUALITY": 0.9,
+  "IMAGE_EDIT_PREVIEW_MAX": 480,
   "INSTALL_TARGETS": {
     "component": [
       "host"
@@ -4346,6 +4391,25 @@
     "bing": "msvalidate.01",
     "google": "google-site-verification"
   },
+  "SEO_FINDING_LABELS": {
+    "description-duplicate": "Description used on another page",
+    "description-missing": "No search description",
+    "description-too-long": "Description too long",
+    "entity-incomplete": "Structured data incomplete",
+    "h1-missing": "No main heading",
+    "h1-multiple": "More than one main heading",
+    "h1-thin": "Main heading says little",
+    "image-alt-missing": "Images without a description",
+    "keyword-missing": "Target keyword not covered",
+    "llms-guidance-missing": "No guidance for AI agents",
+    "orphan": "No page links here",
+    "search-discouraged": "Search engines are discouraged",
+    "title-duplicate": "Title used on another page",
+    "title-missing": "No search title",
+    "title-too-long": "Title too long"
+  },
+  "SEO_KEYWORD_LINES_MAX_CHARS": 3000,
+  "SEO_MAX_KEYWORDS": 5,
   "SITE_CARDS_PAGE_SIZE": 12,
   "SITE_FILTER_HEADERS": {
     "createdAt": "Created",
