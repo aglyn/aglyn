@@ -102,8 +102,24 @@
       "why": "The per-page traffic table's fold over screen day documents (AGL-3670)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/screen-seo-fields.ts",
+      "why": "Reached by seo-listing-fields: a page's search text fields (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
       "why": "Search engine verification labels and the token extraction the native SEO setup replays (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "why": "The SEO check's report model, finding labels and the target-keyword lines; the native SEO check card reads the same report and writes the same lines (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "why": "Target keywords: the limits and how a typed list is split; the native keyword rows hold the same limits (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-listing-fields.ts",
+      "why": "Reached by seo-audit: the listing fields' lengths (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/seo-title-variables.ts",

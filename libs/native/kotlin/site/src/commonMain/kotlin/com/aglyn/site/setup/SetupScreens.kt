@@ -142,7 +142,7 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
               if (!canEdit) NoticeBanner("You can view this site's setup. Changing it needs the author, editor or admin role.", StatusTone.INFO)
               when (section) {
                 SetupSection.DETAILS -> DetailsSection(context, hostId, doc.data, api, canEdit)
-                SetupSection.SEO -> SeoSection(doc.data, api, canEdit)
+                SetupSection.SEO -> SeoSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.TRACKING -> TrackingSection(doc.data, api, canEdit)
                 SetupSection.THEME -> ThemeSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.EMAILS -> EmailsSection(context, hostId, api, canEdit)
@@ -326,8 +326,10 @@ private fun LanguagesCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit
 // --- SEO ------------------------------------------------------------------
 
 @Composable
-private fun SeoSection(host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
+private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
   val c = Contracts
+  // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
+  SeoCheckCard(context, hostId, host)
   HostTextCard(
     "Search appearance",
     host,

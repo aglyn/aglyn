@@ -4327,6 +4327,25 @@
     "bing": "msvalidate.01",
     "google": "google-site-verification"
   },
+  "SEO_FINDING_LABELS": {
+    "description-duplicate": "Description used on another page",
+    "description-missing": "No search description",
+    "description-too-long": "Description too long",
+    "entity-incomplete": "Structured data incomplete",
+    "h1-missing": "No main heading",
+    "h1-multiple": "More than one main heading",
+    "h1-thin": "Main heading says little",
+    "image-alt-missing": "Images without a description",
+    "keyword-missing": "Target keyword not covered",
+    "llms-guidance-missing": "No guidance for AI agents",
+    "orphan": "No page links here",
+    "search-discouraged": "Search engines are discouraged",
+    "title-duplicate": "Title used on another page",
+    "title-missing": "No search title",
+    "title-too-long": "Title too long"
+  },
+  "SEO_KEYWORD_LINES_MAX_CHARS": 3000,
+  "SEO_MAX_KEYWORDS": 5,
   "SITE_CARDS_PAGE_SIZE": 12,
   "SITE_FILTER_HEADERS": {
     "createdAt": "Created",

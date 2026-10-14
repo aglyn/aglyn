@@ -108,7 +108,7 @@ struct SetupDetail: View {
       }
       switch section {
       case .details: DetailsSection(context: context, hostID: hostID, host: doc.data, api: api, canEdit: canEdit)
-      case .seo: SeoSection(host: doc.data, api: api, canEdit: canEdit)
+      case .seo: SeoSection(context: context, hostID: hostID, host: doc.data, api: api, canEdit: canEdit)
       case .tracking: TrackingSection(host: doc.data, api: api, canEdit: canEdit)
       case .theme: ThemeSection(context: context, hostID: hostID, doc: doc, api: api, canEdit: canEdit)
       case .emails: EmailsSection(context: context, hostID: hostID, api: api, canEdit: canEdit)
@@ -374,12 +374,16 @@ private struct LanguagesCard: View {
 // MARK: - SEO
 
 private struct SeoSection: View {
+  let context: NativePluginContext
+  let hostID: String
   let host: [String: Any]
   let api: HostSettingsAPI
   let canEdit: Bool
   private let contracts = ContractValues.shared
 
   var body: some View {
+    // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
+    SeoCheckCard(context: context, hostID: hostID, host: host)
     HostTextCard(
       title: "Search appearance", host: host, paths: ["seo.title", "seo.description", "seo.separator", "seo.titlePattern"],
       api: api, canEdit: canEdit, message: "How your site reads in search results and link previews.",

@@ -360,4 +360,22 @@ class SiteTest {
     assertEquals(listOf("/api/fonts/prepare", "/api/fonts/theme", "/api/media/replace", "/api/fonts/theme"), seen.map { it.first })
     assertEquals(emptyList(), installedFontsOf(null))
   }
+
+  @Test
+  fun listsTheRoutedPagesForTheKeywordPickerAndReadsTheReportTheRouteAnswers() {
+    val pages = com.aglyn.site.setup.seoKeywordPages(
+      mapOf("screens" to mapOf("s2" to "pricing", "s1" to "/", "s3" to 5)),
+      mapOf("s1" to "Home", "s2" to ""),
+    )
+    assertEquals(listOf("/" to "Home", "/pricing" to "/pricing"), pages.map { it.path to it.name })
+    val report = com.aglyn.contracts.ContractJsonFormat.decodeFromJsonElement(
+      com.aglyn.contracts.SeoAuditReport.serializer(),
+      Json.parseToJsonElement(
+        """{"pages":[{"screenId":"s1","path":"/","name":"Home","versionId":null,"score":85,"findings":[{"code":"title-missing","severity":"high","message":"No title."},{"code":"keyword-missing","severity":"low","message":"Say it.","keyword":"pricing"}],"keywords":[]}],"skipped":2,"site":[{"code":"search-discouraged","severity":"high","message":"Hidden."}],"score":85,"notes":["A note"]}""",
+      ),
+    )
+    assertEquals(3, com.aglyn.contracts.seoAuditFindingCount(report))
+    assertEquals(2L, report.skipped)
+    assertEquals(null, report.pages[0].versionId)
+  }
 }

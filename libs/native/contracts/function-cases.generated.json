@@ -16367,6 +16367,140 @@
         }
       ]
     },
+    "readSeoKeywordLines": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/pricing: plans, pricing"
+          ],
+          "result": {
+            "keywords": {
+              "/pricing": [
+                "plans",
+                "pricing"
+              ]
+            },
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/pricing: plans\n/pricing: pricing, plans"
+          ],
+          "result": {
+            "keywords": {
+              "/pricing": [
+                "plans",
+                "pricing"
+              ]
+            },
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "no colon here"
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            ": noPath"
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/: home, welcome\nabout: team, story, crew, staff, owners, founders"
+          ],
+          "result": {
+            "keywords": {
+              "/": [
+                "home",
+                "welcome"
+              ],
+              "/about": [
+                "team",
+                "story",
+                "crew",
+                "staff",
+                "owners"
+              ]
+            },
+            "unchecked": {
+              "/about": [
+                "founders"
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            "/x: a, , A, b"
+          ],
+          "result": {
+            "keywords": {
+              "/x": [
+                "a",
+                "b"
+              ]
+            },
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/x: ,  ,"
+          ],
+          "result": {
+            "keywords": {},
+            "unchecked": {}
+          }
+        },
+        {
+          "args": [
+            "/a: one\n/b: two, three"
+          ],
+          "result": {
+            "keywords": {
+              "/a": [
+                "one"
+              ],
+              "/b": [
+                "two",
+                "three"
+              ]
+            },
+            "unchecked": {}
+          }
+        }
+      ]
+    },
     "renameProductOptions": {
       "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
       "cases": [
@@ -19965,6 +20099,183 @@
             "truncated": true,
             "unattributedClicks": 1
           }
+        }
+      ]
+    },
+    "seoAuditFindingCount": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "pages": [],
+              "site": []
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "pages": [
+                {
+                  "findings": [
+                    {
+                      "code": "orphan"
+                    }
+                  ]
+                },
+                {
+                  "findings": []
+                },
+                {
+                  "findings": [
+                    {
+                      "code": "orphan"
+                    },
+                    {
+                      "code": "title-missing"
+                    }
+                  ]
+                }
+              ],
+              "site": [
+                {
+                  "code": "search-discouraged"
+                }
+              ]
+            }
+          ],
+          "result": 4
+        }
+      ]
+    },
+    "seoKeywordSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": {
+            "keywords": [],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            "a, b\nc"
+          ],
+          "result": {
+            "keywords": [
+              "a",
+              "b",
+              "c"
+            ],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            "a, A, b, c, d, e, f, g"
+          ],
+          "result": {
+            "keywords": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "unchecked": [
+              "f",
+              "g"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "x",
+              " y ",
+              "x"
+            ]
+          ],
+          "result": {
+            "keywords": [
+              "x",
+              "y"
+            ],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "keywords": [],
+            "unchecked": []
+          }
+        },
+        {
+          "args": [
+            "  spaced   out ,word"
+          ],
+          "result": {
+            "keywords": [
+              "spaced out",
+              "word"
+            ],
+            "unchecked": []
+          }
+        }
+      ]
+    },
+    "seoNormalizePath": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": "/"
+        },
+        {
+          "args": [
+            "/"
+          ],
+          "result": "/"
+        },
+        {
+          "args": [
+            "pricing"
+          ],
+          "result": "/pricing"
+        },
+        {
+          "args": [
+            "/pricing/"
+          ],
+          "result": "/pricing"
+        },
+        {
+          "args": [
+            "//a//"
+          ],
+          "result": "/a"
+        },
+        {
+          "args": [
+            "  /about  "
+          ],
+          "result": "/about"
+        },
+        {
+          "args": [
+            "/a/b/"
+          ],
+          "result": "/a/b"
         }
       ]
     },

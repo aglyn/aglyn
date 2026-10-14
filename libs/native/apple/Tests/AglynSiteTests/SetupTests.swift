@@ -96,6 +96,21 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(themeEdits(from: before, to: cleared), [.color(scheme: "light", token: "primary", value: nil)])
   }
 
+  func testListsTheRoutedPagesForTheKeywordPickerAndReadsTheReportTheRouteAnswers() throws {
+    let pages = seoKeywordPages(host: ["screens": ["s2": "pricing", "s1": "/", "s3": 5]], names: ["s1": "Home", "s2": ""])
+    XCTAssertEqual(pages.map(\.path), ["/", "/pricing"])
+    XCTAssertEqual(pages.map(\.name), ["Home", "/pricing"])
+    let report = try JSONDecoder().decode(
+      SeoAuditReport.self,
+      from: Data(
+        """
+        {"pages":[{"screenId":"s1","path":"/","name":"Home","versionId":null,"score":85,"findings":[{"code":"title-missing","severity":"high","message":"No title."},{"code":"keyword-missing","severity":"low","message":"Say it.","keyword":"pricing"}],"keywords":[]}],"skipped":2,"site":[{"code":"search-discouraged","severity":"high","message":"Hidden."}],"score":85,"notes":["A note"]}
+        """.utf8))
+    XCTAssertEqual(seoAuditFindingCount(report), 3)
+    XCTAssertEqual(report.skipped, 2)
+    XCTAssertNil(report.pages[0].versionId)
+  }
+
   func testReadsTheThemeEditorsAnswer() {
     let catalog = themeCatalog(
       of: .object([
