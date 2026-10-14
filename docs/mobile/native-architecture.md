@@ -906,6 +906,13 @@ whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
 in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
 
+Three small forms serve the cards that list data they cannot shape: a path
+`rows.*.field` reads that field of every row as a list (so `{item.issues.*.message}`
+prints them joined); a select's `optionsFrom` takes `where`, a condition on the
+row (`item.classification == bank`); and a comparison's right side may be another
+path (`a != @b.c`). A load names the query parameter its route searches by with
+`searchParam` (the catalog route reads `q`, the default is `search`).
+
 ### The plugin switchboard
 
 `{ "switchboard": "org" }` reads `orgs/{org}` and `{ "switchboard": "site" }`
