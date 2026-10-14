@@ -61,7 +61,6 @@ import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
-import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -457,8 +456,7 @@ private fun LocalBusinessCard(host: Map<String, Any?>, api: HostSettingsApi, can
         supporting = "One place per line, up to ${c.areaServedMax}",
         error = if (area.size > c.areaServedMax) "At most ${c.areaServedMax} places" else null,
       )
-      // Picked by clicking, never typed; what is saved is the same `Mo-Fr 09:00-17:00` lines.
-      OpeningHoursPicker(f["seo.entity.openingHours"].orEmpty(), { f["seo.entity.openingHours"] = it }, label = "Opening hours", enabled = canEdit)
+      CountedTextField("Opening hours", f["seo.entity.openingHours"].orEmpty(), { f["seo.entity.openingHours"] = it }, multiline = true, enabled = canEdit, supporting = "One line per day or range, like Mo-Fr 09:00-17:00")
       CountedTextField("Price range", f["seo.entity.priceRange"].orEmpty(), { f["seo.entity.priceRange"] = it }, max = c.priceRangeMaxLength.toInt(), enabled = canEdit, placeholder = "$$")
       CountedTextField("Payment accepted", f["seo.entity.paymentAccepted"].orEmpty(), { f["seo.entity.paymentAccepted"] = it }, max = c.paymentAcceptedMaxLength.toInt(), enabled = canEdit, placeholder = "Cash, Credit Card")
     }
