@@ -152,59 +152,6 @@
               "success": "Your plan continues"
             },
             {
-              "id": "plans",
-              "label": "Choose a plan",
-              "icon": "sparkles|workspace_premium",
-              "navigate": {
-                "screen": "core.billing.plans"
-              }
-            }
-          ]
-        },
-        {
-          "type": "actions",
-          "title": "Manage",
-          "when": "org.manager",
-          "footer": "Plans, payment methods and cancellations open on Stripe's secure pages.",
-          "items": [
-            {
-              "id": "portal",
-              "label": "Manage subscription",
-              "icon": "creditcard|credit_card",
-              "when": "data.billing.subscription || data.org.subscription",
-              "url": "/api/billing/subscription",
-              "body": {
-                "orgId": "{org.id}",
-                "action": "portal"
-              },
-              "open": "url"
-            },
-            {
-              "id": "card",
-              "label": "Update payment method",
-              "icon": "creditcard.and.123|add_card",
-              "when": "data.billing.subscription || data.org.subscription",
-              "url": "/api/billing/subscription",
-              "body": {
-                "orgId": "{org.id}",
-                "action": "portal",
-                "flow": "payment_method_update"
-              },
-              "open": "url"
-            },
-            {
-              "id": "resume",
-              "label": "Keep my plan",
-              "icon": "arrow.uturn.backward|undo",
-              "when": "data.billing.subscription.cancelAtPeriodEnd",
-              "url": "/api/billing/subscription",
-              "body": {
-                "orgId": "{org.id}",
-                "action": "resume"
-              },
-              "success": "Your plan continues"
-            },
-            {
               "id": "cancel",
               "label": "Cancel my plan",
               "icon": "xmark.circle|cancel",
@@ -275,46 +222,6 @@
       "scope": "org",
       "requires": "org.manager",
       "blocks": [
-        {
-          "type": "notice",
-          "tone": "info",
-          "text": "Pick a plan to continue on Stripe's secure checkout, where the price and terms are shown. A workspace already on a paid plan changes it under Manage subscription."
-        },
-        {
-          "type": "list",
-          "items": "const.plans",
-          "primary": "{item.label}",
-          "secondary": "{item.blurb}",
-          "icon": "sparkles|workspace_premium",
-          "actions": [
-            {
-              "id": "monthly",
-              "label": "Continue, billed monthly",
-              "icon": "calendar|event",
-              "url": "/api/billing/checkout",
-              "body": {
-                "orgId": "{org.id}",
-                "plan": "{item.id}",
-                "interval": "month"
-              },
-              "open": "url",
-              "reload": false
-            },
-            {
-              "id": "yearly",
-              "label": "Continue, billed yearly",
-              "icon": "calendar.badge.clock|event",
-              "url": "/api/billing/checkout",
-              "body": {
-                "orgId": "{org.id}",
-                "plan": "{item.id}",
-                "interval": "year"
-              },
-              "open": "url",
-              "reload": false
-            }
-          ]
-        },
         {
           "type": "notice",
           "tone": "info",
@@ -552,26 +459,6 @@
       ],
       "constants": {
         "plans": [
-          {
-            "id": "starter",
-            "label": "Starter",
-            "blurb": "One site, the essentials"
-          },
-          {
-            "id": "pro",
-            "label": "Pro",
-            "blurb": "More sites, store and forms"
-          },
-          {
-            "id": "business",
-            "label": "Business",
-            "blurb": "Teams and higher limits"
-          },
-          {
-            "id": "agency",
-            "label": "Agency",
-            "blurb": "Client workspaces and white-label"
-          },
           {
             "id": "free",
             "label": "Free",
