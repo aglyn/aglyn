@@ -158,6 +158,8 @@ class FieldSpec private constructor(
   /** The bounds of a number field; one outside them leaves the field unfinished. */
   val min: Double? = null,
   val max: Double? = null,
+  /** A number field that takes whole numbers: what is typed is rounded to one. */
+  val integer: Boolean = false,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
@@ -259,6 +261,7 @@ class FieldSpec private constructor(
         mustMatch = json.str("mustMatch"),
         min = ScreenValues.number(json.obj("min")),
         max = ScreenValues.number(json.obj("max")),
+        integer = json.isTrue("integer"),
       )
     }
   }

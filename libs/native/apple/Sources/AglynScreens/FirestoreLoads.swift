@@ -94,8 +94,15 @@ enum FirestoreLoads {
     var filters: [ListQueryConstraint] = []
     func plainValue(_ raw: JSONValue) -> Any {
       // A number or flag written into the spec is compared as itself, not as its text.
+      if case .null = raw { return NSNull() }
       if case .number(let number) = raw { return number }
       if case .bool(let flag) = raw { return flag }
+      // `@now.ms-7d`: a time or number computed from the context, the way a condition's right side is.
+      if let text = raw.stringValue?.trimmingCharacters(in: .whitespaces), text.hasPrefix("@"),
+        let computed = ScreenValues.operand(text, in: context)
+      {
+        return computed
+      }
       switch ScreenValues.resolve(raw.stringValue ?? ScreenValues.text(raw), in: context) {
       case .bool(let flag): return flag
       case .number(let number): return number
@@ -103,9 +110,11 @@ enum FirestoreLoads {
       }
     }
     for clause in spec["where"].array {
-      guard case .array(let parts) = clause, parts.count == 3, let field = parts[0].stringValue,
+      guard case .array(let parts) = clause, parts.count == 3 || parts.count == 4, let field = parts[0].stringValue,
         let name = parts[1].stringValue, let op = ListQueryOp(rawValue: name), op != .unknown
       else { continue }
+      // A fourth entry is a condition: the clause counts only while it holds (a filter the person has not picked is left off).
+      if parts.count == 4, !ScreenValues.condition(parts[3].stringValue, in: context) { continue }
       // `in` and `array-contains-any` take a list; the others one value.
       let listOp = op == .in || op == .arrayContainsAny
       let value: Any

@@ -270,6 +270,8 @@ public struct FieldSpec: Sendable, Identifiable {
   /// The bounds of a number field; one outside them leaves the field unfinished.
   public let min: Double?
   public let max: Double?
+  /// A number field that takes whole numbers: what is typed is rounded to one.
+  public let integer: Bool
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
@@ -300,6 +302,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.mustMatch = nil
     self.min = nil
     self.max = nil
+    self.integer = false
   }
 
   /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
@@ -362,6 +365,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.mustMatch = nil
     self.min = nil
     self.max = nil
+    self.integer = false
   }
 
   init?(_ json: JSONValue) {
@@ -382,6 +386,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.mustMatch = json["mustMatch"]?.stringValue
     self.min = ScreenValues.number(json["min"])
     self.max = ScreenValues.number(json["max"])
+    self.integer = json["integer"] == .bool(true)
   }
 
   /// The choices for a `select`: the static options, then any read from data.

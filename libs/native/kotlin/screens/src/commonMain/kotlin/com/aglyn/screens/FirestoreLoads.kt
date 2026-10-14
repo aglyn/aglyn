@@ -50,7 +50,9 @@ internal object FirestoreLoads {
     val collection = ScreenValues.render(spec.str("collection").orEmpty(), context)
     val filters = spec.arr("where").mapNotNull { clause ->
       val parts = clause as? JsonArray ?: return@mapNotNull null
-      if (parts.size != 3) return@mapNotNull null
+      // A fourth entry is a condition: the clause counts only while it holds (a filter the person has not picked is left off).
+      if (parts.size != 3 && parts.size != 4) return@mapNotNull null
+      if (parts.size == 4 && !ScreenValues.condition((parts[3] as? JsonPrimitive)?.content, context)) return@mapNotNull null
       val field = (parts[0] as? JsonPrimitive)?.content ?: return@mapNotNull null
       val op = when ((parts[1] as? JsonPrimitive)?.content) {
         "==" -> FilterOp.EQ
@@ -67,9 +69,12 @@ internal object FirestoreLoads {
       }
       fun plain(raw: JsonElement): Any? {
         // A number or flag written into the spec is compared as itself, not as its text.
-        (raw as? JsonPrimitive)?.takeIf { !it.isString && it !is JsonNull }?.let { literal ->
+        if (raw is JsonNull) return null
+        (raw as? JsonPrimitive)?.takeIf { !it.isString }?.let { literal ->
           return if (literal.content == "true" || literal.content == "false") literal.content == "true" else literal.content.toDoubleOrNull()
         }
+        // `@now.ms-7d`: a time or number computed from the context, the way a condition's right side is.
+        (raw as? JsonPrimitive)?.content?.trim()?.takeIf { it.startsWith("@") }?.let { return ScreenValues.operand(it, context) }
         val value = ScreenValues.resolve((raw as? JsonPrimitive)?.takeIf { it.isString }?.content ?: ScreenValues.text(raw), context)
         return (value as? JsonPrimitive)?.let { p ->
           when {

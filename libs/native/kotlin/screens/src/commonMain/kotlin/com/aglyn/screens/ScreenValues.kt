@@ -10,6 +10,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.max
 import kotlin.math.round
 
 /**
@@ -387,7 +388,7 @@ object ScreenValues {
   private val offset = Regex("""^@(.+?)\s*([+-])\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?$""")
 
   /** The right side of `<`: a number, `@path`, or `@path+7d` / `@path-30m` (units ms, s, m, h, d; none is ms). */
-  private fun operand(text: String, context: JsonElement): Double? {
+  internal fun operand(text: String, context: JsonElement): Double? {
     text.toDoubleOrNull()?.let { return it }
     if (!text.startsWith("@")) return null
     val match = offset.matchEntire(text)
@@ -513,6 +514,26 @@ object ScreenValues {
         is JsonObject -> value.size.toString()
         else -> number(value)?.let { grouped(it) } ?: "0"
       }
+      // A time as how long ago it was: `5m ago`, `3h ago`, `2d ago`; a dash for none.
+      "ago" -> epochMillis(value)?.let { at ->
+        val minutes = max(0.0, round((nowMillis() - at) / 60_000.0)).toLong()
+        if (minutes < 60) "${minutes}m ago" else round(minutes / 60.0).toLong().let { hours -> if (hours < 48) "${hours}h ago" else "${round(hours / 24.0).toLong()}d ago" }
+      } ?: "\u2014"
+      // `minus/other.path`: this number less the one at the path, never below zero (text that is no number stays as it is).
+      "minus" -> number(value)?.let { numberText(max(0.0, it - (parts.getOrNull(1)?.let { path -> number(lookup(path, context)) } ?: 0.0))) } ?: text(value)
+      // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
+      "lesscents" -> formatOrderMoney(round(max(0.0, (number(value) ?: 0.0) - (parts.getOrNull(1)?.let { number(lookup(it, context)) } ?: 0.0))), "USD")
+      // `take/120`: at most that many characters.
+      "take" -> text(value).take(parts.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE)
+      // `plural/item`: the count (or the total of a list of numbers) with its noun, `1 item` or `3 items`.
+      "plural" -> ((value as? JsonArray)?.sumOf { number(it) ?: 0.0 } ?: number(value) ?: 0.0).let { count -> "${numberText(count)} ${parts.getOrElse(1) { "" }}${if (count == 1.0) "" else "s"}" }
+      // `ordernumber/item.$id`: an order's number as `#1042`, else the last six characters of its id (`#A1B2C3`).
+      "ordernumber" -> if (truthy(value)) "#${text(value)}" else parts.getOrNull(1)?.let { text(lookup(it, context)) }?.takeIf { it.isNotEmpty() }?.let { "#${it.takeLast(6).uppercase()}" } ?: "#\u2014"
+      // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.
+      "isodate" -> epochMillis(value)?.let { at ->
+        val (y, m, d) = localParts(at, "UTC")
+        "${y.toString().padStart(4, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}"
+      } ?: "\u2014"
       // How many of a list of times are still ahead (the holds on a promotion that have not lapsed).
       "ahead" -> ((value as? JsonArray)?.count { (epochMillis(it) ?: 0L) > nowMillis() } ?: 0).toString()
       "yesno" -> if (truthy(value)) "Yes" else "No"

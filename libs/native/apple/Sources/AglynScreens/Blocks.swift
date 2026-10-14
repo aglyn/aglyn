@@ -313,7 +313,7 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   case ("toggle", .flag(let flag)?): return .bool(flag)
   case ("number", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
-    return trimmed.isEmpty ? .null : Double(trimmed).map(JSONValue.number) ?? .string(trimmed)
+    return trimmed.isEmpty ? .null : Double(trimmed).map { .number(field.integer ? $0.rounded() : $0) } ?? .string(trimmed)
   case (_, .text(let text)?):
     return .string(field.kind == "multiline" || field.kind == "password" ? text : text.trimmingCharacters(in: .whitespaces))
   case (_, .flag(let flag)?): return .bool(flag)
@@ -381,7 +381,7 @@ struct FieldInput: View {
       switch field.kind {
       case "email": .emailAddress
       case "url": .URL
-      case "number": .decimalPad
+      case "number": field.integer ? .numberPad : .decimalPad
       default: .default
       }
     }

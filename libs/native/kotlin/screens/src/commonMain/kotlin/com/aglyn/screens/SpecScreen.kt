@@ -709,7 +709,7 @@ internal sealed interface FieldValue {
 
 internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when {
   field.kind == "toggle" && value is FieldValue.Flag -> JsonPrimitive(value.value)
-  field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
+  field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(if (field.integer) kotlin.math.round(it) else it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
   else -> if (field.kind == "toggle") JsonPrimitive(false) else JsonNull
@@ -774,7 +774,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
           keyboardType = when (field.kind) {
             "email" -> KeyboardType.Email
             "url" -> KeyboardType.Uri
-            "number" -> KeyboardType.Decimal
+            "number" -> if (field.integer) KeyboardType.Number else KeyboardType.Decimal
             "password" -> KeyboardType.Password
             else -> KeyboardType.Text
           },

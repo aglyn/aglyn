@@ -150,6 +150,7 @@
                   "key": "maxRedemptions",
                   "label": "Max uses (blank = unlimited)",
                   "kind": "number",
+                  "integer": true,
                   "min": 1,
                   "initial": "{item.maxRedemptions}"
                 },
@@ -290,6 +291,7 @@
                   "key": "maxRedemptions",
                   "label": "Max uses (blank = unlimited)",
                   "kind": "number",
+                  "integer": true,
                   "min": 1
                 },
                 {
@@ -456,6 +458,7 @@
                   "key": "percentOff",
                   "label": "Percent off",
                   "kind": "number",
+                  "integer": true,
                   "required": true,
                   "min": 1,
                   "max": 100
@@ -464,6 +467,7 @@
                   "key": "maxRedemptions",
                   "label": "Max redemptions (blank = unlimited)",
                   "kind": "number",
+                  "integer": true,
                   "min": 1
                 },
                 {

@@ -429,7 +429,7 @@ public enum ScreenValues {
   }
 
   /// The right side of `<`: a number, `@path`, or `@path+7d` / `@path-30m` (units ms, s, m, h, d; none is ms).
-  private static func operand(_ text: String, in context: JSONValue) -> Double? {
+  static func operand(_ text: String, in context: JSONValue) -> Double? {
     if let number = Double(text) { return number }
     guard text.hasPrefix("@") else { return nil }
     let body = String(text.dropFirst())
@@ -603,6 +603,44 @@ public enum ScreenValues {
       case .object(let record)?: return String(record.count)
       default: return number(value).map { grouped($0) } ?? "0"
       }
+    case "ago":
+      // A time as how long ago it was: `5m ago`, `3h ago`, `2d ago`; a dash for none.
+      guard let at = epochMillis(value) else { return "\u{2014}" }
+      let minutes = Int(max(0, ((Date().timeIntervalSince1970 * 1000 - Double(at)) / 60_000).rounded()))
+      if minutes < 60 { return "\(minutes)m ago" }
+      let hours = Int((Double(minutes) / 60).rounded())
+      return hours < 48 ? "\(hours)h ago" : "\(Int((Double(hours) / 24).rounded()))d ago"
+    case "minus":
+      // `minus/other.path`: this number less the one at the path, never below zero (text that is no number stays as it is).
+      guard let amount = number(value) else { return text(value) }
+      let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
+      return numberText(max(0, amount - other))
+    case "lesscents":
+      // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
+      let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
+      return formatOrderMoney(Int(max(0, (number(value) ?? 0) - other).rounded()), currency: "USD")
+    case "take":
+      // `take/120`: at most that many characters.
+      return String(text(value).prefix(parts.count > 1 ? Int(parts[1]) ?? Int.max : Int.max))
+    case "plural":
+      // `plural/item`: the count (or the total of a list of numbers) with its noun, `1 item` or `3 items`.
+      var count = number(value) ?? 0
+      if case .array(let items)? = value { count = items.reduce(0) { $0 + (number($1) ?? 0) } }
+      return "\(numberText(count)) \(parts.count > 1 ? parts[1] : "")\(count == 1 ? "" : "s")"
+    case "ordernumber":
+      // `ordernumber/item.$id`: an order's number as `#1042`, else the last six characters of its id (`#A1B2C3`).
+      if truthy(value) { return "#\(text(value))" }
+      let id = parts.count > 1 ? text(lookup(parts[1], in: context)) : ""
+      return id.isEmpty ? "#\u{2014}" : "#\(id.suffix(6).uppercased())"
+    case "isodate":
+      // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.
+      guard let at = epochMillis(value) else { return "\u{2014}" }
+      let formatter = DateFormatter()
+      formatter.locale = Locale(identifier: "en_US_POSIX")
+      formatter.calendar = Calendar(identifier: .gregorian)
+      formatter.timeZone = TimeZone(identifier: "UTC")
+      formatter.dateFormat = "yyyy-MM-dd"
+      return formatter.string(from: Date(timeIntervalSince1970: Double(at) / 1000))
     case "ahead":
       // How many of a list of times are still ahead (the holds on a promotion that have not lapsed).
       guard case .array(let items)? = value else { return "0" }

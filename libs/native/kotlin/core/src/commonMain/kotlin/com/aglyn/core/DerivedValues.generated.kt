@@ -5,18 +5,18 @@ package com.aglyn.core
 /** Each plan's default for the plan features native screens gate on. */
 object PlanFeatureDefaults {
   val byPlan: Map<String, Map<String, Boolean>> = mapOf(
-    "free" to mapOf("marketingOverlays" to false, "abTesting" to false, "screenAnalytics" to false, "outreach" to false, "giftCards" to false),
-    "starter" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to false, "outreach" to false, "giftCards" to false),
-    "pro" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to true, "outreach" to false, "giftCards" to false),
-    "business" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true),
-    "scale" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true),
-    "advanced" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true),
-    "agency" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true),
-    "enterprise" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true),
+    "free" to mapOf("marketingOverlays" to false, "abTesting" to false, "screenAnalytics" to false, "outreach" to false, "giftCards" to false, "abandonedCart" to false),
+    "starter" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to false, "outreach" to false, "giftCards" to false, "abandonedCart" to false),
+    "pro" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to true, "outreach" to false, "giftCards" to false, "abandonedCart" to true),
+    "business" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "abandonedCart" to true),
+    "scale" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "abandonedCart" to true),
+    "advanced" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "abandonedCart" to true),
+    "agency" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "abandonedCart" to true),
+    "enterprise" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "abandonedCart" to true),
   )
 
   /** The plan an upsell names for a feature: the cheapest one that carries it. */
-  val grantedFrom: Map<String, String> = mapOf("marketingOverlays" to "Starter", "abTesting" to "Business", "screenAnalytics" to "Pro", "giftCards" to "Business")
+  val grantedFrom: Map<String, String> = mapOf("marketingOverlays" to "Starter", "abTesting" to "Business", "screenAnalytics" to "Pro", "giftCards" to "Business", "abandonedCart" to "Pro")
 }
 
 /** The events an A/B test can count as its goal, in the console's picker order. */

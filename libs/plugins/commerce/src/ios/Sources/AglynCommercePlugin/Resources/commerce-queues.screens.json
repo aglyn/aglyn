@@ -1,0 +1,976 @@
+{
+  "$comment": "The Commerce plugin's queues, natively: recovery and back-in-stock alerts (server counts), the pickup and local delivery queue by tab, and reservations with their resources. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.recovery",
+      "title": "Recovery & alerts",
+      "label": "Recovery & alerts",
+      "subtitle": "Checkouts shoppers left and sold-out alerts",
+      "icon": "arrow.uturn.backward.circle|undo",
+      "scope": "site",
+      "order": 60,
+      "load": {
+        "gate": {
+          "entitlement": "abandonedCart"
+        },
+        "due": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/checkouts",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "status",
+                "==",
+                "open"
+              ],
+              [
+                "recoveryState",
+                "==",
+                "pending"
+              ],
+              [
+                "createdAtMs",
+                ">=",
+                "@now.ms-7d"
+              ],
+              [
+                "createdAtMs",
+                "<=",
+                "@now.ms-1h"
+              ]
+            ]
+          }
+        },
+        "waiting": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/checkouts",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "status",
+                "==",
+                "open"
+              ],
+              [
+                "recoveryState",
+                "==",
+                "pending"
+              ],
+              [
+                "createdAtMs",
+                ">",
+                "@now.ms-1h"
+              ]
+            ]
+          }
+        },
+        "reminded": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/checkouts",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "status",
+                "==",
+                "open"
+              ],
+              [
+                "recoveryState",
+                "==",
+                "reminded"
+              ]
+            ]
+          }
+        },
+        "alertsWaiting": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/restockAlerts",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "notifiedAtMs",
+                "==",
+                null
+              ]
+            ]
+          }
+        },
+        "alertsRetired": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/restockAlerts",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "notifiedAtMs",
+                "!=",
+                null
+              ]
+            ]
+          }
+        },
+        "alertsSkipped": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/restockAlerts",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "skipped",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "recent": {
+          "query": {
+            "collection": "hosts/{site.id}/checkouts",
+            "limit": 5,
+            "orderBy": "createdAtMs desc",
+            "where": [
+              [
+                "status",
+                "==",
+                "open"
+              ],
+              [
+                "recoveryState",
+                "in",
+                [
+                  "pending",
+                  "reminded"
+                ]
+              ]
+            ]
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "countFailed",
+          "tone": "warning",
+          "when": "!data.alertsWaiting",
+          "text": "The queue figures could not be counted just now. Pull to reload the screen to count them again."
+        },
+        {
+          "type": "notice",
+          "id": "locked",
+          "tone": "info",
+          "when": "!data.gate.carried",
+          "text": "Abandoned checkout recovery emails a shopper who reached checkout, entered their email and left, with a link straight back to the cart they built. Included from {data.gate.label}."
+        },
+        {
+          "type": "fields",
+          "id": "abandoned",
+          "title": "Abandoned checkouts",
+          "when": "data.gate.carried",
+          "rows": [
+            {
+              "label": "Due a reminder",
+              "value": "{data.due.count|'—'}"
+            },
+            {
+              "label": "Still within the first hour",
+              "value": "{data.waiting.count|'—'}"
+            },
+            {
+              "label": "Reminded",
+              "value": "{data.reminded.count|'—'}"
+            }
+          ],
+          "footer": "Reminders send automatically about 15 minutes after a checkout has been idle for an hour. A checkout that is completed stops reminding itself."
+        },
+        {
+          "type": "list",
+          "id": "recent",
+          "when": "data.gate.carried",
+          "items": "data.recent.items",
+          "empty": "No open checkouts with an email address.",
+          "primary": "{item.email}",
+          "secondary": "Started {item.createdAtMs:ago}",
+          "icon": "cart|shopping_basket",
+          "badges": [
+            {
+              "text": "Reminded {item.remindedAtMs:ago}",
+              "tone": "neutral",
+              "when": "item.remindedAtMs"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "alerts",
+          "title": "Back-in-stock alerts",
+          "rows": [
+            {
+              "label": "Shoppers waiting",
+              "value": "{data.alertsWaiting.count|'—'}"
+            },
+            {
+              "label": "Notified",
+              "value": "{data.alertsRetired.count|'—':minus/data.alertsSkipped.count}"
+            }
+          ],
+          "footer": "Anyone who used “Notify me when it’s back” on a sold-out product is emailed once its stock goes above zero. Waiting shoppers are a demand signal worth restocking against."
+        }
+      ]
+    },
+    {
+      "id": "commerce.fulfillmentQueue",
+      "title": "Pickup & delivery",
+      "label": "Pickup & delivery",
+      "subtitle": "What to prepare, hand over and drive out",
+      "icon": "shippingbox|local_shipping",
+      "scope": "site",
+      "order": 61,
+      "load": {
+        "pickup": {
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "limit": 1,
+            "where": [
+              [
+                "pickup.enabled",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "settings": {
+          "doc": "hosts/{site.id}/settings/store"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "off",
+          "tone": "info",
+          "when": "!data.pickup.items.0 && data.settings.localDelivery.enabled != true",
+          "text": "Pickup and local delivery are both off, so there is nothing to prepare or drive out. Switch them on in the store's settings."
+        },
+        {
+          "type": "links",
+          "id": "tabs",
+          "items": [
+            {
+              "title": "To prepare",
+              "icon": "shippingbox|local_shipping",
+              "screen": "commerce.fulfillmentPickup",
+              "params": {
+                "tab": "pickup_preparing"
+              },
+              "when": "data.pickup.items.0"
+            },
+            {
+              "title": "Ready for pickup",
+              "icon": "shippingbox|local_shipping",
+              "screen": "commerce.fulfillmentPickup",
+              "params": {
+                "tab": "pickup_ready"
+              },
+              "when": "data.pickup.items.0"
+            },
+            {
+              "title": "To deliver",
+              "icon": "shippingbox|local_shipping",
+              "screen": "commerce.fulfillmentDelivery",
+              "params": {
+                "tab": "delivery_scheduled"
+              },
+              "when": "data.settings.localDelivery.enabled == true"
+            },
+            {
+              "title": "Out for delivery",
+              "icon": "shippingbox|local_shipping",
+              "screen": "commerce.fulfillmentDelivery",
+              "params": {
+                "tab": "delivery_out_for_delivery"
+              },
+              "when": "data.settings.localDelivery.enabled == true"
+            },
+            {
+              "title": "Delivery failed",
+              "icon": "shippingbox|local_shipping",
+              "screen": "commerce.fulfillmentDelivery",
+              "params": {
+                "tab": "delivery_failed"
+              },
+              "when": "data.settings.localDelivery.enabled == true"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.fulfillmentPickup",
+      "title": "{const.tabs[id=params.tab].label|'Pickup'}",
+      "label": "Pickup",
+      "icon": "shippingbox|local_shipping",
+      "scope": "site",
+      "constants": {
+        "tabs": [
+          {
+            "id": "pickup_preparing",
+            "label": "To prepare"
+          },
+          {
+            "id": "pickup_ready",
+            "label": "Ready for pickup"
+          },
+          {
+            "id": "delivery_scheduled",
+            "label": "To deliver"
+          },
+          {
+            "id": "delivery_out_for_delivery",
+            "label": "Out for delivery"
+          },
+          {
+            "id": "delivery_failed",
+            "label": "Delivery failed"
+          }
+        ]
+      },
+      "load": {
+        "orders": {
+          "query": {
+            "collection": "hosts/{site.id}/orders",
+            "limit": 50,
+            "orderBy": "fulfillmentDueMs asc",
+            "where": [
+              [
+                "fulfillmentLocationId",
+                "==",
+                "{params.locationId}",
+                "params.locationId"
+              ],
+              [
+                "fulfillmentKey",
+                "==",
+                "{params.tab}"
+              ],
+              [
+                "status",
+                "in",
+                [
+                  "paid",
+                  "partially_fulfilled",
+                  "fulfilled"
+                ]
+              ]
+            ]
+          }
+        },
+        "locations": {
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "limit": 25,
+            "orderBy": "name"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "actions",
+          "id": "filter",
+          "when": "data.locations.items.1",
+          "items": [
+            {
+              "id": "location",
+              "label": "Location",
+              "icon": "mappin|location_on",
+              "prompt": [
+                {
+                  "key": "locationId",
+                  "label": "Location",
+                  "kind": "select",
+                  "initial": "{params.locationId}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "All locations"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.locations.items",
+                    "value": "{item.$id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.fulfillmentPickup",
+                "params": {
+                  "tab": "{params.tab}",
+                  "locationId": "{form.locationId}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "orders",
+          "items": "data.orders.items",
+          "empty": "Nothing here right now.",
+          "primary": "{item.number:ordernumber/item.$id} · {item.customerName|item.customerEmail|'Guest buyer'} · {item.lineItems.*.quantity:plural/item}",
+          "secondary": "Ordered {item.createdAtMs:datetime}",
+          "tertiary": "{item.pickup.locationName}",
+          "icon": "shippingbox|local_shipping",
+          "badges": [],
+          "actions": [
+            {
+              "id": "ready",
+              "label": "Mark ready",
+              "icon": "checkmark.circle|check_circle",
+              "when": "params.tab == pickup_preparing",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{item.$id}",
+                "action": "ready"
+              },
+              "success": "Marked ready — the buyer has been told"
+            },
+            {
+              "id": "pickedUp",
+              "label": "Picked up",
+              "icon": "checkmark.circle|check_circle",
+              "when": "params.tab == pickup_ready",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{item.$id}",
+                "action": "picked_up"
+              },
+              "success": "Marked picked up"
+            },
+            {
+              "id": "open",
+              "label": "Open",
+              "icon": "bag|shopping_basket",
+              "navigate": {
+                "screen": "commerce.order",
+                "params": {
+                  "orderId": "{item.$id}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.fulfillmentDelivery",
+      "title": "{const.tabs[id=params.tab].label|'Delivery'}",
+      "label": "Delivery",
+      "icon": "shippingbox|local_shipping",
+      "scope": "site",
+      "constants": {
+        "tabs": [
+          {
+            "id": "pickup_preparing",
+            "label": "To prepare"
+          },
+          {
+            "id": "pickup_ready",
+            "label": "Ready for pickup"
+          },
+          {
+            "id": "delivery_scheduled",
+            "label": "To deliver"
+          },
+          {
+            "id": "delivery_out_for_delivery",
+            "label": "Out for delivery"
+          },
+          {
+            "id": "delivery_failed",
+            "label": "Delivery failed"
+          }
+        ]
+      },
+      "load": {
+        "orders": {
+          "query": {
+            "collection": "hosts/{site.id}/orders",
+            "limit": 50,
+            "orderBy": "fulfillmentDueMs asc",
+            "where": [
+              [
+                "fulfillmentLocationId",
+                "==",
+                "{params.locationId}",
+                "params.locationId"
+              ],
+              [
+                "fulfillmentKey",
+                "==",
+                "{params.tab}"
+              ],
+              [
+                "status",
+                "in",
+                [
+                  "paid",
+                  "partially_fulfilled",
+                  "fulfilled"
+                ]
+              ]
+            ]
+          }
+        },
+        "locations": {
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "limit": 25,
+            "orderBy": "name"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "actions",
+          "id": "filter",
+          "when": "data.locations.items.1",
+          "items": [
+            {
+              "id": "location",
+              "label": "Location",
+              "icon": "mappin|location_on",
+              "prompt": [
+                {
+                  "key": "locationId",
+                  "label": "Location",
+                  "kind": "select",
+                  "initial": "{params.locationId}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "All locations"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.locations.items",
+                    "value": "{item.$id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.fulfillmentDelivery",
+                "params": {
+                  "tab": "{params.tab}",
+                  "locationId": "{form.locationId}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "orders",
+          "items": "data.orders.items",
+          "empty": "Nothing here right now.",
+          "primary": "{item.number:ordernumber/item.$id} · {item.customerName|item.customerEmail|'Guest buyer'} · {item.lineItems.*.quantity:plural/item}",
+          "secondary": "{item.localDelivery.windowLabel}",
+          "tertiary": "{item.shippingAddress.line1}",
+          "icon": "shippingbox|local_shipping",
+          "badges": [
+            {
+              "text": "{item.localDelivery.postalCode}",
+              "tone": "neutral",
+              "when": "item.localDelivery.postalCode"
+            }
+          ],
+          "actions": [
+            {
+              "id": "out",
+              "label": "Out for delivery",
+              "icon": "checkmark.circle|check_circle",
+              "when": "params.tab == delivery_scheduled || params.tab == delivery_failed",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{item.$id}",
+                "action": "out_for_delivery"
+              },
+              "success": "Out for delivery — the buyer has been told"
+            },
+            {
+              "id": "delivered",
+              "label": "Delivered",
+              "icon": "checkmark.circle|check_circle",
+              "when": "params.tab == delivery_out_for_delivery",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{item.$id}",
+                "action": "delivered"
+              },
+              "success": "Marked delivered"
+            },
+            {
+              "id": "open",
+              "label": "Open",
+              "icon": "bag|shopping_basket",
+              "navigate": {
+                "screen": "commerce.order",
+                "params": {
+                  "orderId": "{item.$id}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.reservations",
+      "title": "Reservations",
+      "label": "Reservations",
+      "subtitle": "Resources and the stays booked against them",
+      "icon": "calendar|event",
+      "scope": "site",
+      "order": 62,
+      "load": {
+        "resources": {
+          "query": {
+            "collection": "hosts/{site.id}/resources",
+            "limit": 50
+          }
+        },
+        "stays": {
+          "query": {
+            "collection": "hosts/{site.id}/reservations",
+            "limit": 100,
+            "orderBy": "checkInDayMs asc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "resources",
+          "title": "Resources",
+          "items": "data.resources.items",
+          "empty": "No resources yet. A resource is a room, a cabin or anything guests book by the night.",
+          "primary": "{item.name} · ${item.nightlyRateUsd}/night",
+          "secondary": "id: {item.$id}",
+          "icon": "bed.double|apartment",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "placeholder": "Lakeside cabin",
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "nightlyRateUsd",
+                  "label": "Nightly rate ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0.01,
+                  "initial": "{item.nightlyRateUsd}"
+                },
+                {
+                  "key": "weekendMultiplier",
+                  "label": "Weekend ×",
+                  "kind": "number",
+                  "placeholder": "1",
+                  "initial": "{item.weekendMultiplier}"
+                },
+                {
+                  "key": "minNights",
+                  "label": "Min nights",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{item.minNights}"
+                },
+                {
+                  "key": "depositPct",
+                  "label": "Deposit %",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "max": 100,
+                  "placeholder": "100 = pay in full",
+                  "initial": "{item.depositPct}"
+                },
+                {
+                  "key": "cancellationHours",
+                  "label": "Free cancel (hrs)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{item.cancellationHours}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/resources/{item.$id}",
+                "fields": {
+                  "name": "{form.name:take/120}",
+                  "nightlyRateUsd": "{form.nightlyRateUsd}",
+                  "weekendMultiplier": "{form.weekendMultiplier}",
+                  "minNights": "{form.minNights}",
+                  "depositPct": "{form.depositPct}",
+                  "cancellationHours": "{form.cancellationHours}"
+                }
+              },
+              "success": "Resource saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.name}? Existing reservations keep their records; the widget stops accepting new stays.",
+              "write": {
+                "delete": "hosts/{site.id}/resources/{item.$id}"
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addResource",
+              "label": "Add resource",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "placeholder": "Lakeside cabin"
+                },
+                {
+                  "key": "nightlyRateUsd",
+                  "label": "Nightly rate ($)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0.01,
+                  "initial": "100"
+                },
+                {
+                  "key": "weekendMultiplier",
+                  "label": "Weekend ×",
+                  "kind": "number",
+                  "placeholder": "1"
+                },
+                {
+                  "key": "minNights",
+                  "label": "Min nights",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "1"
+                },
+                {
+                  "key": "depositPct",
+                  "label": "Deposit %",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "max": 100,
+                  "placeholder": "100 = pay in full",
+                  "initial": "30"
+                },
+                {
+                  "key": "cancellationHours",
+                  "label": "Free cancel (hrs)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1
+                }
+              ],
+              "write": {
+                "add": "hosts/{site.id}/resources",
+                "fields": {
+                  "name": "{form.name:take/120}",
+                  "nightlyRateUsd": "{form.nightlyRateUsd}",
+                  "weekendMultiplier": "{form.weekendMultiplier}",
+                  "minNights": "{form.minNights}",
+                  "depositPct": "{form.depositPct}",
+                  "cancellationHours": "{form.cancellationHours}"
+                }
+              },
+              "success": "Resource saved"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "stays",
+          "title": "Upcoming & recent stays",
+          "items": "data.stays.items",
+          "empty": "Reservations from the widget (and walk-ins) appear here.",
+          "primary": "{data.resources.items[$id=item.resourceId].name|'?'} · {item.checkInDayMs:isodate} → {item.checkOutDayMs:isodate}",
+          "secondary": "{item.guestName ?? item.guestEmail ?? 'Guest'} · {item.paidCents|'0':cents} / {item.totalCents|'0':cents} paid",
+          "icon": "calendar|event",
+          "badges": [
+            {
+              "text": "pending",
+              "tone": "warning",
+              "when": "item.status == pending"
+            },
+            {
+              "text": "confirmed",
+              "tone": "neutral",
+              "when": "item.status == confirmed"
+            },
+            {
+              "text": "checked in",
+              "tone": "success",
+              "when": "item.status == checked_in"
+            },
+            {
+              "text": "checked out",
+              "tone": "neutral",
+              "when": "item.status == checked_out"
+            },
+            {
+              "text": "cancelled",
+              "tone": "neutral",
+              "when": "item.status == cancelled"
+            },
+            {
+              "text": "no show",
+              "tone": "error",
+              "when": "item.status == no_show"
+            }
+          ],
+          "actions": [
+            {
+              "id": "checkIn",
+              "label": "Check in",
+              "icon": "checkmark.circle|check_circle",
+              "when": "item.status == confirmed",
+              "write": {
+                "doc": "hosts/{site.id}/reservations/{item.$id}",
+                "fields": {
+                  "status": "checked_in"
+                }
+              },
+              "success": "Checked in"
+            },
+            {
+              "id": "noShow",
+              "label": "No-show",
+              "icon": "xmark.circle|cancel",
+              "when": "item.status == confirmed",
+              "write": {
+                "doc": "hosts/{site.id}/reservations/{item.$id}",
+                "fields": {
+                  "status": "no_show"
+                }
+              },
+              "success": "Marked no-show",
+              "destructive": true
+            },
+            {
+              "id": "checkOut",
+              "label": "Check out",
+              "icon": "arrow.right.circle|logout",
+              "when": "item.status == checked_in && !item.folio.0 && item.totalCents <= @item.paidCents || item.status == checked_in && !item.folio.0 && !item.totalCents",
+              "write": {
+                "doc": "hosts/{site.id}/reservations/{item.$id}",
+                "fields": {
+                  "status": "checked_out"
+                }
+              },
+              "success": "Checked out"
+            },
+            {
+              "id": "checkOutOwing",
+              "label": "Check out",
+              "icon": "arrow.right.circle|logout",
+              "when": "item.status == checked_in && !item.folio.0 && item.totalCents > @item.paidCents || item.status == checked_in && !item.folio.0 && !item.paidCents && item.totalCents",
+              "write": {
+                "doc": "hosts/{site.id}/reservations/{item.$id}",
+                "fields": {
+                  "status": "checked_out"
+                }
+              },
+              "success": "Checked out",
+              "confirm": "Check out with open balance? Stay balance due: {item.totalCents:lesscents/item.paidCents} — collect at the register."
+            },
+            {
+              "id": "checkOutFolio",
+              "label": "Check out",
+              "icon": "arrow.right.circle|logout",
+              "when": "item.status == checked_in && item.folio.0 && item.totalCents <= @item.paidCents || item.status == checked_in && item.folio.0 && !item.totalCents",
+              "write": {
+                "doc": "hosts/{site.id}/reservations/{item.$id}",
+                "fields": {
+                  "status": "checked_out"
+                }
+              },
+              "success": "Checked out",
+              "confirm": "Check out with open balance? Room charges: {item.folio.*.amountCents:sumcents} (already recorded as paid POS orders)."
+            },
+            {
+              "id": "checkOutBoth",
+              "label": "Check out",
+              "icon": "arrow.right.circle|logout",
+              "when": "item.status == checked_in && item.folio.0 && item.totalCents > @item.paidCents || item.status == checked_in && item.folio.0 && !item.paidCents && item.totalCents",
+              "write": {
+                "doc": "hosts/{site.id}/reservations/{item.$id}",
+                "fields": {
+                  "status": "checked_out"
+                }
+              },
+              "success": "Checked out",
+              "confirm": "Check out with open balance? Room charges: {item.folio.*.amountCents:sumcents} (already recorded as paid POS orders). Stay balance due: {item.totalCents:lesscents/item.paidCents} — collect at the register."
+            },
+            {
+              "id": "cancel",
+              "label": "Cancel",
+              "icon": "xmark.circle|cancel",
+              "when": "item.status == pending || item.status == confirmed",
+              "write": {
+                "doc": "hosts/{site.id}/reservations/{item.$id}",
+                "fields": {
+                  "status": "cancelled"
+                }
+              },
+              "success": "Cancelled",
+              "destructive": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
