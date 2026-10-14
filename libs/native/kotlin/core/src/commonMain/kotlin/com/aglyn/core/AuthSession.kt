@@ -35,6 +35,10 @@ interface AuthSession {
   suspend fun changePassword(current: String, new: String): Unit =
     throw AuthError("Changing the password is not available here.")
 
+  /** Disconnects a sign-in provider (`google.com`) from the account, as the console's Account section does with `unlink`. */
+  suspend fun unlinkProvider(providerId: String): Unit =
+    throw AuthError("Disconnecting a sign-in method is not available here.")
+
   /** Keeps the account's display name in step with the profile (rosters and comments read it). */
   suspend fun updateDisplayName(name: String) {}
 }

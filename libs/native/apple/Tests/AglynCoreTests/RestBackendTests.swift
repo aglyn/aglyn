@@ -115,6 +115,18 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(store.load()?.displayName, "Ada Lovelace")
   }
 
+  func testDisconnectingAProviderAsksForItsDeletionAndKeepsTheFreshTokens() async throws {
+    let transport = RecordingTransport([(200, signedIn), (200, #"{"idToken":"id2","refreshToken":"r2","expiresIn":"3600"}"#)])
+    let store = MemoryCredentialStore()
+    let session = auth(transport, store: store)
+    try await session.signIn(email: "a@example.test", password: "pw")
+    try await session.deleteProvider("google.com")
+    XCTAssertTrue(transport.requests[1].url?.absoluteString.contains("accounts:update") == true)
+    XCTAssertEqual(transport.json(1)["deleteProvider"] as? [String], ["google.com"])
+    let token = try await session.idToken(forceRefresh: false)
+    XCTAssertEqual(token, "id2")
+  }
+
   func testARefusedSignInCarriesTheCode() async {
     let transport = RecordingTransport([(400, #"{"error":{"message":"INVALID_LOGIN_CREDENTIALS"}}"#)])
     do {

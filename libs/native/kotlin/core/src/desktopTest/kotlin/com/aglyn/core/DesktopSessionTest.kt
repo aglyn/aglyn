@@ -82,6 +82,16 @@ class DesktopSessionTest {
   }
 
   @Test
+  fun disconnectingAProviderAsksForItsDeletionAndKeepsTheFreshTokens() = runTest {
+    val calls = mutableListOf<String>()
+    val session = IdentityToolkitAuthSession(http(calls), "key", "127.0.0.1:9299", credentials = InMemoryCredentialStore(), credentialKey = "k")
+    session.signInWithEmail("dana@example.test", "pw")
+    session.unlinkProvider("google.com")
+    assertEquals(listOf("accounts:signInWithPassword", "accounts:update"), calls)
+    assertEquals("id-3", session.idToken())
+  }
+
+  @Test
   fun aPasswordChangeNeedsASignedInPerson() = runTest {
     val session = IdentityToolkitAuthSession(http(), "key", null, credentials = InMemoryCredentialStore(), credentialKey = "k")
     val error = runCatching { session.changePassword("a", "b") }.exceptionOrNull()

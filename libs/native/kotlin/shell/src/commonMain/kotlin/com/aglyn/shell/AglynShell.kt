@@ -152,6 +152,10 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     account = com.aglyn.screens.AccountOperations(
       changePassword = { current, new -> services.auth.changePassword(current, new) },
       updateDisplayName = { name -> services.auth.updateDisplayName(name) },
+      unlinkProvider = { provider ->
+        services.auth.unlinkProvider(provider)
+        claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull())
+      },
     ),
   )
 

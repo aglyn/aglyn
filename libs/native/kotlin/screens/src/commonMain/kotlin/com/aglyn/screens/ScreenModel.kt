@@ -35,6 +35,10 @@ data class AccountOperations(
   },
   /** Keeps the account's display name in step with the profile. */
   val updateDisplayName: suspend (name: String) -> Unit = {},
+  /** Disconnects a sign-in provider (`google.com`) from the account. */
+  val unlinkProvider: suspend (providerId: String) -> Unit = {
+    throw IllegalStateException("Disconnecting a sign-in method is not available here.")
+  },
 )
 
 /**
@@ -207,6 +211,13 @@ class ScreenModel(
     return Triple(load.key, value, load.cursor?.let { (ScreenValues.lookup(it, value) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
   }
 
+  /** Takes the session's people and workspace afresh (after the token's claims changed, such as a sign-in method disconnected), keeping what the screen has loaded. */
+  fun rebase(base: JsonElement) {
+    var next = context
+    for (key in listOf("org", "site", "user", "staff")) base.obj(key)?.let { next = ScreenContext.with(next, key, it) }
+    context = next
+  }
+
   suspend fun loadMore(key: String) {
     val client = api ?: return
     val load = spec.loads.firstOrNull { it.key == key } ?: return
@@ -254,6 +265,11 @@ class ScreenModel(
           }
           // A blank name is not written over the one the account has.
           "updateDisplayName" -> field("name").trim().takeIf { it.isNotEmpty() }?.let { target.updateDisplayName(it) }
+          "unlinkProvider" -> {
+            val provider = field("providerId")
+            if (provider.isEmpty()) return ActionOutcome.Failed("Choose a sign-in method.")
+            target.unlinkProvider(provider)
+          }
           else -> return ActionOutcome.Failed("That is not available here.")
         }
         ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)

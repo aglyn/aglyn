@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -160,7 +162,7 @@ class IdentityToolkitAuthSession(
   }
 
   /** `accounts:update` with the current ID token; the new tokens replace the old, which a password change revokes. */
-  private suspend fun update(fields: Map<String, JsonPrimitive>): JsonObject {
+  private suspend fun update(fields: Map<String, JsonElement>): JsonObject {
     val idToken = lock.withLock { tokens?.idToken } ?: throw AuthError(authErrorMessage(null))
     val response = try {
       http.post("$identityBase/v1/accounts:update?key=$apiKey") {
@@ -198,6 +200,10 @@ class IdentityToolkitAuthSession(
       throw AuthError(if ("do not match" in error.message) passwordChangeMessage("INVALID_LOGIN_CREDENTIALS") else error.message, error)
     }
     update(mapOf("password" to JsonPrimitive(new)))
+  }
+
+  override suspend fun unlinkProvider(providerId: String) {
+    update(mapOf("deleteProvider" to JsonArray(listOf(JsonPrimitive(providerId)))))
   }
 
   override suspend fun updateDisplayName(name: String) {

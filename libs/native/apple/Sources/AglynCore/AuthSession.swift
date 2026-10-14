@@ -230,6 +230,20 @@ public final class AuthSession {
     user = AglynUser(uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed)
   }
 
+  /// Disconnects a sign-in provider (`google.com`), as the console's Account section does with `unlink`.
+  public func unlinkProvider(_ providerID: String) async throws {
+    if let rest {
+      try await rest.deleteProvider(providerID)
+      await refreshStanding()
+      return
+    }
+    guard let signedIn = Auth.auth().currentUser else { throw IdentityToolkitError(code: nil, status: 401) }
+    _ = try await signedIn.unlink(fromProvider: providerID)
+    // The token's identities are read for the provider list, so ask for a fresh one.
+    _ = try await signedIn.getIDToken(forcingRefresh: true)
+    await refreshStanding()
+  }
+
   public func resetPassword(email: String) async throws {
     let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
     if let rest {

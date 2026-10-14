@@ -126,6 +126,10 @@ final class AppModel {
           try await self?.auth?.changePassword(current: current, new: new)
         },
         updateDisplayName: { [weak self] name in try await self?.auth?.updateDisplayName(name) },
+        unlinkProvider: { [weak self] provider in
+          try await self?.auth?.unlinkProvider(provider)
+          await self?.refreshClaims(force: true)
+        },
         message: { passwordChangeMessage($0) }))
   }
 

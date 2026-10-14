@@ -50,6 +50,17 @@ class FirebaseAuthSession(private val auth: FirebaseAuth) : AuthSession {
     }
   }
 
+  override suspend fun unlinkProvider(providerId: String) {
+    val user = auth.currentUser ?: throw AuthError(authErrorMessage(null))
+    try {
+      user.unlink(providerId).await()
+      // The token's identities are read for the provider list, so ask for a fresh one.
+      user.getIdToken(true).await()
+    } catch (error: Exception) {
+      throw AuthError("That sign-in method could not be disconnected. Try again.", error)
+    }
+  }
+
   override suspend fun updateDisplayName(name: String) {
     val user = auth.currentUser ?: return
     user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()).await()

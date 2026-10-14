@@ -14,6 +14,8 @@ public struct AccountOperations: Sendable {
   public var changePassword: @Sendable (_ current: String, _ new: String) async throws -> Void
   /// Keeps the account's display name in step with the profile.
   public var updateDisplayName: @Sendable (_ name: String) async throws -> Void
+  /// Disconnects a sign-in provider (`google.com`) from the account.
+  public var unlinkProvider: @Sendable (_ providerID: String) async throws -> Void
   /// The words a refusal from either shows.
   public var message: @Sendable (_ error: Error) -> String
 
@@ -22,10 +24,14 @@ public struct AccountOperations: Sendable {
       throw ConsoleAPIError(status: 0, message: "Changing the password is not available here.")
     },
     updateDisplayName: @escaping @Sendable (String) async throws -> Void = { _ in },
+    unlinkProvider: @escaping @Sendable (String) async throws -> Void = { _ in
+      throw ConsoleAPIError(status: 0, message: "Disconnecting a sign-in method is not available here.")
+    },
     message: @escaping @Sendable (Error) -> String = { $0.localizedDescription }
   ) {
     self.changePassword = changePassword
     self.updateDisplayName = updateDisplayName
+    self.unlinkProvider = unlinkProvider
     self.message = message
   }
 }
@@ -258,6 +264,16 @@ public final class ScreenModel {
     return (load.key, value, cursor)
   }
 
+  /// Takes the session's people and workspace afresh (after the token's claims changed, such as a
+  /// sign-in method disconnected), keeping what the screen has loaded.
+  public func rebase(_ base: JSONValue) {
+    var next = context
+    for key in ["org", "site", "user", "staff"] {
+      if let value = base[key] { next = ScreenContext.with(next, key, value) }
+    }
+    context = next
+  }
+
   /// The next page of a paged load, appended to its rows.
   public func loadMore(_ key: String) async {
     guard let api, let load = spec.loads.first(where: { $0.key == key }), let cursor = cursors[key],
@@ -315,6 +331,10 @@ public final class ScreenModel {
           // A blank name is not written over the one the account has.
           let name = ScreenValues.text(form["name"]).trimmingCharacters(in: .whitespaces)
           if !name.isEmpty { try await account.updateDisplayName(name) }
+        case "unlinkProvider":
+          let provider = ScreenValues.text(form["providerId"])
+          guard !provider.isEmpty else { return .failed("Choose a sign-in method.") }
+          try await account.unlinkProvider(provider)
         default:
           return .failed("That is not available here.")
         }
