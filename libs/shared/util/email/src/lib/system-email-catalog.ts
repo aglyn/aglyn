@@ -1086,6 +1086,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Test Org canceled, leaving the Advanced plan.',
         },
         {
+          name: 'notification.details',
+          description:
+            'What the email alone carries, one line each, when there is any: ' +
+            'a form submission’s answers',
+          sample: 'Name: Jane Doe\nEmail: jane@example.com\nMessage: Do you deliver on Saturdays?',
+        },
+        {
           name: 'notification.url',
           description: 'Where the notification opens in the console',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications`,
@@ -1099,6 +1106,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       defaultBody: [
         { block: 'text', text: '{{notification.title}}', variant: 'heading' },
         { block: 'text', text: '{{notification.body}}', variant: 'body' },
+        { block: 'text', text: '{{notification.details}}', variant: 'body' },
         { block: 'button', label: 'Open in {{brand.productName}}', href: '{{notification.url}}' },
         {
           block: 'text',
