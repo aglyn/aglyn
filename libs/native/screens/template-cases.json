@@ -145,7 +145,11 @@
             }
           }
         }
-      ]
+      ],
+      "from": "2026-09",
+      "monthKey": "2026-10",
+      "badFrom": "true",
+      "hundred": 100
     }
   },
   "render": [
@@ -316,6 +320,66 @@
     {
       "template": "{data.access.*}",
       "expect": "editor, viewer"
+    },
+    {
+      "template": "{data.money / 100}",
+      "expect": "1234.56"
+    },
+    {
+      "template": "{max(0, data.money - 200000)}",
+      "expect": "0"
+    },
+    {
+      "template": "{max(0, data.money - 100000) / 1000 * 2}",
+      "expect": "46.912"
+    },
+    {
+      "template": "{round(data.ratio * 100) / 100}",
+      "expect": "0.46"
+    },
+    {
+      "template": "{(data.money - 56) * 2}",
+      "expect": "246800"
+    },
+    {
+      "template": "{min(3, 2 + 5, data.money / 1000)}",
+      "expect": "3"
+    },
+    {
+      "template": "{ceil(data.ratio * 10)} {floor(data.ratio * 10)} {abs(0 - 5)}",
+      "expect": "5 4 5"
+    },
+    {
+      "template": "{data.missing * 2}",
+      "expect": ""
+    },
+    {
+      "template": "{data.money / 0}",
+      "expect": ""
+    },
+    {
+      "template": "{data.missing? * 2 + 1}",
+      "expect": "1"
+    },
+    {
+      "template": "{data.members.*.joined * 2}",
+      "expect": "3582662400"
+    },
+    {
+      "template": "{- data.hundred * 2 + 250}",
+      "expect": "50"
+    },
+    {
+      "template": "{round(data.money / 100):number}",
+      "expect": "1,235"
+    },
+    {
+      "template": "{data.hundred * 1.5:dollars}",
+      "expect": "$150.00"
+    },
+    {
+      "template": "{data.hundred * 0.00001:usd} {data.hundred * 0.5:usd}",
+      "expect": "<$0.01 $50.00"
     },
     {
       "template": "{'(512) 555-0123':phone}",
@@ -709,6 +773,46 @@
     {
       "when": "staff.is && org.manager || org.role == owner",
       "expect": false
+    },
+    {
+      "when": "data.from <= data.monthKey",
+      "expect": true
+    },
+    {
+      "when": "data.monthKey <= data.from",
+      "expect": false
+    },
+    {
+      "when": "data.monthKey >= data.from",
+      "expect": true
+    },
+    {
+      "when": "data.missing <= data.monthKey",
+      "expect": false
+    },
+    {
+      "when": "data.from < 2026-10",
+      "expect": true
+    },
+    {
+      "when": "data.badFrom <= data.monthKey",
+      "expect": false
+    },
+    {
+      "when": "max(0, data.money - 100000) > 0",
+      "expect": true
+    },
+    {
+      "when": "max(0, data.money - 200000) > 0",
+      "expect": false
+    },
+    {
+      "when": "data.hundred + data.hundred >= 200",
+      "expect": true
+    },
+    {
+      "when": "data.hundred + data.hundred > data.money / 1000",
+      "expect": true
     }
   ]
 }

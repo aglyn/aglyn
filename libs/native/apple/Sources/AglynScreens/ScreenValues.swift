@@ -192,6 +192,13 @@ public enum ScreenValues {
       format = String(body[body.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
       body = String(body[..<colon])
     }
+    // `(a - b) * c / 1000`, `max(0, a - b)`: arithmetic with products, brackets and a few functions.
+    if calculates(body) {
+      guard let result = calculate(body, in: context) else { return nil }
+      let value = JSONValue.number(result)
+      guard let format, !format.isEmpty else { return value }
+      return .string(formatted(value, as: format, in: context))
+    }
     // `a + b - c`: a sum of numbers (paths or literals), each operator set apart by spaces. A term
     // that is missing makes the whole sum missing, so a read that failed never shows as zero.
     if let terms = arithmeticTerms(body) {
@@ -495,9 +502,31 @@ public enum ScreenValues {
         guard let range = clause.range(of: op) else { continue }
         func side(_ text: Substring) -> Double? {
           let trimmed = text.trimmingCharacters(in: .whitespaces)
-          return Double(trimmed) ?? number(lookup(trimmed, in: context))
+          if let literal = Double(trimmed) { return literal }
+          // A side may itself be arithmetic: `max(0, a - b) > 0`, `a + b >= c`.
+          if calculates(trimmed) { return calculate(trimmed, in: context) }
+          if arithmeticTerms(trimmed) != nil { return number(evaluate(trimmed, in: context)) }
+          return number(lookup(trimmed, in: context))
         }
-        guard let left = side(clause[..<range.lowerBound]), let right = side(clause[range.upperBound...]) else { return false }
+        guard let left = side(clause[..<range.lowerBound]), let right = side(clause[range.upperBound...]) else {
+          // Two months (`2026-09 <= 2026-10`) or two other texts that are not numbers: ordered as text.
+          func words(_ part: Substring) -> String {
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            let found = text(lookup(trimmed, in: context))
+            if !found.isEmpty { return found }
+            // A literal month or date (`2026-10`), not a path that found nothing.
+            return !trimmed.isEmpty && trimmed.allSatisfy { $0.isNumber || $0 == "-" } ? trimmed : ""
+          }
+          let a = words(clause[..<range.lowerBound])
+          let b = words(clause[range.upperBound...])
+          guard !a.isEmpty, !b.isEmpty, side(clause[..<range.lowerBound]) == nil else { return false }
+          switch op {
+          case ">=": return a >= b
+          case "<=": return a <= b
+          case ">": return a > b
+          default: return a < b
+          }
+        }
         switch op {
         case ">=": return left >= right
         case "<=": return left <= right
@@ -520,6 +549,114 @@ public enum ScreenValues {
     }
     if clause.hasPrefix("!") { return !truthy(lookup(String(clause.dropFirst()), in: context)) }
     return truthy(lookup(clause, in: context))
+  }
+
+  /// Whether `body` is arithmetic beyond a sum: a product or quotient set apart by spaces, or brackets.
+  static func calculates(_ body: String) -> Bool {
+    !body.contains("'") && (body.contains(" * ") || body.contains(" / ") || body.contains("("))
+  }
+
+  /// The tokens of an arithmetic body: operators set apart by spaces, brackets and commas, and paths (which may hold `-`, `.`, `[…]`).
+  private static func calcTokens(_ body: String) -> [String] {
+    var tokens: [String] = []
+    var current = ""
+    var depth = 0
+    func flush() {
+      if !current.isEmpty { tokens.append(current) }
+      current = ""
+    }
+    for character in body {
+      if character == "[" { depth += 1 }
+      if character == "]" { depth -= 1 }
+      if depth <= 0, character == " " {
+        flush()
+      } else if depth <= 0, character == "(" || character == ")" || character == "," {
+        flush()
+        tokens.append(String(character))
+      } else {
+        current.append(character)
+      }
+    }
+    flush()
+    return tokens
+  }
+
+  /// `(a - b) * c / 1000`: the usual precedence; a path is a number (a list adds up), `x?` is zero where it
+  /// is missing, and the functions are `max`, `min`, `round` (half up, as JavaScript's), `floor`, `ceil` and
+  /// `abs`. Anything missing, or a division by zero, makes the whole figure missing.
+  static func calculate(_ body: String, in context: JSONValue) -> Double? {
+    let tokens = calcTokens(body)
+    var position = 0
+    func peek() -> String? { position < tokens.count ? tokens[position] : nil }
+    func take() -> String? {
+      defer { position += 1 }
+      return peek()
+    }
+    func expression() -> Double? {
+      guard var left = term() else { return nil }
+      while let op = peek(), op == "+" || op == "-" {
+        position += 1
+        guard let right = term() else { return nil }
+        left = op == "+" ? left + right : left - right
+      }
+      return left
+    }
+    func term() -> Double? {
+      guard var left = unary() else { return nil }
+      while let op = peek(), op == "*" || op == "/" {
+        position += 1
+        guard let right = unary() else { return nil }
+        if op == "/" {
+          if right == 0 { return nil }
+          left /= right
+        } else {
+          left *= right
+        }
+      }
+      return left
+    }
+    func unary() -> Double? {
+      if peek() == "-" {
+        position += 1
+        return unary().map { -$0 }
+      }
+      return primary()
+    }
+    func primary() -> Double? {
+      guard let token = take() else { return nil }
+      if token == "(" {
+        let inner = expression()
+        guard take() == ")" else { return nil }
+        return inner
+      }
+      if ["max", "min", "round", "floor", "ceil", "abs"].contains(token), peek() == "(" {
+        position += 1
+        var arguments: [Double] = []
+        while peek() != ")" {
+          guard let one = expression() else { return nil }
+          arguments.append(one)
+          if peek() == "," { position += 1 } else { break }
+        }
+        guard take() == ")", let first = arguments.first else { return nil }
+        switch token {
+        case "max": return arguments.max()
+        case "min": return arguments.min()
+        case "round": return (first + 0.5).rounded(.down)
+        case "floor": return first.rounded(.down)
+        case "ceil": return first.rounded(.up)
+        default: return abs(first)
+        }
+      }
+      if let literal = Double(token) { return literal }
+      let optional = token.hasSuffix("?")
+      let path = optional ? String(token.dropLast()) : token
+      let value = lookup(path, in: context)
+      if optional, value == nil || value == .null { return 0 }
+      if case .array(let items)? = value { return items.compactMap { number($0) }.reduce(0, +) }
+      return number(value)
+    }
+    guard let result = expression(), position == tokens.count, result.isFinite else { return nil }
+    return result
   }
 
   /// The signed terms of `a + b - c`, or nil where the text is not a sum.
@@ -690,6 +827,11 @@ public enum ScreenValues {
       return formatOrderMoney(Int(amount.rounded()), currency: currency.isEmpty ? "USD" : currency)
     case "dollars":
       guard let amount = number(value) else { return text(value) }
+      return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
+    case "usd":
+      // A charge: a real amount under a cent reads `<$0.01`, never `$0.00` beside a non-zero total.
+      guard let amount = number(value) else { return text(value) }
+      if amount > 0, amount < 0.005 { return "<$0.01" }
       return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
     case "bytes":
       return number(value).map(bytesText) ?? text(value)

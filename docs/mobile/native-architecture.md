@@ -987,6 +987,15 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   one another deeply. A row's position is `index`; `*` also walks an object's values; the format
   `first3` keeps a list's first three entries; a condition may mix `&&` and `||` (`&&` binds
   tighter).
+- Arithmetic in a template is a sum (`a + b - c`) or, with products and brackets, the usual
+  precedence: `{max(0, used - included) / 1000 * rate:usd}`. A path is a number (a list adds up),
+  `x?` is zero where it is missing, the functions are `max`, `min`, `round`, `floor`, `ceil` and
+  `abs`, and anything missing (or a division by zero) leaves the whole figure blank. A condition
+  may compare two such expressions, and two months or dates as text (`2026-09 <= now.month`).
+  The format `usd` reads a charge (`<$0.01` under a cent).
+- `derive: [{ name, when }]` on a screen works conditions out once over the loaded data as
+  `is.<name>` (a later entry may read an earlier one), where a block's own `when` would need
+  brackets.
 - A POST load pages too: `cursor` names the response field, and the next page is
   the same body with the cursor under `cursorParam` (a number cursor, such as a
   job's `createdAt`, goes back as a number).

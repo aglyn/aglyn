@@ -196,7 +196,23 @@ public final class ScreenModel {
   /// Seeds data without a network (previews, snapshot tests).
   public func seed(_ data: JSONValue) {
     context = ScreenContext.with(context, "data", data)
+    applyDerived()
     phase = .ready
+  }
+
+  /// The screen's `derive` list (`[{ name, when }]`, in order) as `is.<name>`: conditions worked out once over
+  /// the loaded data, so a block can say `is.billed` where the condition itself would need brackets. A later
+  /// entry may read an earlier one.
+  private func applyDerived() {
+    let entries = spec.raw["derive"].array
+    guard !entries.isEmpty else { return }
+    var flags: [String: JSONValue] = [:]
+    for entry in entries {
+      guard let name = entry["name"]?.stringValue else { continue }
+      let seen = ScreenContext.with(context, "is", .object(flags))
+      flags[name] = .bool(ScreenValues.condition(entry["when"]?.stringValue, in: seen))
+    }
+    context = ScreenContext.with(context, "is", .object(flags))
   }
 
   public var data: JSONValue { context["data"] ?? [:] }
@@ -279,6 +295,7 @@ public final class ScreenModel {
       return
     }
     context = ScreenContext.with(context, "data", .object(results))
+    applyDerived()
     cursors = nextCursors
     phase = .ready
   }

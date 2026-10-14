@@ -10,6 +10,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.ceil
 import kotlin.math.round
 
 /**
@@ -199,6 +200,13 @@ object ScreenValues {
     lastUnquotedColon(body)?.let { colon ->
       format = body.substring(colon + 1).trim()
       body = body.substring(0, colon)
+    }
+    // `(a - b) * c / 1000`, `max(0, a - b)`: arithmetic with products, brackets and a few functions.
+    if (calculates(body)) {
+      val result = calculate(body, context) ?: return null
+      val value = JsonPrimitive(result)
+      val named = format
+      return if (named.isNullOrEmpty()) value else JsonPrimitive(formatted(value, named, context))
     }
     // `a + b - c`: a sum of numbers (paths or literals), each operator set apart by spaces. A term
     // that is missing makes the whole sum missing, so a read that failed never shows as zero.
@@ -506,9 +514,32 @@ object ScreenValues {
       for (op in listOf(">=", "<=", ">", "<")) {
         val place = clause.indexOf(op)
         if (place < 0) continue
-        fun side(part: String): Double? = part.trim().let { it.toDoubleOrNull() ?: number(lookup(it, context)) }
-        val left = side(clause.substring(0, place)) ?: return false
-        val right = side(clause.substring(place + op.length)) ?: return false
+        // A side may itself be arithmetic: `max(0, a - b) > 0`, `a + b >= c`.
+        fun side(part: String): Double? = part.trim().let { trimmed ->
+          trimmed.toDoubleOrNull() ?: when {
+            calculates(trimmed) -> calculate(trimmed, context)
+            arithmeticTerms(trimmed) != null -> number(evaluate(trimmed, context))
+            else -> number(lookup(trimmed, context))
+          }
+        }
+        val left = side(clause.substring(0, place))
+        val right = side(clause.substring(place + op.length))
+        if (left == null || right == null) {
+          // Two months (`2026-09 <= 2026-10`) or two other texts that are not numbers: ordered as text.
+          // A literal month or date (`2026-10`) stands for itself; a path that found nothing is empty.
+          fun words(part: String): String = part.trim().let { trimmed ->
+            text(lookup(trimmed, context)).ifEmpty { if (trimmed.isNotEmpty() && trimmed.all { it.isDigit() || it == '-' }) trimmed else "" }
+          }
+          val a = words(clause.substring(0, place))
+          val b = words(clause.substring(place + op.length))
+          if (a.isEmpty() || b.isEmpty() || left != null) return false
+          return when (op) {
+            ">=" -> a >= b
+            "<=" -> a <= b
+            ">" -> a > b
+            else -> a < b
+          }
+        }
         return when (op) {
           ">=" -> left >= right
           "<=" -> left <= right
@@ -551,6 +582,103 @@ object ScreenValues {
     if (current.isEmpty()) return null
     terms += sign to current.joinToString(" ")
     return if (terms.size > 1) terms else null
+  }
+
+  /** Whether [body] is arithmetic beyond a sum: a product or quotient set apart by spaces, or brackets. */
+  internal fun calculates(body: String): Boolean = '\'' !in body && (" * " in body || " / " in body || '(' in body)
+
+  /** The tokens of an arithmetic body: operators set apart by spaces, brackets and commas, and paths (which may hold `-`, `.`, `[…]`). */
+  private fun calcTokens(body: String): List<String> {
+    val tokens = mutableListOf<String>()
+    val current = StringBuilder()
+    var depth = 0
+    fun flush() {
+      if (current.isNotEmpty()) tokens += current.toString()
+      current.clear()
+    }
+    for (c in body) {
+      if (c == '[') depth += 1
+      if (c == ']') depth -= 1
+      if (depth <= 0 && c == ' ') flush()
+      else if (depth <= 0 && (c == '(' || c == ')' || c == ',')) {
+        flush()
+        tokens += c.toString()
+      } else current.append(c)
+    }
+    flush()
+    return tokens
+  }
+
+  /**
+   * `(a - b) * c / 1000`: the usual precedence; a path is a number (a list adds up), `x?` is zero where it is
+   * missing, and the functions are `max`, `min`, `round` (half up, as JavaScript's), `floor`, `ceil` and `abs`.
+   * Anything missing, or a division by zero, makes the whole figure missing.
+   */
+  internal fun calculate(body: String, context: JsonElement): Double? {
+    val tokens = calcTokens(body)
+    var position = 0
+    fun peek(): String? = tokens.getOrNull(position)
+    fun take(): String? = tokens.getOrNull(position).also { position += 1 }
+    lateinit var expression: () -> Double?
+    lateinit var term: () -> Double?
+    lateinit var unary: () -> Double?
+    fun primary(): Double? {
+      val token = take() ?: return null
+      if (token == "(") {
+        val inner = expression()
+        return if (take() == ")") inner else null
+      }
+      if (token in listOf("max", "min", "round", "floor", "ceil", "abs") && peek() == "(") {
+        position += 1
+        val arguments = mutableListOf<Double>()
+        while (peek() != ")") {
+          arguments += expression() ?: return null
+          if (peek() == ",") position += 1 else break
+        }
+        if (take() != ")" || arguments.isEmpty()) return null
+        val first = arguments.first()
+        return when (token) {
+          "max" -> arguments.max()
+          "min" -> arguments.min()
+          "round" -> floor(first + 0.5)
+          "floor" -> floor(first)
+          "ceil" -> ceil(first)
+          else -> abs(first)
+        }
+      }
+      token.toDoubleOrNull()?.let { return it }
+      val optional = token.endsWith("?")
+      val value = lookup(if (optional) token.dropLast(1) else token, context)
+      if (optional && (value == null || value == JsonNull)) return 0.0
+      if (value is JsonArray) return value.mapNotNull { number(it) }.sum()
+      return number(value)
+    }
+    unary = {
+      if (peek() == "-") {
+        position += 1
+        unary()?.let { -it }
+      } else primary()
+    }
+    term = {
+      var left = unary()
+      while (left != null && (peek() == "*" || peek() == "/")) {
+        val op = take()
+        val right = unary()
+        left = if (right == null) null else if (op == "/") (if (right == 0.0) null else left / right) else left * right
+      }
+      left
+    }
+    expression = {
+      var left = term()
+      while (left != null && (peek() == "+" || peek() == "-")) {
+        val op = take()
+        val right = term()
+        left = if (right == null) null else if (op == "+") left + right else left - right
+      }
+      left
+    }
+    val result = expression() ?: return null
+    return if (position == tokens.size && result.isFinite()) result else null
   }
 
   private fun lastUnquotedColon(text: String): Int? {
@@ -649,6 +777,8 @@ object ScreenValues {
         formatOrderMoney(round(amount), currency.ifEmpty { "USD" })
       } ?: text(value)
       "dollars" -> number(value)?.let { formatOrderMoney(round(it * 100), "USD") } ?: text(value)
+      // A charge: a real amount under a cent reads `<$0.01`, never `$0.00` beside a non-zero total.
+      "usd" -> number(value)?.let { if (it > 0 && it < 0.005) "<\$0.01" else formatOrderMoney(round(it * 100), "USD") } ?: text(value)
       "bytes" -> number(value)?.let { bytesText(it) } ?: text(value)
       "number" -> number(value)?.let { grouped(it, 2) } ?: text(value)
       "percent" -> number(value)?.let { "${grouped(it * 100, 1)}%" } ?: text(value)
