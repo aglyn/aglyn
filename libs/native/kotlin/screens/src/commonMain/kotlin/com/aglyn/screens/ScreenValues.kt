@@ -217,6 +217,15 @@ object ScreenValues {
       val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
       if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
       JsonObject(map)
+    } else if (body.size == 1 && body["\$timestamp"] != null) {
+      // `{"$timestamp": true}`: the server's time, written as a Firestore timestamp (a write's `updatedAt`).
+      JsonObject(mapOf("\$timestamp" to JsonPrimitive(true)))
+    } else if (body.size == 1 && body["\$slug"] != null) {
+      // `{"$slug": "{form.name}"}`: the console's slug of a name (lower case, letters and digits joined by hyphens).
+      JsonPrimitive(com.aglyn.contracts.commerceSlug(text(resolveBody(body.getValue("\$slug"), context))))
+    } else if (body.size == 1 && body["\$orNull"] != null) {
+      // `{"$orNull": "{form.parentId}"}`: the value, or an explicit null when it is empty (a merge write clears the field).
+      resolveBody(body.getValue("\$orNull"), context).let { if (truthy(it)) it else JsonNull }
     } else if (body.size == 1 && body["\$cents"] != null) {
       // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`) as whole cents; null when it is not an amount.
       val typed = text(resolveBody(body.getValue("\$cents"), context)).trim().removePrefix("$").replace(",", "")
@@ -258,7 +267,9 @@ object ScreenValues {
       val key = (spec["key"] as? JsonPrimitive)?.content.orEmpty()
       val match = text(spec["match"]?.let { resolveBody(it, context) })
       val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
-      JsonArray(list.map { row -> if (text(lookup(key, row)) == match) value else row })
+      // key "*": the row that equals `match` as a whole (a list of rows with no id of their own).
+      val whole = if (key == "*") spec["match"]?.let { resolveBody(it, context) } else null
+      JsonArray(list.map { row -> if (if (key == "*") row == whole else text(lookup(key, row)) == match) value else row })
     } else if (body.size == 1 && body["\$split"] != null) {
       // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       val parts = text(resolveBody(body.getValue("\$split"), context)).split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
@@ -272,7 +283,7 @@ object ScreenValues {
         for ((key, value) in body) {
           val resolved = resolveBody(value, context)
           // A template that found nothing is left out; a literal null is sent (it clears the field).
-          if (resolved != JsonNull || value == JsonNull) put(key, resolved)
+          if (resolved != JsonNull || value == JsonNull || (value is JsonObject && value.containsKey("\$orNull"))) put(key, resolved)
         }
       },
     )

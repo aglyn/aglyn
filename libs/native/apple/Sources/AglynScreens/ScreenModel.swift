@@ -284,13 +284,50 @@ public final class ScreenModel {
   /// The action that actually made the request last, which may be the `else` of the one that was pressed.
   private var performed: ActionSpec?
 
+  /// A write the person makes themselves, as the console does: `{ doc, fields }` merges a document, `{ add, fields }`
+  /// adds one to a collection, `{ delete }` removes one, and `{ steps: [...] }` does several in order. Any step may
+  /// carry `each: { items, filter }` to repeat for every row of a list (`item` is the row, `parent` the outer item).
+  private func runWrite(_ write: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+    let steps = write["steps"].array
+    if !steps.isEmpty {
+      for step in steps { try await runWrite(step, scope, writer) }
+      return
+    }
+    if let each = write["each"] {
+      let rows = ScreenValues.rows(ScreenValues.lookup(each["items"]?.stringValue ?? "", in: scope)).filter {
+        ScreenValues.condition(each["filter"]?.stringValue, in: ScreenContext.with(scope, item: $0))
+      }
+      for row in rows { try await writeOne(write, ScreenContext.with(scope, item: row), writer) }
+      return
+    }
+    try await writeOne(write, scope, writer)
+  }
+
+  private func writeOne(_ write: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+    if let path = write["delete"]?.stringValue {
+      try await writer.delete(FirestoreLoads.segments(ScreenValues.render(path, in: scope)))
+      return
+    }
+    let fields = ScreenValues.resolveBody(write["fields"] ?? [:], in: scope)
+    let data = FirestoreLoads.plain(fields) as? [String: Any] ?? [:]
+    if let collection = write["add"]?.stringValue {
+      let path = FirestoreLoads.segments(ScreenValues.render(collection, in: scope)) + [newResourceID()]
+      try await writer.merge(path, data)
+      return
+    }
+    if let doc = write["doc"]?.stringValue {
+      try await writer.merge(FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), data)
+    }
+  }
+
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     if let write = action.write {
-      guard let writer, let doc = write["doc"]?.stringValue else { return .failed("Saving is not available here.") }
+      guard let writer else { return .failed("Saving is not available here.") }
+      guard write["doc"] != nil || write["add"] != nil || write["delete"] != nil || !write["steps"].array.isEmpty else {
+        return .failed("Saving is not available here.")
+      }
       do {
-        let fields = ScreenValues.resolveBody(write["fields"] ?? [:], in: scope)
-        try await writer.merge(
-          FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(fields) as? [String: Any] ?? [:])
+        try await runWrite(write, scope, writer)
         // `siteWide`: the write changes every page of the site, so its cached pages are dropped as the console does.
         if write["siteWide"] == .bool(true), let api {
           await publishSiteWide(api: api, writer: writer, hostID: ScreenValues.render("{site.id}", in: scope))

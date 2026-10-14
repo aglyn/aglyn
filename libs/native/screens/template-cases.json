@@ -482,6 +482,36 @@
           }
         ]
       }
+    },
+    {
+      "body": {
+        "slug": {
+          "$slug": "Café Latte"
+        },
+        "parent": {
+          "$orNull": "{params.empty}"
+        },
+        "kept": {
+          "$orNull": "{params.uid}"
+        },
+        "swapped": {
+          "$replace": {
+            "list": "{data.list}",
+            "key": "*",
+            "match": "y",
+            "value": "z"
+          }
+        }
+      },
+      "expect": {
+        "slug": "cafe-latte",
+        "parent": null,
+        "kept": "u2",
+        "swapped": [
+          "x",
+          "z"
+        ]
+      }
     }
   ],
   "condition": [

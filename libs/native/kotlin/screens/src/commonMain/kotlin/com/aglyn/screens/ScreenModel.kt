@@ -234,14 +234,44 @@ class ScreenModel(
     return outcome
   }
 
+  /**
+   * A write the person makes themselves, as the console does: `{ doc, fields }` merges a document, `{ add, fields }`
+   * adds one to a collection, `{ delete }` removes one, and `{ steps: [...] }` does several in order. Any step may
+   * carry `each: { items, filter }` to repeat for every row of a list (`item` is the row, `parent` the outer item).
+   */
+  private suspend fun runWrite(write: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+    val steps = write.arr("steps")
+    if (steps.isNotEmpty()) {
+      for (step in steps) runWrite(step, scope, target)
+      return
+    }
+    val each = write.obj("each")
+    if (each != null) {
+      val rows = ScreenValues.rows(ScreenValues.lookup(each.str("items").orEmpty(), scope))
+        .filter { ScreenValues.condition(each.str("filter"), ScreenContext.withItem(scope, it)) }
+      for (row in rows) writeOne(write, ScreenContext.withItem(scope, row), target)
+      return
+    }
+    writeOne(write, scope, target)
+  }
+
+  private suspend fun writeOne(write: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+    write.str("delete")?.let { target.delete(ScreenValues.render(it, scope)); return }
+    val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
+    @Suppress("UNCHECKED_CAST")
+    val data = (plain(fields) as? Map<String, Any?>) ?: emptyMap()
+    write.str("add")?.let { target.add(ScreenValues.render(it, scope), data); return }
+    write.str("doc")?.let { target.merge(ScreenValues.render(it, scope), data) }
+  }
+
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
     action.write?.let { write ->
-      val doc = write.str("doc") ?: return ActionOutcome.Failed("Saving is not available here.")
       val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
+      if (write.str("doc") == null && write.str("add") == null && write.str("delete") == null && write.arr("steps").isEmpty()) {
+        return ActionOutcome.Failed("Saving is not available here.")
+      }
       return try {
-        val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
-        @Suppress("UNCHECKED_CAST")
-        target.merge(ScreenValues.render(doc, scope), (plain(fields) as? Map<String, Any?>) ?: emptyMap())
+        runWrite(write, scope, target)
         // `siteWide`: the write changes every page of the site, so its cached pages are dropped as the console does.
         if (write.isTrue("siteWide")) api?.let { com.aglyn.core.publishSiteWideChange(it, target, ScreenValues.render("{site.id}", scope)) }
         ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)
@@ -282,7 +312,7 @@ class ScreenModel(
         else -> value.content.toLongOrNull() ?: value.content.toDoubleOrNull()
       }
       is JsonArray -> value.map { plain(it) }
-      is JsonObject -> value.mapValues { plain(it.value) }
+      is JsonObject -> if (value.size == 1 && value.containsKey("\$timestamp")) com.aglyn.core.ServerTimestamp else value.mapValues { plain(it.value) }
     }
 
     internal fun appending(rows: JsonArray, path: String, value: JsonElement): JsonElement {

@@ -34,7 +34,10 @@ enum FirestoreLoads {
     case .number(let number): return number == number.rounded() && abs(number) < 9e15 ? Int(number) as Any : number
     case .string(let text): return text
     case .array(let items): return items.map(plain)
-    case .object(let record): return record.mapValues(plain)
+    case .object(let record):
+      // A write's `{"$timestamp": true}` is the server's time.
+      if record.count == 1, record["$timestamp"] != nil { return FirestoreSentinel.serverTimestamp }
+      return record.mapValues(plain)
     }
   }
 

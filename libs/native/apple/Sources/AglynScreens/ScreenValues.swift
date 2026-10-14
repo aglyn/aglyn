@@ -240,6 +240,16 @@ public enum ScreenValues {
         if truthy(value) { map[key] = value } else { map[key] = nil }
       }
       return .object(map)
+    case .object(let record) where record.count == 1 && record["$timestamp"] != nil:
+      // `{"$timestamp": true}`: the server's time, written as a Firestore timestamp (a write's `updatedAt`).
+      return ["$timestamp": true]
+    case .object(let record) where record.count == 1 && record["$slug"] != nil:
+      // `{"$slug": "{form.name}"}`: the console's slug of a name (lower case, letters and digits joined by hyphens).
+      return .string(commerceSlug(Self.text(resolveBody(record["$slug"] ?? .null, in: context))))
+    case .object(let record) where record.count == 1 && record["$orNull"] != nil:
+      // `{"$orNull": "{form.parentId}"}`: the value, or an explicit null when it is empty (a merge write clears the field).
+      let value = resolveBody(record["$orNull"] ?? .null, in: context)
+      return truthy(value) ? value : .null
     case .object(let record) where record.count == 1 && record["$cents"] != nil:
       // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`) as whole cents; null when it is not an amount.
       let typed = Self.text(resolveBody(record["$cents"] ?? .null, in: context)).trimmingCharacters(in: .whitespaces)
@@ -281,7 +291,9 @@ public enum ScreenValues {
       let key = spec["key"]?.stringValue ?? ""
       let match = Self.text(resolveBody(spec["match"] ?? .null, in: context))
       let value = resolveBody(spec["value"] ?? .null, in: context)
-      return .array(list.map { row in Self.text(lookup(key, in: row)) == match ? value : row })
+      // key "*": the row that equals `match` as a whole (a list of rows with no id of their own).
+      let whole = key == "*" ? resolveBody(spec["match"] ?? .null, in: context) : nil
+      return .array(list.map { row in (key == "*" ? row == whole : Self.text(lookup(key, in: row)) == match) ? value : row })
     case .object(let record) where record.count == 1 && record["$split"] != nil:
       // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))
@@ -308,7 +320,7 @@ public enum ScreenValues {
       for (key, value) in record {
         let resolved = resolveBody(value, in: context)
         // A template that found nothing is left out; a literal null is sent (it clears the field).
-        if resolved != .null || value == .null { out[key] = resolved }
+        if resolved != .null || value == .null || value["$orNull"] != nil { out[key] = resolved }
       }
       return .object(out)
     default: return body
