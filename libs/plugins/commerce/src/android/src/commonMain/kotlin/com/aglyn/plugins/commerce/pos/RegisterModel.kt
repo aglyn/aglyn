@@ -59,6 +59,10 @@ class RegisterModel(
   val opsApi: PosOpsApi = OfflinePosOps,
   /** The customer route. */
   customersApi: PosCustomersApi = OfflinePosCustomers,
+  /** The signed-in member: the only one whose offline sales this device may sync. */
+  uid: String = "",
+  /** The offline register's kit and sync routes. */
+  offlineApi: PosOfflineApi = UnreachablePosOffline,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -72,6 +76,15 @@ class RegisterModel(
   val customers = PosCustomerModel(customersApi, scope)
   /** The last sale this register finished, and its receipt. */
   val lastReceipt = PosLastReceiptModel(firestore, api, store, hostId, scope, { receiptContext() })
+
+  /** The cash sales rung while offline, and their sync. */
+  val offline = PosOfflineModel(
+    offlineApi, PosOfflineDeviceStore(deviceStore, "$uid:$hostId"), uid, scope,
+    { register?.id }, { register?.locationId }, { shift.shift?.id }, { cashier.assertion },
+  ).also { model -> model.networkSink = { failed -> if (failed) online = false } }
+
+  /** The offline cash dialog is open. */
+  var offlineCashOpen by mutableStateOf(false)
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
@@ -162,6 +175,7 @@ class RegisterModel(
     while (currentCoroutineContext().isActive) {
       delay(CASHIER_TICK_MS)
       cashier.tick()
+      if (online && offline.kitIsStale) offline.refreshKit()
     }
   }
 
@@ -214,6 +228,9 @@ class RegisterModel(
       online = true
       readers.removeAll { it.kind == CardReaderKind.SMART }
       loaded.readers.filter { it.online }.forEach { readers += SmartReaderService(it) }
+      // The console answered: get the offline rules, then send whatever was rung while it did not.
+      if (offline.kitIsStale) offline.refreshKit()
+      offline.sync()
       cardCollector?.let { collector ->
         runCatching { collector.connect(hostId, terminal) }.onFailure { if (it is CancellationException) throw it }
         syncDeviceReader(collector)
@@ -385,6 +402,13 @@ class RegisterModel(
   fun attachCustomer(customer: PosCustomer?) = updateCart(cart.withCustomer(customer))
 
   fun clearCart() = updateCart(Cart.EMPTY)
+
+  /** Takes the basket's total in cash while offline. The sale is on the device, and the basket cleared, only when this answers; null when it could not be kept. */
+  fun takeOfflineCash(sold: Cart, tenderedCents: Long): PosOfflineRung? {
+    val rung = offline.ringCashSale(sold, tenderedCents) ?: return null
+    updateCart(Cart.EMPTY)
+    return rung
+  }
 
   private fun updateCart(next: Cart) {
     cart = next

@@ -72,14 +72,18 @@ final class RegisterModel {
   @ObservationIgnored let customers: PosCustomerModel
   /// The last sale this register finished, and its receipt.
   @ObservationIgnored let lastReceipt: PosLastReceiptModel
+  @ObservationIgnored private var tillOffline: PosOfflineModel!
   /// Who is ringing: the cashier a PIN switched in, and the idle lock.
   var cashier: PosCashier { tillCashier }
   /// The register's shift and its drawer.
   var shift: PosShiftModel { tillShift }
+  /// The cash sales rung while offline, and their sync.
+  var offline: PosOfflineModel { tillOffline }
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
-    defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil
+    defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
+    uid: String = "", offlineAPI: PosOfflineAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
@@ -96,6 +100,13 @@ final class RegisterModel {
     cashier.assertionSink = { sale.cashier.assertion = $0 }
     tillCashier = cashier
     tillShift = PosShiftModel(api: ops, registerID: { [weak self] in self?.register?.id }, assertion: { [weak cashier] in cashier?.assertion })
+    let offline = PosOfflineModel(
+      api: offlineAPI ?? ConsolePosOfflineAPI(api: api, hostID: hostID),
+      store: PosOfflineDeviceStore(defaults: defaults, scope: "\(uid):\(hostID)"), uid: uid,
+      registerID: { [weak self] in self?.register?.id }, locationID: { [weak self] in self?.register?.locationID },
+      shiftID: { [weak self] in self?.tillShift.shift?.id }, assertion: { [weak cashier] in cashier?.assertion })
+    offline.networkSink = { [weak self] failed in if failed { self?.online = false } }
+    tillOffline = offline
   }
 
   func money(_ cents: Int) -> String { posMoney(cents, currency: currency) }
@@ -152,6 +163,7 @@ final class RegisterModel {
       try? await Task.sleep(for: cashierTick)
       if Task.isCancelled { return }
       await cashier.tick()
+      if online, offline.kitIsStale { await offline.refreshKit() }
     }
   }
 
@@ -211,6 +223,9 @@ final class RegisterModel {
       }
       next += loaded.readers.filter(\.online).map { SmartReaderService($0) }
       readers = next
+      // The console answered: get the offline rules, then send whatever was rung while it did not.
+      if offline.kitIsStale { await offline.refreshKit() }
+      await offline.syncNow()
     } catch {
       if isLostAnswer(error) { online = false }
     }
@@ -306,6 +321,13 @@ final class RegisterModel {
   /// Attaches the customer the lookup found; nil lets them go. Their email is the sale's.
   func attachCustomer(_ customer: PosCustomer?) { updateCart(cart.withCustomer(customer)) }
   func clearCart() { updateCart(.empty) }
+
+  /// Takes the basket's total in cash while offline. The sale is on the device, and the basket cleared, only when this answers; nil when it could not be kept.
+  func takeOfflineCash(cart sold: Cart, tenderedCents: Int) -> PosOfflineRung? {
+    guard let rung = offline.ringCashSale(cart: sold, tenderedCents: tenderedCents) else { return nil }
+    updateCart(.empty)
+    return rung
+  }
 
   private func updateCart(_ next: Cart) {
     cart = next

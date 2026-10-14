@@ -138,6 +138,8 @@ fun RegisterScreen(context: NativePluginContext) {
       scope = scope,
       opsApi = ConsolePosOpsApi(context.api, hostId),
       customersApi = ConsolePosCustomersApi(context.api, hostId),
+      uid = context.uid,
+      offlineApi = ConsolePosOfflineApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
@@ -291,6 +293,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
   }
   model.sheet?.let { ItemSheetDialog(model, it, wide) }
   if (holdsOpen) HoldsDialog(model) { holdsOpen = false }
+  if (model.offlineCashOpen) OfflineCashDialog(model)
   if (opsOpen) RegisterOpsDialog(model) { opsOpen = false }
   if (model.cashier.locked) LockedRegister(model)
   if (cameraOpen && camera != null) {
@@ -365,14 +368,7 @@ private fun CatalogPane(
       }
       RegisterPicker(model)
     }
-    if (!model.online) {
-      NoticeBanner(
-        "Offline. Keep ringing up; hold baskets and charge when you are back online.",
-        StatusTone.WARNING,
-        Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("pos-offline"),
-        action = { TextButton(onClick = { model.reconnect() }, modifier = Modifier.testTag("pos-reconnect")) { Text("Retry") } },
-      )
-    }
+    RegisterOfflineBanner(model)
     val selected = when {
       model.args.search.isNotBlank() -> null
       model.args.quickKeys -> "quick"
@@ -667,6 +663,20 @@ private fun BasketBar(model: RegisterModel, onOpen: () -> Unit) {
 @Composable
 private fun ChargeButton(model: RegisterModel, modifier: Modifier = Modifier) {
   val cart = model.cart
+  if (!model.online) {
+    // Offline: cash is the one tender that still sells, saved on this register until the connection returns.
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+      Button(
+        onClick = { model.offlineCashOpen = true },
+        enabled = !cart.isEmpty && model.offline.ready && model.register != null,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("pos-charge-offline"),
+      ) { Text("Take cash offline", style = MaterialTheme.typography.titleMedium) }
+      model.offline.unavailableReason?.takeIf { !cart.isEmpty }?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+      }
+    }
+    return
+  }
   Button(
     onClick = { model.charge() },
     enabled = !cart.isEmpty && !model.charging && model.register != null,

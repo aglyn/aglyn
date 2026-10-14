@@ -38,6 +38,38 @@ class FunctionCasesTest {
   }
 
   @Test
+  fun anOfflineSaleIsPricedAndTaxedAsTheConsoleDoes() = cases("posOfflineSaleTotals").forEach { (args, result) ->
+    val input = args[0].jsonObject
+    val tax = input.getValue("tax").jsonObject
+    val lines = input.getValue("lines").jsonArray.map {
+      PosOfflineTotalsLine(it.jsonObject.getValue("unitAmountCents").jsonPrimitive.double, it.jsonObject.getValue("quantity").jsonPrimitive.double)
+    }
+    val totals = posOfflineSaleTotals(
+      lines,
+      input.getValue("discountPct").jsonPrimitive.double,
+      tax["pct"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.double,
+      tax.getValue("pricesIncludeTax").jsonPrimitive.boolean,
+    )
+    val expected = result.jsonObject
+    assertEquals(expected.getValue("itemsCents").jsonPrimitive.double, totals.itemsCents, args.toString())
+    assertEquals(expected.getValue("discountCents").jsonPrimitive.double, totals.discountCents, args.toString())
+    assertEquals(expected.getValue("taxCents").jsonPrimitive.double, totals.taxCents, args.toString())
+    assertEquals(expected.getValue("totalCents").jsonPrimitive.double, totals.totalCents, args.toString())
+    assertEquals(expected.getValue("shippingCents").jsonPrimitive.double, totals.shippingCents, args.toString())
+    assertEquals(expected.getValue("feeCents").jsonPrimitive.double, totals.feeCents, args.toString())
+  }
+
+  @Test
+  fun changeIsNeverNegative() = cases("posOfflineChangeCents").forEach { (args, result) ->
+    assertEquals(result.jsonPrimitive.long, posOfflineChangeCents(args[0].jsonPrimitive.double, args[1].jsonPrimitive.double), args.toString())
+  }
+
+  @Test
+  fun aSaleKeyIsAnIdTheOrderCanTake() = cases("posOfflineSaleKeyIsValid").forEach { (args, result) ->
+    assertEquals(result.jsonPrimitive.boolean, posOfflineSaleKeyIsValid(str(args[0])), args.toString())
+  }
+
+  @Test
   fun formatOrderNumberCases() = cases("formatOrderNumber").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.content, formatOrderNumber(order(args[0]), str(args.getOrNull(1))), args.toString())
   }
