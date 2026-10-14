@@ -2985,7 +2985,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commerceSettingsShipping",
             "orderDetail",
             "returnDetail",
             "ordersBulk",
@@ -3036,7 +3036,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commerceSettingsShipping",
             "orderDetail"
           ]
         }
@@ -3067,7 +3067,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commercePromotions",
             "orderDetail"
           ]
         }
@@ -3172,7 +3172,7 @@
       },
       "contributes": {
         "console": {
-          "slots": ["commerceSettings", "orderDetail", "productEditor"]
+          "slots": ["commerceSettingsTaxes", "orderDetail", "productEditor"]
         }
       }
     },
@@ -3362,7 +3362,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commerceSettingsShipping",
             "orderDetail"
           ]
         }
@@ -3408,7 +3408,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commerceSettingsShipping",
             "orderDetail",
             "localDeliveryRow"
           ]
@@ -3455,7 +3455,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commerceSettingsChannels",
             "orderDetail"
           ]
         }
@@ -3644,7 +3644,7 @@
       "contributes": {
         "console": {
           "slots": [
-            "commerceSettings",
+            "commerceSettingsChannels",
             "productEditor"
           ]
         }

@@ -513,12 +513,25 @@ private struct EntryForm: View {
 
   private var mediaCard: some View {
     Section {
-      AglynCountedField(
-        "Cover image", text: $draft.coverImage, placeholder: "https://… or media:{id}", keyboard: .url, enabled: env.canWrite)
+      // A pick stores the asset's reference, and the description follows the picture unless the author wrote one (`inheritedMediaAlt`).
+      MediaPickField(
+        context: env.context, label: "Cover image", value: draft.coverImage, enabled: env.canWrite,
+        onPick: { chosen in
+          draft.coverImage = chosen.reference
+          draft.coverImageAlt =
+            inheritedMediaAlt(placementAlt: draft.coverImageAlt, assetAlt: chosen.item.alt) ?? draft.coverImageAlt
+        },
+        onClear: { draft.coverImage = "" }, onLink: { draft.coverImage = $0 })
       AglynCountedField(
         "Cover image description", text: $draft.coverImageAlt, enabled: env.canWrite && !draft.coverImage.trimmed.isEmpty)
-      AglynCountedField(
-        "Cover video", text: $draft.coverVideo, placeholder: "https://… or media:{id}", keyboard: .url, enabled: env.canWrite)
+      // The film's length goes with it (the library's measurement, else blank: one typed for another film does not describe this one).
+      MediaPickField(
+        context: env.context, label: "Cover video", value: draft.coverVideo, kind: "video", enabled: env.canWrite,
+        onPick: { chosen in
+          draft.coverVideo = chosen.reference
+          draft.coverVideoDuration = chosen.item.videoSeconds.map(String.init) ?? ""
+        },
+        onClear: { draft.coverVideo = "" }, onLink: { draft.coverVideo = $0 })
       AglynCountedField(
         "Video length (seconds)",
         text: Binding(get: { draft.coverVideoDuration }, set: { draft.coverVideoDuration = $0.filter(\.isNumber) }),

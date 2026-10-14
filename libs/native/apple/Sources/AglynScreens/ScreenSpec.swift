@@ -187,7 +187,7 @@ public struct ActionSpec: Sendable, Identifiable {
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
   /// `{ doc, current, edited }`: the owner's save of a business profile. `edited` is the typed values,
-  /// `current` the path to the stored document; the write follows `BusinessProfile.ownerWrite`.
+  /// `current` the path to the stored document; the write follows `businessProfileOwnerWrite` (AglynContracts).
   public let businessProfile: JSONValue?
   /// After a `write` to the site document that changes how pages render, stage the site-wide
   /// republish the console's host-document writes do (`publishSiteWideChange`).

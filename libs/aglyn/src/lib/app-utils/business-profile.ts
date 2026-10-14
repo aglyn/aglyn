@@ -19,7 +19,9 @@ import { siteProfileUrls, type HostSeoEntity } from './content-authors'
 import { normalizeAreaServed } from './local-business'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 import {
+  BUSINESS_PROFILE_FIELDS,
   BUSINESS_PROFILE_MAX_CHARS,
+  BUSINESS_TONES,
   businessProfileSourceOf,
   fieldValue,
   isEmpty,
@@ -54,6 +56,12 @@ export type {
   BusinessProfileValues,
   BusinessTone,
 } from './business-profile-values'
+
+/** The tones as a plain list, in the order the owner picks them, for the native apps' pickers. */
+export const BUSINESS_TONE_ORDER: readonly string[] = BUSINESS_TONES
+
+/** The stored fields as a plain list, for the native apps' writers. */
+export const BUSINESS_PROFILE_FIELD_ORDER: readonly string[] = BUSINESS_PROFILE_FIELDS
 
 /**
  * A site's BUSINESS PROFILE (AGL-3661): what the business is, as everything

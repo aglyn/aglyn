@@ -19,6 +19,7 @@ import {
   type PluginRecordRouteContext,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { COMMERCE_SETTINGS_PAGE_ZONES } from '../components/commerce-console-sections'
 
 /**
  * Where a product and an order are read, published for every other surface
@@ -72,10 +73,16 @@ function orders(context: PluginRecordRouteContext, key?: string, value?: string)
  * The store's settings — payments (Stripe), shipping, tax and returns — under
  * `store-settings` (AGL-3676): where an AI-built store's "Finish your store"
  * list sends its owner, without spelling this plugin's console path.
+ *
+ * A page each since AGL-3713: the list is Payments, the first of them, and a
+ * record is the settings page of that id (`shipping`, `taxes` …). An id that
+ * is not a settings page opens the list rather than a 404.
  */
-function settings(context: PluginRecordRouteContext): string | null {
+function settings(context: PluginRecordRouteContext, page?: string): string | null {
   const list = catalog(context)
-  return list ? `${list}/settings` : null
+  if (!list) return null
+  const id = page && Object.hasOwn(COMMERCE_SETTINGS_PAGE_ZONES, page) ? page : 'payments'
+  return `${list}/${id}`
 }
 
 /**
@@ -89,7 +96,11 @@ export function registerCommerceRecordRoutes(): void {
     { list: catalog, record: catalog },
     { pluginId: BUNDLE_ID },
   )
-  registerPluginRecordRoute('store-settings', { list: settings, record: settings }, { pluginId: BUNDLE_ID })
+  registerPluginRecordRoute(
+    'store-settings',
+    { list: (context) => settings(context), record: settings },
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginRecordRoute(
     'order',
     {

@@ -334,7 +334,7 @@ describe('POS page, plan not yet known', () => {
     render(<PosConsolePage hostId="host-1" entitled basePath="/acme/hosts/shop/pos" />)
     expect(screen.getByText(/No POS register yet/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add a register' }).getAttribute('href')).toBe(
-      '/acme/hosts/shop/products/settings#pos-registers',
+      '/acme/hosts/shop/products/pos#pos-registers',
     )
     expect(screen.queryByRole('button', { name: 'Pair display' })).toBeNull()
   })

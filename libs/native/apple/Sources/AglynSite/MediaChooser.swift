@@ -7,16 +7,32 @@ import AglynPluginHost
 import AglynUI
 import SwiftUI
 
-/// What a person picked in the chooser: the stored reference the console's
-/// `formatMediaRef` mints (`media:{scope}/{mediaId}`), the file, and where it
-/// is served from.
+/// What a person picked in the chooser: the file and the library it came from.
 public struct ChosenMedia: Equatable, Sendable {
   public let item: MediaItem
   public let scope: MediaScope
 
-  /// `media:{cdnScope}/{mediaId}`: the asset by identity, so replacing or moving the file never breaks what names it.
-  public var reference: String { "media:\(scope.cdnScope)/\(item.id)" }
+  private var hostID: String? {
+    switch scope {
+    case .site(let hostID): hostID
+    case .org(_, let forHostID): forHostID
+    }
+  }
+
+  /// What the console's picker stores (`mediaNodeSrc`): the asset by identity
+  /// (`media:{scope}/{mediaId}`), so replacing or moving the file never breaks
+  /// what names it, and for a workspace file shared with only some sites, the
+  /// form that names this site (`hostQualifiedCdnPath`).
+  public var reference: String {
+    mediaNodeSrc(
+      url: item.url, cdnPath: hostQualifiedCDNPath(item.cdnPath, visibleTo: item.visibleTo, hostID: hostID),
+      isPrivate: item.isPrivate) ?? "media:\(scope.cdnScope)/\(item.id)"
+  }
 }
+
+/// Why a private file cannot be placed, as the console's picker says it.
+public let privateFileRefusal =
+  "That file is private, so it cannot be placed on a page. Turn off Private in the media library to use it here."
 
 /// The media library as a chooser, the native side of the console's media
 /// picker (`pickMedia`): this site's files and the workspace's, filtered to
@@ -86,6 +102,7 @@ private struct MediaChooserGrid: View {
   let onChoose: (ChosenMedia) -> Void
   @State private var model = MediaListModel()
   @State private var searchText = ""
+  @State private var refusal: String?
 
   var body: some View {
     Group {
@@ -105,7 +122,7 @@ private struct MediaChooserGrid: View {
           LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: AglynSpace.one)], spacing: AglynSpace.one) {
             ForEach(items) { item in
               Button {
-                onChoose(ChosenMedia(item: item, scope: scope))
+                if item.isPrivate { refusal = privateFileRefusal } else { onChoose(ChosenMedia(item: item, scope: scope)) }
               } label: {
                 AglynMediaTile(
                   item.fileName, imageURL: item.thumbnail(origin: context.api.origin).flatMap(URL.init(string:)),
@@ -122,6 +139,11 @@ private struct MediaChooserGrid: View {
           }
         }
         .refreshable { model.refresh() }
+      }
+    }
+    .safeAreaInset(edge: .top) {
+      if let refusal {
+        AglynNotice(refusal, tone: .warning).padding(.horizontal, AglynSpace.two).accessibilityIdentifier("chooser-private-refusal")
       }
     }
     .searchable(text: $searchText, prompt: "Search files")
