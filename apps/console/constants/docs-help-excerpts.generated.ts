@@ -758,7 +758,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   pos: {
     '#card-readers': 'T printer with a system print driver works; see POS hardware.',
     '#registers': 'Es not give you more registers; each sale runs through a register you\'ve created.',
-    '#reservations': 'Nutes. Paired kiosks are listed with your customer displays under Commerce → Settings → POS devices, where Sign out unpairs one.',
+    '#reservations': 'Nt of sale permission, on a plan that includes POS. For anyone else the POS devices card shows why Pair display is unavailable.',
   },
   posHardware: {
     '#receipt-printers': 'Choice at a busy counter.',

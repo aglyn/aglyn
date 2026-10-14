@@ -21,7 +21,9 @@ through a register you've created.
 ## Registers
 
 Create your registers under **Products → Point of sale → POS registers** — one
-per till or device that takes in-person payments. Give each a name (and,
+per till or device that takes in-person payments. Before your first
+register exists, the register page and the **POS devices** card each show
+an **Add a register** button that takes you there. Give each a name (and,
 if you use inventory locations, the location it sells from). Every POS sale
 is tagged with its register so you can reconcile end-of-day takings per
 till. Your plan caps how many registers you can run; add more with the
@@ -259,11 +261,17 @@ logo (or name) and a welcome line between sales, the basket with its total
 as you ring it up, and it lets the customer choose a tip and a receipt
 themselves.
 
-To pair one:
+To pair one, start from either place:
 
-1. On the register, tap **Pair display** next to the **Register** heading.
-   It shows an address and a 6-digit code. The code works **once** and
-   expires in **10 minutes**.
+- **On the register**, tap **Pair display** next to the **Register** heading.
+- **In the console**, open **Products → Point of sale → POS devices** and tap
+  **Pair display** beside the register the tablet belongs to. Use this when
+  you are setting a tablet up away from the till.
+
+Then:
+
+1. Keep **Customer display** selected. You see an address and a 6-digit
+   code. The code works **once** and expires in **10 minutes**.
 2. On the tablet, open that address — your console address followed by
    `/kiosk/commerce/pos-display` — and enter the code. No one signs in on
    the tablet.
@@ -295,8 +303,8 @@ The email address or phone number the customer typed is not kept on the
 display: it is cleared as soon as the receipt is sent. Change the welcome line with **Customer display welcome**
 in the **Commerce settings** card (blank shows "Welcome").
 
-Paired displays are listed under **Products → Point of sale → POS devices**
-with a **Connected** or **Not connected** status. **Sign out** there
+Paired displays are listed under **Products → Point of sale → POS devices**,
+beneath their register, with a **Connected** or **Not connected** status. **Sign out** there
 unpairs a display, and so does removing its register; it then has to be
 paired again with a new code.
 
@@ -310,7 +318,8 @@ automatic promotions and stock as a sale you ring up.
 
 To pair one:
 
-1. On the register, tap **Pair display**, then choose **Self-service
+1. Tap **Pair display** on the register, or beside the register under
+   **Products → Point of sale → POS devices**, then choose **Self-service
    kiosk**. It shows an address and a 6-digit code that works **once** and
    expires in **10 minutes**.
 2. On the tablet, open that address — your console address followed by
@@ -363,8 +372,13 @@ the right PIN you can choose the card reader the kiosk uses, reload it, or
 **Exit kiosk mode**, which unpairs it. After five wrong PINs the unlock
 screen locks for 15 minutes.
 
-Paired kiosks are listed with your customer displays under **Commerce →
-Settings → POS devices**, where **Sign out** unpairs one.
+Paired kiosks are listed with your customer displays under **Products →
+Point of sale → POS devices**, where **Sign out** unpairs one.
+
+Pairing from either place needs the same access as the register itself: an
+admin or editor on the site with the **Use the point of sale** permission, on a plan
+that includes POS. For anyone else the **POS devices** card shows why
+**Pair display** is unavailable.
 
 ## Reservations
 
