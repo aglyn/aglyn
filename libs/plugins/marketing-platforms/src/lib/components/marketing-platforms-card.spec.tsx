@@ -112,6 +112,29 @@ describe('the email platforms card', () => {
     await waitFor(() => expect(routes.syncNow).toHaveBeenCalledWith('klaviyo'))
   })
 
+  /**
+   * A Tag field only where the tag reaches the platform (AGL-3775): Attentive
+   * has nowhere to put it, and a field it silently drops is a promise broken.
+   */
+  it('offers the Tag field only for platforms that carry it', async () => {
+    const klaviyo = api({
+      list: jest.fn(async () => ({ available: [{ id: 'klaviyo' as const, apiKey: true, oauth: false }], connections: [connection()] })),
+    })
+    const { unmount } = render(<MarketingPlatformsCard hostId="h" api={klaviyo} />)
+    expect(await screen.findByLabelText('Tag')).toBeTruthy()
+    unmount()
+
+    const attentive = api({
+      list: jest.fn(async () => ({
+        available: [{ id: 'attentive' as const, apiKey: false, oauth: true }],
+        connections: [connection({ id: 'h_attentive', provider: 'attentive', authKind: 'oauth', listId: null, lists: [] })],
+      })),
+    })
+    render(<MarketingPlatformsCard hostId="h" api={attentive} />)
+    await screen.findByText(/contacts sent/)
+    expect(screen.queryByLabelText('Tag')).toBeNull()
+  })
+
   it('pages the sync log with the shared footer', async () => {
     const entries = Array.from({ length: 12 }, (_, n) => ({ id: `e${n}`, atMs: 1000 - n, kind: 'run' as const, message: `Run ${n}` }))
     const routes = api({
