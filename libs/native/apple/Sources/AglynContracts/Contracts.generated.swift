@@ -3691,6 +3691,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
+  public let componentPropTokenPrefix: String
   public let contactLifecycleStageLabels: [String: String]
   public let contactListDeclaration: ListQueryDeclaration
   public let contentSchemaTypeDefault: ContentSchemaType
@@ -3853,9 +3854,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let reminderWindowStartHours: Int
   public let replyBodyMax: Int
   public let replySubjectMax: Int
+  public let reservedScreenRouteSegments: [String]
   public let returnReasonLabels: [String: String]
   public let returnReasons: [ReturnReason]
   public let scopedSearchJoin: String
+  public let screenRootPath: String
+  public let screenSlugPathSeparatorMessage: String
   public let searchEngineVerificationLabels: [String: String]
   public let searchEngineVerificationMetaNames: [String: String]
   public let siteCardsPageSize: Int
@@ -3893,6 +3897,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
+    case componentPropTokenPrefix = "COMPONENT_PROP_TOKEN_PREFIX"
     case contactLifecycleStageLabels = "CONTACT_LIFECYCLE_STAGE_LABELS"
     case contactListDeclaration = "CONTACT_LIST_DECLARATION"
     case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
@@ -4055,9 +4060,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
+    case reservedScreenRouteSegments = "RESERVED_SCREEN_ROUTE_SEGMENTS"
     case returnReasonLabels = "RETURN_REASON_LABELS"
     case returnReasons = "RETURN_REASONS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case screenRootPath = "SCREEN_ROOT_PATH"
+    case screenSlugPathSeparatorMessage = "SCREEN_SLUG_PATH_SEPARATOR_MESSAGE"
     case searchEngineVerificationLabels = "SEARCH_ENGINE_VERIFICATION_LABELS"
     case searchEngineVerificationMetaNames = "SEARCH_ENGINE_VERIFICATION_META_NAMES"
     case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"

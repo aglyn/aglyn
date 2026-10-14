@@ -18,6 +18,10 @@
       "why": "Reached by entry-list-declaration: the entry date fields and publish sort key, no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/compress.ts",
+      "why": "A stored node tree is msgpack bytes; the native readers decode them and the cases record what the console's encoder makes (AGL-3668). Its one import is the msgpack coder."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/content-schema-type.ts",
       "why": "The content collection schema types the native collection settings offer (AGL-3668), no imports."
     },
@@ -26,8 +30,20 @@
       "why": "Reached by the automation step vocabulary: the CRM lifecycle stages, task and activity kinds, plain lists."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
+      "why": "The {{name}} placeholders a saved template asks for when it is used; the native Save as template declares the same (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/element-animation.ts",
+      "why": "Reached by reusable-component-keys: animation prop names."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts",
       "why": "A collection's entry list declaration, filter fields and statuses; the native content screens plan the same Firestore query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/entry-preview-link.ts",
+      "why": "Reached by screen-slug: the reserved preview segment. No imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/functions.ts",
@@ -40,6 +56,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
       "why": "Reached by organizations: site naming and slug rules over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/leaving-notice.ts",
+      "why": "Reached by screen-slug: the reserved leaving-notice segment. No imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/local-business.ts",
@@ -94,12 +114,24 @@
       "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
+      "why": "A template's {{name}} placeholders filled in as a page, component or layout is made from it (AGL-3668). Type-only import."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/reusable-component-keys.ts",
+      "why": "Reached by detect-template-placeholders: the {{prop.*}} prefix a template placeholder never takes (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
       "why": "The per-page traffic table's fold over screen day documents (AGL-3670)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "why": "A page address: the slug normalizer, the reserved segments and the one-segment rule the native publish and template screens ask the same way (AGL-3668). Leaf imports only."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
@@ -128,6 +160,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "why": "Where a page made from a template lands: de-conflicted against the taken addresses, refused when reserved (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",

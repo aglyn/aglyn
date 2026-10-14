@@ -149,7 +149,8 @@ export function functionCases(functions, load, plainValue) {
     if (!inputs.length) throw new Error(`functionCases.${name} lists no inputs`)
     out[name] = {
       module,
-      cases: inputs.map((input, i) => ({ args: input, result: plainValue(fn(...structuredClone(input)), `${name} case ${i}`) })),
+      // A function that answers `undefined` (no reference, no alt) answers nothing; JSON records that as null.
+      cases: inputs.map((input, i) => ({ args: input, result: plainValue(fn(...structuredClone(input)) ?? null, `${name} case ${i}`) })),
     }
   }
   return out

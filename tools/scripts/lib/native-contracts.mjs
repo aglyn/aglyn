@@ -300,6 +300,8 @@ export function buildContractModel({ ts, program, root, config, pure }) {
 /** The value as JSON, refusing anything JSON would silently change. */
 export function plainValue(value, where) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  // Bytes (a stored node tree) are recorded as base64, the form a native Firestore reader hands them over in.
+  if (value instanceof Uint8Array) return Buffer.from(value).toString('base64')
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error(`${where}: ${value} is not a JSON number`)
     return value

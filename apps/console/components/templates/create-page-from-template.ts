@@ -15,142 +15,14 @@
  * limitations under the License.
  */
 import * as Aglyn from '@aglyn/aglyn'
+import { resolveNamedTokens } from '@aglyn/aglyn'
 import {
-  normalizeScreenSlug,
-  reservedScreenRouteMessage,
-  reservedScreenRouteSegment,
-  resolveNamedTokens,
-  SCREEN_ROOT_PATH,
-  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
-  screenSlugHasPathSeparator,
-} from '@aglyn/aglyn'
+  resolveTemplateSlug,
+  templateScreenAddressRefusal,
+  withBundleRootScreen,
+} from '@aglyn/aglyn/app-utils/template-slug'
 import type { Firestore } from 'firebase/firestore'
 import { publishScreenRoute } from '../../constants/screen-publishing'
-
-/**
- * Why one template screen cannot be given the address it asks for, or
- * `undefined` when it can (AGL-2588).
- *
- * The bundle appliers pass `slug` straight off a template document into
- * {@link createPageFromTemplate}, so no field ever asks the two questions
- * every typed slug field asks: is this ONE path segment (AGL-2572), and is
- * the address one the published site can actually answer (AGL-2076)? The set
- * of bundle slugs is safe today only because of where they come from —
- * starter slugs are code-defined, and library-template slugs were captured
- * off screens that already passed a guard. Provenance is not a guard, and it
- * stops being true the first time a template carries an author-supplied slug.
- *
- * Answers over the address `resolveTemplateSlug` would REQUEST — the slug,
- * or the display name when the slug sanitizes away, or `page` — because a
- * screen whose slug is `###` and whose name is `Search` still lands on
- * `search`. De-confliction only ever appends a numeric suffix, so it can
- * neither create a reserved segment nor clear one.
- *
- * A refusal string rather than a boolean, so the caller can name to the
- * author which rule the screen fell foul of.
- */
-export function templateScreenAddressRefusal(input: {
-  slug?: string
-  displayName?: string
-}): string | undefined {
-  if (screenSlugHasPathSeparator(input.slug)) {
-    return SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
-  }
-  const requested =
-    normalizeScreenSlug(input.slug) ??
-    normalizeScreenSlug(input.displayName) ??
-    'page'
-  const reserved = reservedScreenRouteSegment(requested)
-  return reserved ? reservedScreenRouteMessage(reserved) : undefined
-}
-
-/**
- * The address one template page claims (AGL-1575).
- *
- * This used to be a private `slugifyPageName` that stripped every character
- * outside `[a-z0-9]`, so `'/'` and `''` both reduced to the empty string and
- * fell through to the display name. A template screen asking for the SITE
- * ROOT could therefore never get it: the shop starters declared `slug: ''`
- * meaning home and were published at `/home`, and a site started from any
- * template 404'd at its own URL while the console showed a success toast.
- *
- * The routing-map format has one canonical normalizer — `normalizeScreenSlug`
- * — which is what the Screens page and the besigner already publish through,
- * and which is the only place that knows `'/'` is the root path rather than
- * punctuation. Template pages now go through it too, so all three surfaces
- * agree on what a user-supplied address means.
- *
- * ## De-confliction (the invariant)
- *
- * `usedSlugs` holds every path already routed on the host plus everything
- * claimed earlier in the same batch. A claim that collides FALLS BACK; it
- * never overwrites, because the caller publishes into the host's routing map
- * and a duplicate path would take a live page off the site.
- *
- * The root is the interesting case: `'/-2'` is not an address, so a second
- * claimant on a host that already has a home page falls back to its NAME
- * (`Home` → `home`), and only then to numeric suffixes. First claimant wins
- * the root; everybody after it gets a real path of their own.
- *
- * Mutates `usedSlugs` with whatever it hands out.
- */
-export function resolveTemplateSlug(input: {
-  /** Preferred address as authored — `'/'` (or `SCREEN_ROOT_PATH`) for home. */
-  slug?: string
-  /** Falls back to a slug of this when no address is authored. */
-  displayName: string
-  /** Paths already taken. Mutated with whatever this page claims. */
-  usedSlugs: Set<string>
-}): { slug: string; requestedSlug: string } {
-  const { usedSlugs } = input
-  // `normalizeScreenSlug` returns undefined for anything that sanitizes away
-  // (`''`, `'###'`) — the caller decides what that means, and here it means
-  // "no address authored", so the display name answers instead.
-  const named = normalizeScreenSlug(input.displayName) ?? 'page'
-  const requested = normalizeScreenSlug(input.slug) ?? named
-
-  const base =
-    requested === SCREEN_ROOT_PATH && usedSlugs.has(SCREEN_ROOT_PATH)
-      ? named
-      : requested
-  let slug = base
-  let attempt = 2
-  while (usedSlugs.has(slug)) slug = `${base}-${attempt++}`
-  usedSlugs.add(slug)
-  return { slug, requestedSlug: requested }
-}
-
-/**
- * Gives a multi-page bundle a home page when nothing in it claims one
- * (AGL-1575).
- *
- * A starter is somebody's whole site, and a site whose root 404s is broken in
- * the one place every visitor lands. When no screen in the bundle asks for
- * `SCREEN_ROOT_PATH` and the host has no root route yet, the FIRST screen —
- * authored order, which is the order the author meant them to be created in —
- * takes it. That also repairs starters materialized before this fix, whose
- * seeded documents dropped the home screen's `slug: ''` on the floor.
- *
- * Deliberately NOT applied to the single-template "Use template" dialog: the
- * user types an address there, and silently re-pointing an explicit answer at
- * the root would be a worse surprise than a site that needs a home page.
- * Deliberately conditional on the host having no root: it never moves a live
- * home page, which is the same invariant `resolveTemplateSlug` protects.
- */
-export function withBundleRootScreen<T extends { slug?: string }>(
-  screens: readonly T[],
-  usedSlugs: Iterable<string>,
-): T[] {
-  const list = [...screens]
-  if (!list.length) return list
-  if ([...usedSlugs].includes(SCREEN_ROOT_PATH)) return list
-  const claimsRoot = list.some(
-    (screen) => normalizeScreenSlug(screen.slug) === SCREEN_ROOT_PATH,
-  )
-  if (claimsRoot) return list
-  list[0] = { ...list[0], slug: SCREEN_ROOT_PATH }
-  return list
-}
 
 /**
  * Create one live page from a node map (AGL-672).
@@ -281,5 +153,7 @@ export async function createPageFromTemplate(
 
   return { screenId, slug, requestedSlug }
 }
+
+export { resolveTemplateSlug, templateScreenAddressRefusal, withBundleRootScreen }
 
 export default createPageFromTemplate

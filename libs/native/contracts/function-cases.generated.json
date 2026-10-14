@@ -3508,6 +3508,261 @@
         }
       ]
     },
+    "compress": {
+      "module": "libs/aglyn/src/lib/app-utils/compress.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "root": {
+                "$id": "root",
+                "componentId": "div",
+                "nodes": [
+                  "n1",
+                  "n2"
+                ]
+              },
+              "n1": {
+                "$id": "n1",
+                "componentId": "text",
+                "pluginId": "mui",
+                "props": {
+                  "children": "Hello, {{name}}",
+                  "size": 16,
+                  "bold": true,
+                  "ratio": 1.5,
+                  "neg": -7,
+                  "big": 4294967296,
+                  "nested": {
+                    "a": [
+                      1,
+                      2,
+                      {
+                        "b": null
+                      }
+                    ]
+                  },
+                  "empty": ""
+                }
+              },
+              "n2": {
+                "$id": "n2",
+                "componentId": "image",
+                "props": {
+                  "src": "media:h1/m1",
+                  "alt": "Café ☕ — naïve 日本語 🙂",
+                  "width": 160
+                }
+              }
+            }
+          ],
+          "result": "g6Ryb290g6MkaWSkcm9vdKtjb21wb25lbnRJZKNkaXalbm9kZXOSom4xom4yom4xhKMkaWSibjGrY29tcG9uZW50SWSkdGV4dKhwbHVnaW5JZKNtdWmlcHJvcHOIqGNoaWxkcmVur0hlbGxvLCB7e25hbWV9faRzaXplEKRib2xkw6VyYXRpb8s/+AAAAAAAAKNuZWf5o2JpZ88AAAABAAAAAKZuZXN0ZWSBoWGTAQKBoWLApWVtcHR5oKJuMoOjJGlkom4yq2NvbXBvbmVudElkpWltYWdlpXByb3Bzg6NzcmOrbWVkaWE6aDEvbTGjYWx02SNDYWbDqSDimJUg4oCUIG5hw692ZSDml6XmnKzoqp4g8J+ZgqV3aWR0aMyg"
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": "gA=="
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": "kA=="
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "wA=="
+        },
+        {
+          "args": [
+            true
+          ],
+          "result": "ww=="
+        },
+        {
+          "args": [
+            false
+          ],
+          "result": "wg=="
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "oA=="
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": "v3h4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg="
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": "2SB4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA=="
+        },
+        {
+          "args": [
+            "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+          ],
+          "result": "2gEseXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5"
+        },
+        {
+          "args": [
+            [
+              0,
+              1,
+              127,
+              128,
+              255,
+              256,
+              65535,
+              65536,
+              4294967295,
+              4294967296,
+              9007199254740991,
+              -1,
+              -32,
+              -33,
+              -128,
+              -129,
+              -32768,
+              -32769,
+              -2147483648,
+              -2147483649,
+              -9007199254740991
+            ]
+          ],
+          "result": "3AAVAAF/zIDM/80BAM3//84AAQAAzv/////PAAAAAQAAAADPAB//////////4NDf0IDR/3/RgADS//9//9KAAAAA0/////9/////0//gAAAAAAAB"
+        },
+        {
+          "args": [
+            [
+              0.1,
+              -2.5,
+              3.14159265358979,
+              1e+21,
+              -1e-7,
+              123456.789
+            ]
+          ],
+          "result": "lss/uZmZmZmZmsvABAAAAAAAAMtACSH7VEQtEctESxrk1uLvUMu+etfymryvSMtA/iQMn752yQ=="
+        },
+        {
+          "args": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ]
+          ],
+          "result": "3AAQAAECAwQFBgcICQoLDA0ODw=="
+        },
+        {
+          "args": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14
+            ]
+          ],
+          "result": "nwABAgMEBQYHCAkKCwwNDg=="
+        },
+        {
+          "args": [
+            {
+              "k00": 0,
+              "k01": 1,
+              "k02": 2,
+              "k03": 3,
+              "k04": 4,
+              "k05": 5,
+              "k06": 6,
+              "k07": 7,
+              "k08": 8,
+              "k09": 9,
+              "k10": 10,
+              "k11": 11,
+              "k12": 12,
+              "k13": 13,
+              "k14": 14,
+              "k15": 15,
+              "k16": 16,
+              "k17": 17,
+              "k18": 18,
+              "k19": 19
+            }
+          ],
+          "result": "3gAUo2swMACjazAxAaNrMDICo2swMwOjazA0BKNrMDUFo2swNgajazA3B6NrMDgIo2swOQmjazEwCqNrMTELo2sxMgyjazEzDaNrMTQOo2sxNQ+jazE2EKNrMTcRo2sxOBKjazE5Ew=="
+        },
+        {
+          "args": [
+            {
+              "a": {
+                "b": {
+                  "c": {
+                    "d": [
+                      {
+                        "e": "deep"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "result": "gaFhgaFigaFjgaFkkYGhZaRkZWVw"
+        },
+        {
+          "args": [
+            {
+              "mixed": [
+                null,
+                true,
+                false,
+                0,
+                -1,
+                1.25,
+                "s",
+                [],
+                {}
+              ]
+            }
+          ],
+          "result": "gaVtaXhlZJnAw8IA/8s/9AAAAAAAAKFzkIA="
+        }
+      ]
+    },
     "consentGroupForHost": {
       "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
       "cases": [
@@ -4478,6 +4733,100 @@
             }
           ],
           "result": "-13% · 20% conf."
+        }
+      ]
+    },
+    "detectTemplatePlaceholders": {
+      "module": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "n": {
+                "props": {
+                  "children": "Hello {{name}} and {{ company }}"
+                }
+              }
+            }
+          ],
+          "result": [
+            "company",
+            "name"
+          ]
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "props": {
+                  "a": "{{var:abc}} {{fn:xyz}} {{prop.title}} {{real}}"
+                }
+              }
+            }
+          ],
+          "result": [
+            "real"
+          ]
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "props": {
+                  "a": [
+                    "{{zeta}}",
+                    {
+                      "b": "{{alpha}} {{alpha}}"
+                    }
+                  ]
+                }
+              },
+              "m": {
+                "props": {
+                  "x": "{{beta.gamma}} {{a-b}} {{a_b}}"
+                }
+              }
+            }
+          ],
+          "result": [
+            "a-b",
+            "a_b",
+            "alpha",
+            "beta.gamma",
+            "zeta"
+          ]
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "props": {
+                  "a": "{{1bad}} {{ }} {{}} {{x y}}"
+                }
+              }
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "props": {
+                  "count": 3,
+                  "flag": true,
+                  "nothing": null
+                }
+              }
+            }
+          ],
+          "result": []
         }
       ]
     },
@@ -12420,6 +12769,113 @@
         }
       ]
     },
+    "normalizeScreenSlug": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "cases": [
+        {
+          "args": [
+            "About us"
+          ],
+          "result": "about-us"
+        },
+        {
+          "args": [
+            "  /about/  "
+          ],
+          "result": "about"
+        },
+        {
+          "args": [
+            "/"
+          ],
+          "result": "/"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "###"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "Hello World!"
+          ],
+          "result": "hello-world"
+        },
+        {
+          "args": [
+            "a_b-c"
+          ],
+          "result": "a_b-c"
+        },
+        {
+          "args": [
+            "/Team/"
+          ],
+          "result": "team"
+        },
+        {
+          "args": [
+            "alt/webflow"
+          ],
+          "result": "altwebflow"
+        },
+        {
+          "args": [
+            "search"
+          ],
+          "result": "search"
+        },
+        {
+          "args": [
+            "404"
+          ],
+          "result": "404"
+        },
+        {
+          "args": [
+            "Café Menu"
+          ],
+          "result": "caf-menu"
+        },
+        {
+          "args": [
+            "UPPER"
+          ],
+          "result": "upper"
+        },
+        {
+          "args": [
+            "--x--"
+          ],
+          "result": "x"
+        },
+        {
+          "args": [
+            "a  b"
+          ],
+          "result": "a-b"
+        },
+        {
+          "args": [
+            "10%"
+          ],
+          "result": "10"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        }
+      ]
+    },
     "optionsFromChoiceRows": {
       "module": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
       "cases": [
@@ -19914,6 +20370,100 @@
         }
       ]
     },
+    "reservedScreenRouteMessage": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "cases": [
+        {
+          "args": [
+            "search"
+          ],
+          "result": "\"/search\" is a reserved address on every Aglyn site — pick another slug"
+        },
+        {
+          "args": [
+            "404"
+          ],
+          "result": "\"/404\" is a reserved address on every Aglyn site — pick another slug"
+        },
+        {
+          "args": [
+            "_aglyn"
+          ],
+          "result": "\"/_aglyn\" is a reserved address on every Aglyn site — pick another slug"
+        }
+      ]
+    },
+    "reservedScreenRouteSegment": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "cases": [
+        {
+          "args": [
+            "search"
+          ],
+          "result": "search"
+        },
+        {
+          "args": [
+            "404"
+          ],
+          "result": "404"
+        },
+        {
+          "args": [
+            "api/docs"
+          ],
+          "result": "api"
+        },
+        {
+          "args": [
+            "/_next"
+          ],
+          "result": "_next"
+        },
+        {
+          "args": [
+            "about"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "/"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "aglyn-preview/x"
+          ],
+          "result": "aglyn-preview"
+        },
+        {
+          "args": [
+            "_aglyn/leaving"
+          ],
+          "result": "_aglyn"
+        },
+        {
+          "args": [
+            "company/search"
+          ],
+          "result": null
+        }
+      ]
+    },
     "resolveDisableCascade": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "cases": [
@@ -20392,6 +20942,481 @@
             "music",
             "ad-conversions"
           ]
+        }
+      ]
+    },
+    "resolveNamedTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "root": {
+                "$id": "root",
+                "componentId": "div",
+                "nodes": [
+                  "n1",
+                  "n2"
+                ]
+              },
+              "n1": {
+                "$id": "n1",
+                "componentId": "text",
+                "pluginId": "mui",
+                "props": {
+                  "children": "Hello, {{name}}",
+                  "size": 16,
+                  "bold": true,
+                  "ratio": 1.5,
+                  "neg": -7,
+                  "big": 4294967296,
+                  "nested": {
+                    "a": [
+                      1,
+                      2,
+                      {
+                        "b": null
+                      }
+                    ]
+                  },
+                  "empty": ""
+                }
+              },
+              "n2": {
+                "$id": "n2",
+                "componentId": "image",
+                "props": {
+                  "src": "media:h1/m1",
+                  "alt": "Café ☕ — naïve 日本語 🙂",
+                  "width": 160
+                }
+              }
+            },
+            {
+              "name": "Ada"
+            }
+          ],
+          "result": {
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "big": 4294967296,
+                "bold": true,
+                "children": "Hello, Ada",
+                "empty": "",
+                "neg": -7,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "ratio": 1.5,
+                "size": 16
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "src": "media:h1/m1",
+                "width": 160
+              }
+            },
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "root": {
+                "$id": "root",
+                "componentId": "div",
+                "nodes": [
+                  "n1",
+                  "n2"
+                ]
+              },
+              "n1": {
+                "$id": "n1",
+                "componentId": "text",
+                "pluginId": "mui",
+                "props": {
+                  "children": "Hello, {{name}}",
+                  "size": 16,
+                  "bold": true,
+                  "ratio": 1.5,
+                  "neg": -7,
+                  "big": 4294967296,
+                  "nested": {
+                    "a": [
+                      1,
+                      2,
+                      {
+                        "b": null
+                      }
+                    ]
+                  },
+                  "empty": ""
+                }
+              },
+              "n2": {
+                "$id": "n2",
+                "componentId": "image",
+                "props": {
+                  "src": "media:h1/m1",
+                  "alt": "Café ☕ — naïve 日本語 🙂",
+                  "width": 160
+                }
+              }
+            },
+            {
+              "name": "A.d{a}"
+            }
+          ],
+          "result": {
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "big": 4294967296,
+                "bold": true,
+                "children": "Hello, A.d{a}",
+                "empty": "",
+                "neg": -7,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "ratio": 1.5,
+                "size": 16
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "src": "media:h1/m1",
+                "width": 160
+              }
+            },
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "root": {
+                "$id": "root",
+                "componentId": "div",
+                "nodes": [
+                  "n1",
+                  "n2"
+                ]
+              },
+              "n1": {
+                "$id": "n1",
+                "componentId": "text",
+                "pluginId": "mui",
+                "props": {
+                  "children": "Hello, {{name}}",
+                  "size": 16,
+                  "bold": true,
+                  "ratio": 1.5,
+                  "neg": -7,
+                  "big": 4294967296,
+                  "nested": {
+                    "a": [
+                      1,
+                      2,
+                      {
+                        "b": null
+                      }
+                    ]
+                  },
+                  "empty": ""
+                }
+              },
+              "n2": {
+                "$id": "n2",
+                "componentId": "image",
+                "props": {
+                  "src": "media:h1/m1",
+                  "alt": "Café ☕ — naïve 日本語 🙂",
+                  "width": 160
+                }
+              }
+            },
+            {}
+          ],
+          "result": {
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "big": 4294967296,
+                "bold": true,
+                "children": "Hello, {{name}}",
+                "empty": "",
+                "neg": -7,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "ratio": 1.5,
+                "size": 16
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "src": "media:h1/m1",
+                "width": 160
+              }
+            },
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "root": {
+                "$id": "root",
+                "componentId": "div",
+                "nodes": [
+                  "n1",
+                  "n2"
+                ]
+              },
+              "n1": {
+                "$id": "n1",
+                "componentId": "text",
+                "pluginId": "mui",
+                "props": {
+                  "children": "Hello, {{name}}",
+                  "size": 16,
+                  "bold": true,
+                  "ratio": 1.5,
+                  "neg": -7,
+                  "big": 4294967296,
+                  "nested": {
+                    "a": [
+                      1,
+                      2,
+                      {
+                        "b": null
+                      }
+                    ]
+                  },
+                  "empty": ""
+                }
+              },
+              "n2": {
+                "$id": "n2",
+                "componentId": "image",
+                "props": {
+                  "src": "media:h1/m1",
+                  "alt": "Café ☕ — naïve 日本語 🙂",
+                  "width": 160
+                }
+              }
+            },
+            null
+          ],
+          "result": {
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "big": 4294967296,
+                "bold": true,
+                "children": "Hello, {{name}}",
+                "empty": "",
+                "neg": -7,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "ratio": 1.5,
+                "size": 16
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "src": "media:h1/m1",
+                "width": 160
+              }
+            },
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "$id": "n",
+                "componentId": "text",
+                "props": {
+                  "children": "{{ name }} and {{other}} and {{ name}}",
+                  "list": [
+                    "{{name}}",
+                    {
+                      "deep": "x {{name}} y"
+                    }
+                  ],
+                  "count": 3
+                }
+              }
+            },
+            {
+              "name": "Zed",
+              "other": "Q"
+            }
+          ],
+          "result": {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "Zed and Q and Zed",
+                "count": 3,
+                "list": [
+                  "Zed",
+                  {
+                    "deep": "x Zed y"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "$id": "n",
+                "componentId": "text",
+                "props": {
+                  "children": "Hi {{who}}"
+                }
+              }
+            },
+            {
+              "name": "Ada"
+            }
+          ],
+          "result": {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "Hi {{who}}"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "$id": "n",
+                "componentId": "div"
+              }
+            },
+            {
+              "name": "Ada"
+            }
+          ],
+          "result": {
+            "n": {
+              "$id": "n",
+              "componentId": "div"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "n": {
+                "$id": "n",
+                "componentId": "text",
+                "props": {
+                  "children": "{{a.b}} {{a}}"
+                }
+              }
+            },
+            {
+              "a.b": "dot",
+              "a": "plain"
+            }
+          ],
+          "result": {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "dot plain"
+              }
+            }
+          }
         }
       ]
     },
@@ -21116,6 +22141,173 @@
             "blocked": true,
             "ready": true,
             "reason": "This action requires the  staff role. Ask someone who holds it."
+          }
+        }
+      ]
+    },
+    "resolveTemplateSlugAmong": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "slug": "about",
+              "displayName": "About",
+              "taken": []
+            }
+          ],
+          "result": {
+            "requestedSlug": "about",
+            "slug": "about",
+            "taken": [
+              "about"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "slug": "about",
+              "displayName": "About",
+              "taken": [
+                "about"
+              ]
+            }
+          ],
+          "result": {
+            "requestedSlug": "about",
+            "slug": "about-2",
+            "taken": [
+              "about",
+              "about-2"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "slug": "about",
+              "displayName": "About",
+              "taken": [
+                "about",
+                "about-2"
+              ]
+            }
+          ],
+          "result": {
+            "requestedSlug": "about",
+            "slug": "about-3",
+            "taken": [
+              "about",
+              "about-2",
+              "about-3"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "slug": "/",
+              "displayName": "Home",
+              "taken": []
+            }
+          ],
+          "result": {
+            "requestedSlug": "/",
+            "slug": "/",
+            "taken": [
+              "/"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "slug": "/",
+              "displayName": "Home",
+              "taken": [
+                "/"
+              ]
+            }
+          ],
+          "result": {
+            "requestedSlug": "/",
+            "slug": "home",
+            "taken": [
+              "/",
+              "home"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "slug": "/",
+              "displayName": "Home",
+              "taken": [
+                "/",
+                "home"
+              ]
+            }
+          ],
+          "result": {
+            "requestedSlug": "/",
+            "slug": "home-2",
+            "taken": [
+              "/",
+              "home",
+              "home-2"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "slug": "###",
+              "displayName": "Our Team",
+              "taken": []
+            }
+          ],
+          "result": {
+            "requestedSlug": "our-team",
+            "slug": "our-team",
+            "taken": [
+              "our-team"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "displayName": "",
+              "taken": []
+            }
+          ],
+          "result": {
+            "requestedSlug": "page",
+            "slug": "page",
+            "taken": [
+              "page"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "slug": "Contact Us",
+              "displayName": "x",
+              "taken": [
+                "contact-us"
+              ]
+            }
+          ],
+          "result": {
+            "requestedSlug": "contact-us",
+            "slug": "contact-us-2",
+            "taken": [
+              "contact-us",
+              "contact-us-2"
+            ]
           }
         }
       ]
@@ -22365,6 +23557,65 @@
         }
       ]
     },
+    "screenSlugHasPathSeparator": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "cases": [
+        {
+          "args": [
+            "alternatives/webflow"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "/about/"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "/"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "about"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "a/b/c"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "  "
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            " /x/y "
+          ],
+          "result": true
+        }
+      ]
+    },
     "sendLinkReport": {
       "module": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
       "cases": [
@@ -23221,6 +24472,77 @@
             }
           ],
           "result": ""
+        }
+      ]
+    },
+    "templateScreenAddressRefusal": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "slug": "alt/webflow"
+            }
+          ],
+          "result": "A slug is one path segment — remove the \"/\" and nest the page under a parent page instead"
+        },
+        {
+          "args": [
+            {
+              "slug": "search",
+              "displayName": "Search"
+            }
+          ],
+          "result": "\"/search\" is a reserved address on every Aglyn site — pick another slug"
+        },
+        {
+          "args": [
+            {
+              "slug": "###",
+              "displayName": "Search"
+            }
+          ],
+          "result": "\"/search\" is a reserved address on every Aglyn site — pick another slug"
+        },
+        {
+          "args": [
+            {
+              "displayName": "API"
+            }
+          ],
+          "result": "\"/api\" is a reserved address on every Aglyn site — pick another slug"
+        },
+        {
+          "args": [
+            {
+              "slug": "/",
+              "displayName": "Home"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "slug": "",
+              "displayName": "Pricing"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "slug": "404"
+            }
+          ],
+          "result": "\"/404\" is a reserved address on every Aglyn site — pick another slug"
         }
       ]
     },
@@ -24610,6 +25932,140 @@
             36
           ],
           "result": "36 hours"
+        }
+      ]
+    },
+    "withBundleRootScreen": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "displayName": "A",
+                "slug": "a"
+              },
+              {
+                "displayName": "B",
+                "slug": "b"
+              }
+            ],
+            []
+          ],
+          "result": [
+            {
+              "displayName": "A",
+              "slug": "/"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "displayName": "A",
+                "slug": "a"
+              },
+              {
+                "displayName": "B",
+                "slug": "b"
+              }
+            ],
+            [
+              "/"
+            ]
+          ],
+          "result": [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "displayName": "A",
+                "slug": "a"
+              },
+              {
+                "displayName": "B",
+                "slug": "b"
+              }
+            ],
+            [
+              "about"
+            ]
+          ],
+          "result": [
+            {
+              "displayName": "A",
+              "slug": "/"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "displayName": "A",
+                "slug": "a"
+              },
+              {
+                "displayName": "H",
+                "slug": "/"
+              }
+            ],
+            []
+          ],
+          "result": [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "H",
+              "slug": "/"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            []
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              {
+                "displayName": "A"
+              }
+            ],
+            [
+              "x"
+            ]
+          ],
+          "result": [
+            {
+              "displayName": "A",
+              "slug": "/"
+            }
+          ]
         }
       ]
     }

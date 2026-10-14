@@ -17,6 +17,11 @@ private enum ArtifactDialog: Identifiable {
   case duplicate(ArtifactRow)
   case delete(ArtifactRow, siblings: [ArtifactRow])
   case deleteBundle(lead: ArtifactRow, pages: [ArtifactRow])
+  /// The templates of this list's kind to start a new one from.
+  case gallery
+  /// Use this template: a page, component or layout (or a starter site's pages) made from it.
+  case use(ArtifactRow)
+  case saveTemplate(ArtifactRow)
 
   var id: String {
     switch self {
@@ -25,6 +30,9 @@ private enum ArtifactDialog: Identifiable {
     case .duplicate(let row): "duplicate-\(row.id)"
     case .delete(let row, _): "delete-\(row.id)"
     case .deleteBundle(let lead, _): "delete-bundle-\(lead.id)"
+    case .gallery: "gallery"
+    case .use(let row): "use-\(row.id)"
+    case .saveTemplate(let row): "save-template-\(row.id)"
     }
   }
 }
@@ -81,7 +89,8 @@ struct ArtifactsScreen: View {
         .sheet(item: $dialog) { dialog in
           ArtifactDialogSheet(
             context: context, hostID: hostID, kind: kind, dialog: dialog, api: api, runner: runner,
-            onCreated: { selection = $0 }, onDeleted: { id in if selection == id { selection = nil } }
+            onCreated: { selection = $0 }, onDeleted: { id in if selection == id { selection = nil } },
+            onOpen: { self.dialog = $0 }
           ) { self.dialog = nil }
         }
       } else {
@@ -95,6 +104,18 @@ struct ArtifactsScreen: View {
       if !Task.isCancelled { model.search = searchText }
     }
     .toolbar {
+      if kind != .template {
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            runner.clear()
+            dialog = .gallery
+          } label: {
+            Label("From a template", systemImage: "square.grid.2x2")
+          }
+          .disabled(!canEdit)
+          .accessibilityIdentifier("from-template-\(kind.singular)")
+        }
+      }
       ToolbarItem(placement: .primaryAction) {
         Button {
           runner.clear()
@@ -296,6 +317,7 @@ private struct ArtifactDetail: View {
       Menu {
         Button("Edit details", systemImage: "pencil") { open(.details(row)) }.disabled(!canEdit)
         if !row.isStarterBundle { Button("Duplicate", systemImage: "square.on.square") { open(.duplicate(row)) }.disabled(!canEdit) }
+        if kind != .template { Button("Save as template", systemImage: "bookmark") { open(.saveTemplate(row)) }.disabled(!canEdit) }
         Button(row.isStarterBundle ? "Delete bundle" : "Delete", systemImage: "trash", role: .destructive) {
           open(row.isStarterBundle ? .deleteBundle(lead: row, pages: bundle.isEmpty ? [row] : bundle) : .delete(row, siblings: []))
         }
@@ -335,10 +357,16 @@ private struct ArtifactDetail: View {
       .buttonStyle(.bordered)
       .disabled(preview == nil)
       .accessibilityIdentifier("artifact-preview")
-    }
-    if kind == .template {
-      Text("Starting a page, component or layout from a template happens in the Besigner's template gallery.")
-        .font(AglynFont.caption).foregroundStyle(.secondary)
+      if kind == .template {
+        Button {
+          open(.use(row))
+        } label: {
+          Label(row.isStarterBundle ? "Use this starter site" : "Use this template", systemImage: "plus")
+        }
+        .buttonStyle(.bordered)
+        .disabled(!canEdit)
+        .accessibilityIdentifier("use-template")
+      }
     }
     if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() } }
   }
@@ -451,11 +479,30 @@ private struct ArtifactDialogSheet: View {
   let runner: ActionRunner
   let onCreated: (String) -> Void
   let onDeleted: (String) -> Void
+  let onOpen: (ArtifactDialog) -> Void
   let close: () -> Void
 
   var body: some View {
     Group {
       switch dialog {
+      case .gallery:
+        TemplateGallerySheet(context: context, hostID: hostID, kind: kind == .layout ? "layout" : "component", onChoose: { onOpen(.use($0)) }, close: close)
+      case .use(let row):
+        UseTemplateSheet(context: context, hostID: hostID, row: row, onDone: { usedKind, id in
+          close()
+          let destination = templateUseDestination(kind: usedKind, id: id)
+          context.navigate(destination.screen, destination.params)
+        }, close: close)
+      case .saveTemplate(let row):
+        SaveAsTemplateSheet(
+          context: context, hostID: hostID, kind: kind == .layout ? "layout" : "component", defaultName: row.name,
+          load: { templates in
+            kind == .layout ? try await templates.layoutSource(row.id, versionID: row.versionID) : try await templates.componentSource(row.id)
+          },
+          onSaved: { message in
+            runner.notice = message
+            close()
+          }, close: close)
       case .create:
         CreateArtifactSheet(kind: kind, api: api, runner: runner, onCreated: onCreated, close: close)
       case .details(let row):

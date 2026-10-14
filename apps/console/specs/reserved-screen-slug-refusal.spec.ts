@@ -72,8 +72,9 @@ const SLUG_ENTRY_SURFACES: Record<string, string> = {
     'app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
   'the Use template dialog':
     'components/templates/use-template-dialog.component.tsx',
+  // Moved to the core lib (the native apps replay it); the console file re-exports it.
   'the template bundle refusal helper':
-    'components/templates/create-page-from-template.ts',
+    '../../libs/aglyn/src/lib/app-utils/template-slug.ts',
 }
 
 /** Bundle appliers, which delegate to the helper rather than ask directly. */
