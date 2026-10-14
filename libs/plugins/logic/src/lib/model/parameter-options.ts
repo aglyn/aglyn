@@ -40,41 +40,8 @@ export function formatParameterOptions(
   return formatFunctionParameterOptions(options)
 }
 
-/** One row of the choices editor, blanks and all, as the author sees it. */
-export interface ParameterChoiceRow {
-  /** What the function receives. */
-  value: string
-  /** What the visitor reads; the value when blank. */
-  label: string
-}
-
-/** The rows a stored choice list opens as. */
-export function choiceRowsFromOptions(
-  options: HostFunctionParameterOption[] | undefined,
-): ParameterChoiceRow[] {
-  return (options ?? []).map((option) => ({
-    value: option.value,
-    label: option.label ?? '',
-  }))
-}
-
-/**
- * The choice list rows store as (AGL-3768) — the same shape the one-line
- * grammar produced. A row with no value is not a choice yet; the second row
- * of a value is dropped, since a list cannot tell the function which of two
- * identical values was picked; a label equal to its value is not stored.
- */
-export function optionsFromChoiceRows(
-  rows: readonly ParameterChoiceRow[],
-): HostFunctionParameterOption[] {
-  const options: HostFunctionParameterOption[] = []
-  const seen = new Set<string>()
-  for (const row of rows) {
-    const value = row.value.trim()
-    if (!value || seen.has(value)) continue
-    seen.add(value)
-    const label = row.label.trim()
-    options.push(label && label !== value ? { value, label } : { value })
-  }
-  return options
-}
+export {
+  choiceRowsFromOptions,
+  optionsFromChoiceRows,
+  type ParameterChoiceRow,
+} from './parameter-choice-rows'

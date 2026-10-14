@@ -2242,6 +2242,21 @@ data class ReceiptTender(
     val label: String,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ReturnReasonSerializer::class)
+enum class ReturnReason(val raw: String) {
+    DAMAGED("damaged"),
+    NO_LONGER_NEEDED("no_longer_needed"),
+    NOT_AS_DESCRIBED("not_as_described"),
+    OTHER("other"),
+    SIZE_OR_FIT("size_or_fit"),
+    WRONG_ITEM("wrong_item"),
+    UNKNOWN(""),
+}
+
+internal object ReturnReasonSerializer :
+    RawEnumSerializer<ReturnReason>("com.aglyn.contracts.ReturnReason", ReturnReason.entries, ReturnReason.UNKNOWN, { it.raw })
+
 @Serializable
 data class ScreenTrafficRow(
     val devices: Map<String, Double>,
@@ -2509,6 +2524,8 @@ internal data class ContractValuesPart4(
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
     @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
+    @SerialName("RETURN_REASON_LABELS") val returnReasonLabels: Map<String, String>,
+    @SerialName("RETURN_REASONS") val returnReasons: List<ReturnReason>,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
     @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
     @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
@@ -2524,12 +2541,12 @@ internal data class ContractValuesPart4(
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
     @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
-    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
-    @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
+    @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
@@ -2722,6 +2739,8 @@ class ContractValues internal constructor(
     val reminderWindowStartHours: Long get() = part4.reminderWindowStartHours
     val replyBodyMax: Long get() = part4.replyBodyMax
     val replySubjectMax: Long get() = part4.replySubjectMax
+    val returnReasonLabels: Map<String, String> get() = part4.returnReasonLabels
+    val returnReasons: List<ReturnReason> get() = part4.returnReasons
     val scopedSearchJoin: String get() = part4.scopedSearchJoin
     val searchEngineVerificationLabels: Map<String, String> get() = part4.searchEngineVerificationLabels
     val searchEngineVerificationMetaNames: Map<String, String> get() = part4.searchEngineVerificationMetaNames
@@ -2737,8 +2756,8 @@ class ContractValues internal constructor(
     val suppressionListQuery: ListQueryDeclaration get() = part4.suppressionListQuery
     val taskListDeclaration: ListQueryDeclaration get() = part4.taskListDeclaration
     val templateKindOptions: List<ListFilterOption> get() = part4.templateKindOptions
-    val templateListBase: List<ListQueryFilter> get() = part4.templateListBase
-    val templateListQuery: ListQueryDeclaration get() = part4.templateListQuery
+    val templateListBase: List<ListQueryFilter> get() = part5.templateListBase
+    val templateListQuery: ListQueryDeclaration get() = part5.templateListQuery
     val tenantEmailCollection: String get() = part5.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part5.tenantEmails
     val workflowMaxSteps: Long get() = part5.workflowMaxSteps
