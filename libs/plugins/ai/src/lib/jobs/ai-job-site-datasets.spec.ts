@@ -58,6 +58,7 @@ import {
   aiSitePlanDatasetCapability,
   aiSitePlanDatasets,
   aiSiteRecordTemplateOf,
+  aiSiteReusedDatasetListings,
   createAiSiteDatasetRunner,
 } from './ai-job-site-datasets'
 
@@ -778,5 +779,61 @@ describe('a dataset whose records carry photos (AGL-3616)', () => {
     await createAiSiteDatasetRunner({ generate: generated(), writerFor, photos })(context(job))
     expect(photos).not.toHaveBeenCalled()
     expect((writes[0].content as { fields: Array<{ type: string }> }).fields.some((field) => field.type === 'image')).toBe(false)
+  })
+})
+
+/*
+ * Panaderia El Trigal (AGL-3771, beta.249): the workspace's second site
+ * reused its first one's menu, its plan naming the dataset by id. The start
+ * listed only the datasets it made, so the home's "Del menú" section was
+ * asked to place a dataset no block draws, showed none of its six items and
+ * the home was refused; the Menú page published with no menu at all.
+ */
+describe('a site start lists the workspace datasets its plan reuses (AGL-3771)', () => {
+  const screens = [
+    {
+      id: 'scr-home',
+      title: 'Inicio',
+      slug: '/',
+      sections: [
+        { name: 'Hero', uses: [], items: 0 },
+        { name: 'Del menú: favoritos de la casa', uses: ['NCR4gX9ABA'], items: 6 },
+        { name: 'Cierre', uses: ['new:Formulario de contacto'], items: 0 },
+      ],
+    },
+    { id: 'scr-menu', title: 'Menú', slug: '/menu', sections: [{ name: 'Lista del menú', uses: ['NCR4gX9ABA'], items: 0 }] },
+    { id: 'scr-faq', title: 'Pasteles', slug: '/pasteles', sections: [{ name: 'Preguntas', uses: ['vkPjuiHoOT'], items: 0 }] },
+  ]
+  const plan = {
+    reuse: [
+      { kind: 'dataset', id: 'NCR4gX9ABA', purpose: 'Lists menu items' },
+      { kind: 'dataset', id: 'vkPjuiHoOT', purpose: 'Cake questions' },
+      { kind: 'dataset', id: 'E8aTfL9zAw', purpose: 'Keeps each contact form submission' },
+      { kind: 'theme', id: 'theme', purpose: 'Brand colors' },
+    ],
+    create: [{ kind: 'form', name: 'Formulario de contacto', why: 'Contact', duplicateOf: null, fields: ['Nombre'], writesTo: 'E8aTfL9zAw' }],
+    labels: { NCR4gX9ABA: 'Menú de panadería', vkPjuiHoOT: 'Preguntas frecuentes de pasteles', E8aTfL9zAw: 'Solicitudes de contacto' },
+  } as unknown as Pick<AiJobPlan, 'reuse' | 'create' | 'labels'>
+
+  it('features the reused menu on the home and lists all of it on its own page', () => {
+    const listings = aiSiteReusedDatasetListings({ plan, screens, listed: [] })
+    expect(listings.map((listing) => [listing.datasetId, listing.name, listing.placements])).toEqual([
+      [
+        'NCR4gX9ABA',
+        'Menú de panadería',
+        [
+          { screenId: 'scr-home', section: 1, role: 'featured' },
+          { screenId: 'scr-menu', section: 0, role: 'index' },
+        ],
+      ],
+      ['vkPjuiHoOT', 'Preguntas frecuentes de pasteles', [{ screenId: 'scr-faq', section: 0, role: 'index' }]],
+    ])
+    // Its fields are read off the site's inventory when the page is designed.
+    expect(listings[0]).not.toHaveProperty('fields')
+  })
+
+  it('never lists the dataset a form writes its submissions into, nor one already listed', () => {
+    const named = [{ ...screens[0], sections: [...screens[0].sections, { name: 'Leads', uses: ['E8aTfL9zAw'], items: 3 }] }]
+    expect(aiSiteReusedDatasetListings({ plan, screens: named, listed: [{ datasetId: 'NCR4gX9ABA' }] })).toEqual([])
   })
 })

@@ -726,6 +726,33 @@ export function aiDatasetListingsOf(
 }
 
 /**
+ * A `records` listing for each dataset the workspace already keeps that a
+ * site start's plan reuses and a section names (AGL-3771), as a build lists
+ * the ones it reuses (AGL-3747). A second site in a workspace reuses the
+ * first one's menu: its plan names the dataset by id, the start listed only
+ * the datasets it made, and the page was asked to "place" a dataset no block
+ * can draw — the home's "Del menú" section was refused for showing none of
+ * its six items, and the Menú page published with no menu. A dataset one of
+ * the plan's forms writes into holds the site's submissions, and is never
+ * listed on a page.
+ */
+export function aiSiteReusedDatasetListings(input: {
+  plan: Pick<AiJobPlan, 'reuse' | 'create' | 'labels'>
+  screens: readonly AiLayoutListingScreen[]
+  /** The listings the start already has, whose datasets are not listed twice. */
+  listed: ReadonlyArray<Pick<AiLayoutListing, 'datasetId'>>
+}): AiLayoutListing[] {
+  const submissions = new Set(
+    input.plan.create.flatMap((entry) => (entry.kind === 'form' && entry.writesTo && !isAiPlanNewRef(entry.writesTo) ? [entry.writesTo] : [])),
+  )
+  const listed = new Set(input.listed.map((listing) => listing.datasetId).filter(Boolean))
+  const datasets = input.plan.reuse
+    .filter((entry) => entry.kind === 'dataset' && !submissions.has(entry.id) && !listed.has(entry.id))
+    .map((entry) => ({ id: entry.id, name: input.plan.labels?.[entry.id] || entry.id }))
+  return aiDatasetListingsOf(datasets, input.screens)
+}
+
+/**
  * The site's datasets a layout or a page unit is handed (AGL-3616), each a
  * `records` listing with the sections of the plan's pages that name it, once
  * its unit wrote it. A dataset not yet written, or one that failed, lists
