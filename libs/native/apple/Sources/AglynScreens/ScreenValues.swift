@@ -559,6 +559,21 @@ public enum ScreenValues {
       return facts(value)
     case "pairs":
       return pairs(value)
+    case "before", "after":
+      // `before/-` and `after/-`: the text either side of the first separator (a jurisdiction key `US-TX`); no separator, no tail.
+      let whole = text(value)
+      let separator = parts.count > 1 ? parts[1] : "-"
+      guard let found = whole.range(of: separator) else { return name == "before" ? whole : "" }
+      return name == "before" ? String(whole[..<found.lowerBound]) : String(whole[found.upperBound...])
+    case "labeled":
+      // `labeled/<path>`: each id (or the one) through the map at <path>; an id the map lacks stays as it is.
+      let map = parts.count > 1 ? lookup(parts[1], in: context) : nil
+      let ids: [JSONValue]
+      if case .array(let items)? = value { ids = items } else { ids = value.map { [$0] } ?? [] }
+      return ids.map { id -> String in
+        let key = text(id)
+        return map?[key].map { text($0) } ?? key
+      }.filter { !$0.isEmpty }.joined(separator: ", ")
     case "duration":
       // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
       guard let millis = number(value), millis.isFinite else { return "unknown" }

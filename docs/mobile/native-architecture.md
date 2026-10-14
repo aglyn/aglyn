@@ -897,7 +897,8 @@ A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
 
 `report` is a list of lines (`{ text, when, each }`, or a plain string) appended to `success`, one per
-line; `failure` is the same list for a refusal, appended to the route's own words and read over the route's
+line; `file` (`{ name, type, from }`) hands text to the device as a file, its name a template and `from` the path of the
+text over the screen and the route's `response` (Save, or the share sheet: the working papers' CSV); `failure` is the same list for a refusal, appended to the route's own words and read over the route's
 answer as `response` (the workspaces that still need an owner); `each` repeats a line for every row or map entry as `item`. `loop` (`{ cursor, param, until, max }`)
 sends a route that works in pages again, with the cursor it answered, until it says it is done, and
 answers the totals: numbers add up (a map of counts too), `pages` counts the requests and `bounded` says
@@ -915,7 +916,8 @@ Templates are `{path|fallback|'literal':format}` over the context `org`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row
 whose field matches) and `map[key.with.dots]`. `now` has `month`, `previousMonth`, `quarter` and `ms`. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
 platform's secure generator (the console's password generator). Formats: `pairs` (a map's entries as
-`key: value`, the keys untouched, where `facts` splits them into words), `date`, `datetime`,
+`key: value`, the keys untouched, where `facts` splits them into words), `labeled/<path>` (each id through the map at
+`<path>`), `before/-` and `after/-` (either side of the first separator), `date`, `datetime`,
 `cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
 `count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved

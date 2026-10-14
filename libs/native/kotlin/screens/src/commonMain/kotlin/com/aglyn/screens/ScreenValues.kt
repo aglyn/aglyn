@@ -500,6 +500,19 @@ object ScreenValues {
       "upper" -> text(value).uppercase()
       "facts" -> facts(value)
       "pairs" -> pairs(value)
+      // `before/-` and `after/-`: the text either side of the first separator (a jurisdiction key `US-TX`); no separator, no tail.
+      "before", "after" -> {
+        val whole = text(value)
+        val separator = parts.getOrNull(1) ?: "-"
+        val at = whole.indexOf(separator)
+        if (at < 0) (if (parts[0] == "before") whole else "") else if (parts[0] == "before") whole.substring(0, at) else whole.substring(at + separator.length)
+      }
+      // `labeled/<path>`: each id (or the one) through the map at <path>; an id the map lacks stays as it is.
+      "labeled" -> {
+        val map = parts.getOrNull(1)?.let { lookup(it, context) } as? JsonObject
+        val ids = (value as? JsonArray)?.toList() ?: listOfNotNull(value)
+        ids.map { id -> text(id).let { key -> map?.get(key)?.let { text(it) } ?: key } }.filter { it.isNotEmpty() }.joinToString(", ")
+      }
       // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
       "duration" -> number(value)?.takeIf { it.isFinite() }?.let { millis ->
         val minutes = (millis / 60_000).toLong()

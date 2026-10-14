@@ -10449,7 +10449,7 @@
     },
     {
       "id": "core.staff.tax",
-      "title": "Tax return",
+      "title": "{data.view.title|'Sales tax'}",
       "icon": "doc.text.magnifyingglass|request_quote",
       "scope": "staff",
       "group": "staff",
@@ -10459,168 +10459,542 @@
         "/admin/tax-return"
       ],
       "load": {
-        "ret": {
-          "url": "/api/admin/tax-return?period={params.period|now.quarter}",
-          "optional": true
+        "view": {
+          "url": "/api/admin/tax-return?view=prepared&period={params.period}"
         },
-        "filing": {
-          "url": "/api/admin/tax-filing",
-          "optional": true
+        "findings": {
+          "late": true,
+          "optional": true,
+          "url": "/api/admin/tax-return?view=findings&period={data.view.period}&pageSize=25",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "filters": [
+            {
+              "field": "groups",
+              "op": "equals",
+              "value": "{params.finding}"
+            }
+          ]
         },
         "purchases": {
-          "url": "/api/admin/tax-purchases?period={params.period|now.quarter}",
-          "optional": true
+          "late": true,
+          "optional": true,
+          "when": "data.view.purchases.applies",
+          "url": "/api/admin/tax-purchases?period={data.view.period}"
         }
       },
       "blocks": [
         {
           "type": "fields",
-          "title": "Filing setup",
-          "object": "data.filing.config",
+          "title": "Filing period",
+          "object": "data.view",
           "rows": [
             {
+              "label": "Period",
+              "value": "{item.period}"
+            },
+            {
               "label": "Jurisdiction",
-              "value": "{item.jurisdictionLabel|item.jurisdiction}"
+              "value": "Jurisdiction {item.jurisdiction.code}",
+              "chip": true,
+              "tone": "neutral",
+              "when": "item.jurisdiction.recognized"
             },
             {
-              "label": "First taxable period",
-              "value": "{item.firstTaxablePeriod}"
-            },
-            {
-              "label": "Registration",
-              "value": "{item.registration.configured:yesno}"
-            },
-            {
-              "label": "Filing",
-              "value": "{item.filing.configured:yesno}"
+              "label": "Jurisdiction",
+              "value": "Jurisdiction {item.jurisdiction.code}",
+              "chip": true,
+              "tone": "error",
+              "when": "!item.jurisdiction.recognized"
             }
           ]
         },
         {
           "type": "list",
-          "title": "Periods",
-          "items": "data.ret.periods",
-          "primary": "{item.period|item.label}",
-          "secondary": "Taxable {item.taxableUsd:dollars} · tax {item.taxUsd:dollars}",
+          "title": "Registration",
+          "when": "data.view.registration.configured",
+          "items": "data.view.registration.lines",
+          "primary": "{item}",
+          "icon": "number|tag",
           "count": false,
-          "empty": "—"
+          "empty": "None."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Registration",
+          "text": "{data.view.registration.hint}",
+          "when": "!data.view.registration.configured"
         },
         {
           "type": "actions",
-          "when": "staff.super",
           "items": [
             {
-              "id": "setup",
-              "label": "Set up the filing",
-              "icon": "square.and.pencil|edit",
-              "method": "PUT",
-              "url": "/api/admin/tax-filing",
+              "id": "period",
+              "label": "Choose the period",
+              "icon": "calendar|calendar_month",
               "prompt": [
                 {
-                  "key": "jurisdiction",
-                  "label": "Jurisdiction",
-                  "kind": "text",
+                  "key": "period",
+                  "label": "Period",
+                  "kind": "select",
                   "required": true,
-                  "initial": "{data.filing.config.jurisdiction}"
-                },
-                {
-                  "key": "first",
-                  "label": "First taxable period (YYYY-MM)",
-                  "kind": "text",
-                  "initial": "{data.filing.config.firstTaxablePeriod}"
-                },
-                {
-                  "key": "note",
-                  "label": "Note",
-                  "kind": "multiline"
+                  "initial": "{data.view.period}",
+                  "optionsFrom": {
+                    "items": "data.view.periods",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  },
+                  "help": "Starts at the earliest filable period set in Platform settings, because nothing earlier can be filed."
                 }
               ],
-              "body": {
-                "jurisdiction": "{form.jurisdiction}",
-                "firstTaxablePeriod": "{form.first}",
-                "note": "{form.note}"
+              "navigate": {
+                "screen": "core.staff.tax",
+                "params": {
+                  "period": "{form.period}"
+                }
+              }
+            },
+            {
+              "id": "export",
+              "label": "Export the working papers (CSV)",
+              "icon": "square.and.arrow.up|download",
+              "method": "GET",
+              "url": "/api/admin/tax-return?view=csv&period={data.view.period}",
+              "file": {
+                "name": "{response.filename}",
+                "type": "text/csv",
+                "from": "response.csv"
               },
-              "success": "Saved"
+              "success": "Working papers exported"
             }
           ]
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Every row read cleanly",
+          "when": "data.view.verdict.state == clean",
+          "text": "{data.view.verdict.message}\n{data.view.verdict.excludedNote}"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Do not file",
+          "when": "data.view.verdict.state == blocking",
+          "text": "{data.view.verdict.title}\n{data.view.verdict.excludedNote}"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Review before filing",
+          "when": "data.view.verdict.state == review",
+          "text": "{data.view.verdict.title}\n{data.view.verdict.excludedNote}"
+        },
+        {
+          "type": "list",
+          "title": "What needs attention",
+          "when": "data.view.verdict.items.0",
+          "items": "data.view.verdict.items",
+          "primary": "{item.count} · {item.label}",
+          "secondary": "{item.detail}",
+          "icon": "exclamationmark.triangle|warning",
+          "badges": [
+            {
+              "text": "Blocking",
+              "when": "item.severity == blocking",
+              "tone": "error"
+            },
+            {
+              "text": "Review",
+              "when": "item.severity == review",
+              "tone": "warning"
+            }
+          ],
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Findings: the rows behind each count",
+          "footer": "A count with no rows behind it cannot be acted on. Every flagged invoice is listed once; pick a finding to narrow the list to it.",
+          "when": "data.view.findings.0",
+          "items": "data.view.findings",
+          "primary": "{item.count} · {item.label}",
+          "secondary": "{item.detail}",
+          "icon": "list.bullet.clipboard|fact_check",
+          "badges": [
+            {
+              "text": "Blocking",
+              "when": "item.severity == blocking",
+              "tone": "error"
+            },
+            {
+              "text": "Review",
+              "when": "item.severity == review",
+              "tone": "warning"
+            },
+            {
+              "text": "Informational",
+              "when": "item.severity == informational",
+              "tone": "neutral"
+            }
+          ],
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "actions",
+          "when": "data.view.findings.0",
+          "items": [
+            {
+              "id": "finding",
+              "label": "Show one finding",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "prompt": [
+                {
+                  "key": "finding",
+                  "label": "Finding",
+                  "kind": "select",
+                  "initial": "{params.finding}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "All findings"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.view.findings",
+                    "value": "{item.id}",
+                    "label": "{item.label}"
+                  }
+                }
+              ],
+              "navigate": {
+                "screen": "core.staff.tax",
+                "params": {
+                  "period": "{data.view.period}",
+                  "finding": "{form.finding}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Invoices",
+          "when": "data.view.findings.0",
+          "load": "findings",
+          "search": true,
+          "items": "data.findings.rows",
+          "primary": "{item.invoiceId}",
+          "secondary": "{item.jurisdiction:upper} · gross ${item.grossDollars} · tax ${item.taxDollars} · paid {item.paidAt|'not stated'}",
+          "tertiary": "{item.groups:labeled/data.view.findingLabels}",
+          "icon": "doc.text|receipt_long",
+          "actions": [
+            {
+              "id": "stripe",
+              "label": "Open in Stripe",
+              "icon": "arrow.up.right.square|open_in_new",
+              "when": "item.stripeUrl",
+              "link": "{item.stripeUrl}"
+            }
+          ],
+          "empty": "No invoices match."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "title": "{data.view.figures.banner.title}",
+          "text": "{data.view.figures.banner.text}",
+          "when": "data.view.figures.banner.title"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Incomplete",
+          "text": "{data.view.figures.blockedNote}",
+          "when": "data.view.figures.blocked"
+        },
+        {
+          "type": "list",
+          "title": "Return figures",
+          "footer": "The filing figures, in dollars, for the configured jurisdiction only. Everything sold elsewhere is on the jurisdiction list below.",
+          "items": "data.view.figures.lines",
+          "primary": "{item.label}",
+          "secondary": "{item.note}",
+          "tertiary": "{item.item}",
+          "trailing": "{item.value}",
+          "icon": "number|tag",
+          "badges": [
+            {
+              "text": "Entered, not computed",
+              "when": "item.entered",
+              "tone": "info"
+            }
+          ],
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "title": "Item 3: taxable purchases",
+          "when": "data.view.purchases.applies",
+          "text": "This figure is not in platformRevenue and cannot be derived from it; that collection records sales. Entering it here does not compute it; it records what you filed and why, so the next quarter has the previous one to check against."
         },
         {
           "type": "fields",
-          "title": "Item 3: taxable purchases",
-          "when": "data.purchases",
-          "footer": "Use tax on Aglyn's own purchases, typed in by hand each period. A period nobody has entered reads not computed, never zero.",
+          "title": "Item 3 for this period",
+          "when": "data.view.purchases.applies",
           "rows": [
             {
-              "label": "Period",
-              "value": "{data.purchases.period}"
-            },
-            {
               "label": "Amount",
-              "value": "{data.purchases.entry.amountDollars|'Not computed'}"
+              "value": "{data.purchases.entry.amountDollars|'not computed'}"
             },
             {
-              "label": "Note",
-              "value": "{data.purchases.entry.note|'—'}"
+              "label": "Status",
+              "value": "Entered, not computed",
+              "chip": true,
+              "tone": "info",
+              "when": "data.purchases.entry"
+            },
+            {
+              "label": "Status",
+              "value": "Nobody has entered one",
+              "chip": true,
+              "tone": "neutral",
+              "when": "!data.purchases.entry"
             },
             {
               "label": "Entered by",
-              "value": "{data.purchases.entry.enteredBy|'—'}"
+              "value": "{data.purchases.entry.enteredBy|'—'}",
+              "when": "data.purchases.entry"
+            },
+            {
+              "label": "Entered on",
+              "value": "{data.purchases.entry.enteredAt:date}",
+              "when": "data.purchases.entry"
+            },
+            {
+              "label": "Reason given",
+              "value": "{data.purchases.entry.note}",
+              "when": "data.purchases.entry"
             }
-          ]
+          ],
+          "footer": "Every change is written to adminAudit with the figure before, the figure after and the reason. The figure is recorded because it goes onto a public filing."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "title": "Entering this needs the super staff role",
+          "when": "data.view.purchases.applies && !staff.super",
+          "text": "The same bar as where the platform files, and for the same reason: this number goes onto a return signed under penalty of perjury."
         },
         {
           "type": "actions",
-          "when": "staff.super && data.purchases",
+          "title": "Item 3",
+          "when": "data.view.purchases.applies && staff.super",
           "items": [
             {
               "id": "enter",
-              "label": "Enter the amount",
+              "label": "Record Item 3",
               "icon": "square.and.pencil|edit",
               "method": "PUT",
               "url": "/api/admin/tax-purchases",
               "prompt": [
                 {
                   "key": "amount",
-                  "label": "Amount in dollars (0.00 if you looked and there was none)",
+                  "label": "Taxable purchases (USD)",
                   "kind": "text",
                   "required": true,
-                  "initial": "{data.purchases.entry.amountDollars}"
+                  "initial": "{data.purchases.entry.amountDollars}",
+                  "placeholder": "1234.56",
+                  "help": "Dollars and cents. Blank is not zero: write 0.00 if you looked and there was none."
                 },
                 {
                   "key": "note",
-                  "label": "Where it came from",
+                  "label": "Why (audited)",
                   "kind": "multiline",
-                  "initial": "{data.purchases.entry.note}"
+                  "required": true,
+                  "placeholder": "From the Q4 expense ledger, taxable purchases tab",
+                  "help": "Which expense records the figure came from. It cannot be added afterwards."
                 }
               ],
               "body": {
-                "period": "{data.purchases.period}",
+                "period": "{data.view.period}",
                 "amount": "{form.amount}",
                 "note": "{form.note}"
               },
-              "success": "Saved",
+              "success": "Item 3 recorded for {data.view.period}",
               "reload": true
             },
             {
               "id": "clear",
-              "label": "Clear the entry",
+              "label": "Clear: back to not computed",
               "icon": "trash|delete",
               "destructive": true,
               "when": "data.purchases.entry",
               "method": "DELETE",
               "url": "/api/admin/tax-purchases",
-              "reason": true,
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "Why (audited)",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
               "body": {
-                "period": "{data.purchases.period}",
-                "note": "{form.reason}"
+                "period": "{data.view.period}",
+                "note": "{form.note}"
               },
-              "confirm": "Clear the taxable purchases entered for {data.purchases.period}?",
-              "success": "Cleared",
+              "confirm": "Clear the taxable purchases entered for {data.view.period}? It reads not computed again.",
+              "success": "Item 3 cleared for {data.view.period}",
               "reload": true
             }
           ]
+        },
+        {
+          "type": "fields",
+          "title": "Refunds recorded in the period",
+          "footer": "{data.view.refunds.note}",
+          "rows": [
+            {
+              "label": "Rows refunded",
+              "value": "{data.view.refunds.lines.0.value}"
+            },
+            {
+              "label": "Refunded gross",
+              "value": "{data.view.refunds.lines.1.value}"
+            },
+            {
+              "label": "Estimated refunded tax",
+              "value": "{data.view.refunds.lines.2.value}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Period bounds",
+          "footer": "{data.view.bounds.note}",
+          "rows": [
+            {
+              "label": "From (UTC)",
+              "value": "{data.view.bounds.lines.0.value}"
+            },
+            {
+              "label": "To (UTC, exclusive)",
+              "value": "{data.view.bounds.lines.1.value}"
+            },
+            {
+              "label": "Invoices swept",
+              "value": "{data.view.bounds.lines.2.value}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Sales facilitated for others",
+          "footer": "One entry per source, each read and worded by the plugin that sold it, and no grand total anywhere: adding them is the mistake the split exists to prevent.",
+          "items": "data.view.sources",
+          "primary": "{item.title}",
+          "secondary": "{item.error|item.truncated|item.intro}",
+          "icon": "cart|shopping_basket",
+          "badges": [
+            {
+              "text": "Could not be read",
+              "when": "item.refused",
+              "tone": "error"
+            },
+            {
+              "text": "Lower bound",
+              "when": "item.truncated",
+              "tone": "warning"
+            }
+          ],
+          "count": false,
+          "empty": "No source of facilitated sales."
+        },
+        {
+          "type": "list",
+          "title": "Facilitated sales: rows",
+          "items": "data.view.sources",
+          "flatten": "tables.rows",
+          "primary": "{item.title}",
+          "secondary": "{item.detail}",
+          "tertiary": "{item.$parent.heading|item.$parent.$parent.title}",
+          "icon": "cart|shopping_basket",
+          "badges": [
+            {
+              "text": "{item.tag}",
+              "when": "item.tag",
+              "tone": "warning"
+            }
+          ],
+          "count": false,
+          "empty": "No facilitated sales in this period."
+        },
+        {
+          "type": "list",
+          "title": "Facilitated sales: figures",
+          "items": "data.view.sources",
+          "flatten": "figures",
+          "primary": "{item.label}",
+          "secondary": "{item.note}",
+          "tertiary": "{item.$parent.title}",
+          "trailing": "{item.value}",
+          "icon": "number|tag",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Aglyn’s own sales by jurisdiction",
+          "footer": "{data.view.ownSales.footnote}",
+          "items": "data.view.ownSales.rows",
+          "primary": "{item.jurisdiction}",
+          "secondary": "{item.invoices} invoices · total {item.total} · taxable {item.taxable} · tax {item.tax}",
+          "tertiary": "{item.reasons}",
+          "icon": "globe|public",
+          "badges": [
+            {
+              "text": "On the return",
+              "when": "item.onReturn",
+              "tone": "info"
+            },
+            {
+              "text": "No address",
+              "when": "item.noAddress",
+              "tone": "warning"
+            },
+            {
+              "text": "Nothing filed: all internal",
+              "when": "item.internalOnly",
+              "tone": "neutral"
+            },
+            {
+              "text": "Rates: {item.rates}",
+              "when": "item.rates",
+              "tone": "neutral"
+            },
+            {
+              "text": "Excluded (internal): {item.excluded}",
+              "when": "item.excluded",
+              "tone": "neutral"
+            }
+          ],
+          "count": false,
+          "empty": "No invoices in this period."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "{data.view.ownSales.intro}"
         }
-      ]
+      ],
+      "label": "Sales tax",
+      "subtitle": "The return for one period"
     },
     {
       "id": "core.staff.settings",
@@ -10641,6 +11015,10 @@
         },
         "hosts": {
           "url": "/api/admin/first-party-hosts",
+          "optional": true
+        },
+        "taxFiling": {
+          "url": "/api/admin/tax-filing",
           "optional": true
         }
       },
@@ -10740,6 +11118,247 @@
           }
         },
         {
+          "type": "notice",
+          "tone": "info",
+          "title": "Sales tax filing",
+          "when": "data.taxFiling",
+          "text": "Which authority the sales tax return is prepared for, and under whose registration numbers. Changing it needs no deploy. This decides reporting only: what a shopper is charged is computed by Stripe against your own registrations at checkout and is unaffected by anything here."
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Not a jurisdiction key",
+          "when": "data.taxFiling && !data.taxFiling.config.jurisdictionRecognized",
+          "text": "“{data.taxFiling.config.jurisdiction}” cannot be a key in the return’s own buckets, so every figure on the return reads 0.00. Set a country, and a subdivision only if you file at that level."
+        },
+        {
+          "type": "fields",
+          "title": "Where this deployment files",
+          "when": "data.taxFiling",
+          "object": "data.taxFiling.config",
+          "rows": [
+            {
+              "label": "Files in",
+              "value": "{item.jurisdiction} {item.jurisdictionLabel}"
+            },
+            {
+              "label": "Where it is set",
+              "value": "{const.taxSources[@item.jurisdictionSource]}",
+              "chip": true,
+              "tone": "neutral"
+            },
+            {
+              "label": "{data.taxFiling.config.registrationIdLabel}",
+              "value": "•••• {data.taxFiling.config.registration.hint}",
+              "when": "data.taxFiling.config.registration.configured && data.taxFiling.config.registration.hint"
+            },
+            {
+              "label": "{data.taxFiling.config.registrationIdLabel}",
+              "value": "Configured",
+              "when": "data.taxFiling.config.registration.configured && !data.taxFiling.config.registration.hint"
+            },
+            {
+              "label": "{data.taxFiling.config.registrationIdLabel}",
+              "value": "Not configured",
+              "when": "!data.taxFiling.config.registration.configured"
+            },
+            {
+              "label": "Where it is set",
+              "value": "{const.taxSources[@data.taxFiling.config.registration.source]}",
+              "chip": true,
+              "tone": "neutral"
+            },
+            {
+              "label": "Requirement",
+              "value": "Required for {item.jurisdiction}",
+              "when": "item.filingIdRequired"
+            },
+            {
+              "label": "Requirement",
+              "value": "Optional for this jurisdiction",
+              "when": "!item.filingIdRequired"
+            },
+            {
+              "label": "{data.taxFiling.config.filingIdLabel}",
+              "value": "•••• {data.taxFiling.config.filing.hint}",
+              "when": "data.taxFiling.config.filing.configured && data.taxFiling.config.filing.hint"
+            },
+            {
+              "label": "{data.taxFiling.config.filingIdLabel}",
+              "value": "Configured",
+              "when": "data.taxFiling.config.filing.configured && !data.taxFiling.config.filing.hint"
+            },
+            {
+              "label": "{data.taxFiling.config.filingIdLabel}",
+              "value": "Not configured",
+              "when": "!data.taxFiling.config.filing.configured"
+            },
+            {
+              "label": "Where it is set",
+              "value": "{const.taxSources[@data.taxFiling.config.filing.source]}",
+              "chip": true,
+              "tone": "neutral"
+            },
+            {
+              "label": "Earliest filable period",
+              "value": "{item.firstTaxablePeriod}"
+            },
+            {
+              "label": "Where it is set",
+              "value": "{const.taxSources[@item.firstTaxablePeriodSource]}",
+              "chip": true,
+              "tone": "neutral"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Not filable",
+          "when": "data.taxFiling && !data.taxFiling.config.configured",
+          "text": "The return cannot be filed under what is configured. {data.taxFiling.config.jurisdiction} authenticates filing with the numbers above that it requires, so half a registration files nothing."
+        },
+        {
+          "type": "list",
+          "title": "Set in the environment, not in force",
+          "footer": "The precedence rule: the console’s own value wins, and a number issued under another authority is never filed under this one.",
+          "when": "data.taxFiling.config.shadowed.0",
+          "items": "data.taxFiling.config.shadowed",
+          "primary": "{item.env}",
+          "secondary": "{item.reason}",
+          "icon": "info.circle|info",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "title": "Changing where the platform files",
+          "when": "data.taxFiling && !staff.super",
+          "text": "This needs the super staff role: the same bar as release flags, because the wrong jurisdiction files a return with an authority nobody registered with."
+        },
+        {
+          "type": "actions",
+          "title": "Sales tax filing",
+          "when": "data.taxFiling && staff.super",
+          "items": [
+            {
+              "id": "saveTax",
+              "label": "Save the filing configuration",
+              "icon": "square.and.pencil|edit",
+              "method": "PUT",
+              "url": "/api/admin/tax-filing",
+              "prompt": [
+                {
+                  "key": "country",
+                  "label": "Country or region (two-letter code)",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{data.taxFiling.config.jurisdiction:before/-}",
+                  "help": "For example US. Moving to a different jurisdiction drops the stored registration numbers: one authority’s number is never filed under another, so enter the new ones here or the return will read not configured until you do."
+                },
+                {
+                  "key": "subdivision",
+                  "label": "Subdivision (optional)",
+                  "kind": "text",
+                  "initial": "{data.taxFiling.config.jurisdiction:after/-}",
+                  "help": "Only if you file at state or province level, as the code the buyer addresses carry (TX, CA, NSW). Most authorities file at country level; leave it blank."
+                },
+                {
+                  "key": "registrationId",
+                  "label": "{data.taxFiling.config.registrationIdLabel}",
+                  "kind": "password",
+                  "help": "Leave blank to keep what is stored. Never shown back."
+                },
+                {
+                  "key": "filingId",
+                  "label": "{data.taxFiling.config.filingIdLabel}",
+                  "kind": "password",
+                  "help": "Leave blank to keep what is stored. Optional for most jurisdictions; required alongside the registration number where the authority issues both."
+                },
+                {
+                  "key": "remove",
+                  "label": "Remove the stored numbers instead",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "first",
+                  "label": "Earliest filable period",
+                  "kind": "text",
+                  "initial": "{data.taxFiling.config.firstTaxablePeriod}",
+                  "help": "YYYY-QN or YYYY-MM: when your collection obligation began. The period menu on the return offers nothing earlier."
+                },
+                {
+                  "key": "note",
+                  "label": "Why (audited)",
+                  "kind": "multiline",
+                  "required": true,
+                  "placeholder": "Registered in California, or: Webfile number reissued"
+                }
+              ],
+              "body": {
+                "jurisdiction": {
+                  "$if": {
+                    "when": "form.subdivision",
+                    "then": "{form.country:upper}-{form.subdivision:upper}",
+                    "else": "{form.country:upper}"
+                  }
+                },
+                "firstTaxablePeriod": "{form.first}",
+                "note": "{form.note}",
+                "registrationId": {
+                  "$if": {
+                    "when": "form.remove",
+                    "then": "",
+                    "else": {
+                      "$if": {
+                        "when": "form.registrationId",
+                        "then": "{form.registrationId}"
+                      }
+                    }
+                  }
+                },
+                "filingId": {
+                  "$if": {
+                    "when": "form.remove",
+                    "then": "",
+                    "else": {
+                      "$if": {
+                        "when": "form.filingId",
+                        "then": "{form.filingId}"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Filing configuration saved: {response.config.jurisdiction}",
+              "reload": true
+            },
+            {
+              "id": "clearTax",
+              "label": "Clear and use the environment",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "data.taxFiling.config.storedPresent",
+              "method": "DELETE",
+              "url": "/api/admin/tax-filing",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "Why (audited)",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "note": "{form.note}"
+              },
+              "success": "Console setting cleared. The environment is in force again.",
+              "reload": true
+            }
+          ]
+        },
+        {
           "type": "fields",
           "title": "First-party hosts",
           "when": "data.hosts",
@@ -10788,7 +11407,14 @@
             "reload": true
           }
         }
-      ]
+      ],
+      "constants": {
+        "taxSources": {
+          "console": "From this console",
+          "environment": "From the environment",
+          "none": "Not set"
+        }
+      }
     },
     {
       "id": "core.staff.churn",

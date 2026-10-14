@@ -253,6 +253,19 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(outcome, .failed("This person owns workspaces\nAcme: 2 other members\nBeta: 0 other members"))
   }
 
+  /// An action can hand text to the device as a file: the name is a template, the text a path over the context.
+  func testAnActionCanHandTextToTheDeviceAsAFile() throws {
+    let action = try XCTUnwrap(
+      ActionSpec(["label": "Export", "url": "/api/x", "file": ["name": "{data.view.filename}", "type": "text/csv", "from": "response.csv"]]))
+    let file = try XCTUnwrap(action.file)
+    XCTAssertEqual(file.type, "text/csv")
+    let made = file.contents(in: ["data": ["view": ["filename": "US-TX-2026-Q3.csv"]], "response": ["csv": "a,b\n1,2"]])
+    XCTAssertEqual(made?.name, "US-TX-2026-Q3.csv")
+    XCTAssertEqual(made?.text, "a,b\n1,2")
+    XCTAssertNil(file.contents(in: ["response": ["csv": ""]]))
+    XCTAssertNil(try XCTUnwrap(ActionSpec(["label": "Go", "url": "/api/x"])).file)
+  }
+
   /// A field can fill itself with a random value from an alphabet; `pairs` prints a map's keys as they are.
   func testAGeneratedValueIsTheLengthAskedFromTheAlphabet() {
     let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

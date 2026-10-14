@@ -88,6 +88,26 @@ class BlockSpec(val type: String, val raw: JsonElement) {
   fun flag(key: String): Boolean = raw.isTrue(key)
 }
 
+/**
+ * `{ name, type, from }`: the file an action hands to the device. `name` is a template, `type` a MIME type, and `from`
+ * the path (over the screen's context and the route's `response`) of the text that is the file.
+ */
+class FileSpec(val name: String, val type: String, val from: String) {
+  /** The file name and the text, or null when there is nothing to hand over. */
+  fun contents(context: JsonElement): Pair<String, String>? {
+    val text = ScreenValues.text(ScreenValues.lookup(from, context))
+    return if (text.isEmpty()) null else ScreenValues.render(name, context) to text
+  }
+
+  companion object {
+    fun parse(json: JsonElement): FileSpec? {
+      val name = json.str("name") ?: return null
+      val from = json.str("from") ?: return null
+      return FileSpec(name, json.str("type") ?: "text/plain", from)
+    }
+  }
+}
+
 /** One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it. */
 class ReportLine(val text: String, val whenCondition: String?, val each: String?) {
   companion object {
@@ -154,6 +174,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val write: JsonElement? = json.obj("write")
   /** Lines the result is reported in, after `success`: `{ when, each, text }`, one per line. */
   val report: List<ReportLine> = json.arr("report").mapNotNull { ReportLine.parse(it) }
+  /** Hands text to the device as a file (Save, or the share sheet): the working papers' CSV, the audit log's. */
+  val file: FileSpec? = json.obj("file")?.let { FileSpec.parse(it) }
   /** Lines a refusal is explained in, after the route's own words, over the route's answer as `response` (the workspaces that still need an owner). */
   val failure: List<ReportLine> = json.arr("failure").mapNotNull { ReportLine.parse(it) }
   /** Repeats the request page by page until the route is done, and answers the totals. */

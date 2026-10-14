@@ -340,22 +340,24 @@ struct FieldInput: View {
   }
 
   var body: some View {
+    // A label can name what the loaded data does (a registration number's name for the jurisdiction in force).
+    let label = ScreenValues.render(field.label, in: context)
     VStack(alignment: .leading, spacing: 4) {
       switch field.kind {
       case "toggle":
-        Toggle(field.label, isOn: flag)
+        Toggle(label, isOn: flag)
       case "select":
-        Picker(field.label, selection: text) {
+        Picker(label, selection: text) {
           ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
         }
       case "multiline":
-        TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
+        TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)
       case "password":
-        SecureField(field.label, text: text, prompt: field.placeholder.map { Text($0) })
+        SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
           .textContentType(.password)
       default:
-        TextField(field.label, text: text, prompt: Text(field.placeholder ?? field.label))
+        TextField(label, text: text, prompt: Text(field.placeholder ?? label))
           #if os(iOS)
             .keyboardType(keyboard)
             .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)

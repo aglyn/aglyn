@@ -40,7 +40,13 @@ import { resolveTaxFilingSettings } from '../../../../utils/server/tax-filing-st
 import { readTaxablePurchases } from '../../../../utils/server/taxable-purchases-store'
 import { taxFindingListRows } from '../../../../utils/tax-findings-list'
 import { serveTaxFindings } from '../../../../utils/server/tax-findings-list'
-import type { TaxReturnPayload } from '../../../../utils/tx-return-webfile'
+import {
+  defaultTaxReturnPeriod,
+  taxReturnCsv,
+  taxReturnCsvFilename,
+  type TaxReturnPayload,
+} from '../../../../utils/tx-return-webfile'
+import { taxReturnView } from '../../../../utils/tax-return-view'
 import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 /**
@@ -338,6 +344,35 @@ async function handler(request: Request): Promise<Response> {
     }
     if (!decoded['staff']) {
       return Response.json({ error: 'Staff only' }, { status: 403 })
+    }
+
+    /*
+     * THE PAGE'S OWN READING OF THE RETURN, for a client that draws no HTML
+     * (the staff apps). `view=prepared` runs the page's derivations over the
+     * payload and sends the figures and sentences as the lines it prints;
+     * `view=csv` sends the working papers. Both read the period the page
+     * would open on when none is asked for.
+     */
+    const view = new URL(request.url).searchParams.get('view')
+    if (view === 'prepared' || view === 'csv') {
+      const now = new Date()
+      const floor = (await resolveTaxFilingSettings()).firstTaxablePeriod
+      const defaultPeriod = defaultTaxReturnPeriod(now, floor)
+      const preparedPeriod = new URL(request.url).searchParams.get('period') || defaultPeriod
+      const preparedRange = taxPeriodRange(preparedPeriod)
+      if (!preparedRange) {
+        return Response.json({ error: 'period must be YYYY-Q[1-4] or YYYY-MM' }, { status: 400 })
+      }
+      const wire = JSON.parse(
+        JSON.stringify(await readTaxReturn(preparedPeriod, preparedRange)),
+      ) as TaxReturnPayload
+      if (view === 'csv') {
+        return Response.json({
+          csv: taxReturnCsv(wire),
+          filename: taxReturnCsvFilename(wire.period, wire.registration?.jurisdiction),
+        })
+      }
+      return Response.json(taxReturnView(wire, { now, floor, defaultPeriod }))
     }
 
     const period = new URL(request.url).searchParams.get('period') ?? ''

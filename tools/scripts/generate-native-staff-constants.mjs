@@ -67,6 +67,7 @@ export async function staffSources() {
   const identity = await jiti.import(join(ROOT, 'apps/console/utils/staff-identity-source.ts'))
   const passwordPolicy = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/password-policy.ts'))
   const passwordGenerator = await jiti.import(join(ROOT, 'apps/console/utils/password-generator.ts'))
+  const taxFiling = await jiti.import(join(ROOT, 'apps/console/utils/tax-filing-config.ts'))
   const organizations = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/organizations.ts'))
   const overrideReasons = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/org-override-reason.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
@@ -76,6 +77,7 @@ export async function staffSources() {
   const statuses = await model('plugin-review-status')
   const attestation = await model('publisher-attestation')
   return {
+    settings: { taxSources: taxFiling.TAX_FILING_SOURCE_LABEL },
     user: {
       identitySources: identity.IDENTITY_SOURCE_LABEL,
       userTypes: {
@@ -482,6 +484,7 @@ replace('core.staff.site', (screen) => ({
   })),
 }))
 replace('core.staff.user', (screen) => ({ ...screen, constants: sources.user }))
+replace('core.staff.settings', (screen) => ({ ...screen, constants: sources.settings }))
 replace('core.staff.maintenance', () => maintenanceScreen(sources.jobs, sources.reasonMin))
 replace('core.staff.orgOverride', () => orgOverrideScreen(sources.override))
 

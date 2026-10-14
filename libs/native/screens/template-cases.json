@@ -54,6 +54,9 @@
         "h2": "viewer"
       },
       "hostKey": "h2",
+      "ids": ["h2", "h1", "zz"],
+      "jur": "US-TX",
+      "plain": "US",
       "check": {
         "ok": false,
         "ms": 12,
@@ -201,6 +204,14 @@
     {
       "template": "{data.access:pairs}|{data.list:pairs}",
       "expect": "h1: editor, h2: viewer|x, y"
+    },
+    {
+      "template": "{data.jur:before/-}|{data.jur:after/-}|{data.plain:before/-}|{data.plain:after/-}",
+      "expect": "US|TX|US|"
+    },
+    {
+      "template": "{data.ids:labeled/data.access}|{data.hostKey:labeled/data.access}|{data.list:labeled/data.access}",
+      "expect": "viewer, editor, zz|viewer|x, y"
     },
     {
       "template": "{data.msA:duration}|{data.msB:duration}|{data.msC:duration}|{data.msD:duration}|{data.nothing:duration}",

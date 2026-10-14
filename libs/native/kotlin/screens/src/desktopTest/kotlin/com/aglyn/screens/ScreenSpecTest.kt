@@ -285,6 +285,20 @@ class ScreenSpecTest {
     assertEquals("This person owns workspaces\nAcme: 2 other members\nBeta: 0 other members", outcome.message)
   }
 
+  /** An action can hand text to the device as a file: the name is a template, the text a path over the context. */
+  @Test
+  fun anActionCanHandTextToTheDeviceAsAFile() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement("""{"label":"Export","url":"/api/x","file":{"name":"{data.view.filename}","type":"text/csv","from":"response.csv"}}"""),
+    )!!
+    val file = action.file!!
+    assertEquals("text/csv", file.type)
+    val made = file.contents(Json.parseToJsonElement("""{"data":{"view":{"filename":"US-TX-2026-Q3.csv"}},"response":{"csv":"a,b\n1,2"}}"""))
+    assertEquals("US-TX-2026-Q3.csv" to "a,b\n1,2", made)
+    assertNull(file.contents(Json.parseToJsonElement("""{"response":{"csv":""}}""")))
+    assertNull(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Go","url":"/api/x"}"""))!!.file)
+  }
+
   /** A field can fill itself with a random value from an alphabet; `pairs` prints a map's keys as they are. */
   @Test
   fun aGeneratedValueIsTheLengthAskedFromTheAlphabet() {

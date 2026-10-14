@@ -6,6 +6,7 @@ import AglynPluginHost
 import AglynUI
 import AuthenticationServices
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if canImport(UIKit)
   import UIKit
@@ -127,6 +128,7 @@ struct SpecScreenBody: View {
   @State private var reauthing: PendingAction?
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
+  @State private var exporting: (name: String, type: UTType, data: Data)?
   @State private var running: String?
   @State private var searchText = ""
 
@@ -169,6 +171,14 @@ struct SpecScreenBody: View {
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
         }
+      }
+      .fileExporter(
+        isPresented: Binding(get: { exporting != nil }, set: { if !$0 { exporting = nil } }),
+        document: exporting.map { ExportedText(data: $0.data) }, contentType: exporting?.type ?? .plainText,
+        defaultFilename: exporting?.name
+      ) { result in
+        if case .success = result { show("Saved", .success) }
+        exporting = nil
       }
       .alert(
         revealed?.title ?? "",
@@ -428,6 +438,9 @@ struct SpecScreenBody: View {
       if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) {
         revealed = (action.label, ScreenValues.text(value))
       }
+      if let file = action.file, let made = file.contents(in: after) {
+        exporting = (made.name, UTType(mimeType: file.type) ?? .plainText, Data(made.text.utf8))
+      }
       if let openPath = action.openURL, let link = ScreenValues.lookup(openPath, in: response ?? .null)?.stringValue,
         let url = URL(string: link)
       {
@@ -461,6 +474,16 @@ struct SpecScreenBody: View {
       NSPasteboard.general.setString(text, forType: .string)
     #endif
   }
+}
+
+/// The text an action hands to the device, as a document the file exporter writes.
+struct ExportedText: FileDocument {
+  static var readableContentTypes: [UTType] { [.plainText, .commaSeparatedText, .data] }
+  let data: Data
+
+  init(data: Data) { self.data = data }
+  init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
 func renderParams(_ params: JSONValue?, in context: JSONValue) -> NativeParams {

@@ -169,6 +169,7 @@ private fun SpecBody(
   splitting: Boolean,
 ) {
   val session = LocalScreenSession.current
+  val exporter = com.aglyn.ui.LocalFileExporter.current
   val scope = rememberCoroutineScope()
   @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
   var confirming by remember { mutableStateOf<Pending?>(null) }
@@ -224,6 +225,12 @@ private fun SpecBody(
           outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
         }
         action.reveal?.let { path -> ScreenValues.lookup(path, outcome.response ?: JsonNull)?.let { revealed = action.label to ScreenValues.text(it) } }
+        action.file?.let { file ->
+          file.contents(after)?.let { (name, text) ->
+            if (exporter == null) show("Saving a file is not available here.", StatusTone.WARNING)
+            else if (exporter.export(name, file.type, text.encodeToByteArray())) show("Saved", StatusTone.SUCCESS)
+          }
+        }
         action.openUrl?.let { path -> (ScreenValues.lookup(path, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         action.navigate?.let { nav -> plugin.navigate(nav.screen, nav.params.mapValues { ScreenValues.render(it.value, after) }) }
         if (action.back) session.back() else if (action.reload) model.load()
@@ -736,9 +743,11 @@ internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
 internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValue, onChange: (FieldValue) -> Unit) {
   val text = (value as? FieldValue.Text)?.value.orEmpty()
   val help = field.help?.let { ScreenValues.render(it, context) }
+  // A label can name what the loaded data does (a registration number's name for the jurisdiction in force).
+  val label = ScreenValues.render(field.label, context)
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
-      "toggle" -> SwitchRow(field.label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
+      "toggle" -> SwitchRow(label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
       "select" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }
@@ -747,7 +756,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
             value = choices.firstOrNull { it.first == text }?.second ?: text,
             onValueChange = {},
             readOnly = true,
-            label = { Text(field.label) },
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
           )
@@ -761,7 +770,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
       else -> OutlinedTextField(
         value = text,
         onValueChange = { onChange(FieldValue.Text(it)) },
-        label = { Text(field.label + if (field.required) " *" else "") },
+        label = { Text(label + if (field.required) " *" else "") },
         placeholder = field.placeholder?.let { { Text(it) } },
         singleLine = field.kind != "multiline",
         minLines = if (field.kind == "multiline") 3 else 1,

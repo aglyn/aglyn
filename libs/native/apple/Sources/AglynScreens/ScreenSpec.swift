@@ -187,6 +187,8 @@ public struct ActionSpec: Sendable, Identifiable {
   /// Lines a refusal is explained in, after the route's own words, over the route's answer as `response`
   /// (the workspaces that still need an owner, the addresses another account holds).
   public let failure: [ReportLine]
+  /// Hands text to the device as a file (Save, or the share sheet): the working papers' CSV, the audit log's.
+  public let file: FileSpec?
   /// Repeats the request page by page until the route is done, and answers the totals.
   public let loop: LoopSpec?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
@@ -228,6 +230,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.report = json["report"].array.compactMap(ReportLine.init)
     self.failure = json["failure"].array.compactMap(ReportLine.init)
     self.loop = json["loop"].flatMap(LoopSpec.init)
+    self.file = json["file"].flatMap(FileSpec.init)
     self.instead = json["instead"]
   }
 
@@ -237,6 +240,27 @@ public struct ActionSpec: Sendable, Identifiable {
       ? prompt + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true,
           help: "Recorded in the audit log.")]
       : prompt
+  }
+}
+
+/// `{ name, type, from }`: the file an action hands to the device. `name` is a template, `type` a MIME type, and
+/// `from` the path (over the screen's context and the route's `response`) of the text that is the file.
+public struct FileSpec: Sendable {
+  public let name: String
+  public let type: String
+  public let from: String
+
+  init?(_ json: JSONValue) {
+    guard let name = json["name"]?.stringValue, let from = json["from"]?.stringValue else { return nil }
+    self.name = name
+    self.type = json["type"]?.stringValue ?? "text/plain"
+    self.from = from
+  }
+
+  /// The file name and the text, or nil when there is nothing to hand over.
+  public func contents(in context: JSONValue) -> (name: String, text: String)? {
+    let text = ScreenValues.text(ScreenValues.lookup(from, in: context))
+    return text.isEmpty ? nil : (ScreenValues.render(name, in: context), text)
   }
 }
 
