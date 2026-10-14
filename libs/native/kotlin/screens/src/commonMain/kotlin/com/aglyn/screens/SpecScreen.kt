@@ -218,6 +218,7 @@ private fun SpecBody(
           is ActionOutcome.Done -> confirming = Pending(action, ScreenContext.with(actionScope, "preview", checked.response ?: JsonObject(emptyMap())))
           is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, checked.message)
           is ActionOutcome.Failed -> show(checked.message, StatusTone.ERROR)
+          is ActionOutcome.File -> Unit // a preview is a JSON answer, never a file
         }
         return
       }

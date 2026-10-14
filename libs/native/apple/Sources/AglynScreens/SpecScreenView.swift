@@ -417,6 +417,8 @@ struct SpecScreenBody: View {
         reauthing = PendingAction(action: action, scope: scope, reauthMessage: message)
       case .failed(let message):
         show(message, .error)
+      case .file:
+        break  // a preview is a JSON answer, never a file
       }
       return
     }
