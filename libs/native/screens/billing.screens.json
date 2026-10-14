@@ -138,6 +138,16 @@
               "success": "Your plan continues"
             },
             {
+              "id": "cancel",
+              "label": "Cancel my plan",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "data.billing.subscription && !data.billing.subscription.cancelAtPeriodEnd",
+              "navigate": {
+                "screen": "core.billing.cancel"
+              }
+            },
+            {
               "id": "plans",
               "label": "Choose a plan",
               "icon": "sparkles|workspace_premium",
@@ -1371,6 +1381,179 @@
           "enterprise": 298000
         }
       }
+    },
+    {
+      "id": "core.billing.cancel",
+      "title": "Cancel your plan",
+      "icon": "xmark.circle|cancel",
+      "scope": "org",
+      "requires": "org.manager",
+      "blocks": [
+        {
+          "type": "form",
+          "title": "Before you go, what went wrong?",
+          "id": "survey",
+          "footer": "One question, and it genuinely shapes what we build next.",
+          "fields": [
+            {
+              "key": "reason",
+              "label": "Reason",
+              "kind": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "too_expensive",
+                  "label": "It's too expensive"
+                },
+                {
+                  "value": "missing_features",
+                  "label": "Missing features I need"
+                },
+                {
+                  "value": "not_using_enough",
+                  "label": "I'm not using it enough"
+                },
+                {
+                  "value": "switching_provider",
+                  "label": "I'm switching to something else"
+                },
+                {
+                  "value": "technical_issues",
+                  "label": "Technical problems"
+                },
+                {
+                  "value": "temporary_pause",
+                  "label": "Just pausing for now"
+                },
+                {
+                  "value": "other",
+                  "label": "Something else"
+                }
+              ]
+            },
+            {
+              "key": "detail",
+              "label": "Anything else? (optional)",
+              "kind": "multiline"
+            }
+          ],
+          "submit": {
+            "label": "Continue",
+            "url": "/api/billing/retention",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "survey",
+              "surface": "subscription_cancel",
+              "reason": "{form.reason}",
+              "detail": "{form.detail}"
+            },
+            "navigate": {
+              "screen": "core.billing.cancel.offers",
+              "params": {
+                "funnelId": "{response.funnelId}",
+                "downsellPlan": "{response.downsellPlan}",
+                "winbackAvailable": "{response.winbackAvailable}",
+                "winbackPercentOff": "{response.winbackPercentOff}",
+                "winbackMonths": "{response.winbackDurationMonths}"
+              }
+            },
+            "reload": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.billing.cancel.offers",
+      "title": "Cancel your plan",
+      "icon": "xmark.circle|cancel",
+      "scope": "org",
+      "requires": "org.manager",
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}"
+        },
+        "billing": {
+          "doc": "orgs/{org.id}/billing/stripe",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "actions",
+          "title": "Would a smaller plan work better?",
+          "when": "params.downsellPlan",
+          "footer": "{params.downsellPlan:title} costs less and keeps your sites, data and team exactly where they are. Moving down takes effect at the end of your current billing period; you keep everything you have already paid for until then.",
+          "items": [
+            {
+              "id": "downsell",
+              "label": "Switch to {params.downsellPlan:title}",
+              "icon": "arrow.down.circle|expand_more",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "switch",
+                "plan": "{params.downsellPlan}",
+                "interval": "{data.billing.subscription.interval|data.org.subscription.interval}"
+              },
+              "instead": [
+                {
+                  "when": "response.scheduled",
+                  "title": "Plan change scheduled",
+                  "text": "Moving to {params.downsellPlan:title} on {response.effectiveAt:date}. You keep your current plan until then."
+                }
+              ],
+              "success": "Plan switched to {params.downsellPlan:title}",
+              "back": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Stay for {params.winbackPercentOff}% off?",
+          "when": "params.winbackAvailable == true",
+          "footer": "Keep your current plan at {params.winbackPercentOff}% off for the next {params.winbackMonths} months. After that your plan returns to its regular price. One offer per organization.",
+          "items": [
+            {
+              "id": "winback",
+              "label": "Apply the discount",
+              "icon": "tag|sell",
+              "url": "/api/billing/retention",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "winback",
+                "funnelId": "{params.funnelId}"
+              },
+              "success": "Discount applied: {response.percentOff}% off for the next {response.durationMonths} months.",
+              "back": true
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Your plan stays active until the end of the paid period, then this workspace moves to the Free plan. Nothing is deleted, and you can resume any time before it ends."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "cancel",
+              "label": "Yes, cancel my plan",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "confirm": "Cancel your subscription at the end of the paid period?",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "cancel",
+                "funnelId": "{params.funnelId}"
+              },
+              "success": "Subscription cancels {response.currentPeriodEnd|'at the end of the period':date}",
+              "back": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }
