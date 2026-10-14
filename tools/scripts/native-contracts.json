@@ -12196,6 +12196,458 @@
           "C"
         ]
       ]
+    },
+    "mediaNodeSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          {
+            "cdnPath": "/api/media/cdn/h1/m1",
+            "url": "https://example.com/a.png"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/org:o1/m2"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/org:o1:h1/m3",
+            "url": "https://example.com/b.png",
+            "private": false
+          }
+        ],
+        [
+          {
+            "cdnPath": "https://console.aglyn.com/api/media/cdn/h1/m4?w=320",
+            "url": "https://example.com/c.png"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/bad scope/m",
+            "url": "https://example.com/d.png"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+            "private": false
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media",
+            "private": true
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://example.com/photo.jpg"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "cdnPath": null,
+            "url": null,
+            "private": null
+          }
+        ]
+      ]
+    },
+    "resolveMediaSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          "media:h1/m1"
+        ],
+        [
+          "media:h1/m1",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1:h1/m2",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "bad host"
+          }
+        ],
+        [
+          "media:h1/m1@abc123"
+        ],
+        [
+          "media:h1/m1@bad hash"
+        ],
+        [
+          "media:bad scope/m1"
+        ],
+        [
+          "media:h1/"
+        ],
+        [
+          "media:"
+        ],
+        [
+          "/api/media/cdn/h1/m1"
+        ],
+        [
+          "https://example.com/photo.jpg",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+          {
+            "hostId": "h2"
+          }
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "inheritedMediaAlt": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "My own words",
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "   ",
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "",
+            "assetAlt": "  spaced out  "
+          }
+        ],
+        [
+          {
+            "decorative": true,
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "assetAlt": "   "
+          }
+        ],
+        [
+          {
+            "assetAlt": 5
+          }
+        ],
+        [
+          {
+            "assetAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      ]
+    },
+    "hostQualifiedCdnPath": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "org"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "org",
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1:h2/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/h1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1/abc123",
+          [
+            "host:h1",
+            "host:h2"
+          ],
+          "h2"
+        ],
+        [
+          "https://console.aglyn.com/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          null
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          null,
+          "h1"
+        ],
+        [
+          "/somewhere/else.png",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          null,
+          [
+            "host:h1"
+          ],
+          "h1"
+        ]
+      ]
+    },
+    "videoMediaProps": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 63400,
+              "width": 1920,
+              "height": 1080
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 400,
+              "width": 640,
+              "height": 360
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 90500,
+              "width": 640,
+              "height": 360,
+              "codec": "avc1.640028"
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": "61000",
+              "width": "640",
+              "height": "360"
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 86400000,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 86400001,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 0,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": -5,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 1280
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 0,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 16385,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": "wide",
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {}
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": null
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": "video"
+          }
+        ]
+      ]
     }
   }
 }

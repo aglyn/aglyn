@@ -8305,6 +8305,210 @@
         }
       ]
     },
+    "hostQualifiedCdnPath": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1:h1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "org"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "org",
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1:h2/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1:h2/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/h1/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1/abc123",
+            [
+              "host:h1",
+              "host:h2"
+            ],
+            "h2"
+          ],
+          "result": "/api/media/cdn/org:o1:h2/m1/abc123"
+        },
+        {
+          "args": [
+            "https://console.aglyn.com/api/media/cdn/org:o1/m1",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "https://console.aglyn.com/api/media/cdn/org:o1:h1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            [
+              "host:h1"
+            ],
+            null
+          ],
+          "result": "/api/media/cdn/org:o1/m1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/org:o1/m1",
+            null,
+            "h1"
+          ],
+          "result": "/api/media/cdn/org:o1:h1/m1"
+        },
+        {
+          "args": [
+            "/somewhere/else.png",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": "/somewhere/else.png"
+        },
+        {
+          "args": [
+            "",
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null,
+            [
+              "host:h1"
+            ],
+            "h1"
+          ],
+          "result": null
+        }
+      ]
+    },
+    "inheritedMediaAlt": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": "A red door"
+        },
+        {
+          "args": [
+            {
+              "placementAlt": "My own words",
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "placementAlt": "   ",
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": "A red door"
+        },
+        {
+          "args": [
+            {
+              "placementAlt": "",
+              "assetAlt": "  spaced out  "
+            }
+          ],
+          "result": "spaced out"
+        },
+        {
+          "args": [
+            {
+              "decorative": true,
+              "assetAlt": "A red door"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": "   "
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": 5
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "assetAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "result": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
     "isBookingReminderDue": {
       "module": "libs/plugins/bookings/src/lib/model/bookings.ts",
       "cases": [
@@ -9679,6 +9883,130 @@
             ""
           ],
           "result": "document"
+        }
+      ]
+    },
+    "mediaNodeSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/h1/m1",
+              "url": "https://example.com/a.png"
+            }
+          ],
+          "result": "media:h1/m1"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/org:o1/m2"
+            }
+          ],
+          "result": "media:org:o1/m2"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/org:o1:h1/m3",
+              "url": "https://example.com/b.png",
+              "private": false
+            }
+          ],
+          "result": "media:org:o1:h1/m3"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "https://console.aglyn.com/api/media/cdn/h1/m4?w=320",
+              "url": "https://example.com/c.png"
+            }
+          ],
+          "result": "https://example.com/c.png"
+        },
+        {
+          "args": [
+            {
+              "cdnPath": "/api/media/cdn/bad scope/m",
+              "url": "https://example.com/d.png"
+            }
+          ],
+          "result": "https://example.com/d.png"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+            }
+          ],
+          "result": "media:h1/m5"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+              "private": false
+            }
+          ],
+          "result": "media:org:o1/m6"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media",
+              "private": true
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
+            }
+          ],
+          "result": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
+        },
+        {
+          "args": [
+            {
+              "url": "https://example.com/photo.jpg"
+            }
+          ],
+          "result": "https://example.com/photo.jpg"
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cdnPath": null,
+              "url": null,
+              "private": null
+            }
+          ],
+          "result": null
         }
       ]
     },
@@ -17921,6 +18249,125 @@
         }
       ]
     },
+    "resolveMediaSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "cases": [
+        {
+          "args": [
+            "media:h1/m1"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:h1/m1",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:org:o1/m2",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1:h9/m2"
+        },
+        {
+          "args": [
+            "media:org:o1:h1/m2",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1:h9/m2"
+        },
+        {
+          "args": [
+            "media:org:o1/m2",
+            {
+              "hostId": "bad host"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1/m2"
+        },
+        {
+          "args": [
+            "media:h1/m1@abc123"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:h1/m1@bad hash"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "media:bad scope/m1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "media:h1/"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "media:"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "/api/media/cdn/h1/m1"
+          ],
+          "result": "/api/media/cdn/h1/m1"
+        },
+        {
+          "args": [
+            "https://example.com/photo.jpg",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "https://example.com/photo.jpg"
+        },
+        {
+          "args": [
+            "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+          ],
+          "result": "/api/media/cdn/h1/m5"
+        },
+        {
+          "args": [
+            "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+            {
+              "hostId": "h2"
+            }
+          ],
+          "result": "/api/media/cdn/org:o1:h2/m6"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        }
+      ]
+    },
     "resolvePluginInstallState": {
       "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "cases": [
@@ -21959,6 +22406,229 @@
               "severity": "error"
             }
           ]
+        }
+      ]
+    },
+    "videoMediaProps": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 63400,
+                "width": 1920,
+                "height": 1080
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 63,
+            "intrinsicHeight": 1080,
+            "intrinsicWidth": 1920
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 400,
+                "width": 640,
+                "height": 360
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 1,
+            "intrinsicHeight": 360,
+            "intrinsicWidth": 640
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 90500,
+                "width": 640,
+                "height": 360,
+                "codec": "avc1.640028"
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 91,
+            "intrinsicHeight": 360,
+            "intrinsicWidth": 640
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": "61000",
+                "width": "640",
+                "height": "360"
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 61,
+            "intrinsicHeight": 360,
+            "intrinsicWidth": 640
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 86400000,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {
+            "durationSeconds": 86400,
+            "intrinsicHeight": 720,
+            "intrinsicWidth": 1280
+          }
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 86400001,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 0,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": -5,
+                "width": 1280,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": 1280
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": 0,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": 16385,
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {
+                "durationMs": 5000,
+                "width": "wide",
+                "height": 720
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": {}
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": null
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "componentId": "video",
+              "propName": "src",
+              "assetVideo": "video"
+            }
+          ],
+          "result": {}
         }
       ]
     },

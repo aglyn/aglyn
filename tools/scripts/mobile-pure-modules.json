@@ -66,6 +66,10 @@
       "why": "Reached by media-filter: media kinds, orientation and the name-token normalizer the library search asks with."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "why": "The media: reference grammar the pickers write and the previews read (mediaNodeSrc, resolveMediaSrc); its one import is the tenant apex constant (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/message-search.ts",
       "why": "Who sent a form submission (`messageSender`), which the native submissions list and detail name the same way (AGL-3668)."
     },
