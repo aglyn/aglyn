@@ -467,17 +467,20 @@ struct ActionInputSheet: View {
     return ScreenContext.with(pending.scope, "form", .object(form))
   }
 
+  /// A field the person cannot see (its `when` fails) never holds up the action.
   private var missing: Bool {
-    inputs.contains { field in
-      field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: pending.scope)), in: pending.scope)
+    let context = filled
+    return inputs.contains { field in
+      ScreenValues.condition(field.when, in: context)
+        && field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: pending.scope)), in: pending.scope)
     }
   }
 
   var body: some View {
     NavigationStack {
       Form {
-        if let confirm = pending.action.confirm {
-          Section { Text(ScreenValues.render(confirm, in: pending.scope)).font(AglynFont.subheadline) }
+        if let confirm = pending.action.confirmText(in: pending.scope) {
+          Section { Text(confirm).font(AglynFont.subheadline) }
         }
         Section {
           ForEach(inputs.filter { ScreenValues.condition($0.when, in: filled) }) { field in

@@ -57,6 +57,8 @@ class RegisterModel(
   private val reconnectMs: Long = RECONNECT_MS,
   /** The shift and staff PIN routes. */
   val opsApi: PosOpsApi = OfflinePosOps,
+  /** The return route. */
+  returnsApi: PosReturnsApi = OfflinePosReturns,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -68,6 +70,8 @@ class RegisterModel(
 
   /** The last sale this register finished, and its receipt. */
   val lastReceipt = PosLastReceiptModel(firestore, api, store, hostId, scope, { receiptContext() })
+  /** The return being rung at the register. */
+  val returns = PosReturnModel(returnsApi, scope, { register?.id }, { cashier.assertion })
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
