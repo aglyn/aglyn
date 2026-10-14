@@ -51,6 +51,8 @@ struct SeoCheckCard: View {
   let context: NativePluginContext
   let hostID: String
   let host: [String: Any]
+  /// Hears the keyword lines the check was last run with.
+  var onChecked: (String) -> Void = { _ in }
   @State private var rows: [SeoTargetKeywordRow] = []
   @State private var report: SeoAuditReport?
   @State private var busy = false
@@ -99,6 +101,7 @@ struct SeoCheckCard: View {
       defer { busy = false }
       do {
         report = try await runSeoCheck(api: context.api, hostID: hostID, keywords: keywords)
+        onChecked(keywords)
       } catch {
         notice = (error as? ConsoleAPIError)?.message ?? "The SEO check could not run — try again."
       }

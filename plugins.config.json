@@ -2761,6 +2761,7 @@
             "ai.allotment"
           ],
           "widgets": [
+            "ai.seo-audit",
             "ai.seo-start",
             "ai.site-memory"
           ],

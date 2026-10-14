@@ -8,12 +8,15 @@ import SwiftUI
 public struct SeoZone: @unchecked Sendable {
   /// The site's stored `seo` settings.
   public let seo: [String: Any]?
+  /// The target keyword lines the SEO check above was last run with, one page a line (`/pricing: plans, pricing`); blank before a run.
+  public let keywords: String
   /// Puts `values` in the SEO form as unsaved edits, keyed by the form's field names (`seo.title`, `seo.entity.description`,
   /// `seo.agent.whenToUse`). The same key twice applies once; the form's Save is the write.
   public let proposeDraft: @MainActor ([String: String], String) -> Void
 
-  public init(seo: [String: Any]?, proposeDraft: @escaping @MainActor ([String: String], String) -> Void) {
+  public init(seo: [String: Any]?, keywords: String = "", proposeDraft: @escaping @MainActor ([String: String], String) -> Void) {
     self.seo = seo
+    self.keywords = keywords
     self.proposeDraft = proposeDraft
   }
 }

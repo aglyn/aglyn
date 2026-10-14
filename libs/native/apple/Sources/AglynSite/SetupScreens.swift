@@ -383,14 +383,17 @@ private struct SeoSection: View {
   let canEdit: Bool
   private let contracts = ContractValues.shared
   @State private var draft = FormDraft()
+  @State private var checkedKeywords = ""
 
   var body: some View {
     // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
-    SeoCheckCard(context: context, hostID: hostID, host: host)
+    SeoCheckCard(context: context, hostID: hostID, host: host, onChecked: { checkedKeywords = $0 })
     // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
     SlotCards(context: context, slot: "hostSeo")
       .environment(
-        \.seoZone, SeoZone(seo: host["seo"] as? [String: Any], proposeDraft: { [draft] values, key in draft.propose(values, key: key) }))
+        \.seoZone, SeoZone(
+          seo: host["seo"] as? [String: Any], keywords: checkedKeywords,
+          proposeDraft: { [draft] values, key in draft.propose(values, key: key) }))
     HostTextCard(
       title: "Search appearance", host: host, paths: ["seo.title", "seo.description", "seo.separator", "seo.titlePattern"],
       api: api, canEdit: canEdit, message: "How your site reads in search results and link previews.",

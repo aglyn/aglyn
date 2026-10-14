@@ -90,7 +90,7 @@ private fun tone(finding: SeoFinding) = when (finding.severity) {
  * reads the target keywords by page that are picked here rather than typed as lines.
  */
 @Composable
-fun SeoCheckCard(context: NativePluginContext, hostId: String, host: Map<String, Any?>) {
+fun SeoCheckCard(context: NativePluginContext, hostId: String, host: Map<String, Any?>, onChecked: (keywords: String) -> Unit = {}) {
   val scope = rememberCoroutineScope()
   val runner = remember(hostId) { ActionRunner(scope, roleHint = "an author, editor or admin") }
   var rows by remember { mutableStateOf<List<SeoTargetKeywordRow>>(emptyList()) }
@@ -116,7 +116,9 @@ fun SeoCheckCard(context: NativePluginContext, hostId: String, host: Map<String,
         notice = null
         scope.launch {
           try {
-            report = runSeoCheck(context.api, hostId, seoKeywordLinesFromRows(rows))
+            val lines = seoKeywordLinesFromRows(rows)
+            report = runSeoCheck(context.api, hostId, lines)
+            onChecked(lines)
           } catch (error: Throwable) {
             if (error is kotlinx.coroutines.CancellationException) throw error
             notice = runner.describe(error)

@@ -335,11 +335,12 @@ private fun LanguagesCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit
 private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
   val c = Contracts
   // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
-  SeoCheckCard(context, hostId, host)
+  var checkedKeywords by remember { mutableStateOf("") }
+  SeoCheckCard(context, hostId, host, onChecked = { checkedKeywords = it })
   // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
   val draft = remember { FormDraft() }
   @Suppress("UNCHECKED_CAST")
-  val zone = remember(host, draft) { SeoZone(host.at("seo") as? Map<String, Any?>, draft::propose) }
+  val zone = remember(host, draft, checkedKeywords) { SeoZone(host.at("seo") as? Map<String, Any?>, checkedKeywords, draft::propose) }
   CompositionLocalProvider(LocalSeoZone provides zone) { SlotCards(context, "hostSeo") }
   HostTextCard(
     "Search appearance",
