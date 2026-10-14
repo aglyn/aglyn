@@ -131,6 +131,24 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(JSONValue.decode(sent[0].httpBody ?? Data()), ["orgId": "o1", "email": "a@b.c"])
   }
 
+  func testChoicesFromDataLeaveOutWhatTheFilterRefuses() throws {
+    let field = try XCTUnwrap(
+      FieldSpec([
+        "key": "screen", "kind": "select",
+        "options": [["value": "", "label": "Built-in form"]],
+        "optionsFrom": ["items": "data.screens", "value": "{item.$id}", "label": "{item.displayName|item.$id}", "filter": "!item.deletedAt && item.kind != group"],
+      ]))
+    let context: JSONValue = [
+      "data": ["screens": [
+        ["$id": "home", "displayName": "Home"], ["$id": "old", "displayName": "Old", "deletedAt": 5],
+        ["$id": "folder", "displayName": "Folder", "kind": "group"], ["$id": "login"],
+      ]]
+    ]
+    XCTAssertEqual(field.choices(in: context).map(\.value), ["", "home", "login"])
+    XCTAssertEqual(field.choices(in: context).map(\.label), ["Built-in form", "Home", "login"])
+    XCTAssertTrue(try XCTUnwrap(ActionSpec(["label": "Set", "siteWide": true, "write": ["doc": "hosts/h"]])).siteWide)
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])

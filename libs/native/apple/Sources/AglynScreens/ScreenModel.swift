@@ -327,6 +327,9 @@ public final class ScreenModel {
         let fields = ScreenValues.resolveBody(write["fields"] ?? [:], in: scope)
         try await writer.merge(
           FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(fields) as? [String: Any] ?? [:])
+        if action.siteWide, let api, let reader, let hostID = scope["site"]?["id"]?.stringValue {
+          await publishSiteWideChange(api: api, reader: reader, hostID: hostID)
+        }
         return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
       } catch {
         return .failed(error.localizedDescription)

@@ -268,6 +268,8 @@ class ScreenModel(
         val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
         @Suppress("UNCHECKED_CAST")
         target.merge(ScreenValues.render(doc, scope), (plain(fields) as? Map<String, Any?>) ?: emptyMap())
+        val hostId = (ScreenValues.lookup("site.id", scope) as? JsonPrimitive)?.takeIf { it.isString }?.content
+        if (action.siteWide && api != null && hostId != null) com.aglyn.core.publishSiteWideChange(api, target, hostId)
         ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)
       } catch (error: CancellationException) {
         throw error

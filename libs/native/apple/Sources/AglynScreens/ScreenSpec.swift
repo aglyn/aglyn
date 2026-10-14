@@ -165,6 +165,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// After a `write` to the site document that changes how pages render, stage the site-wide
+  /// republish the console's host-document writes do (`publishSiteWideChange`).
+  public let siteWide: Bool
   /// A change to the signed-in person's own sign-in, made through the
   /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
   public let account: String?
@@ -199,6 +202,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.siteWide = json["siteWide"] == .bool(true)
     self.account = json["account"]?.stringValue
   }
 
@@ -283,7 +287,9 @@ public struct FieldSpec: Sendable, Identifiable {
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
-    let rows = ScreenValues.lookup(path, in: context).array
+    let rows = ScreenValues.lookup(path, in: context).array.filter {
+      ScreenValues.condition(from["filter"]?.stringValue, in: ScreenContext.with(context, item: $0))
+    }
     return options + rows.map { row in
       let scope = ScreenContext.with(context, item: row)
       return (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))

@@ -118,6 +118,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val account: String? = json.str("account")
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
+  /** After a `write` to the site document that changes how pages render, stage the site-wide republish the console's host-document writes do (`publishSiteWideChange`). */
+  val siteWide: Boolean = json.isTrue("siteWide")
 
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>
@@ -153,7 +155,9 @@ class FieldSpec private constructor(
     val path = from.str("items") ?: return options
     val valueTemplate = from.str("value") ?: "{item.\$id}"
     val labelTemplate = from.str("label") ?: valueTemplate
-    val rows = (ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()
+    val rows = ((ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()).filter {
+      ScreenValues.condition(from.str("filter"), ScreenContext.withItem(context, it))
+    }
     return options + rows.map { row ->
       val scope = ScreenContext.withItem(context, row)
       ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope)
