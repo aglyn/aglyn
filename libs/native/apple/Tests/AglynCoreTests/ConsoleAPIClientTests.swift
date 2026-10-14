@@ -162,6 +162,22 @@ final class ConsoleAPIClientTests: XCTestCase {
     XCTAssertEqual(StubProtocol.requests.map { $0.value(forHTTPHeaderField: "Idempotency-Key") }, ["k1", "k1"])
   }
 
+  /// Extra request headers go out as given, and a write that names its own `Idempotency-Key` through them is retried like one given `idempotencyKey`.
+  func testHeadersGoOutAndAKeyInThemMakesAWriteRetryable() async throws {
+    StubProtocol.reset([.failure(.networkConnectionLost), .status(200, "{}")])
+    try await client().request(
+      "/api/x", method: .post, body: [:], headers: ["idempotency-key": "k2", "X-Staff": "yes"])
+    XCTAssertEqual(StubProtocol.requests.map { $0.value(forHTTPHeaderField: "Idempotency-Key") }, ["k2", "k2"])
+    XCTAssertEqual(StubProtocol.requests[0].value(forHTTPHeaderField: "X-Staff"), "yes")
+    StubProtocol.reset([.status(503, #"{"error":"Busy"}"#)])
+    do {
+      try await client().request("/api/x", method: .post, body: [:], headers: ["X-Staff": "yes"])
+      XCTFail("expected a refusal")
+    } catch {
+      XCTAssertEqual(StubProtocol.requests.count, 1)
+    }
+  }
+
   func testAnUnreachableConsoleSaysSo() async {
     StubProtocol.reset([.failure(.notConnectedToInternet), .failure(.notConnectedToInternet)])
     do {
