@@ -90,6 +90,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val method: ApiMethod = runCatching { ApiMethod.valueOf((json.str("method") ?: "POST").uppercase()) }.getOrDefault(ApiMethod.POST)
   val url: String? = json.str("url")
   val body: JsonElement? = json.obj("body")
+  /**
+   * Request headers, name to template. `{attempt}` is a key that stays the same while the same
+   * action sends the same body (a retry) and changes with the body: `Idempotency-Key` for a
+   * route that provisions something (enterprise billing).
+   */
+  val headers: Map<String, String> = json.entries("headers").associate { (k, v) -> k to ((v as? JsonPrimitive)?.contentOrNull ?: ScreenValues.text(v)) }
   val confirm: String? = json.str("confirm")
   /** A confirmation built from segments, `[{ "when": …, "text": … }]`, joined in order, so one sentence can change with the route's answer. */
   val confirmParts: List<JsonElement> = (json.obj("confirm") as? JsonArray).orEmpty()
@@ -106,7 +112,7 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     }
   }
   val back: Boolean = json.isTrue("back")
-  val reload: Boolean = !json.isFalse("reload") && (url != null || json.obj("write") != null)
+  val reload: Boolean = !json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null)
   val whenCondition: String? = json.str("when")
   val link: String? = json.str("link")
   /** A Besigner path (whole, from the console root) opened in the app's web view. */
@@ -116,6 +122,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
   /** A follow-up the action makes once it succeeds (best effort, like the console's). */
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
+  /** A change to the signed-in person's own sign-in, made through the session (`changePassword`, `updateDisplayName`); its inputs are the body. */
+  val account: String? = json.str("account")
   /**
    * `{ when, title, text }` (or a list of them, the first that matches wins): when the route's answer
    * meets `when`, `text` (a template over `response`) is shown in place of the success message.

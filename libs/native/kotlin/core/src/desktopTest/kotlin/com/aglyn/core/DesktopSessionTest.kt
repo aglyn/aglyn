@@ -34,6 +34,8 @@ class DesktopSessionTest {
         respond("""{"users":[{"localId":"u1","email":"dana@example.test","displayName":"Dana"}]}""", HttpStatusCode.OK, json)
       path.endsWith("accounts:signInWithPassword") ->
         respond("""{"idToken":"id-1","refreshToken":"good-1","expiresIn":"3600","localId":"u1","email":"dana@example.test"}""", HttpStatusCode.OK, json)
+      path.endsWith("accounts:update") ->
+        respond("""{"idToken":"id-3","refreshToken":"good-3","expiresIn":"3600"}""", HttpStatusCode.OK, json)
       else -> respond("", HttpStatusCode.NotFound)
     }
   })
@@ -57,6 +59,33 @@ class DesktopSessionTest {
     assertEquals("good-1", store.read("k"))
     session.signOut()
     assertNull(store.read("k"))
+  }
+
+  @Test
+  fun aPasswordChangeProvesTheCurrentOneThenReplacesTheTokens() = runTest {
+    val store = InMemoryCredentialStore()
+    val calls = mutableListOf<String>()
+    val session = IdentityToolkitAuthSession(http(calls), "key", "127.0.0.1:9299", credentials = store, credentialKey = "k")
+    session.signInWithEmail("dana@example.test", "old")
+    session.changePassword("old", "a-much-longer-new-one")
+    assertEquals(listOf("accounts:signInWithPassword", "accounts:signInWithPassword", "accounts:update"), calls)
+    assertEquals("good-3", store.read("k"))
+    assertEquals("id-3", session.idToken())
+  }
+
+  @Test
+  fun aDisplayNameChangeIsKeptOnTheSignedInUser() = runTest {
+    val session = IdentityToolkitAuthSession(http(), "key", "127.0.0.1:9299", credentials = InMemoryCredentialStore(), credentialKey = "k")
+    session.signInWithEmail("dana@example.test", "pw")
+    session.updateDisplayName("Dana Scully")
+    assertEquals(AuthState.SignedIn(AuthUser("u1", "dana@example.test", "Dana Scully")), session.state.value)
+  }
+
+  @Test
+  fun aPasswordChangeNeedsASignedInPerson() = runTest {
+    val session = IdentityToolkitAuthSession(http(), "key", null, credentials = InMemoryCredentialStore(), credentialKey = "k")
+    val error = runCatching { session.changePassword("a", "b") }.exceptionOrNull()
+    assertIs<AuthError>(error)
   }
 
   @Test

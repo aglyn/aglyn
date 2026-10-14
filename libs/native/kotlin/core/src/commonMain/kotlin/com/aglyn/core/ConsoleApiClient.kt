@@ -84,7 +84,9 @@ class ConsoleApiClient(
     /** A paired device's own credential (the customer display's token), where there is no signed-in member. */
     headers: Map<String, String> = emptyMap(),
   ): JsonElement? {
-    val retryable = method == ApiMethod.GET || idempotencyKey != null
+    // A write that names its own `Idempotency-Key` (a spec action's `headers`) is as safe to retry as one given `idempotencyKey`.
+    val keyed = idempotencyKey != null || headers.keys.any { it.equals("Idempotency-Key", ignoreCase = true) }
+    val retryable = method == ApiMethod.GET || keyed
     var forceRefresh = false
     var lastError: Throwable? = null
     var attempt = 1

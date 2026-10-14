@@ -140,6 +140,10 @@ public struct ActionSpec: Sendable, Identifiable {
   public let method: HTTPMethod
   public let url: String?
   public let body: JSONValue?
+  /// Request headers, name to template. `{attempt}` is a key that stays the same while the same
+  /// action sends the same body (a retry), and changes with the body: `Idempotency-Key` for a
+  /// route that provisions something (enterprise billing).
+  public let headers: [String: String]
   public let confirm: String?
   /// A confirmation built from segments, `[{ "when": …, "text": … }]`, joined in order, so one
   /// sentence can change with the route's answer (the add-on's price preview).
@@ -168,6 +172,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// A change to the signed-in person's own sign-in, made through the
+  /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
+  public let account: String?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
@@ -189,6 +196,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "POST").uppercased()) ?? .post
     self.url = json["url"]?.stringValue
     self.body = json["body"]
+    self.headers = json["headers"].objectEntries.reduce(into: [:]) { $0[$1.key] = $1.value.stringValue ?? ScreenValues.text($1.value) }
     self.confirm = json["confirm"]?.stringValue
     self.confirmParts = json["confirm"].array
     self.confirmWhen = json["confirmWhen"]?.stringValue
@@ -199,7 +207,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
-    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil)
+    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil)
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.then = json["then"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.when = json["when"]?.stringValue
@@ -208,6 +216,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.account = json["account"]?.stringValue
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }

@@ -912,7 +912,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
 
-An action is `{ label, icon, method, url, body, confirm, confirmWhen, destructive, prompt,
+An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
 reason, success, instead, check, open, navigate, back, reload, when, link, copy,
 reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
@@ -930,6 +930,12 @@ that matches wins) shown in place of `success` when the route's answer meets
 (`open` then names the response field holding the invoice page to open).
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
+
+`headers` names request headers, each a template. `{attempt}` there is one key per
+(action, route, resolved body): sending the same request again, a retry or a second tap,
+reuses it, and a changed body gets a new one. A route that provisions something
+(enterprise billing) takes it as `Idempotency-Key`, and a write that carries one is retried
+like a read.
 
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,

@@ -292,6 +292,26 @@ public struct ThemeRange: Equatable, Sendable {
   public let max: Int
 }
 
+/// One choice a Style components field offers; a color choice names the theme color it draws in.
+public struct ThemeLookOption: Equatable, Sendable {
+  public let value: String
+  public let label: String
+  public let token: String?
+}
+
+/// One Style components field: a site-wide look of buttons, form inputs or cards, a choice from a list.
+public struct ThemeLookField: Equatable, Sendable, Identifiable {
+  public let id: String
+  public let group: String
+  public let label: String
+  public let kind: String
+  public let options: [ThemeLookOption]
+}
+
+/// The select's value for a look the site does not set (the theme's own) and for one no choice names.
+public let themeLookDefault = ""
+public let themeLookCustom = "__custom__"
+
 /// The editor's controls as the theme route hands them out (`THEME_EDITOR_CATALOG`).
 public struct ThemeCatalog: Equatable, Sendable {
   public let schemes: [String]
@@ -304,9 +324,11 @@ public struct ThemeCatalog: Equatable, Sendable {
   public let spacing: ThemeRange
   public let navHeightXs: ThemeRange
   public let navHeightSm: ThemeRange
+  public let lookGroups: [(group: String, label: String)]
+  public let looks: [ThemeLookField]
 
   public static func == (a: ThemeCatalog, b: ThemeCatalog) -> Bool {
-    a.schemes == b.schemes && a.colors == b.colors && a.fonts == b.fonts && a.systemFont == b.systemFont
+    a.schemes == b.schemes && a.colors == b.colors && a.fonts == b.fonts && a.systemFont == b.systemFont && a.looks == b.looks
       && a.darkSchemeOptions.map(\.value) == b.darkSchemeOptions.map(\.value)
   }
 }
@@ -337,6 +359,8 @@ public struct ThemeValues: Equatable, Sendable {
   public var spacing: Double?
   public var navHeightXs: Double?
   public var navHeightSm: Double?
+  /// Each Style components field's choice: `themeLookDefault` for the theme's own, `themeLookCustom` for a value no choice names.
+  public var componentLooks: [String: String] = [:]
 }
 
 private func rangeOf(_ json: JSONValue?) -> ThemeRange {
@@ -362,7 +386,16 @@ public func themeCatalog(of json: JSONValue?) -> ThemeCatalog {
     borderRadius: rangeOf(json?["borderRadius"]),
     spacing: rangeOf(json?["spacing"]),
     navHeightXs: rangeOf(json?["navHeight"]?["xs"]),
-    navHeightSm: rangeOf(json?["navHeight"]?["sm"]))
+    navHeightSm: rangeOf(json?["navHeight"]?["sm"]),
+    lookGroups: json?["componentLooks"]?["groups"]?.arrayValue?.map { ($0["group"]?.stringValue ?? "", $0["label"]?.stringValue ?? "") } ?? [],
+    looks: json?["componentLooks"]?["fields"]?.arrayValue?.map { field in
+      ThemeLookField(
+        id: field["id"]?.stringValue ?? "", group: field["group"]?.stringValue ?? "", label: field["label"]?.stringValue ?? "",
+        kind: field["kind"]?.stringValue ?? "select",
+        options: field["options"]?.arrayValue?.map {
+          ThemeLookOption(value: $0["value"]?.stringValue ?? "", label: $0["label"]?.stringValue ?? "", token: $0["token"]?.stringValue)
+        } ?? [])
+    } ?? [])
 }
 
 public func themeValues(of json: JSONValue?) -> ThemeValues {
@@ -373,11 +406,14 @@ public func themeValues(of json: JSONValue?) -> ThemeValues {
       colors[scheme] = map.mapValues { $0.stringValue }
     }
   }
+  var looks: [String: String] = [:]
+  if case .object(let map)? = json?["componentLooks"] { looks = map.compactMapValues { $0.stringValue } }
   return ThemeValues(
     colors: colors, darkScheme: json?["darkScheme"]?.stringValue ?? "auto",
     fontFamily: json?["fontFamily"]?.stringValue ?? "__system__",
     borderRadius: json?["borderRadius"]?.numberValue, spacing: json?["spacing"]?.numberValue,
-    navHeightXs: json?["navHeight"]?["xs"]?.numberValue, navHeightSm: json?["navHeight"]?["sm"]?.numberValue)
+    navHeightXs: json?["navHeight"]?["xs"]?.numberValue, navHeightSm: json?["navHeight"]?["sm"]?.numberValue,
+    componentLooks: looks)
 }
 
 /// One edit of the theme editor, as the route reads it (`ThemeEditorEdit`).
@@ -388,6 +424,7 @@ public enum ThemeEdit: Equatable, Sendable {
   case borderRadius(Double?)
   case spacing(Double?)
   case navHeight(breakpoint: String, value: Double?)
+  case componentLook(field: String, value: String)
 
   public var body: [String: Any?] {
     switch self {
@@ -397,6 +434,7 @@ public enum ThemeEdit: Equatable, Sendable {
     case .borderRadius(let value): ["control": "borderRadius", "value": value]
     case .spacing(let value): ["control": "spacing", "value": value]
     case .navHeight(let breakpoint, let value): ["control": "navHeight", "breakpoint": breakpoint, "value": value]
+    case .componentLook(let field, let value): ["control": "componentLook", "field": field, "value": value]
     }
   }
 }
@@ -418,6 +456,11 @@ public func themeEdits(from before: ThemeValues, to after: ThemeValues) -> [Them
   if before.spacing != after.spacing { edits.append(.spacing(after.spacing)) }
   if before.navHeightXs != after.navHeightXs { edits.append(.navHeight(breakpoint: "xs", value: after.navHeightXs)) }
   if before.navHeightSm != after.navHeightSm { edits.append(.navHeight(breakpoint: "sm", value: after.navHeightSm)) }
+  // A look no choice names (Custom) is left alone, as the console's select leaves it.
+  for field in after.componentLooks.keys.sorted() {
+    let value = after.componentLooks[field] ?? ""
+    if (before.componentLooks[field] ?? "") != value, value != themeLookCustom { edits.append(.componentLook(field: field, value: value)) }
+  }
   return edits
 }
 

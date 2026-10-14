@@ -58,7 +58,7 @@ extension URLSession: HTTPTransport {
 /// app-only route and no privileged path; a route refuses the app exactly
 /// when it would refuse the console.
 ///
-/// Retries: a GET (and a write that carries an `Idempotency-Key`) is retried
+/// Retries: a GET (and a write that carries an `Idempotency-Key`, given or in `headers`) is retried
 /// on a network error or a 502/503/504, with 400·2ⁿ ms backoff. A 4xx is an
 /// answer and is never retried, except one forced token refresh on a 401.
 public final class ConsoleAPIClient: Sendable {
@@ -142,7 +142,9 @@ public final class ConsoleAPIClient: Sendable {
     rawBody: (data: Data, contentType: String)? = nil,
     headers: [String: String] = [:]
   ) async throws -> JSONValue? {
-    let retryable = method == .get || idempotencyKey != nil
+    // A write that names its own `Idempotency-Key` (a spec action's `headers`) is as safe to retry as one given `idempotencyKey`.
+    let keyed = idempotencyKey != nil || headers.keys.contains { $0.caseInsensitiveCompare("Idempotency-Key") == .orderedSame }
+    let retryable = method == .get || keyed
     var forceRefresh = false
     var lastError: Error?
     let url = try url(for: path, query: query)
