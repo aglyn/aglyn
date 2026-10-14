@@ -193,6 +193,12 @@ public struct ActionSpec: Sendable, Identifiable {
   /// `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds
   /// (a chosen package, the plan read from it), until the app closes.
   public let stash: JSONValue?
+
+  /// `passkey: { options, verify, origin, errors, otherwise }`: sets up a passkey on this device. The
+  /// options route answers a WebAuthn challenge, the platform makes the credential, and the verify route
+  /// stores it; `origin` is the `Origin` the routes check the ceremony against (`https://<relying party>`),
+  /// `errors` maps a route's reason to the words shown and `otherwise` words any other failure.
+  public let passkey: JSONValue?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
@@ -248,7 +254,8 @@ public struct ActionSpec: Sendable, Identifiable {
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
     self.reload = json["reload"] == .bool(true)
-      || (json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil))
+      || (json["reload"] != .bool(false)
+        && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil || json["passkey"] != nil))
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.then = json["then"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.when = json["when"]?.stringValue
@@ -265,6 +272,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.chunk = json["chunk"]
     self.repeating = json["repeat"]
     self.after = json["after"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
+    self.passkey = json["passkey"]
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }

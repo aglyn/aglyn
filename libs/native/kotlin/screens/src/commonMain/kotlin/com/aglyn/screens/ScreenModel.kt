@@ -39,6 +39,14 @@ data class AccountOperations(
   },
   /** Keeps the account's display name in step with the profile. */
   val updateDisplayName: suspend (name: String) -> Unit = {},
+  /** Connects Google through the platform's sign-in sheet and links it to the account. */
+  val linkGoogle: suspend () -> Unit = {
+    throw IllegalStateException("Connecting Google is not set up in this build.")
+  },
+  /** Disconnects a sign-in provider (`google.com`) from the account. */
+  val unlinkProvider: suspend (providerId: String) -> Unit = {
+    throw IllegalStateException("Disconnecting a sign-in method is not available here.")
+  },
 )
 
 /**
@@ -63,6 +71,13 @@ data class ScreenSession(
   /** Leaves the current screen (an action that ends it, like a delete). */
   val back: () -> Unit = {},
   val account: AccountOperations = AccountOperations(),
+  /** Whether this build can connect Google (its OAuth client is configured and a sign-in sheet runner is bound). */
+  val googleConfigured: Boolean = false,
+  /**
+   * The relying party passkeys are made for (`aglyn.com`): set where this build can make a passkey (it is configured,
+   * the app is linked to that domain, and a creator is bound); null hides the action.
+   */
+  val passkeyRelyingParty: String? = null,
 ) {
   fun context(plugin: NativePluginContext?, params: NativeParams): JsonElement {
     val role = orgRole.orEmpty()
@@ -87,13 +102,20 @@ data class ScreenSession(
         put("name", displayName)
         put("providers", kotlinx.serialization.json.JsonArray(claims.signInMethods.map { JsonPrimitive(it) }))
         put("emailVerified", claims.emailVerified)
+        // Google can be connected where this build has its client, the account is not on a company login (a tenant), and Google is not connected already.
+        put("canLinkGoogle", googleConfigured && (claims.values["firebase"] as? JsonObject)?.get("tenant") == null && "google.com" !in claims.signInMethods)
+        // A passkey can be set up where this build can make one, the account is not on a company login (the routes refuse a tenant) and its email is verified (they refuse that too).
+        put("canAddPasskey", passkeyRelyingParty != null && (claims.values["firebase"] as? JsonObject)?.get("tenant") == null && claims.emailVerified)
       })
       put("staff", buildJsonObject {
         put("is", claims.isStaff)
         put("role", claims.staffRole)
         put("super", claims.isSuper)
       })
-      put("app", buildJsonObject { put("origin", origin) })
+      put("app", buildJsonObject {
+        put("origin", origin)
+        put("passkeyRp", passkeyRelyingParty)
+      })
       // Today, for routes that take a period, in UTC as the routes keep them.
       put("now", buildJsonObject {
         val (year, month) = nowParts()
@@ -127,6 +149,12 @@ object ScreenStash {
 
   fun clear() { values = JsonObject(emptyMap()) }
 }
+
+/** Makes a passkey through the platform; the app provides it where the device can (null elsewhere, and the desktop). */
+val LocalPasskeyCreator = compositionLocalOf<PasskeyCreator?> { null }
+
+/** Signs in to Google on this device for "Connect Google": the Credential Manager on Android, the browser on the desktop (null elsewhere). */
+val LocalGoogleCredentialSource = compositionLocalOf<com.aglyn.core.GoogleCredentialSource?> { null }
 
 sealed interface ActionOutcome {
   data class Done(val message: String?, val response: JsonElement?) : ActionOutcome
@@ -163,6 +191,9 @@ class ScreenModel(
   private val attempts = mutableMapOf<String, String>()
 
   val data: JsonElement get() = context.obj("data") ?: JsonObject(emptyMap())
+
+  /** Makes a passkey through the platform; the screen sets it (null where the device cannot). */
+  var createPasskey: PasskeyCreator? = null
 
   /** Seeds data without a network (previews, snapshot tests). */
   fun seed(data: JsonElement) {
@@ -301,6 +332,13 @@ class ScreenModel(
     }
   }
 
+  /** Takes the session's people and workspace afresh (after the token's claims changed, such as a sign-in method disconnected), keeping what the screen has loaded. */
+  fun rebase(base: JsonElement) {
+    var next = context
+    for (key in listOf("org", "site", "user", "staff")) base.obj(key)?.let { next = ScreenContext.with(next, key, it) }
+    context = next
+  }
+
   suspend fun loadMore(key: String) {
     val client = api ?: return
     val load = spec.loads.firstOrNull { it.key == key } ?: return
@@ -385,6 +423,12 @@ class ScreenModel(
           }
           // A blank name is not written over the one the account has.
           "updateDisplayName" -> field("name").trim().takeIf { it.isNotEmpty() }?.let { target.updateDisplayName(it) }
+          "linkGoogle" -> target.linkGoogle()
+          "unlinkProvider" -> {
+            val provider = field("providerId")
+            if (provider.isEmpty()) return ActionOutcome.Failed("Choose a sign-in method.")
+            target.unlinkProvider(provider)
+          }
           else -> return ActionOutcome.Failed("That is not available here.")
         }
         ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)
@@ -394,6 +438,7 @@ class ScreenModel(
         ActionOutcome.Failed(error.message ?: "That did not work. Try again.")
       }
     }
+    action.passkey?.let { return registerPasskey(it, action, scope) }
     action.write?.let { write ->
       val doc = write.str("doc") ?: return ActionOutcome.Failed("Saving is not available here.")
       val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
@@ -488,6 +533,51 @@ class ScreenModel(
       if (!ScreenValues.truthy(last?.let { ScreenValues.lookup(until, it) })) throw ConsoleApiError("The file did not finish uploading. Try again.", 500, null)
     }
     return last
+  }
+
+  /**
+   * Sets up a passkey as the console's `registerPasskey` does: the options route answers a challenge, the platform makes
+   * the credential, the verify route stores it. The routes read the ceremony's `Origin` (they derive the relying party
+   * from it), so the options call sends the relying party's own origin and the verify call the origin the platform
+   * signed into the credential.
+   */
+  private suspend fun registerPasskey(passkey: JsonElement, action: ActionSpec, scope: JsonElement): ActionOutcome {
+    val client = api
+    val create = createPasskey
+    if (client == null || create == null) return ActionOutcome.Failed("Passkeys are not available on this device.")
+    val optionsPath = passkey.str("options")
+    val verifyPath = passkey.str("verify")
+    val origin = passkey.str("origin")?.let { ScreenValues.render(it, scope) }
+    if (optionsPath == null || verifyPath == null || origin.isNullOrEmpty()) return ActionOutcome.Failed("Passkeys are not set up in this build.")
+    return try {
+      val started = client.request(ScreenValues.renderUrl(optionsPath, scope), ApiMethod.POST, JsonObject(emptyMap()), headers = mapOf("Origin" to origin))
+      val challengeId = started.str("challengeId")
+      val options = started.obj("options")
+      if (challengeId == null || options == null) {
+        return ActionOutcome.Failed(ScreenPasskeys.message(ConsoleApiError("", 500, null), passkey, scope))
+      }
+      val credential = create.create(options)
+      val label = ScreenValues.text(ScreenValues.resolveBody(action.body ?: JsonObject(emptyMap()), scope).obj("label")).trim()
+      val body = buildJsonObject {
+        put("challengeId", challengeId)
+        put("response", credential)
+        if (label.isNotEmpty()) put("label", label)
+      }
+      val verified = client.request(
+        ScreenValues.renderUrl(verifyPath, scope), ApiMethod.POST, body,
+        headers = mapOf("Origin" to (ScreenPasskeys.clientDataOrigin(credential) ?: origin)),
+      )
+      ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", verified)) }, verified)
+    } catch (error: PasskeyCancelled) {
+      // Closing the prompt is the person's answer, not a failure worth alarming them with.
+      ActionOutcome.Done(null, null)
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: ConsoleApiError) {
+      if (wantsReauth(error)) ActionOutcome.NeedsReauth(error.body.str("message") ?: error.message) else ActionOutcome.Failed(ScreenPasskeys.message(error, passkey, scope))
+    } catch (error: Throwable) {
+      ActionOutcome.Failed(ScreenPasskeys.message(error, passkey, scope))
+    }
   }
 
   companion object {

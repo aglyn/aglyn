@@ -131,8 +131,11 @@ fun SpecScreen(
     return
   }
   val key = "${spec.id}:${plugin.orgId}:${plugin.hostId}:$params"
+  val passkeys = LocalPasskeyCreator.current
   val model = remember(key) { ScreenModel(spec, base, plugin.api, plugin.firestore, plugin.writer, session.account) }
+  model.createPasskey = if (session.passkeyRelyingParty != null) passkeys else null
   LaunchedEffect(key) { if (seed != null) model.seed(seed) else model.load() }
+  LaunchedEffect(session.claims) { model.rebase(base) }
   var selection by remember(key) { mutableStateOf<Selection?>(null) }
   val split = !embedded && spec.blocks.any { it.type == "list" && it.flag("split") && it["open"] != null }
   val wide = currentWidthClass() != WidthClass.COMPACT

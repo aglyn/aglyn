@@ -383,6 +383,28 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun theProfileListsSignInMethodsAndOnlyOffersToDisconnectOneWhileAnotherRemains() = runTest {
+    val unlinked = mutableListOf<String>()
+    val account = AccountOperations(unlinkProvider = { unlinked += it })
+    val spec = ScreenSpec.parseFile(File(screensDir, "account.screens.json").readText()).first { it.id == "core.account.profile" }
+    val list = spec.blocks.first { it.title == "Sign-in methods" }
+    val unlink = ActionSpec.parse(list.raw.arr("actions").first())!!
+    fun scope(providers: List<String>, item: String) = ScreenContext.withItem(
+      Json.parseToJsonElement("""{"user":{"providers":${providers.joinToString(",", "[", "]") { "\"$it\"" }}}}"""), JsonPrimitive(item),
+    )
+    assertTrue(ScreenValues.condition(unlink.whenCondition, scope(listOf("password", "google.com"), "google.com")))
+    assertFalse(ScreenValues.condition(unlink.whenCondition, scope(listOf("password", "google.com"), "password")))
+    assertFalse(ScreenValues.condition(unlink.whenCondition, scope(listOf("google.com"), "google.com")))
+    val model = ScreenModel(spec, JsonObject(emptyMap()), null, account = account)
+    // The screen's own constants (the provider names) come with the model's context.
+    val shown = ScreenContext.with(ScreenContext.withItem(model.context, JsonPrimitive("google.com")), "user", Json.parseToJsonElement("""{"providers":["password","google.com"]}"""))
+    val outcome = model.run(unlink, shown)
+    assertIs<ActionOutcome.Done>(outcome)
+    assertEquals("Google disconnected", outcome.message)
+    assertEquals(listOf("google.com"), unlinked)
+  }
+
+  @Test
   fun theAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() {
     val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }
     val list = spec.blocks.first { it.type == "list" }

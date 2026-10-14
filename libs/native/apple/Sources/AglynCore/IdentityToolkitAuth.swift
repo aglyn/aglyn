@@ -240,6 +240,20 @@ public actor IdentityToolkitAuth {
     return user
   }
 
+  /// Removes a sign-in provider from the account (`accounts:update` with `deleteProvider`), as the
+  /// console's `unlink` does, and keeps the fresh tokens the answer carries.
+  public func deleteProvider(_ providerID: String) async throws {
+    guard let current = session else { throw IdentityToolkitError(code: nil, status: 401) }
+    let body = try await post(
+      "\(identityBase)/v1/accounts:update?key=\(apiKey)",
+      json: [
+        "idToken": .string(current.idToken), "deleteProvider": .array([.string(providerID)]), "returnSecureToken": .bool(true),
+      ])
+    accept(
+      user: current.user, idToken: body["idToken"]?.stringValue ?? current.idToken,
+      refreshToken: body["refreshToken"]?.stringValue ?? current.refreshToken, expiresIn: body["expiresIn"])
+  }
+
   /// The current ID token, refreshed a minute before it expires; nil when signed out.
   public func idToken(forceRefresh: Bool) async throws -> String? {
     guard let current = session else { return nil }

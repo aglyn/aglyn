@@ -26,6 +26,8 @@ public struct SpecScreenView: View {
   var embedded = false
 
   @Environment(\.aglynScreenSession) private var session
+  @Environment(\.webAuthenticationSession) private var webAuthentication
+  @Environment(\.authorizationController) private var authorizationController
   @State private var model: ScreenModel?
   @State private var selection: ListSelection?
 
@@ -72,11 +74,20 @@ public struct SpecScreenView: View {
         Form { SkeletonRows(count: 6) }.formStyle(.grouped)
       }
     }
+    .onChange(of: session.claims) { _, _ in model?.rebase(baseContext) }
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {
       let fresh = ScreenModel(
         spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer,
         account: session.account)
+      fresh.authenticate = { [webAuthentication] url, scheme in
+        try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
+      }
+      if session.passkeyRelyingParty != nil {
+        fresh.createPasskey = { [authorizationController] options in
+          try await SystemPasskeys.create(options, using: authorizationController)
+        }
+      }
       model = fresh
       selection = nil
       await fresh.load()

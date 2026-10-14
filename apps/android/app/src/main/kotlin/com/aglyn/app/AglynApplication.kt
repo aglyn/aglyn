@@ -21,6 +21,8 @@ class AglynApplication : Application() {
         firebaseMessagingSenderId = BuildConfig.FIREBASE_MESSAGING_SENDER_ID,
         authEmulatorHost = BuildConfig.AUTH_EMULATOR_HOST,
         firestoreEmulatorHost = BuildConfig.FIRESTORE_EMULATOR_HOST,
+        passkeyRpId = BuildConfig.PASSKEY_RP_ID,
+        googleWebClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID,
       ),
       manifest = NativePluginManifest.entries,
       appVersion = BuildConfig.VERSION_NAME,

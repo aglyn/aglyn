@@ -169,5 +169,14 @@ and properties files from the plugin's `mobile.android` block; the apps load
 - Stripe Terminal live mode, and Tap to Pay on Android for the POS app.
 - `assetlinks.json` on the console origin, with both apps' signing certificate
   fingerprints, so console links open the apps.
+  Passkeys need one more on the apex, `https://aglyn.com/.well-known/assetlinks.json`, with the
+  `delegate_permission/common.get_login_creds` relation for `com.aglyn.app` and its signing certificate (template:
+  `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the certificate's hash is
+  listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden. The fingerprint is
+  the placeholder.
+- Google sign-in for "Connect Google": the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId`) and an
+  Android OAuth client in the same Google Cloud project for `com.aglyn.app` and its release signing certificate's SHA-1;
+  on Windows a Desktop OAuth client (`AGLYN_GOOGLE_DESKTOP_CLIENT_ID` and `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET`). The
+  action is hidden until they are set.
 - Desktop (Windows): code signing (Azure Trusted Signing or an EV certificate)
   and/or a Microsoft Store account.

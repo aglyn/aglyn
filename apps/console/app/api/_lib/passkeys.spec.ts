@@ -69,6 +69,7 @@ import {
   createAuthenticationOptions,
   createRegistrationOptions,
   deletePasskey,
+  listedAndroidHashes,
   PasskeyError,
   resolveRpContext,
   verifyAndStoreRegistration,
@@ -170,6 +171,24 @@ describe('resolveRpContext', () => {
       rpID: 'localhost',
       origin: 'http://localhost:4200',
     })
+  })
+
+  it('accepts an Android app only for a signing certificate the deployment lists', () => {
+    // The hash of the certificate an app is signed with, as Android writes it into the credential's origin.
+    const hash = 'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_-aBcDe'
+    expect(hash).toHaveLength(43)
+    const origin = `android:apk-key-hash:${hash}`
+    expect(resolveRpContext(origin, new Set([hash]))).toEqual({ rpID: 'aglyn.com', origin })
+    // Any other app on the device, a hash cut short, and a deployment that lists none refuse.
+    expect(resolveRpContext(origin, new Set(['another-app-hash']))).toBeNull()
+    expect(resolveRpContext(origin, new Set())).toBeNull()
+    expect(resolveRpContext(`android:apk-key-hash:${hash.slice(1)}`, new Set([hash.slice(1)]))).toBeNull()
+    expect(resolveRpContext(`${origin}/`, new Set([hash]))).toBeNull()
+  })
+
+  it('reads the listed certificate hashes from the environment, comma-separated', () => {
+    expect([...listedAndroidHashes({ PASSKEY_ANDROID_APK_KEY_HASHES: ' a , b,, c ' })]).toEqual(['a', 'b', 'c'])
+    expect([...listedAndroidHashes({})]).toEqual([])
   })
 
   it('refuses foreign, insecure and absent origins', () => {

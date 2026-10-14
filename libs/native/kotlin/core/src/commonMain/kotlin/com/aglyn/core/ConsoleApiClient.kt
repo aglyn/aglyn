@@ -81,7 +81,7 @@ class ConsoleApiClient(
     idempotencyKey: String? = null,
     anonymous: Boolean = false,
     rawBody: RawBody? = null,
-    /** A paired device's own credential (the customer display's token), where there is no signed-in member. */
+    /** Headers a route reads beyond the usual ones: an action's `headers`, a paired device's own credential, the ceremony's `Origin` on the passkey routes. */
     headers: Map<String, String> = emptyMap(),
   ): JsonElement? {
     // A write that names its own `Idempotency-Key` (a spec action's `headers`) is as safe to retry as one given `idempotencyKey`.

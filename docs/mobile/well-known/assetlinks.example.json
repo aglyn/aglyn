@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.aglyn.app",
+      "sha256_cert_fingerprints": ["<ANDROID_SIGNING_CERTIFICATE_SHA256_FINGERPRINT>"]
+    }
+  }
+]

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -160,7 +162,7 @@ class IdentityToolkitAuthSession(
   }
 
   /** `accounts:update` with the current ID token; the new tokens replace the old, which a password change revokes. */
-  private suspend fun update(fields: Map<String, JsonPrimitive>): JsonObject {
+  private suspend fun update(fields: Map<String, JsonElement>): JsonObject {
     val idToken = lock.withLock { tokens?.idToken } ?: throw AuthError(authErrorMessage(null))
     val response = try {
       http.post("$identityBase/v1/accounts:update?key=$apiKey") {
@@ -198,6 +200,38 @@ class IdentityToolkitAuthSession(
       throw AuthError(if ("do not match" in error.message) passwordChangeMessage("INVALID_LOGIN_CREDENTIALS") else error.message, error)
     }
     update(mapOf("password" to JsonPrimitive(new)))
+  }
+
+  override suspend fun unlinkProvider(providerId: String) {
+    update(mapOf("deleteProvider" to JsonArray(listOf(JsonPrimitive(providerId)))))
+  }
+
+  override suspend fun linkGoogle(googleIdToken: String) {
+    val idToken = lock.withLock { tokens?.idToken } ?: throw AuthError(GoogleLink.linkRefusal(null))
+    val response = try {
+      http.post("$identityBase/v1/accounts:signInWithIdp?key=$apiKey") {
+        contentType(ContentType.Application.Json)
+        setBody(GoogleLink.linkBody(idToken, googleIdToken).toString())
+      }
+    } catch (error: Exception) {
+      throw AuthError(GoogleLink.linkRefusal(null), error)
+    }
+    val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+    if (response.status.value !in 200..299 || body == null) {
+      throw AuthError(GoogleLink.linkRefusal((body?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content))
+    }
+    // The new tokens carry the Google identity, which is what the provider list is read from.
+    lock.withLock {
+      val current = tokens ?: return@withLock
+      val fresh = Tokens(
+        idToken = body["idToken"]?.jsonPrimitive?.content ?: current.idToken,
+        refreshToken = body["refreshToken"]?.jsonPrimitive?.content ?: current.refreshToken,
+        expiresAt = now() + (body["expiresIn"]?.jsonPrimitive?.content?.toLongOrNull() ?: 3600) * 1000,
+        uid = current.uid,
+      )
+      tokens = fresh
+      keep(fresh.refreshToken)
+    }
   }
 
   override suspend fun updateDisplayName(name: String) {

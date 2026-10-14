@@ -338,6 +338,29 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testTheProfileListsSignInMethodsAndOnlyOffersToDisconnectOneWhileAnotherRemains() async throws {
+    final class Unlinked: @unchecked Sendable { var providers: [String] = [] }
+    let unlinked = Unlinked()
+    let account = AccountOperations(unlinkProvider: { unlinked.providers.append($0) })
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.account.profile" })
+    let list = try XCTUnwrap(spec.blocks.first { $0.title == "Sign-in methods" })
+    let unlink = try XCTUnwrap(list["actions"].array.first.flatMap(ActionSpec.init))
+    func scope(_ providers: [String], item: String) -> JSONValue {
+      ScreenContext.with(["user": ["providers": .array(providers.map(JSONValue.string))]], item: .string(item))
+    }
+    XCTAssertTrue(ScreenValues.condition(unlink.when, in: scope(["password", "google.com"], item: "google.com")))
+    XCTAssertFalse(ScreenValues.condition(unlink.when, in: scope(["password", "google.com"], item: "password")))
+    XCTAssertFalse(ScreenValues.condition(unlink.when, in: scope(["google.com"], item: "google.com")))
+    let model = ScreenModel(spec: spec, context: [:], api: nil, account: account)
+    // The screen's own constants (the provider names) come with the model's context.
+    let shown = ScreenContext.with(
+      ScreenContext.with(model.context, item: "google.com"), "user", ["providers": ["password", "google.com"]])
+    let outcome = await model.run(unlink, in: shown)
+    XCTAssertEqual(outcome, .done(message: "Google disconnected", response: nil))
+    XCTAssertEqual(unlinked.providers, ["google.com"])
+  }
+
+  @MainActor
   func testTheAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })
     let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })

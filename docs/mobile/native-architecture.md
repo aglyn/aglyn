@@ -851,6 +851,13 @@ each issue's runbook comment:
 - Windows code signing (Azure Trusted Signing or an EV certificate) and/or a
   Microsoft Store account;
 - `apple-app-site-association` and `assetlinks.json` on the console origin.
+- `apple-app-site-association` and `assetlinks.json` on `aglyn.com` for passkeys, the
+  `webcredentials:aglyn.com` Associated Domains entry, the Android certificate hash in
+  `PASSKEY_ANDROID_APK_KEY_HASHES`, and `AGLYN_PASSKEY_RP_ID` / `passkeyRpId` in the builds
+  (`docs/mobile/well-known/`).
+- Google sign-in for "Connect Google" on Android and Windows: the Web OAuth client id, an Android OAuth client for
+  `com.aglyn.app` and its signing certificate, and a Desktop OAuth client id and secret (Apple has both of its ids
+  configured in `AGLYN_GOOGLE_*`).
 
 ## 13. Console screens as specs (AGL-3671, AGL-3667)
 
@@ -1015,6 +1022,16 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
 - A POST load pages too: `cursor` names the response field, and the next page is
   the same body with the cursor under `cursorParam` (a number cursor, such as a
   job's `createdAt`, goes back as a number).
+
+`passkey: { options, verify, origin, errors, otherwise }` on an action (a platform action beside `account` and `write`) sets up a passkey on this device, as
+the console's `registerPasskey` does: `options` answers a WebAuthn challenge, the platform makes the credential
+(`ASAuthorizationPlatformPublicKeyCredentialProvider` on Apple, the Credential Manager on Android, both behind
+`PasskeyCreator`), and `verify` stores it. The routes derive the relying party from the request's `Origin`, so the options
+call sends `origin` (`https://{app.passkeyRp}`) and the verify call the origin the platform signed into the credential's
+client data (`https://aglyn.com` on Apple, `android:apk-key-hash:...` on Android, which the server accepts only for the
+hashes it lists). `errors` maps a route's reason to words, `otherwise` words any other failure, and closing the
+system prompt is not a failure. The action shows where `user.canAddPasskey` holds: the build has a relying party
+(`app.passkeyRp`), the device a creator, the account no company login and a verified email.
 
 ### The plugin switchboard
 
