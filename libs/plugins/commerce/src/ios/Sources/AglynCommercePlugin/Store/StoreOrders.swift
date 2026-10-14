@@ -255,10 +255,17 @@ enum OrderAction: String, CaseIterable, Identifiable {
 /// The attempt key is kept until the route answers definitively (below 500),
 /// so pressing Refund again after a lost answer dedupes instead of sending a
 /// second refund, as the console's order dialog does.
-func refundOrder(api: ConsoleAPIClient, hostID: String, orderID: String, attemptKey: String) async throws {
-  _ = try await api.request(
-    "/api/commerce/refund", method: .post,
-    body: .object(["hostId": .string(hostID), "orderId": .string(orderID)]), idempotencyKey: attemptKey)
+func refundOrder(api: ConsoleAPIClient, hostID: String, orderID: String, amountCents: Int? = nil, attemptKey: String) async throws {
+  var body: [String: JSONValue] = ["hostId": .string(hostID), "orderId": .string(orderID)]
+  if let amountCents { body["amountCents"] = .number(Double(amountCents)) }
+  _ = try await api.request("/api/commerce/refund", method: .post, body: .object(body), idempotencyKey: attemptKey)
+}
+
+/// Why a refund amount cannot be sent, or nil. The route checks again.
+func checkRefundAmount(_ amountCents: Int?, refundableCents: Int) -> String? {
+  guard let amountCents, amountCents > 0 else { return "Enter an amount above zero" }
+  if amountCents > refundableCents { return "That is more than is left to refund" }
+  return nil
 }
 
 /// Whether the order has anything left to refund by the transition rules.
@@ -273,13 +280,42 @@ func orderRefundableCents(_ order: HostOrder) -> Int {
   max(0, Int((order.totals?.totalCents ?? order.amountCents ?? 0).rounded()) - Int((order.refundedCents ?? 0).rounded()))
 }
 
-/// Sends the order's receipt again by email, through the console's route.
-func resendOrderReceipt(api: ConsoleAPIClient, hostID: String, orderID: String, to email: String) async throws {
+/// Where a receipt can go. The Commerce settings say which channels the store has switched on.
+enum ReceiptChannel: String, CaseIterable, Identifiable {
+  case email, sms
+  var id: String { rawValue }
+  var label: String { self == .email ? "Email" : "Text" }
+}
+
+/// Why a receipt cannot go to `to`, or nil. The route checks again.
+func checkReceiptRecipient(_ channel: ReceiptChannel, _ to: String) -> String? {
+  let value = to.trimmingCharacters(in: .whitespacesAndNewlines)
+  switch channel {
+  case .sms:
+    return value.range(of: #"^\+?[\d\s().-]{7,}$"#, options: .regularExpression) != nil ? nil : "Enter a phone number"
+  case .email:
+    return value.range(of: #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#, options: .regularExpression) != nil ? nil : "Enter an email address"
+  }
+}
+
+/// The channels the store sends receipts on, as the console's order dialog asks. When the route cannot say, email
+/// is offered and the route checks again.
+func orderReceiptChannels(api: ConsoleAPIClient, hostID: String) async -> [ReceiptChannel] {
+  let answer = try? await api.request(
+    "/api/commerce/order-receipt-send", query: [("hostId", hostID)])
+  let on = ReceiptChannel.allCases.filter { answer?[$0.rawValue] == .bool(true) }
+  return on.isEmpty ? [.email] : on
+}
+
+/// Sends the order's receipt again, by email or text, through the console's route.
+func resendOrderReceipt(
+  api: ConsoleAPIClient, hostID: String, orderID: String, channel: ReceiptChannel = .email, to recipient: String
+) async throws {
   _ = try await api.request(
     "/api/commerce/order-receipt-send", method: .post,
     body: .object([
-      "hostId": .string(hostID), "orderId": .string(orderID), "channel": "email",
-      "to": .string(email.trimmingCharacters(in: .whitespacesAndNewlines)),
+      "hostId": .string(hostID), "orderId": .string(orderID), "channel": .string(channel.rawValue),
+      "to": .string(recipient.trimmingCharacters(in: .whitespacesAndNewlines)),
     ]))
 }
 

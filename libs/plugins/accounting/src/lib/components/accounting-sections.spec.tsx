@@ -19,7 +19,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { AccountingConnectionView, AccountingStatusResponse } from '../model/accounting.types'
 import { EMPTY_ACCOUNTING_MAPPING } from '../model/accounting.types'
 import { AccountingActivitySection } from './accounting-activity-section'
-import { AccountingConnectionSection, connectLabel } from './accounting-connection-section'
+import {
+  AccountingConnectionSection,
+  accountingDocsHelp,
+  connectLabel,
+} from './accounting-connection-section'
 import type { AccountingApi } from './use-accounting-api'
 
 /**
@@ -224,5 +228,27 @@ describe('the Sync activity section', () => {
   it('says when nothing needs attention', async () => {
     render(<AccountingActivitySection orgId="org-1" api={api()} />)
     expect(await screen.findByText('Nothing needs your attention.')).toBeTruthy()
+  })
+})
+
+/**
+ * Each card's help opens the guide for the ledger actually connected
+ * (AGL-3776). A Codat connection used to fall through to the QuickBooks
+ * Online guide, whose steps it never shows.
+ */
+describe('accountingDocsHelp', () => {
+  it('opens the guide for the connected ledger', () => {
+    expect(accountingDocsHelp('codat', '#disconnect', 'x').href).toContain(
+      '/commerce-and-bookings/commerce/connect-other-accounting-software#disconnect',
+    )
+    expect(accountingDocsHelp('xero', '#disconnect', 'x').href).toContain(
+      '/commerce-and-bookings/commerce/connect-xero#disconnect',
+    )
+    expect(accountingDocsHelp('quickbooks', '#disconnect', 'x').href).toContain(
+      '/commerce-and-bookings/commerce/connect-quickbooks-online#disconnect',
+    )
+    expect(accountingDocsHelp(null, '#connect', 'x').href).toContain(
+      '/commerce-and-bookings/commerce/connect-quickbooks-online#connect',
+    )
   })
 })

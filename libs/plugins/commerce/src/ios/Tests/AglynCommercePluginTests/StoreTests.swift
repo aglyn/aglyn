@@ -91,7 +91,7 @@ final class CommerceRegistrationTests: XCTestCase {
     let declared = NativeContributionDeclaration(
       screens: [
         "commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products",
-        "commerce.register", "commerce.sales", "commerce.scan",
+        "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings",
       ],
       tabs: ["commerce.orders-tab", "commerce.products-tab"],
       widgets: ["commerce.sales-trend", "commerce.to-ship", "commerce.today"],
@@ -105,5 +105,32 @@ final class CommerceRegistrationTests: XCTestCase {
     XCTAssertEqual(registry.tabs(for: .aglyn).map(\.id), ["commerce.orders-tab", "commerce.products-tab"])
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/products/orders"), .screen("commerce.orders", ["orgSlug": "acme", "hostSlug": "shop"]))
     XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.register"])
+  }
+}
+
+/// A refund of part of an order, and a receipt by text (the Kotlin kit's checkRefundAmount and checkReceiptRecipient).
+final class RefundAndReceiptTests: XCTestCase {
+  func testARefundAmountMustBeAboveZeroAndNoMoreThanIsLeft() {
+    XCTAssertEqual(checkRefundAmount(nil, refundableCents: 2000), "Enter an amount above zero")
+    XCTAssertEqual(checkRefundAmount(0, refundableCents: 2000), "Enter an amount above zero")
+    XCTAssertEqual(checkRefundAmount(2001, refundableCents: 2000), "That is more than is left to refund")
+    XCTAssertNil(checkRefundAmount(2000, refundableCents: 2000))
+    XCTAssertNil(checkRefundAmount(1, refundableCents: 2000))
+  }
+
+  func testTypedMoneyBecomesCents() {
+    XCTAssertEqual(centsFromText("12.50"), 1250)
+    XCTAssertEqual(centsFromText("$12.5"), 1250)
+    XCTAssertEqual(centsFromText("12"), 1200)
+    XCTAssertNil(centsFromText("twelve"))
+  }
+
+  func testAReceiptRecipientIsCheckedForItsChannel() {
+    XCTAssertNil(checkReceiptRecipient(.email, "buyer@example.com"))
+    XCTAssertEqual(checkReceiptRecipient(.email, "buyer"), "Enter an email address")
+    XCTAssertNil(checkReceiptRecipient(.sms, "+1 (512) 555-0100"))
+    XCTAssertEqual(checkReceiptRecipient(.sms, "12"), "Enter a phone number")
+    XCTAssertEqual(ReceiptChannel.sms.label, "Text")
+    XCTAssertEqual(ReceiptChannel.allCases.map(\.rawValue), ["email", "sms"])
   }
 }
