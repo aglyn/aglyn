@@ -36,6 +36,11 @@ class ScreenSpec private constructor(val raw: JsonElement) {
   /** The plain name a sidebar or app bar shows: `label`, else a title without templates. */
   val label: String = raw.str("label") ?: title.takeIf { '{' !in it } ?: "Details"
   val requires: String? = raw.str("requires")
+  /**
+   * For a screen that sits in a zone: a condition over the screen's own loads. The zone reads those loads and lists the row only
+   * while the condition holds, as a console widget that draws nothing for a store it has nothing to say to.
+   */
+  val showWhen: String? = raw.str("showWhen")
   val links: List<String> = raw.arr("links").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
   /** Core screens' zones this plugin screen contributes to (`orgMember`, `staffOrg`, …). */
   val zones: List<String> = raw.arr("zones").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
@@ -105,6 +110,12 @@ class LoadSpec(val key: String, json: JsonElement) {
   /** A pure function to call over data already loaded (`packageJsonDiff`, `packageMergeKeys`), its answer under this key; [args] are the paths (or numbers) it is given. */
   val compute: String? = json.str("compute")
   val args: List<String> = json.arr("args").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+  /**
+   * A value worked out from other loads once they have answered, not read from anywhere: `shippingCoverage`, from the
+   * shipping settings the [from] path (a path under `data`) finds.
+   */
+  val derive: String? = json.str("derive")
+  val from: String? = json.str("from")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {

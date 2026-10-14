@@ -83,7 +83,7 @@ import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { ASSIST_RETURNED_USD_FIELD, assistSpendAfterReturnsUsd } from '../usage/assist-credit-returns'
 import { freeAccountUsageRef, freeAssistAccount, type AssistMeteredOrg } from '../usage/assist-free-taste'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
-import type { AiTool } from '../providers/contract'
+import type { AiEffort, AiTool } from '../providers/contract'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { readAiSiteContext } from '../runtime/site-context'
@@ -1132,7 +1132,13 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       // A scaffold plans an outline without thinking (AGL-3594): the thinking
       // was nearly all of the 13,491 tokens a Free site's plan spent.
       ...(site ? { thinking: 'off' as const } : route.thinking ? { thinking: route.thinking } : {}),
-      ...(route.effort ? { effort: route.effort } : {}),
+      // A paid site's outline asks the effort its live round held at (AGL-3781);
+      // a Free one's, on the fast tier, keeps the model's own.
+      ...(site && !freeTaste
+        ? { effort: AI_PAID_SITE_PLAN_EFFORT }
+        : route.effort
+          ? { effort: route.effort }
+          : {}),
       ...(signal ? { signal } : {}),
       capabilities,
       // A build's events are listed on a page (AGL-3755): on the one it makes
@@ -1273,6 +1279,19 @@ export function aiSitePlanCapabilities(
       : AI_SITE_FREE_PAGES.max
   return { ...site, freeSitePages: pages }
 }
+
+/**
+ * The effort a paid site's plan asks (AGL-3781). The live round of 2026-10-14
+ * planned the paid site briefs (`ai-job-site-plan-live.spec.ts` with
+ * `AGLYN_LIVE_AI_ORG_PLAN=business`) at the model's default and at medium:
+ * both planned 11 of 11 with no refusal and no rule broken, and medium took
+ * 16 attempts to the default's 22, for $0.129 to $0.164. Scoped to a paid
+ * site's plan, which is all that arm planned: the `job.plan` row's effort,
+ * which every other plan asks, waits on the golden round, and a Free site's
+ * plan on the fast tier was measured at its model's default (every answer a
+ * tool_use, 31 of 31) and keeps it.
+ */
+export const AI_PAID_SITE_PLAN_EFFORT: AiEffort = 'medium'
 
 /**
  * The model a plan runs on (AGL-3594): the resolved one, except a Free site

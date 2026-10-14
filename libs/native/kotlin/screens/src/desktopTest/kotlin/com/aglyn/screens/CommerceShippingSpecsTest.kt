@@ -157,6 +157,58 @@ class CommerceShippingSpecsTest : SpecTestBase() {
     pickup.fire(pickup.form("pickup"), pickup.context, """{"localPickup":true}""")
   }
 
+  // ---- shipping coverage -------------------------------------------------------------------------------------------
+
+  /** The shipping screen over a store document, with the coverage the screen's derived load works out from it. */
+  private fun covered(store: String, writer: RecordingWriter = RecordingWriter()): ScreenModel {
+    val data = json("""{"store":{"shipping":$store}}""")
+    val model = model("commerce.shipping", data.toString(), writer)
+    val load = model.spec.loads.single { it.key == "coverage" }
+    assertEquals("shippingCoverage", load.derive)
+    assertEquals("store.shipping", load.from)
+    model.seed(kotlinx.serialization.json.JsonObject(data + ("coverage" to model.derive(load, data))))
+    return model
+  }
+
+  @Test
+  fun aStoreThatTurnsDestinationsAwayIsToldInTheConsolesWordsAndOfferedARestOfWorldZone() {
+    val writer = RecordingWriter()
+    val model = covered("""{"zones":[{"id":"z1","name":"US","countries":["US"]}],"rates":[{"id":"r1","zoneId":"z1","name":"Standard","kind":"flat","amountCents":500}]}""", writer)
+    val shown = model.shown()
+    assertTrue("coverageGap" in shown && "coverageFix" in shown && "coverageAsks" in shown && "coverageOk" !in shown, shown.toString())
+    assertEquals("Checkout turns away 5 of the 6 destinations it collects addresses for", ScreenValues.render(model.block("coverageGap").title!!, model.context))
+    assertEquals(
+      "No rate reaches Canada, United Kingdom, Australia, Germany, France, so an order shipping there is refused rather than posted for free. Give them a zone with a rate, or add a rest-of-world zone and price one on it.",
+      ScreenValues.render(model.block("coverageGap").string("text")!!, model.context),
+    )
+    assertEquals(
+      "Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one.",
+      ScreenValues.render(model.block("coverageAsks").string("text")!!, model.context),
+    )
+    model.fire(model.action("coverageFix", "restOfWorld"), model.context)
+    val written = calls(writer).single()
+    assertTrue(written.contains("name=Rest of world") && written.contains("countries=[*]") && written.contains("id=zone_") && written.contains("{id=z1,name=US,countries=[US]}"), written)
+  }
+
+  @Test
+  fun aStoreThatReachesEveryDestinationSaysSoAndOffersNoFix() {
+    val model = covered("""{"zones":[{"id":"z1","name":"World","countries":["*"]}],"rates":[{"id":"r1","zoneId":"z1","name":"Standard","kind":"flat","amountCents":1500}],"localPickup":true}""")
+    val shown = model.shown()
+    assertTrue("coverageOk" in shown && "coverageGap" !in shown && "coverageFix" !in shown && "coverageAsks" !in shown, shown.toString())
+    assertEquals("Coverage", ScreenValues.render(model.block("coverageOk").title!!, model.context))
+    assertEquals(
+      "Checkout can price shipping to every destination it collects an address for: United States, Canada, United Kingdom, Australia, Germany, France.",
+      ScreenValues.render(model.block("coverageOk").string("text")!!, model.context),
+    )
+  }
+
+  @Test
+  fun aStoreWithNoRatesChargesNothingAndTurnsNobodyAway() {
+    val model = covered("""{"zones":[{"id":"z1","name":"US","countries":["US"]}],"rates":[]}""")
+    assertTrue("coverageOk" in model.shown() && "coverageGap" !in model.shown())
+    assertEquals("No rate reaches any destination, so checkout charges no shipping and turns nobody away.", ScreenValues.render(model.block("coverageOk").string("text")!!, model.context))
+  }
+
   // ---- local delivery ----------------------------------------------------------------------------------------------
 
   private val delivery = """{"store":{"localDelivery":{"enabled":true,"country":"US","windows":"Mo-Fr 09:00-12:00","leadTimeMinutes":0,

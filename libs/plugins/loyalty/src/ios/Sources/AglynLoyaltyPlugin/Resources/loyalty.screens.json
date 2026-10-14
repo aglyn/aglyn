@@ -12,6 +12,7 @@
         "commercePromotions"
       ],
       "order": 70,
+      "showWhen": "data.program.program",
       "constants": {
         "connectors": [
           {
@@ -28,6 +29,10 @@
         "program": {
           "url": "/api/loyalty/program?hostId={site.id}",
           "optional": true
+        },
+        "conn": {
+          "url": "/api/loyalty/connection?hostId={site.id}",
+          "optional": true
         }
       },
       "blocks": [
@@ -36,7 +41,14 @@
           "id": "unavailable",
           "tone": "info",
           "when": "!data.program.program",
-          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+          "text": "Rewards are not available for this site"
+        },
+        {
+          "type": "notice",
+          "id": "rate",
+          "tone": "info",
+          "when": "data.program.program && !data.program.program.connected",
+          "text": "Customers earn points on every order, online and at the register, and spend them like store credit. Today a member gets back {data.program.program.earnPointsPerDollar:percentof/data.program.program.pointsPerDollar}% of what they spend."
         },
         {
           "type": "notice",
@@ -227,16 +239,17 @@
           "when": "data.program.program",
           "items": [
             {
+              "title": "Rewards account",
+              "subtitle": "Keep points in your own Smile.io or Yotpo Loyalty account",
+              "icon": "link|link",
+              "screen": "loyalty.connection",
+              "when": "data.conn.configured"
+            },
+            {
               "title": "Rewards members",
               "subtitle": "Find a member, see their history, give store credit",
               "icon": "person.2|group",
               "screen": "loyalty.members"
-            },
-            {
-              "title": "Rewards account",
-              "subtitle": "Keep points in your own Smile.io or Yotpo Loyalty account",
-              "icon": "link|link",
-              "screen": "loyalty.connection"
             }
           ]
         }
@@ -249,10 +262,6 @@
       "subtitle": "Your own Smile.io or Yotpo Loyalty account",
       "icon": "link|link",
       "scope": "site",
-      "zones": [
-        "commercePromotions"
-      ],
-      "order": 71,
       "constants": {
         "syncStatus": [
           {
@@ -293,7 +302,7 @@
           "id": "unavailable",
           "tone": "info",
           "when": "!data.conn",
-          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+          "text": "Rewards are not available for this site"
         },
         {
           "type": "notice",
@@ -498,10 +507,6 @@
       "subtitle": "Find a member, see their history, give store credit",
       "icon": "person.2|group",
       "scope": "site",
-      "zones": [
-        "commercePromotions"
-      ],
-      "order": 72,
       "load": {
         "members": {
           "url": "/api/loyalty/members?hostId={site.id}&limit=25&sort={params.sort|'recent'}&q={params.q}",
@@ -517,7 +522,7 @@
           "id": "unavailable",
           "tone": "info",
           "when": "!data.members",
-          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+          "text": "Rewards are not available for this site"
         },
         {
           "type": "actions",

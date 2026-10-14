@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createHash } from 'node:crypto'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { LAYOUT_SLOT_COMPONENT_ID } from '@aglyn/aglyn/app-utils/compose-layout-nodes'
 import { stampDocumentLandmark } from '@aglyn/aglyn/app-utils/document-landmark'
@@ -44,7 +45,7 @@ import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiPlanCapabilitiesForJob, aiPlanCapabilityLines } from '../model/ai-plan-capabilities'
 import { aiProductsJobInputs, aiProductsProposalOf, type AiProductsProposal } from '../model/ai-products'
 import { aiDefaultModelFor, type AiStepKind } from '../providers/catalog'
-import type { AiImagePart, AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
+import type { AiEffort, AiImagePart, AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { aiModelForStep, resolveAiProvider } from '../providers/routing'
 import { aiSiteInventoryBlock, runValidatedGeneration, type AiCustomGenerationInput } from './ai-doctrine'
 import {
@@ -60,7 +61,7 @@ import {
 } from './ai-eval'
 import { aiEvalMemoryFirestore, aiEvalMemoryInventory } from './ai-eval-memory-firestore'
 import { aiCategoriesPrompt, aiProductCopyPrompt } from './ai-products-generation'
-import { aiLiveBatchWanted } from './ai-dev-env'
+import { aiDevEffortArm, aiLiveBatchWanted } from './ai-dev-env'
 import { aiModelReadsImages } from './ai-runtime'
 
 /**
@@ -1287,6 +1288,72 @@ export interface AiEvalLiveReport {
   skipped: Array<{ caseId: string; kind: AiEvalKind; why: string }>
   /** The briefs whose run threw; empty when every brief a recorder covers came back. */
   failed: AiEvalLiveFailure[]
+}
+
+// ── An effort A/B arm's recordings ──────────────────────────────────────
+
+/** The effort A/B arm a live run records under (AGL-3781). */
+export interface AiEvalEffortArm {
+  /** `effort-` and 8 hex characters of a hash of `efforts`: the same arm always gets the same tag. */
+  tag: string
+  /** Each step kind the arm names, in kind order, with its effort; `*` for every other kind. */
+  efforts: Record<string, AiEffort>
+}
+
+/**
+ * The arm `AGLYN_AI_EFFORT` names, or null when it names none. A recording's
+ * filename carries only the tag, and the recording carries the map: the
+ * filename once spelled the whole list out, and a list of five kinds was
+ * longer than a filename may be (ENAMETOOLONG lost the round's recordings).
+ * The hash is of the parsed, sorted map, so the same efforts written in
+ * another order or spacing are the same arm.
+ */
+export function aiEvalEffortArm(env: Record<string, string | undefined>): AiEvalEffortArm | null {
+  const efforts = aiDevEffortArm(env)
+  if (!Object.keys(efforts).length) return null
+  const hash = createHash('sha256').update(JSON.stringify(efforts)).digest('hex').slice(0, 8)
+  return { tag: `effort-${hash}`, efforts }
+}
+
+/** A recording's file name: `<case>.<model>.json`, with the arm's tag before `.json` when one ran. */
+export function aiEvalRecordingFileName(
+  caseId: string,
+  model: string | null | undefined,
+  arm: AiEvalEffortArm | null,
+): string {
+  return `${caseId}.${model ?? 'unknown'}${arm ? `.${arm.tag}` : ''}.json`
+}
+
+/**
+ * What a recording holds: the brief, the answer, and under `arm` the arm's
+ * tag and every effort it named, when one ran — the candidate's own `effort`
+ * is the one its step was asked at.
+ */
+export function aiEvalRecordingBody(
+  caseId: string,
+  candidate: AiEvalCandidate,
+  arm: AiEvalEffortArm | null,
+): string {
+  return `${JSON.stringify({ caseId, ...(arm ? { arm } : {}), candidate }, null, 2)}\n`
+}
+
+/**
+ * One brief's score line. Everything before the colon is the pairing key —
+ * `score <case> (<kind>) <model>`, then the arm's tag when one ran — so a
+ * default run's line and an arm's line for the same brief sort side by side.
+ */
+export function aiEvalScoreLine(
+  entry: { caseId: string; kind: AiEvalKind; candidate: AiEvalCandidate },
+  pass: boolean | null,
+  arm: AiEvalEffortArm | null,
+): string {
+  const { caseId, kind, candidate } = entry
+  const rubric = candidate.rubric
+  return (
+    `score ${caseId} (${kind}) ${candidate.model ?? 'unknown'}${arm ? ` ${arm.tag}` : ''}: ` +
+    `${pass ? 'pass' : 'fail'}, structure ${rubric?.structure ?? '-'}, copy ${rubric?.copy ?? '-'}` +
+    `, reuse ${rubric?.reuse ?? '-'}, output ${candidate.usage?.outputTokens ?? '-'} tokens`
+  )
 }
 
 /** The vendor's request id off a thrown `UpstreamServiceError`, when it carried one. */

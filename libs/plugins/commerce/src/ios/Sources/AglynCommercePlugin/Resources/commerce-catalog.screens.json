@@ -1431,6 +1431,22 @@
           "text": "Subscriptions are on {data.subs.label|'a higher plan'}. A subscription this product already has keeps working."
         },
         {
+          "type": "links",
+          "id": "related",
+          "when": "data.product",
+          "items": [
+            {
+              "title": "Related products (upsells)",
+              "subtitle": "Shown by the Related products block; blank falls back to frequently-bought-together",
+              "icon": "shippingbox|inventory_2",
+              "screen": "commerce.productRelated",
+              "params": {
+                "productId": "{params.productId}"
+              }
+            }
+          ]
+        },
+        {
           "type": "actions",
           "id": "billingChange",
           "title": "Change billing",
@@ -1585,6 +1601,108 @@
               "success": "Buyers can now choose"
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.productRelated",
+      "title": "Related products",
+      "label": "Related products",
+      "subtitle": "Shown by the Related products block",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "load": {
+        "product": {
+          "doc": "hosts/{site.id}/products/{params.productId}",
+          "optional": true
+        },
+        "products": {
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 300,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "missing",
+          "tone": "info",
+          "when": "!data.product",
+          "text": "This product could not be found. It may have been deleted."
+        },
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "when": "data.product",
+          "text": "Turn on the products to show beside this one. Blank falls back to frequently-bought-together."
+        },
+        {
+          "type": "list",
+          "id": "products",
+          "title": "Related products (upsells)",
+          "when": "data.product",
+          "items": "data.products.items",
+          "filter": "!item.deletedAt && item.$id != @params.productId",
+          "primary": "{item.name}",
+          "secondary": "{item.status:title}",
+          "count": false,
+          "icon": "shippingbox|inventory_2",
+          "toggle": {
+            "value": "{data.product.relatedProductIds[=item.$id]}",
+            "label": "{item.name}",
+            "on": {
+              "label": "Save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "url": "/api/commerce/products/save",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "relatedProductIds": {
+                        "$append": {
+                          "list": "{overlay.relatedProductIds}",
+                          "item": "{item.$id}"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Saved"
+            },
+            "off": {
+              "label": "Save",
+              "overlay": "hosts/{site.id}/products/{params.productId}",
+              "url": "/api/commerce/products/save",
+              "body": {
+                "hostId": "{site.id}",
+                "productId": "{params.productId}",
+                "create": false,
+                "product": {
+                  "$overlay": {
+                    "base": "{overlay}",
+                    "set": {
+                      "relatedProductIds": {
+                        "$without": {
+                          "list": "{overlay.relatedProductIds}",
+                          "item": "{item.$id}"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Saved"
+            }
+          },
+          "empty": "No other products yet."
         }
       ]
     }

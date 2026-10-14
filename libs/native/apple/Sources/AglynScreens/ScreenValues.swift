@@ -37,7 +37,8 @@ public enum ScreenValues {
       }
       // `name[group][group]…`: each group is `[field=other.path]` (the first row whose field reads as the text
       // at other.path, or as a quoted literal), `[field~=other.path]` (the first row whose list field holds that text),
-      // `[@path]` (the key is the text at path) or `[some.key]` (a key that itself holds dots).
+      // `[?condition]` (every row the condition holds for, as a list), `[@path]` (the key is the text at path) or
+      // `[some.key]` (a key that itself holds dots).
       var name = raw
       var groups: [String] = []
       if raw.hasSuffix("]"), let open = raw.firstIndex(of: "[") {
@@ -51,7 +52,11 @@ public enum ScreenValues {
           return right.count >= 2 && right.hasPrefix("'") && right.hasSuffix("'")
             ? String(right.dropFirst().dropLast()) : text(lookup(right, root: root, from: root))
         }
-        if inner.hasPrefix("@") {
+        if inner.hasPrefix("?") {
+          // `rows[?item.rate && !item.own]`: every row the condition holds for (`item` is the row), as a list.
+          let keep = String(inner.dropFirst())
+          current = .array(current.array.filter { ScreenValues.condition(keep, in: ScreenContext.with(root, item: $0)) })
+        } else if inner.hasPrefix("@") {
           current = step(current, text(lookup(String(inner.dropFirst()), root: root, from: root)))
         } else if let tilde = inner.range(of: "~=") {
           let field = String(inner[..<tilde.lowerBound])
@@ -1216,6 +1221,10 @@ public enum ScreenValues {
       guard let amount = number(value) else { return text(value) }
       let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
       return numberText(max(0, amount - other))
+    case "percentof":
+      // `percentof/other.path`: this as a percentage of the number at the path, to one decimal (`5`, `2.5`); `0` when there is nothing to divide by.
+      guard let top = number(value), parts.count > 1, let bottom = number(lookup(parts[1], in: context)), bottom != 0 else { return "0" }
+      return numberText(((top / bottom) * 1000 + 0.5).rounded(.down) / 10)
     case "lesscents":
       // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
       let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0

@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
@@ -880,105 +881,19 @@ struct ReauthSheet: View {
   }
 }
 
-/// A week of hours chosen by touch, as the console's picker does: a switch for each day and, for an open day, a From and a
-/// To time from a menu, with another interval on request. It reads and writes the stored text lines (`Mo-Fr 09:00-17:00`),
-/// so nobody types them.
+/// A week of hours chosen by touch: the plugin host's picker (the console's weekly hours picker) over the stored text lines
+/// (`Mo-Fr 09:00-17:00`), so nobody types them. The field's `hours` object sets the noun, the opening and closing time of a
+/// day switched on, and `sameDay`.
 struct HoursInput: View {
   let field: FieldSpec
   @Binding var text: String
 
-  private var noun: String { field.hours?["noun"]?.stringValue ?? "hours" }
-  private var sameDay: Bool { field.hours?["sameDay"] == .bool(true) }
-  private var defaultInterval: HoursInterval {
-    HoursInterval(
-      start: field.hours.flatMap { ScreenValues.number($0["start"]) }.map { Int($0) } ?? 9 * 60,
-      end: field.hours.flatMap { ScreenValues.number($0["end"]) }.map { Int($0) } ?? 17 * 60)
-  }
-
-  private func set(_ week: [[HoursInterval]], day: Int, _ intervals: [HoursInterval]) {
-    var next = week
-    next[day] = intervals
-    text = WeeklyHours.toText(next)
-  }
-
-  private func options(_ current: Int, after: Int?) -> [Int] {
-    let all = WeeklyHours.times.contains(current) ? WeeklyHours.times : (WeeklyHours.times + [current]).sorted()
-    guard let after else { return all }
-    return all.filter { $0 > after || $0 == current }
-  }
-
   var body: some View {
-    let read = WeeklyHours.fromText(text)
-    let week = read.week
-    VStack(alignment: .leading, spacing: 6) {
-      Text(field.label).font(.subheadline.weight(.semibold))
-      ForEach(WeeklyHours.days, id: \.index) { day in
-        let intervals = week[day.index]
-        Toggle(
-          day.name,
-          isOn: Binding(
-            get: { !intervals.isEmpty },
-            set: { open in set(week, day: day.index, open ? [defaultInterval] : []) })
-        )
-        .accessibilityIdentifier("hours-day-\(day.index)")
-        ForEach(Array(intervals.enumerated()), id: \.offset) { position, interval in
-          HStack {
-            Picker(
-              "From",
-              selection: Binding(
-                get: { interval.start },
-                set: { picked in
-                  var next = interval
-                  next.start = picked
-                  // A From moved past its To drags the To along, keeping the length.
-                  if sameDay, next.end <= next.start {
-                    next.end = Swift.min(next.start + Swift.max(interval.end - interval.start, 60), WeeklyHours.lastMinute)
-                  }
-                  var changed = intervals
-                  changed[position] = next
-                  set(week, day: day.index, changed)
-                })
-            ) {
-              ForEach(options(interval.start, after: nil), id: \.self) { Text(WeeklyHours.label($0)).tag($0) }
-            }
-            Picker(
-              "To",
-              selection: Binding(
-                get: { interval.end },
-                set: { picked in
-                  var changed = intervals
-                  changed[position].end = picked
-                  set(week, day: day.index, changed)
-                })
-            ) {
-              ForEach(options(interval.end, after: sameDay ? interval.start : nil), id: \.self) {
-                Text(WeeklyHours.label($0)).tag($0)
-              }
-            }
-            Button("Remove", role: .destructive) {
-              var changed = intervals
-              changed.remove(at: position)
-              set(week, day: day.index, changed)
-            }
-            .buttonStyle(.borderless)
-          }
-        }
-        if let last = intervals.last {
-          Button("Add \(noun)") {
-            // A second interval starts an hour after the first ends, the usual shape of a lunch break.
-            let start = Swift.min(last.end + 60, 22 * 60)
-            set(week, day: day.index, intervals + [HoursInterval(start: start, end: Swift.min(start + 4 * 60, WeeklyHours.lastMinute))])
-          }
-          .buttonStyle(.borderless)
-        }
-      }
-      if !read.unread.isEmpty {
-        Text(
-          "Some saved hours could not be read (line \(read.unread.map(String.init).joined(separator: ", "))) and are not shown. "
-            + "Set the days again here and save to replace them."
-        )
-        .font(AglynFont.caption).foregroundStyle(.orange)
-      }
-    }
+    OpeningHoursPicker(
+      text: $text, label: field.label,
+      defaultInterval: WeeklyHoursInterval(
+        start: field.hours.flatMap { ScreenValues.number($0["start"]) }.map { Int($0) } ?? 9 * 60,
+        end: field.hours.flatMap { ScreenValues.number($0["end"]) }.map { Int($0) } ?? 17 * 60),
+      intervalNoun: field.hours?["noun"]?.stringValue ?? "hours", sameDay: field.hours?["sameDay"] == .bool(true))
   }
 }

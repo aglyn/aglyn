@@ -322,6 +322,9 @@ describe('a dataset a form writes to (AGL-3616)', () => {
   it('is designed from its planned fields with no model, in a person’s words, typed where the plan typed them, empty', () => {
     expect(aiSiteDatasetFieldName('fullName')).toBe('Full name')
     expect(aiSiteDatasetFieldName('time_commitment')).toBe('Time commitment')
+    // A capital in any language starts a word (AGL-3791).
+    expect(aiSiteDatasetFieldName('fechaDeÚltimaVisita')).toBe('Fecha de última visita')
+    expect(aiSiteDatasetFieldName('Correo electrónico')).toBe('Correo electrónico')
     expect(aiSiteFormDatasetContent('Volunteers', VOLUNTEERS.fields, SIGN_UP)).toEqual({
       name: 'Volunteers',
       fields: [

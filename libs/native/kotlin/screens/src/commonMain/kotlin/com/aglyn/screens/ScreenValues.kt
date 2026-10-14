@@ -69,8 +69,8 @@ object ScreenValues {
         )
       }
       // `name[group][group]…`: each group is `[field=other.path]` (the first row whose field reads as the text at other.path, or as
-      // a quoted literal), `[field~=other.path]` (the first row whose list field holds that text), `[@path]` (the key is the text at
-      // path) or `[some.key]` (a key that itself holds dots).
+      // a quoted literal), `[field~=other.path]` (the first row whose list field holds that text), `[?condition]` (every row the
+      // condition holds for, as a list), `[@path]` (the key is the text at path) or `[some.key]` (a key that itself holds dots).
       var name = raw
       var groups = emptyList<String>()
       val open = raw.indexOf('[')
@@ -86,7 +86,11 @@ object ScreenValues {
         }
         val contains = inner.indexOf("~=")
         val equals = inner.indexOf('=')
-        if (inner.startsWith("@")) {
+        if (inner.startsWith("?")) {
+          // `rows[?item.rate && !item.own]`: every row the condition holds for (`item` is the row), as a list.
+          val keep = inner.substring(1)
+          current = (current as? JsonArray)?.let { list -> JsonArray(list.filter { condition(keep, ScreenContext.withItem(root, it)) }) }
+        } else if (inner.startsWith("@")) {
           current = step(current, text(lookup(inner.substring(1), root, root)))
         } else if (contains >= 0) {
           val field = inner.substring(0, contains)
@@ -1132,6 +1136,12 @@ object ScreenValues {
       } ?: "\u2014"
       // `minus/other.path`: this number less the one at the path, never below zero (text that is no number stays as it is).
       "minus" -> number(value)?.let { numberText(max(0.0, it - (parts.getOrNull(1)?.let { path -> number(lookup(path, context)) } ?: 0.0))) } ?: text(value)
+      // `percentof/other.path`: this as a percentage of the number at the path, to one decimal (`5`, `2.5`); `0` when there is nothing to divide by.
+      "percentof" -> {
+        val top = number(value)
+        val bottom = parts.getOrNull(1)?.let { number(lookup(it, context)) }
+        if (top == null || bottom == null || bottom == 0.0) "0" else numberText(floor((top / bottom) * 1000 + 0.5) / 10)
+      }
       // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
       "lesscents" -> formatOrderMoney(round(max(0.0, (number(value) ?: 0.0) - (parts.getOrNull(1)?.let { number(lookup(it, context)) } ?: 0.0))), "USD")
       // A site path with its leading slash: `about` is `/about`, the home page `/`.

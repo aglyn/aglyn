@@ -351,14 +351,16 @@ class ScreenModel(
     }
     context = ScreenContext.with(context, "stash", ScreenStash.values)
     context = ScreenContext.with(context, "now", ScreenValues.nowObject())
-    val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
+    val wanted = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
+    // A derived value is worked out from the others once they have answered.
+    val loads = wanted.filter { it.derive == null }
     val results = try {
       val first = mutableListOf<Triple<String, JsonElement, String?>>()
       // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too. The per-row
       // (`each`) and computed (`compute`) loads follow once every read has answered.
       for (late in listOf(false, true)) {
         val scope = if (first.isEmpty()) context else ScreenContext.with(context, "data", JsonObject(first.associate { it.first to it.second }))
-        val wave = spec.loads.filter { it.late == late && it.each == null && it.compute == null && ScreenValues.condition(it.whenCondition, scope) }
+        val wave = spec.loads.filter { it.late == late && it.each == null && it.compute == null && it.derive == null && ScreenValues.condition(it.whenCondition, scope) }
         if (wave.isEmpty()) continue
         first += coroutineScope {
           wave.map { load ->
@@ -411,12 +413,23 @@ class ScreenModel(
       phase = Phase.Failed(error.message ?: "This did not load.")
       return
     }
-    context = ScreenContext.with(context, "data", JsonObject(results.associate { it.first to it.second }))
+    val answered = results.associate { it.first to it.second }
+    val derived = wanted.filter { it.derive != null }.associate { it.key to derive(it, JsonObject(answered)) }
+    context = ScreenContext.with(context, "data", JsonObject(answered + derived))
     applyDerived()
     cursors.clear()
     for ((key, _, cursor) in results) if (!cursor.isNullOrEmpty()) cursors[key] = cursor
     phase = Phase.Ready
     loadPluginColumns()
+  }
+
+  /** A derived load's value, from what the screen's other loads answered. */
+  internal fun derive(load: LoadSpec, data: JsonElement): JsonElement {
+    val source = load.from?.let { ScreenValues.lookup(it, data) }
+    return when (load.derive) {
+      "shippingCoverage" -> ShippingCoverage.summary(source)
+      else -> JsonNull
+    }
   }
 
   private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec, context: JsonElement = this.context): Triple<String, JsonElement, String?> {

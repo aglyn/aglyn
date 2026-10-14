@@ -458,6 +458,16 @@ describe('a site start that writes its posts links its blog (AGL-3660)', () => {
     expect(outcome.item).toEqual({ slot, status: 'skipped', note: AI_SITE_BLOG_MERGED_NOTE })
   })
 
+  it('names the blog in a link’s words whatever the merged page’s language, and only where a whole word names it (AGL-3791)', () => {
+    const merged = (standsInFor: string) => ({ kind: 'path', href: '/blog', standsInFor, label: 'Blog' }) as const
+    expect(aiLayoutRenamedLabel('Ver noticias', merged('Noticias'))).toBe('Ver blog')
+    expect(aiLayoutRenamedLabel('Ver el menú', merged('Menú'))).toBe('Ver el blog')
+    expect(aiLayoutRenamedLabel('Événements à venir', merged('Événements'))).toBe('Blog à venir')
+    // A name is matched as a whole word, never as the start of a longer one.
+    expect(aiLayoutRenamedLabel('Lee los artículos', merged('Art'))).toBe('Lee los artículos')
+    expect(aiLayoutRenamedLabel('Read the articles', merged('Art'))).toBe('Read the articles')
+  })
+
   it('links no blog where the posts are not owed, or the part was skipped', () => {
     expect(sitePagesOf(siteJob({ plan })).some((page) => page['id'] === AI_SITE_BLOG_NAV_ID)).toBe(false)
     expect(aiSiteWritesPosts(siteJob({ plan, items: ledger('skipped') as never }))).toBe(false)
@@ -917,6 +927,31 @@ describe('the site’s own listing, from the answers', () => {
     expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
       'seo.title': 'Neighborhood dog groomer',
       'seo.description': 'Neighborhood dog groomer for local dog owners.',
+    })
+  })
+
+  it('says it in the language the plan writes the site in, with no English around the answers (AGL-3792)', async () => {
+    const step = stepWith({
+      page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })),
+    })
+    const outcome = await step(
+      context(
+        siteJob({
+          inputs: {
+            businessType: 'Una panadería familiar de San Antonio con pan dulce y conchas',
+            audience: 'Familias de San Antonio',
+            businessName: 'Panadería Flor de Oaxaca',
+            pages: AI_SITE_PAGES.min,
+            welcomeEmail: false,
+          },
+          plan: { ...confirmedPlan(), language: 'es' },
+        }),
+      ),
+    )
+    // Composed as English, it read "Panadería Flor de Oaxaca is an una panadería familiar…".
+    expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
+      'seo.title': 'Panadería Flor de Oaxaca',
+      'seo.description': 'Una panadería familiar de San Antonio con pan dulce y conchas.',
     })
   })
 

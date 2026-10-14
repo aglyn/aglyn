@@ -385,15 +385,7 @@ struct SpecScreenBody: View {
       if !contributions.isEmpty {
         section(title, footer) {
           ForEach(contributions) { spec in
-            Button {
-              openScreen(spec.id, renderParams(block["params"], in: context))
-            } label: {
-              AglynRow(spec.label, subtitle: spec.subtitle, systemImage: spec.icon) {
-                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
-              }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("zone-\(spec.id)")
+            ZoneRow(spec: spec, plugin: plugin, params: renderParams(block["params"], in: context)) { openScreen(spec.id, $0) }
           }
         }
       }
@@ -689,4 +681,46 @@ struct ExportedDocument: FileDocument {
   init(data: Data) { self.data = data }
   init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
   func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
+}
+
+/// One screen's row in a zone. A screen with a `showWhen` reads its own loads first and is listed only while the condition holds,
+/// so a widget with nothing to say to this store leaves no row; one without is listed at once.
+struct ZoneRow: View {
+  let spec: ScreenSpec
+  let plugin: NativePluginContext
+  let params: NativeParams
+  let open: (NativeParams) -> Void
+
+  @Environment(\.aglynScreenSession) private var session
+  @State private var model: ScreenModel?
+
+  private var shown: Bool {
+    guard spec.showWhen != nil else { return true }
+    guard let model, model.phase == .ready else { return false }
+    return ScreenValues.condition(spec.showWhen, in: model.context)
+  }
+
+  var body: some View {
+    Group {
+      if shown {
+        Button {
+          open(params)
+        } label: {
+          AglynRow(spec.label, subtitle: spec.subtitle, systemImage: spec.icon) {
+            Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+          }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("zone-\(spec.id)")
+      }
+    }
+    .task(id: params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }) {
+      guard spec.showWhen != nil else { return }
+      let fresh = ScreenModel(
+        spec: spec, context: session.context(plugin, params: params), api: plugin.api, reader: plugin.firestore, writer: nil,
+        account: session.account)
+      model = fresh
+      await fresh.load()
+    }
+  }
 }

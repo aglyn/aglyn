@@ -388,6 +388,10 @@
         "carrier": {
           "optional": true,
           "url": "/api/commerce/shipping/carrier-rates?hostId={site.id}"
+        },
+        "coverage": {
+          "derive": "shippingCoverage",
+          "from": "store.shipping"
         }
       },
       "blocks": [
@@ -1043,6 +1047,63 @@
             },
             "success": "Shipping settings saved"
           }
+        },
+        {
+          "type": "notice",
+          "id": "coverageGap",
+          "title": "{data.coverage.headline}",
+          "tone": "warning",
+          "when": "data.coverage.headline",
+          "text": "{data.coverage.detail}"
+        },
+        {
+          "type": "actions",
+          "id": "coverageFix",
+          "when": "data.coverage.headline && !data.coverage.hasRestOfWorldZone",
+          "items": [
+            {
+              "id": "restOfWorld",
+              "label": "Add rest-of-world zone",
+              "icon": "public|public",
+              "write": {
+                "doc": "hosts/{site.id}/settings/store",
+                "fields": {
+                  "shipping": {
+                    "zones": {
+                      "$append": {
+                        "list": "{data.store.shipping.zones}",
+                        "item": {
+                          "id": {
+                            "$uuid": "zone_"
+                          },
+                          "name": "Rest of world",
+                          "countries": [
+                            "*"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Zone saved"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "coverageOk",
+          "title": "Coverage",
+          "tone": "info",
+          "when": "!data.coverage.headline",
+          "text": "{data.coverage.note}"
+        },
+        {
+          "type": "notice",
+          "id": "coverageAsks",
+          "tone": "info",
+          "when": "data.coverage.asks",
+          "text": "{data.coverage.asks}"
         }
       ]
     },

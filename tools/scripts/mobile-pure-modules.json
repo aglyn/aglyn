@@ -334,6 +334,10 @@
       "why": "The return reasons and their labels, so the register's return sheet offers the same ones the console does (AGL-3609); imports only commerce, commerce-orders and order-fulfillment."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "why": "What a store's shipping zones and rates cover: the resolver checkout builds its shipping options from and the Coverage block's words. Pure arithmetic over the settings document; the native Shipping page replays it from function-cases.generated.json."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
       "why": "The store's tax settings and the rate arithmetic, imports nothing; the offline register's totals tax a basket with it (AGL-3625)."
     },

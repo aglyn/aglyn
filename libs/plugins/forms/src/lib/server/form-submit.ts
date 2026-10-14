@@ -1044,9 +1044,14 @@ export async function POST(request: Request): Promise<Response> {
      * The email also lists the answers, under the form's own labels, so a
      * manager can act on an inquiry from the inbox it landed in. Email only:
      * the console notification and the push keep to the sentence above.
+     *
+     * Started here, so it runs beside the work below, and awaited before the
+     * response: a serverless invocation is frozen once its response is sent,
+     * and the fan-out mails each manager in turn, so a route that returned
+     * without it reached only the managers it had got to by then.
      */
     const alertPath = typeof path === 'string' ? path.slice(0, 500) : ''
-    void notifyHostManagers(
+    const notifyingManagers = notifyHostManagers(
       hostId,
       {
         type: 'content.formSubmission',
@@ -1116,6 +1121,7 @@ export async function POST(request: Request): Promise<Response> {
           : {}),
       },
     )
+    await notifyingManagers
     return json({ received: true, alerts })
   } catch (error) {
     console.error(error)

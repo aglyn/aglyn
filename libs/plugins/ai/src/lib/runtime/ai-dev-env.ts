@@ -121,17 +121,41 @@ export function aiLiveBatchWanted(env: AiDevEnv = process.env): boolean {
   return aiUnderLiveRun(env)
 }
 
+/** The variable that bounds how long a live run waits on one batch (AGL-3781). */
+export const AI_LIVE_BATCH_WAIT_ENV = 'AGLYN_LIVE_AI_BATCH_WAIT_MS'
+
+/** How long a batch is waited on when the run names no wait. */
+export const AI_LIVE_BATCH_DEFAULT_WAIT_MS = 30 * 60_000
+
 /**
- * The most a batched live run may take: the adapter waits up to an hour on
- * each batch, and a run's requests go as a few batches one after another —
- * the answers, their re-asks, the grades. A spec that timed out would keep
- * none of the answers it already paid for, so the bound is the worst case.
+ * How long a live run waits on one batch (AGL-3781): what
+ * `AGLYN_LIVE_AI_BATCH_WAIT_MS` says, or half an hour. Most batches end in
+ * minutes. One that has not by then is canceled, which keeps every answer it
+ * already has, and the requests it left unanswered are asked on their own at
+ * full price — so a slow batch costs a round part of its discount, never the
+ * round.
+ */
+export function aiLiveBatchWaitMs(env: AiDevEnv = process.env): number {
+  const raw = String(env[AI_LIVE_BATCH_WAIT_ENV] ?? '').trim()
+  const parsed = raw ? Number(raw) : Number.NaN
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : AI_LIVE_BATCH_DEFAULT_WAIT_MS
+}
+
+/**
+ * The most a batched live run may take: a run's requests go as a few batches
+ * one after another — the answers, their re-asks, the grades — and each is
+ * waited on for `aiLiveBatchWaitMs`, then given time to end its cancel and to
+ * have what it left asked on its own. A spec that timed out would keep none
+ * of the answers it already paid for, so the bound is the worst case.
  */
 export const AI_LIVE_BATCH_TIMEOUT_MS = 5 * 60 * 60_000
 
 /** A live spec's timeout: `baseMs`, or the batched run's when this run batches. */
 export function aiLiveTimeoutMs(baseMs: number, env: AiDevEnv = process.env): number {
-  return aiLiveBatchWanted(env) ? Math.max(baseMs, AI_LIVE_BATCH_TIMEOUT_MS) : baseMs
+  if (!aiLiveBatchWanted(env)) return baseMs
+  // Four batches in a row, each waited on, canceled and finished by hand.
+  const longWait = 4 * (aiLiveBatchWaitMs(env) + 20 * 60_000)
+  return Math.max(baseMs, AI_LIVE_BATCH_TIMEOUT_MS, longWait)
 }
 
 /**
@@ -144,17 +168,26 @@ export const AI_EFFORT_ARM_ENV = 'AGLYN_AI_EFFORT'
 
 const AI_EFFORT_LEVELS: readonly AiEffort[] = ['low', 'medium', 'high']
 
+/**
+ * Every step kind this development run's A/B arm names, with its effort, in
+ * kind order — `*` for every kind it does not name. A pair whose effort is no
+ * level is ignored; a kind named twice keeps its first effort, and `*` its
+ * last. Empty when the run names no arm, and in any deployed server.
+ */
+export function aiDevEffortArm(env: AiDevEnv = process.env): Record<string, AiEffort> {
+  if (aiIsDeployedRuntime(env)) return {}
+  const raw = String(env[AI_EFFORT_ARM_ENV] ?? '').trim()
+  const arm: Record<string, AiEffort> = {}
+  for (const pair of raw ? raw.split(',') : []) {
+    const [kind, level] = pair.split(':').map((part) => part.trim())
+    if (!kind || !AI_EFFORT_LEVELS.includes(level as AiEffort)) continue
+    if (kind === '*' || !(kind in arm)) arm[kind] = level as AiEffort
+  }
+  return Object.fromEntries(Object.entries(arm).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+}
+
 /** The effort this development run's A/B arm asks `step` at, or `undefined` for the step's own. */
 export function aiDevEffortFor(step: string | undefined, env: AiDevEnv = process.env): AiEffort | undefined {
-  if (aiIsDeployedRuntime(env)) return undefined
-  const raw = String(env[AI_EFFORT_ARM_ENV] ?? '').trim()
-  if (!raw) return undefined
-  let fallback: AiEffort | undefined
-  for (const pair of raw.split(',')) {
-    const [kind, level] = pair.split(':').map((part) => part.trim())
-    if (!AI_EFFORT_LEVELS.includes(level as AiEffort)) continue
-    if (kind === step) return level as AiEffort
-    if (kind === '*') fallback = level as AiEffort
-  }
-  return fallback
+  const arm = aiDevEffortArm(env)
+  return (step !== undefined && step !== '*' ? arm[step] : undefined) ?? arm['*']
 }

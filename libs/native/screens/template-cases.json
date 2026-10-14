@@ -709,6 +709,34 @@
     {
       "template": "{data.listResource:instance}|{data.wholeResource:instance}|",
       "expect": "abc123||"
+    },
+    {
+      "template": "{data.stub.one:percentof/data.stub.num}",
+      "expect": "0.1"
+    },
+    {
+      "template": "{data.stub.recent:percentof/data.stub.num}",
+      "expect": "0"
+    },
+    {
+      "template": "{data.stub.num:percentof/data.stub.recent}",
+      "expect": "0"
+    },
+    {
+      "template": "{data.stub.num:percentof/data.stub.one}",
+      "expect": "104200"
+    },
+    {
+      "template": "{data.members[?item.role == editor].*.email}",
+      "expect": "b@acme.test"
+    },
+    {
+      "template": "{data.members[?item.count == 0 && item.role == owner].*.$id}",
+      "expect": "u1"
+    },
+    {
+      "template": "{data.members[?item.role == nobody].*.$id:count}",
+      "expect": "0"
     }
   ],
   "url": [

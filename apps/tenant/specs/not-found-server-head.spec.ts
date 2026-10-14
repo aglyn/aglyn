@@ -74,6 +74,7 @@ import {
   NOT_FOUND_PAGE_NAME,
   resolveNotFoundTitle,
 } from '../utils/not-found-title'
+import { SITE_STATUS_COPY_EN, siteStatusCopy, siteStatusLanguage } from '../utils/site-status-copy'
 
 const mockGetHost = getHost as jest.Mock
 const mockGetScreen = getScreen as jest.Mock
@@ -209,6 +210,40 @@ describe('the host boundary’s served <title>', () => {
     consoleError.mockRestore()
   })
 
+  it('names the page in the site’s language, as its heading is (AGL-3791)', async () => {
+    // A Spanish site's 404 said "No encontramos esa página" under a tab that
+    // read "Page not found – Panadería Flor de Oaxaca".
+    mockGetHost.mockResolvedValue({
+      host: { ...HOST, displayName: 'Panadería Flor de Oaxaca', seo: undefined, defaultLocale: 'es' },
+      error: null,
+    })
+    expect((await metadataFor('panaderia')).title).toBe('Página no encontrada – Panadería Flor de Oaxaca')
+
+    for (const [locales, name] of [
+      [{ defaultLocale: 'fr-CA' }, 'Page introuvable'],
+      [{ locales: ['pt-BR'] }, 'Página não encontrada'],
+      [{ defaultLocale: 'de' }, 'Seite nicht gefunden'],
+      [{ defaultLocale: 'it' }, 'Pagina non trovata'],
+      // A language the table does not list keeps the English, as the heading does.
+      [{ defaultLocale: 'ja' }, NOT_FOUND_PAGE_NAME],
+      [{ defaultLocale: 'en-GB' }, NOT_FOUND_PAGE_NAME],
+    ] as const) {
+      mockGetHost.mockResolvedValue({ host: { ...HOST, ...locales }, error: null })
+      expect((await metadataFor('acme')).title).toBe(`${name} - ${SITE_TITLE}`)
+    }
+  })
+
+  it('takes the English name from the one table the heading’s words come from', () => {
+    expect(SITE_STATUS_COPY_EN.notFoundPageName).toBe(NOT_FOUND_PAGE_NAME)
+    expect(resolveNotFoundTitle({ siteTitle: 'Acme', pageName: null })).toBe(`${NOT_FOUND_PAGE_NAME} – Acme`)
+  })
+
+  it('keeps a designed 404’s authored title verbatim in any language', async () => {
+    mockGetHost.mockResolvedValue({ host: { ...HOST_WITH_BOUND_404, defaultLocale: 'es' }, error: null })
+
+    expect((await metadataFor('acme')).title).toBe('That page has moved on — Acme')
+  })
+
   it('carries no robots entry of its own — Next’s NonIndex already writes noindex on a 404', async () => {
     const metadata = await metadataFor('acme')
 
@@ -236,6 +271,22 @@ describe('one title, two writers', () => {
         ...hostSeoTitleParts(HOST_WITH_BOUND_404),
       }),
     ).toBe(served)
+  })
+
+  it('and agrees in the site’s language, from the language the layout publishes (AGL-3791)', async () => {
+    const spanish = { ...HOST, defaultLocale: 'es-MX' }
+    mockGetHost.mockResolvedValue({ host: spanish, error: null })
+    const served = (await metadataFor('acme')).title
+
+    // `HostBrandProvider` publishes `resolvePageLocale({ host })`, which is `es-MX` here,
+    // and `SiteNotFound` reads the page's name for it from the status screen's table.
+    expect(
+      resolveNotFoundTitle({
+        ...hostSeoTitleParts(spanish),
+        pageName: siteStatusCopy(siteStatusLanguage('es-MX')).notFoundPageName,
+      }),
+    ).toBe(served)
+    expect(served).toBe(`Página no encontrada - ${SITE_TITLE}`)
   })
 
   it('the host boundary still renders its body component — the head is additive', () => {

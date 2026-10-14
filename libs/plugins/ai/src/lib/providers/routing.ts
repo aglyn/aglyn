@@ -206,6 +206,9 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
   },
   'job.layout': {
     // The plan was reasoned out and confirmed before the step, so it writes without thinking.
+    // A site's header and footer in the layout language think adaptively, at
+    // low since AGL-3781 (`AI_LAYOUT_LANGUAGE_THINKING`): the live round of
+    // 2026-10-14 built 13 of 13 frames at low, none cut off.
     thinking: 'off',
     effort: null,
     maxTokens: 8000,
@@ -214,8 +217,11 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['layout'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
   'job.template': {
+    // Medium since the golden A/B of 2026-10-14 (AGL-3781): both template
+    // briefs passed at medium as at the default, with about a third fewer
+    // output tokens.
     thinking: 'off',
-    effort: null,
+    effort: 'medium',
     maxTokens: 8000,
     maxTokensBasis:
       "tighter than the doctrine's default for a template, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
@@ -285,7 +291,10 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     // confirmed, so it writes without thinking (AGL-2907). The ceiling here
     // is the MOST a pass may ask for; each pass sizes its own down from it to
     // what fits the time the job beat can give the step, which on the
-    // balanced tier is about half of this.
+    // balanced tier is about half of this. A page in the layout language
+    // thinks adaptively, at low since AGL-3781 (`AI_LAYOUT_LANGUAGE_THINKING`):
+    // the live round of 2026-10-14 built 39 of 39 pages at low, 64 of 65
+    // answers held their rules on the first ask, none cut off.
     thinking: 'off',
     effort: null,
     maxTokens: 2000,
@@ -378,21 +387,32 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['seo'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
   'job.text': {
+    // Low since the golden A/B of 2026-10-14 (AGL-3781): the tagline brief
+    // passed at low, its copy scored higher than at the default.
     thinking: 'adaptive',
-    effort: null,
+    effort: 'low',
     maxTokens: 1024,
     maxTokensBasis: 'a few paragraphs of copy; a brief asking for more gets a draft to extend',
     eval: { kinds: ['text'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
   'job.theme': {
+    // Medium since the golden A/B of 2026-10-14 (AGL-3781): the theme brief
+    // passed at medium with the default's scores and half its output tokens.
+    // A site start's look runs its own setting (`ai-job-site-look.ts`).
     thinking: 'adaptive',
-    effort: null,
+    effort: 'medium',
     maxTokens: 8000,
     maxTokensBasis:
       'the largest answer the theme tool accepts, about 2,500 tokens of JSON as ai-job-theme-step.spec.ts measures it, with as much again to think in',
     eval: { kinds: ['theme'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
   'job.plan': {
+    // A site's plan is an outline written without thinking (AGL-3594), and a
+    // paid site's asks medium (`AI_PAID_SITE_PLAN_EFFORT`, AGL-3781): the live
+    // round of 2026-10-14 planned 11 of 11 paid site briefs at medium in 16
+    // attempts to the default's 22, $0.129 to $0.164, with no refusal and no
+    // rule broken. Every other plan, and a Free site's on the fast tier, asks
+    // this row's effort — the model's default — until a round holds it lower.
     thinking: 'adaptive',
     effort: null,
     maxTokens: 8000,

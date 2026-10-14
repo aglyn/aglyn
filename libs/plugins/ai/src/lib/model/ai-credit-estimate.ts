@@ -113,7 +113,13 @@ export const AI_MEASURED_PAID_SITE_CREDITS = {
   products: { median: 64, p90: 66 },
 } as const satisfies Record<string, AiMeasuredCredits>
 
-/** When the table above was read, and from when its jobs ran. */
+/**
+ * When the table above was read, and from when its jobs ran. Both tables
+ * were measured before AGL-3781 asked a paid site's plan at medium effort and
+ * the layout language's pages and frames at low. A lower effort draws less,
+ * so their plan, page and layout figures stand as the higher reading until
+ * the next re-measure: a quote is never under what is drawn.
+ */
 export const AI_MEASURED_AT = { read: '2026-10-09', since: '2026-10-01' } as const
 
 /**

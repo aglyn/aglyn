@@ -18,6 +18,7 @@ import com.aglyn.plugins.commerce.products.ProductsScreen
 import com.aglyn.plugins.commerce.products.ScanScreen
 import com.aglyn.plugins.commerce.sales.COMMERCE_SALES_SCREEN
 import com.aglyn.plugins.commerce.sales.SalesScreen
+import com.aglyn.plugins.commerce.sales.GlanceWidget
 import com.aglyn.plugins.commerce.sales.SalesTrendWidget
 import com.aglyn.plugins.commerce.sales.TodaySalesWidget
 import com.aglyn.plugins.commerce.pos.COMMERCE_DISPLAY_SCREEN
@@ -108,6 +109,7 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.widget("commerce.today", title = "Today", order = 80, size = WidgetSize.HALF, requiresSite = true) { context -> TodaySalesWidget(context) }
   r.widget("commerce.sales-trend", title = "Last 7 days", order = 110, size = WidgetSize.FULL, requiresSite = true) { context -> SalesTrendWidget(context) }
   r.widget("commerce.to-ship", title = "To ship", order = 90, size = WidgetSize.HALF, requiresSite = true) { context -> OrdersToShipWidget(context) }
+  r.widget("commerce.glance", title = "At a glance", order = 120, size = WidgetSize.FULL, requiresSite = true) { context -> GlanceWidget(context) }
   r.quickAction("commerce.orders-to-ship", "Ship orders", "local_shipping", 100, requiresSite = true, screen = COMMERCE_ORDERS_SCREEN)
   r.quickAction("commerce.new-product", "New product", "add", 110, requiresSite = true, screen = COMMERCE_PRODUCT_SCREEN, params = mapOf("new" to "1"))
   r.quickAction("commerce.scan", "Scan stock", "qr_code_scanner", 120, requiresSite = true, screen = COMMERCE_SCAN_SCREEN)
