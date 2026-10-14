@@ -265,7 +265,7 @@
     "generate:native-staff-constants:check": "node tools/scripts/generate-native-staff-constants.mjs --check",
     "generate:native-email-html-cases": "node tools/scripts/generate-native-email-html-cases.mjs",
     "generate:native-email-html-cases:check": "node tools/scripts/generate-native-email-html-cases.mjs --check",
-    "test:native-contracts": "node --test tools/scripts/lib/native-contracts.test.mjs tools/scripts/lib/native-plugin-settings.test.mjs",
+    "test:native-contracts": "node --test tools/scripts/lib/native-contracts.test.mjs tools/scripts/lib/native-plugin-settings.test.mjs tools/scripts/lib/native-transfer-resources.test.mjs",
     "test:native-ci-changed": "node --test tools/scripts/lib/native-ci-changed.test.mjs tools/scripts/lib/native-swift-tests.test.mjs",
     "generate:native-brand-assets": "node tools/scripts/generate-native-brand-assets.mjs",
     "generate:native-brand-assets:check": "node tools/scripts/generate-native-brand-assets.mjs --check",

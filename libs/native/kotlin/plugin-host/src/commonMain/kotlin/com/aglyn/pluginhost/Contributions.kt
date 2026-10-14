@@ -112,6 +112,13 @@ interface NativePluginContext {
    * (`/screens/{id}/versions/{v}/besigner`).
    */
   fun openBesigner(path: String, scope: ConsoleScope = ConsoleScope.SITE): Boolean
+
+  /**
+   * Follows a console link (`/acme/billing/settings`, a path a notice or a route answers) the way a notification's
+   * link is followed: the native screen that claims it, else a Besigner page. Returns false where this context has no
+   * way to follow one.
+   */
+  fun openLink(link: String): Boolean = false
 }
 
 /** How a screen lays out on wide windows. */
@@ -173,6 +180,12 @@ class NativeWidget(
   val slot: String? = null,
   val content: @Composable (context: NativePluginContext) -> Unit,
 ) : Contribution
+
+/**
+ * The params of the core page's zone a slot widget is drawn in (a plugin's page names the plugin: `pluginId`), the native twin
+ * of the props the console's `PluginWidgetSlot` hands the widget it draws.
+ */
+val LocalSlotParams = androidx.compose.runtime.staticCompositionLocalOf<NativeParams> { emptyMap() }
 
 class NativeQuickAction(
   override val pluginId: String,

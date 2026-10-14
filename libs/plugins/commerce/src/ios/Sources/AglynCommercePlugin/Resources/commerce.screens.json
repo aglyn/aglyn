@@ -707,6 +707,7 @@
               "export": {
                 "resource": "commerce.products",
                 "title": "Export products",
+                "hostId": "{site.id}",
                 "fileStem": "products"
               }
             },
@@ -717,6 +718,7 @@
               "export": {
                 "resource": "commerce.categories",
                 "title": "Export product categories",
+                "hostId": "{site.id}",
                 "fileStem": "categories"
               }
             },
@@ -727,6 +729,7 @@
               "export": {
                 "resource": "commerce.orders",
                 "title": "Export orders",
+                "hostId": "{site.id}",
                 "fileStem": "orders"
               }
             },
@@ -737,6 +740,7 @@
               "export": {
                 "resource": "commerce.discounts",
                 "title": "Export discounts",
+                "hostId": "{site.id}",
                 "fileStem": "discounts"
               }
             },
@@ -747,6 +751,7 @@
               "export": {
                 "resource": "commerce.coupons",
                 "title": "Export coupons",
+                "hostId": "{site.id}",
                 "fileStem": "coupons"
               }
             },
@@ -757,6 +762,7 @@
               "export": {
                 "resource": "commerce.gift-cards",
                 "title": "Export gift cards",
+                "hostId": "{site.id}",
                 "fileStem": "gift-cards"
               }
             },
@@ -767,6 +773,7 @@
               "export": {
                 "resource": "commerce.tracking",
                 "title": "Export tracking numbers",
+                "hostId": "{site.id}",
                 "fileStem": "tracking-numbers"
               }
             }

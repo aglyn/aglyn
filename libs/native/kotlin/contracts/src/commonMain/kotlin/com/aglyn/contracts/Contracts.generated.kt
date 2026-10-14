@@ -2732,6 +2732,8 @@ internal data class ContractValuesPart5(
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
+    @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
+    @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )
 
@@ -2960,6 +2962,8 @@ class ContractValues internal constructor(
     val templateListQuery: ListQueryDeclaration get() = part5.templateListQuery
     val tenantEmailCollection: String get() = part5.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part5.tenantEmails
+    val timeZoneChoices: List<String> get() = part5.timeZoneChoices
+    val timeZoneDefaultLabel: String get() = part5.timeZoneDefaultLabel
     val workflowMaxSteps: Long get() = part5.workflowMaxSteps
 
     override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5)

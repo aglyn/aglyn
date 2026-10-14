@@ -1341,6 +1341,10 @@
       "load": {
         "member": {
           "doc": "hosts/{site.id}/members/{params.memberId}"
+        },
+        "usage": {
+          "url": "/api/ai/usage?orgId={org.id}&hostId={site.id}",
+          "optional": true
         }
       },
       "constants": {
@@ -1381,6 +1385,18 @@
           "tone": "info",
           "when": "data.member.role == owner",
           "text": "The site owner's AI access follows their workspace role."
+        },
+        {
+          "type": "fields",
+          "title": "This month",
+          "when": "data.usage && data.member.status != invited",
+          "footer": "AI credits this collaborator drew on this site, from the workspace's pool.",
+          "rows": [
+            {
+              "label": "Credits on this site",
+              "value": "{data.usage.rows[uid=params.uid].hostCredits ?? '0':number}"
+            }
+          ]
         },
         {
           "type": "list",
@@ -1558,6 +1574,18 @@
                       "label": "Keep going and flag it"
                     }
                   ]
+                },
+                {
+                  "key": "models",
+                  "label": "Models it may use",
+                  "kind": "multiselect",
+                  "initial": "{data.allot.allotments[subject=params.subject].models}",
+                  "help": "Leave all off to allow every model.",
+                  "optionsFrom": {
+                    "items": "data.allot.models",
+                    "value": "{item.id}",
+                    "label": "{item.label}"
+                  }
                 }
               ],
               "url": "/api/ai/allotments",
@@ -1568,7 +1596,7 @@
                     "subject": "{params.subject}",
                     "credits": "{form.credits}",
                     "mode": "{form.mode}",
-                    "models": "{data.allot.allotments[subject=params.subject].models}"
+                    "models": "{form.models}"
                   }
                 ]
               },
@@ -1593,6 +1621,94 @@
               "reload": true
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "ai.import.productCopy",
+      "title": "After import",
+      "subtitle": "What happens to the new products once they land",
+      "icon": "sparkles|auto_awesome",
+      "scope": "org",
+      "zones": [
+        "transferStep"
+      ],
+      "order": 20,
+      "requires": "stash.importResource == commerce.products && org.manager",
+      "load": {
+        "jobs": {
+          "url": "/api/ai/jobs?orgId={org.id}&limit=20",
+          "optional": true
+        }
+      },
+      "hook": {
+        "when": "stash.importAiCopy && stash.importAiCopyFor == @stash.importJob && stash.importResult.done && stash.importHost",
+        "load": {
+          "created": {
+            "url": "/api/transfer/status",
+            "method": "POST",
+            "body": {
+              "orgId": "{org.id}",
+              "jobId": "{stash.importJob}",
+              "include": "results"
+            },
+            "optional": true
+          },
+          "job": {
+            "compute": "aiProductsImportJob",
+            "args": [
+              "data.created.rows"
+            ]
+          }
+        },
+        "action": {
+          "label": "Write copy with AI",
+          "when": "data.job",
+          "url": "/api/ai/jobs",
+          "body": {
+            "orgId": "{org.id}",
+            "hostId": "{stash.importHost}",
+            "kind": "products",
+            "brief": "{data.job.brief}",
+            "inputs": "{data.job.inputs}"
+          },
+          "success": "AI is writing descriptions, search listings and tags for the new products. You review them on the products page before any is saved."
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "What happens to the new products once they land."
+        },
+        {
+          "type": "form",
+          "id": "copy",
+          "when": "data.jobs",
+          "fields": [
+            {
+              "key": "write",
+              "label": "Write descriptions, search listings and tags with AI as they land",
+              "kind": "toggle",
+              "initial": "{stash.importAiCopy}",
+              "help": "You review it on the products page before any is saved. Prices are never written."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "stash": {
+              "importAiCopy": "{form.write}",
+              "importAiCopyFor": "{stash.importJob}"
+            },
+            "back": true,
+            "reload": false
+          }
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.jobs && stash.importPlan.summary.create > 50",
+          "text": "Copy is written for the first 50 of the {stash.importPlan.summary.create} products."
         }
       ]
     }

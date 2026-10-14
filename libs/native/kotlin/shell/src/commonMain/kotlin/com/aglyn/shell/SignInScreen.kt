@@ -80,6 +80,30 @@ fun SignInScreen(
     }
   }
 
+  // A passkey is offered where the build has a relying party and the platform bound a way to sign in with one (the console's
+  // sign-in page offers one too).
+  val asserter = com.aglyn.screens.LocalPasskeyAsserter.current
+  val relyingParty = services.config.passkeyRelyingParty
+
+  fun passkey() {
+    if (busy || asserter == null || relyingParty == null) return
+    busy = true
+    error = null
+    scope.launch {
+      try {
+        services.auth.signInWithCustomToken(com.aglyn.screens.PasskeySignIn.token(services.api, relyingParty, asserter))
+      } catch (failure: AuthError) {
+        error = failure.message
+      } catch (failure: kotlinx.coroutines.CancellationException) {
+        throw failure
+      } catch (failure: Throwable) {
+        error = com.aglyn.screens.PasskeySignIn.message(failure, brand)
+      } finally {
+        busy = false
+      }
+    }
+  }
+
   LaunchedEffect(Unit) {
     if (autoSignIn && services.debugSignIn != null) submit()
   }
@@ -138,6 +162,13 @@ fun SignInScreen(
             } else {
               Text("Sign in")
             }
+          }
+          if (asserter != null && relyingParty != null) {
+            OutlinedButton(
+              onClick = { passkey() },
+              enabled = !busy,
+              modifier = Modifier.fillMaxWidth().height(48.dp).testTag("sign-in-passkey"),
+            ) { Text("Sign in with a passkey") }
           }
           if (deviceModes.isNotEmpty()) {
             HorizontalDivider()

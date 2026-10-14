@@ -26,6 +26,8 @@
 	<string>$(AGLYN_GOOGLE_WEB_CLIENT_ID)</string>
 	<key>AGLYN_BRAND_NAME</key>
 	<string>$(AGLYN_BRAND_NAME)</string>
+	<key>AGLYN_PASSKEY_RP_ID</key>
+	<string>$(AGLYN_PASSKEY_RP_ID)</string>
 	<key>AGLYN_DEBUG_EMAIL</key>
 	<string>$(AGLYN_DEBUG_EMAIL)</string>
 	<key>AGLYN_DEBUG_PASSWORD</key>

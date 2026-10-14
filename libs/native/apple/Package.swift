@@ -54,7 +54,7 @@ let package = Package(
     // core spec file in libs/native/screens.
     .target(
       name: "AglynScreens",
-      dependencies: ["AglynCore", "AglynContracts", "AglynUI", "AglynPluginHost"],
+      dependencies: ["AglynCore", "AglynContracts", "AglynUI", "AglynPluginHost", "AglynSite"],
       resources: screenSpecs.map { .copy("Resources/screens/\($0)") }
     ),
     .target(name: "AglynSite", dependencies: ["AglynContracts", "AglynCore", "AglynUI", "AglynPluginHost"]),

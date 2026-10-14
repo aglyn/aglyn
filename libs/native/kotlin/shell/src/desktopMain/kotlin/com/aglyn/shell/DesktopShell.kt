@@ -65,7 +65,19 @@ object DesktopShell {
       firebaseAppId = read("firebaseAppId", "1:000000000000:web:emulator"),
       authEmulatorHost = read("authEmulatorHost", "127.0.0.1:9099"),
       firestoreEmulatorHost = read("firestoreEmulatorHost", "127.0.0.1:8082"),
+      googleDesktopClientId = read("googleDesktopClientId", null),
+      googleDesktopClientSecret = read("googleDesktopClientSecret", null),
     )
+  }
+
+  /** Google sign-in through the system browser and a loopback return, once the desktop OAuth client is configured; null until then. */
+  fun googleSource(config: AglynConfig, http: io.ktor.client.HttpClient = defaultHttpClient()): com.aglyn.core.GoogleCredentialSource? {
+    val id = config.googleDesktopClientId ?: return null
+    val secret = config.googleDesktopClientSecret ?: return null
+    return com.aglyn.core.GoogleLoopback(http, id, secret, openBrowser = { url ->
+      runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+        .onFailure { throw com.aglyn.core.GoogleLinkError("The browser could not be opened. Try again.", it) }
+    })
   }
 
   fun services(

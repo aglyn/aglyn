@@ -41,8 +41,14 @@ import {
   type OrgInstallSummary,
   type UninstallTarget,
 } from '../model/marketplace'
+import {
+  PLUGIN_ORG_WIDE_UPDATE_NOTE,
+  pluginSiteSetSummary,
+  pluginUpdateAll,
+  pluginUpdatePrompt,
+  staleSites as staleSitesOf,
+} from '../model/marketplace-catalog'
 import UninstallImpactDialog from './uninstall-impact-dialog.component'
-import { compareArtifactVersions } from '../model/update-state'
 
 export interface PluginSiteSetProps {
   /** The listing/installation these pins belong to. */
@@ -110,12 +116,10 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
    * and offering to "update" those would quietly move them backwards.
    */
   const staleSites = useMemo(
-    () =>
-      orgInstall.sites.filter(
-        (site) => (compareArtifactVersions(site.version, latestVersion) ?? 0) < 0,
-      ),
+    () => staleSitesOf(orgInstall.sites, latestVersion),
     [orgInstall.sites, latestVersion],
   )
+  const updateAll = pluginUpdateAll(orgInstall, staleSites, String(latestVersion))
   /**
    * Update is per-site FIRST (AGL-1017). A version with breaking changes has
    * to be absorbable one site at a time — take it on a quiet site, see what
@@ -130,6 +134,12 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
     { hostIds: string[] | null; label: string } | null
   >(null)
   const [changelog, setChangelog] = useState<string | null>(null)
+  const updatePrompt = pluginUpdatePrompt({
+    name: listing?.displayName ?? 'This plugin',
+    latestVersion: String(latestVersion),
+    label: pending?.label ?? '',
+    singleSite: Boolean(pending?.hostIds && pending.hostIds.length === 1),
+  })
   useEffect(() => {
     if (!pending || !listing?.$id || !latestVersion) return
     let active = true
@@ -179,12 +189,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
         sx={{ fontSize: 20, mt: '2px' }}
       />
       <Typography variant="body2">
-        {orgInstall.orgWide
-          ? `Installed for the whole organization ` +
-            `(v${orgInstall.orgVersion}) — every site, ` +
-            'including ones you add later.'
-          : `Installed on ${orgInstall.sites.length} of ` +
-            `${hosts.length} sites.`}
+        {pluginSiteSetSummary(orgInstall, hosts.length)}
       </Typography>
     </Stack>
 
@@ -274,9 +279,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
           // A workspace that wants to stage a breaking update has to be on
           // per-site pins, and the way there is the split below.
           <Alert severity="info" variant="outlined">
-            {'This is one organization-wide pin, so updating moves every ' +
-              'site at once. To take a version on one site first, install ' +
-              'per site instead.'}
+            {PLUGIN_ORG_WIDE_UPDATE_NOTE}
           </Alert>
         ) : null}
         <Box>
@@ -286,17 +289,10 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
             color="primary"
             disabled={siteBusy}
             onClick={() =>
-              setPending({
-                hostIds: orgInstall.orgWide ? null : staleSites.map((site) => site.hostId),
-                label: orgInstall.orgWide
-                  ? 'every site in this organization'
-                  : `${staleSites.length} site${staleSites.length === 1 ? '' : 's'}`,
-              })
+              setPending({ hostIds: updateAll.hostIds, label: updateAll.target })
             }
           >
-            {orgInstall.orgWide
-              ? `Update to v${latestVersion}`
-              : `Update all ${staleSites.length} to v${latestVersion}`}
+            {updateAll.label}
           </Button>
         </Box>
       </Stack>
@@ -311,16 +307,13 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
       maxWidth="sm"
       fullWidth
     >
-      <DialogTitle>{`Update to v${latestVersion}?`}</DialogTitle>
+      <DialogTitle>{updatePrompt.title}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={1.5}>
-          <Typography variant="body2">
-            {`${listing?.displayName ?? 'This plugin'} moves from the version ` +
-              `running now to v${latestVersion} on ${pending?.label ?? ''}.`}
-          </Typography>
-          {pending?.hostIds && pending.hostIds.length === 1 ? (
+          <Typography variant="body2">{updatePrompt.body}</Typography>
+          {updatePrompt.others ? (
             <Typography variant="body2" color="text.secondary">
-              {'Other sites stay on the version they are running.'}
+              {updatePrompt.others}
             </Typography>
           ) : null}
           <Stack spacing={0.5}>
@@ -340,8 +333,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
             )}
           </Stack>
           <Typography variant="caption" color="text.secondary">
-            {'Pins only move forward — there is no going back to the ' +
-              'previous version from here.'}
+            {updatePrompt.note}
           </Typography>
         </Stack>
       </DialogContent>

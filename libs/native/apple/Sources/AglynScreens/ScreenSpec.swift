@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynPluginHost
 import Foundation
 
 /// A console screen as data: what it loads from the console's own API
@@ -29,6 +30,12 @@ public struct ScreenSpec: Identifiable, Sendable {
   public let zones: [String]
   public let loads: [LoadSpec]
   public let blocks: [BlockSpec]
+  /// The screen's own `actions` entry it runs as the screen opens, once its data has loaded and the action's `when` holds
+  /// (`start: { "action": "reviewLinked" }`): a link that carries a query (`?notice=`) opens the dialog it names.
+  public let startAction: String?
+  /// `{ when, load, action }`: what this contributed screen does once a core action that names its zone
+  /// (`afterZone`) has succeeded, and its `when` holds: the `load` is read, then the `action` runs over it.
+  public let hook: JSONValue?
   public let raw: JSONValue
 
   public var requiresSite: Bool { scope == "site" }
@@ -48,6 +55,8 @@ public struct ScreenSpec: Identifiable, Sendable {
     self.zones = json["zones"].arrayOfStrings
     self.loads = json["load"].objectEntries.map { LoadSpec(key: $0.key, $0.value) }
     self.blocks = json["blocks"].array.compactMap(BlockSpec.init)
+    self.hook = json["hook"]
+    self.startAction = json["start"]?["action"]?.stringValue
     self.raw = json
   }
 
@@ -100,6 +109,13 @@ public struct LoadSpec: Sendable, Hashable {
   /// limit when absent). The query is read again with the larger limit, so a collection too big for one read can still be
   /// gone through to its end.
   public let more: Int?
+  /// A path to rows an earlier load brought (`data.sites.sites`): this load then runs once per row,
+  /// with the row as `item`, and its key holds the list of answers (a failed one is null).
+  public let each: String?
+  /// A pure function to call over data already loaded (`packageJsonDiff`, `packageMergeKeys`), its answer under
+  /// this key; `args` are the paths (or numbers) it is given.
+  public let compute: String?
+  public let args: [String]
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -115,6 +131,9 @@ public struct LoadSpec: Sendable, Hashable {
       self.switchboard = nil
       self.entitlement = nil
       self.orderZone = nil
+      self.each = nil
+      self.compute = nil
+      self.args = []
       self.method = .get
       self.body = nil
       self.optional = false
@@ -136,6 +155,9 @@ public struct LoadSpec: Sendable, Hashable {
       self.switchboard = json["switchboard"]?.stringValue
       self.entitlement = json["entitlement"]?.stringValue
       self.orderZone = json["orderZone"]?.stringValue
+      self.each = json["each"]?.stringValue
+      self.compute = json["compute"]?.stringValue
+      self.args = json["args"].arrayOfStrings
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
@@ -208,12 +230,11 @@ public struct ActionSpec: Sendable, Identifiable {
   public let link: String?
   /// A Besigner path (whole, from the console root) opened in the app's web view.
   public let besigner: String?
+  /// A console path (a route's `href`, `/acme/billing/settings`) followed the way a notification's link is: the native
+  /// screen that claims it, else a Besigner page, else a note that the app has no screen for it.
+  public let route: String?
   /// `copy`: the rendered template goes to the clipboard.
   public let copy: String?
-  /// `{ resource, title, fileStem, scope, filter }`: opens the export sheet on a transfer resource (`commerce.products`),
-  /// which asks for the columns and the format and hands the file to the device. `scope` is `{ "kind": "all" }` unless it
-  /// names a filter; `title`, `fileStem` and `filter` are templates.
-  public let export: JSONValue?
   /// A Firestore document path (a template): the stored document is read when the action runs and is `overlay` in the body,
   /// without its timestamps, for a route that replaces the document with the person's edits on top (`$overlay`).
   public let overlay: String?
@@ -244,15 +265,63 @@ public struct ActionSpec: Sendable, Identifiable {
   public let file: FileSpec?
   /// Repeats the request page by page until the route is done, and answers the totals.
   public let loop: LoopSpec?
+  /// `{ doc, current, edited }`: the owner's save of a business profile. `edited` is the typed values,
+  /// `current` the path to the stored document; the write follows `businessProfileOwnerWrite` (AglynContracts).
+  public let businessProfile: JSONValue?
+  /// After a `write` to the site document that changes how pages render, stage the site-wide
+  /// republish the console's host-document writes do (`publishSiteWideChange`).
+  public let siteWide: Bool
   /// A change to the signed-in person's own sign-in, made through the
   /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
   public let account: String?
+
+  /// `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds
+  /// (a chosen package, the plan read from it), until the app closes.
+  public let stash: JSONValue?
+
+  /// `passkey: { options, verify, origin, errors, otherwise }`: sets up a passkey on this device. The
+  /// options route answers a WebAuthn challenge, the platform makes the credential, and the verify route
+  /// stores it; `origin` is the `Origin` the routes check the ceremony against (`https://<relying party>`),
+  /// `errors` maps a route's reason to the words shown and `otherwise` words any other failure.
+  public let passkey: JSONValue?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// The status of the answer that runs `else` (404 unless the spec names another, such as 409).
   public let elseStatus: Int
+  /// `gate: { when, screen }`: when the route refuses with a body that meets `when` (read as `error`), `screen`
+  /// opens over this one and, once it reports `resume`, the very same action is sent again, as the console's
+  /// publisher agreement gate does (accepting the agreement sends the publish again).
+  public let gate: JSONValue?
+  /// This action, finishing inside a gate's screen, tells the screen below to send its action again.
+  public let resume: Bool
+  /// `afterZone: { zone, stash }`: once the action has succeeded, the `hook` of every screen contributed to `zone` whose
+  /// `requires` holds runs (best effort, in order); what they say is kept as `stash.<stash>` for the screen that follows.
+  public let afterZone: JSONValue?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
+  /// `download`: the route answers with a file (an export), not JSON; the person saves or shares it.
+  /// Its value names the file when the route names none.
+  public let download: String?
+  /// `export: { resource, title, hostId, fileStem, scope, filter }`: the platform's export sheet for a transfer resource
+  /// (`commerce.products`, `crm.contacts`): its fields, the format, then the file saved or shared, as every list opens it.
+  /// Each is a template; see `exportRequest(in:)`.
+  public let export: JSONValue?
+  /// `chunk: { field, bytes, idFrom, idKey, firstOnly, until }`: the file text in `field` of the body goes in
+  /// parts of at most `bytes` (JSON-encoded), each with `part` and `parts`, the job the first answer names
+  /// (`idFrom`) sent back as `idKey`; keys in `firstOnly` ride on the first part alone; `until` is the answer
+  /// path that must be true when the last part has landed.
+  public let chunk: JSONValue?
+  /// `repeat: { until, max, stop, stopMessage }`: the action runs again while its answer does not meet
+  /// `until` (a condition over `response`), as the console calls apply until the route says it is done; the
+  /// stash takes every pass's answer, so a screen can show the progress; `stop` ends it as a failure.
+  public let repeating: JSONValue?
+  /// A follow-up that must succeed (unlike `then`): it runs once the action and its stash are done, with the
+  /// stash and the action's answer in scope, and a failure of its own fails the action.
+  public let after: ActionSpecBox?
+  /// `downloadAt`: the route answers with JSON, and the file is the value at this path of it
+  /// (a workspace package export wraps its file as `{ fileName, package }`). `download` is then a
+  /// template over `response`, which names the file.
+  public let downloadAt: String?
   /// `{ when, title, text }` (or a list of them, the first that matches wins): when the route's
   /// answer meets `when`, the person is shown `text` (a template over `response`) in place of the
   /// success message, as the console's report dialog shows the documentation that may already
@@ -283,7 +352,12 @@ public struct ActionSpec: Sendable, Identifiable {
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
-    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil)
+    self.gate = json["gate"]
+    self.resume = json["resume"] == .bool(true)
+    self.afterZone = json["afterZone"]
+    self.reload = json["reload"] == .bool(true)
+      || (json["reload"] != .bool(false)
+        && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil || json["passkey"] != nil))
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.elseStatus = json["elseStatus"].flatMap { value -> Int? in
       if case .number(let number) = value { return Int(number) }
@@ -293,6 +367,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.when = json["when"]?.stringValue
     self.link = json["link"]?.stringValue
     self.besigner = json["besigner"]?.stringValue
+    self.route = json["route"]?.stringValue
     self.copy = json["copy"]?.stringValue
     self.export = json["export"]
     self.overlay = json["overlay"]?.stringValue
@@ -306,7 +381,16 @@ public struct ActionSpec: Sendable, Identifiable {
     self.impersonate = json["impersonate"].flatMap(ImpersonateSpec.init)
     self.loop = json["loop"].flatMap(LoopSpec.init)
     self.file = json["file"].flatMap(FileSpec.init)
+    self.businessProfile = json["businessProfile"]
+    self.siteWide = json["siteWide"] == .bool(true)
     self.account = json["account"]?.stringValue
+    self.stash = json["stash"]
+    self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)
+    self.downloadAt = json["downloadAt"]?.stringValue
+    self.chunk = json["chunk"]
+    self.repeating = json["repeat"]
+    self.after = json["after"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
+    self.passkey = json["passkey"]
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }
@@ -329,6 +413,23 @@ public struct ActionSpec: Sendable, Identifiable {
     let entries: [JSONValue]
     if case .array(let list) = instead { entries = list } else { entries = [instead] }
     return entries.first { ScreenValues.condition($0["when"]?.stringValue, in: scope) }
+  }
+
+  /// The export sheet's request (`export: { resource, title, hostId, fileStem, scope, filter }`), with the action's templates
+  /// read in `scope`; nil when the action opens none. `hostId` names the site a site's resource is read for (none: the
+  /// workspace's); `scope` is `{ "kind": "all" }` unless it names a filter; `fileStem` is the resource key when not given.
+  public func exportRequest(in scope: JSONValue) -> TransferExportRequest? {
+    guard let export, let resource = export["resource"]?.stringValue else { return nil }
+    let key = ScreenValues.render(resource, in: scope)
+    guard !key.isEmpty else { return nil }
+    func text(_ name: String) -> String? {
+      export[name]?.stringValue.map { ScreenValues.render($0, in: scope) }.flatMap { $0.isEmpty ? nil : $0 }
+    }
+    return TransferExportRequest(
+      resource: key, title: text("title") ?? ScreenValues.render(label, in: scope), hostID: text("hostId"),
+      scope: export["scope"].map { ScreenValues.resolveBody($0, in: scope) } ?? ["kind": "all"],
+      fileStem: text("fileStem") ?? key.replacingOccurrences(of: ":", with: "-").replacingOccurrences(of: ".", with: "-"),
+      filter: export["filter"].map { ScreenValues.resolveBody($0, in: scope) })
   }
 
   /// Every field the action asks for before it runs: its prompt, with any `fieldsFrom` entry expanded from the data in
@@ -480,6 +581,20 @@ public struct FieldSpec: Sendable, Identifiable {
   /// A `lookup` field's sources: the kinds of record a person can search, and what picking one fills in.
   public let groups: [LookupGroup]
 
+  /// `dollars`: the typed value and the template are both read as a dollar amount (`60`, `$60.00`,
+  /// `1,250 USD`) and compared in cents, as the gift card import's Confirm step reads a typed total.
+  public let mustMatchAs: String?
+  /// What to say under the field while something is typed that does not match.
+  public let mismatch: String?
+  /// For a `file` field: `json` parses the chosen file and sends the value, else its text is sent.
+  public let parse: String?
+  /// For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an
+  /// import must have acknowledged, each one).
+  public let coversAll: Bool
+  /// The field's own JSON, for a kind that reads more than the common keys (`upload`'s limits).
+  public let config: JSONValue?
+
+
   /// A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name
   /// the console's own constants); nil for a field that does not.
   public func generatedValue(in context: JSONValue) -> String? {
@@ -491,9 +606,10 @@ public struct FieldSpec: Sendable, Identifiable {
       length: Int(length ?? 20), alphabet: ScreenValues.render(generate["alphabet"]?.stringValue ?? "", in: context))
   }
 
-  /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
+  /// Whether a value leaves this field unfinished: required and empty, not what it must match, outside a number field's
+  /// bounds or pattern, or a multiselect that has not chosen every choice it must cover.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
-    if let mustMatch, ScreenValues.text(value) != ScreenValues.render(mustMatch, in: context) { return true }
+    if mismatches(value, in: context) { return true }
     if let pattern {
       let typed = ScreenValues.text(value)
       if !typed.isEmpty, typed.range(of: pattern, options: .regularExpression) == nil { return true }
@@ -501,6 +617,10 @@ public struct FieldSpec: Sendable, Identifiable {
     if kind == "number", let number = ScreenValues.number(value) {
       if let min, number < min { return true }
       if let max, number > max { return true }
+    }
+    if coversAll, kind == "multiselect" {
+      let chosen = Set(Optional(value).array.compactMap { $0.stringValue })
+      if choices(in: context).contains(where: { !chosen.contains($0.value) }) { return true }
     }
     // A number field is finished by any number, zero too.
     let finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != nil)
@@ -530,6 +650,11 @@ public struct FieldSpec: Sendable, Identifiable {
     self.generate = nil
     self.groups = []
     self.each = nil
+    self.mustMatchAs = nil
+    self.mismatch = nil
+    self.parse = nil
+    self.coversAll = false
+    self.config = nil
   }
 
   /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
@@ -578,6 +703,18 @@ public struct FieldSpec: Sendable, Identifiable {
     }
   }
 
+  /// Whether a value is not what the field must match (a field with nothing to match never mismatches).
+  public func mismatches(_ value: JSONValue, in context: JSONValue) -> Bool {
+    guard let mustMatch else { return false }
+    let typed = ScreenValues.text(value)
+    let expected = ScreenValues.render(mustMatch, in: context)
+    if mustMatchAs == "dollars" {
+      guard let cents = ScreenValues.dollarsToCents(typed) else { return true }
+      return cents != ScreenValues.dollarsToCents(expected)
+    }
+    return typed != expected
+  }
+
   init(key: String, label: String, kind: String, required: Bool, help: String?) {
     self.key = key
     self.label = label
@@ -598,6 +735,11 @@ public struct FieldSpec: Sendable, Identifiable {
     self.generate = nil
     self.groups = []
     self.each = nil
+    self.mustMatchAs = nil
+    self.mismatch = nil
+    self.parse = nil
+    self.coversAll = false
+    self.config = nil
   }
 
   /// One field of an `each` field's rows: its templates rendered over the row.
@@ -624,6 +766,11 @@ public struct FieldSpec: Sendable, Identifiable {
     generate = template.generate
     groups = template.groups
     each = nil
+    mustMatchAs = template.mustMatchAs
+    mismatch = template.mismatch
+    parse = template.parse
+    coversAll = template.coversAll
+    config = template.config
   }
 
   /// This field as it is asked: itself, or one per row of its `each` list.
@@ -656,6 +803,11 @@ public struct FieldSpec: Sendable, Identifiable {
     self.generate = json["generate"]
     self.groups = json["groups"].array.compactMap(LookupGroup.init)
     self.each = json["each"]?.stringValue
+    self.mustMatchAs = json["mustMatchAs"]?.stringValue
+    self.mismatch = json["mismatch"]?.stringValue
+    self.parse = json["parse"]?.stringValue
+    self.coversAll = json["coversAll"] == .bool(true)
+    self.config = json
   }
 
   /// The choices for a `select`: the static options, then any read from data. A `country` field offers the
@@ -665,17 +817,18 @@ public struct FieldSpec: Sendable, Identifiable {
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
-    // A map (the site's screens by id) offers one choice per entry: `{ $id: key, $value: value }`, by value.
-    let rows: [JSONValue]
+    // A map (the site's screens by id) offers one choice per entry: `{ $id: key, $value: value }`, by value. A list offers
+    // one per row that meets `filter`, or, given `within`, one per row of each row's inner list (the outer row as `parent`).
+    let scopes: [JSONValue]
     if case .object(let record)? = ScreenValues.lookup(path, in: context) {
-      rows = record.map { JSONValue.object(["$id": .string($0.key), "$value": $0.value]) }
+      scopes = record.map { JSONValue.object(["$id": .string($0.key), "$value": $0.value]) }
         .sorted { ScreenValues.text($0["$value"]).lowercased() < ScreenValues.text($1["$value"]).lowercased() }
+        .map { ScreenContext.with(context, item: $0) }.filter { ScreenValues.condition(from["filter"]?.stringValue, in: $0) }
     } else {
-      rows = ScreenValues.lookup(path, in: context).array
+      scopes = ScreenValues.scopes(
+        items: path, within: from["within"]?.stringValue, filter: from["filter"]?.stringValue, in: context)
     }
-    // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
-    let keep = from["where"]?.stringValue
-    return options + rows.map { ScreenContext.with(context, item: $0) }.filter { ScreenValues.condition(keep, in: $0) }.map { scope in
+    return options + scopes.map { scope in
       // A label built from parts that may be empty reads clean: runs of spaces become one, and the ends are trimmed.
       let label = ScreenValues.render(labelTemplate, in: scope).replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
         .trimmingCharacters(in: .whitespaces)

@@ -97,7 +97,6 @@
             "label": "Save store settings",
             "write": {
               "doc": "hosts/{site.id}/settings/store",
-              "siteWide": true,
               "fields": {
                 "pdpScreenId": {
                   "$orNull": "{form.pdpScreenId}"
@@ -115,6 +114,7 @@
                 }
               }
             },
+            "siteWide": true,
             "success": "Store settings saved"
           }
         }
@@ -323,7 +323,6 @@
             "label": "Save",
             "write": {
               "doc": "hosts/{site.id}/settings/store",
-              "siteWide": true,
               "fields": {
                 "reviews": {
                   "policy": "{form.policy}",
@@ -332,6 +331,7 @@
                 }
               }
             },
+            "siteWide": true,
             "success": "Review settings saved"
           }
         }
@@ -508,7 +508,6 @@
               "when": "item.status != approved",
               "write": {
                 "doc": "hosts/{site.id}/reviews/{item.$id}",
-                "siteWide": true,
                 "fields": {
                   "status": "approved",
                   "moderationReason": null,
@@ -517,6 +516,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Approved"
             },
             {
@@ -526,7 +526,6 @@
               "when": "item.status == pending",
               "write": {
                 "doc": "hosts/{site.id}/reviews/{item.$id}",
-                "siteWide": true,
                 "fields": {
                   "status": "rejected",
                   "moderationReason": {
@@ -537,6 +536,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Rejected",
               "prompt": [
                 {
@@ -575,7 +575,6 @@
               "when": "item.status != rejected && item.status != hidden && item.status != pending",
               "write": {
                 "doc": "hosts/{site.id}/reviews/{item.$id}",
-                "siteWide": true,
                 "fields": {
                   "status": "hidden",
                   "moderationReason": {
@@ -586,6 +585,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Hidden",
               "prompt": [
                 {
@@ -631,13 +631,13 @@
               ],
               "write": {
                 "doc": "hosts/{site.id}/reviews/{item.$id}",
-                "siteWide": true,
                 "fields": {
                   "reply": {
                     "$orNull": "{form.reply:take/500}"
                   }
                 }
               },
+              "siteWide": true,
               "success": "Reply saved"
             },
             {
@@ -655,13 +655,13 @@
               ],
               "write": {
                 "doc": "hosts/{site.id}/reviews/{item.$id}",
-                "siteWide": true,
                 "fields": {
                   "reply": {
                     "$orNull": "{form.reply:take/500}"
                   }
                 }
               },
+              "siteWide": true,
               "success": "Reply saved"
             }
           ],

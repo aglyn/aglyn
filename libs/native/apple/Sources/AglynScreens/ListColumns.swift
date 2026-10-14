@@ -76,7 +76,12 @@ enum ListColumns {
   /// The rows by a `page` column, in the order asked: numbers as numbers, dates as moments, anything else as text; a row without
   /// the value goes last whichever way it is read, and equal rows keep the order they came in.
   static func sorted(_ rows: [JSONValue], by column: ListColumn, descending: Bool, in context: JSONValue) -> [JSONValue] {
-    guard let path = column.page else { return rows }
+    order(rows, by: column, descending: descending, in: context).map { rows[$0] }
+  }
+
+  /// The positions of `rows` in the order `sorted` puts them in.
+  static func order(_ rows: [JSONValue], by column: ListColumn, descending: Bool, in context: JSONValue) -> [Int] {
+    guard let path = column.page else { return Array(rows.indices) }
     let keyed = rows.enumerated().map { offset, row in
       (offset, row, ScreenValues.lookup(path, in: ScreenContext.with(context, item: row)))
     }
@@ -109,7 +114,7 @@ enum ListColumns {
       if !left, before(a.2, b.2) { return true }
       if !left, before(b.2, a.2) { return false }
       return a.0 < b.0
-    }.map(\.1)
+    }.map(\.0)
   }
 
   /// A row's visible columns as one line: `Label value`, joined, skipping what the row has nothing for.

@@ -32,13 +32,13 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Analytics | `hosts/[host]/analytics` | AGL-3670 | [x] | [x] |
 | Automations | `workflows` | AGL-3670 | [x] | [x] |
 | Notifications and their settings | `manage/notifications/*` | AGL-3670 | [x] | [x] |
-| AI | `ai` (credits, jobs, settings) | AGL-3671 | [ ] | [ ] |
-| Site admin | `hosts/[host]/admin/{activity,backup,danger,domain,error-pages,general,plugins,security}`, `hosts/[host]/users` | AGL-3671 | [ ] | [ ] |
-| Workspace settings | `[orgSlug]/settings/*`, `[orgSlug]/plugins/*` | AGL-3671 | [ ] | [ ] |
+| AI | `ai` (credits, jobs, settings) | AGL-3671 | [x] | [x] |
+| Site admin | `hosts/[host]/admin/{activity,backup,danger,domain,error-pages,general,plugins,security}`, `hosts/[host]/users` | AGL-3671 | [x] | [x] |
+| Workspace settings | `[orgSlug]/settings/*`, `[orgSlug]/plugins/*` | AGL-3671 | [x] | [x] |
 | Team and roles | `[orgSlug]/team/*` | AGL-3671 | [x] | [x] |
-| Billing and usage | `billing`, `[orgSlug]/billing/*` (paying = Stripe's hosted pages) | AGL-3671 | [ ] | [ ] |
-| Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [ ] | [ ] |
-| Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [ ] | [ ] |
+| Billing and usage | `billing`, `[orgSlug]/billing/*` (paying = Stripe's hosted pages) | AGL-3671 | [x] | [x] |
+| Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [x] | [x] |
+| Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [x] | [x] |
 | Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [x] | [x] |
 
 ## Staff gaps (AGL-3667)
@@ -109,6 +109,15 @@ by text (AGL-3652), which was the one thing keeping the Apple box above
 open. The card's per-moment email
 switches belong to the Commerce settings and are not part of this row. A
 funnel has no page design of its own, so it has no Besigner entry.
+
+Workspace settings (AGL-3671): all twelve sections of `[orgSlug]/settings` and the Plugins pages are native, in the
+console's words (`native-workspace-settings-match-the-console.spec.ts` holds them to its source). The logo and favicon
+are picked from the workspace's media library with the Setup pickers' field, the time zone from the console's list, a
+hold's `?notice=` link opens its review request, and a marketplace plugin's page installs, updates, splits and removes
+it (the uninstall impact check included) and draws its settings from its manifest. The console's `PluginSiteSet`
+hands the uninstall dialog no plugin id, so its impact check never runs from the plugin page and always asks for the
+typed word; the apps pass the listing's, so the check runs. The Integrations page is a slot (`orgSettings`) no plugin
+fills today; the native screen has the same slot and the console's empty line.
 
 Not screens: `signin`, `signup`, `signout`, `sso`, `reset-password`,
 `verify-email`, `account-recovery`, `auth/handoff/*` and `edit-access` are the

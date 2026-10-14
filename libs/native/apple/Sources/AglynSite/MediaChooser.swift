@@ -40,25 +40,31 @@ public let privateFileRefusal =
 public struct MediaChooserSheet: View {
   let context: NativePluginContext
   let kind: String
+  let workspaceOnly: Bool
   let onChoose: (ChosenMedia) -> Void
   @State private var tab = 0
   @Environment(\.dismiss) private var dismiss
 
-  public init(context: NativePluginContext, kind: String = "image", onChoose: @escaping (ChosenMedia) -> Void) {
+  /// `workspaceOnly` shows the workspace's library alone, whichever site is picked: a workspace setting (its logo,
+  /// its favicon) is chosen from the workspace's files, as the console's org media browser does.
+  public init(
+    context: NativePluginContext, kind: String = "image", workspaceOnly: Bool = false, onChoose: @escaping (ChosenMedia) -> Void
+  ) {
     self.context = context
     self.kind = kind
+    self.workspaceOnly = workspaceOnly
     self.onChoose = onChoose
   }
 
   private var scope: MediaScope? {
-    if context.hostID != nil, tab == 0 { return context.hostID.map { .site(hostID: $0) } }
-    return context.orgID.map { .org(orgID: $0, forHostID: context.hostID) }
+    if !workspaceOnly, context.hostID != nil, tab == 0 { return context.hostID.map { .site(hostID: $0) } }
+    return context.orgID.map { .org(orgID: $0, forHostID: workspaceOnly ? nil : context.hostID) }
   }
 
   public var body: some View {
     NavigationStack {
       VStack(spacing: 0) {
-        if context.hostID != nil {
+        if context.hostID != nil, !workspaceOnly {
           Picker("Library", selection: $tab) {
             Text("This site").tag(0)
             Text("Workspace").tag(1)

@@ -143,5 +143,9 @@ for a real device, TestFlight, the Mac release or production data:
 7. **Stripe Terminal live mode** for the POS app.
 8. **`apple-app-site-association`** on the console origin, naming both apps'
    app ids, so console links open the apps.
+   Passkeys need one more on the apex, `https://aglyn.com/.well-known/apple-app-site-association` with a
+   `webcredentials` entry for `com.aglyn.app` (template: `docs/mobile/well-known/`), the
+   `webcredentials:aglyn.com` Associated Domains entry on that target, and `AGLYN_PASSKEY_RP_ID = aglyn.com` in
+   `Production.xcconfig`; until then "Set up a passkey" is hidden. The Team ID is the placeholder.
 9. **App Store Connect** records for both apps: listing, privacy labels and a
    TestFlight group.

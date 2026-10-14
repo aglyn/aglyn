@@ -5715,18 +5715,14 @@
                 "scope": "{form.scope}",
                 "targetId": "{form.targetId}",
                 "mode": {
-                  "$if": {
-                    "when": "form.scope == org,host",
-                    "then": "{form.mode}",
-                    "else": "full"
-                  }
+                  "$if": "form.scope == org,host",
+                  "then": "{form.mode}",
+                  "else": "full"
                 },
                 "enforcement": {
-                  "$if": {
-                    "when": "form.mode == read-only",
-                    "then": "standard",
-                    "else": "{form.enforcement}"
-                  }
+                  "$if": "form.mode == read-only",
+                  "then": "standard",
+                  "else": "{form.enforcement}"
                 },
                 "reason": "{form.reason}",
                 "message": "{form.message}",
@@ -5734,28 +5730,20 @@
                   "$afterHours": "{form.hours}"
                 },
                 "cancelSubscription": {
-                  "$if": {
-                    "when": "form.scope == org",
-                    "then": "{form.cancelBilling}"
-                  }
+                  "$if": "form.scope == org",
+                  "then": "{form.cancelBilling}"
                 },
                 "lockOwnedWorkspaces": {
-                  "$if": {
-                    "when": "form.scope == user",
-                    "then": "{form.lockOwned}"
-                  }
+                  "$if": "form.scope == user",
+                  "then": "{form.lockOwned}"
                 },
                 "pauseRenewals": {
-                  "$if": {
-                    "when": "form.scope == org,host",
-                    "then": "{form.pauseMoney}"
-                  }
+                  "$if": "form.scope == org,host",
+                  "then": "{form.pauseMoney}"
                 },
                 "pausePayouts": {
-                  "$if": {
-                    "when": "form.scope == org,host",
-                    "then": "{form.pauseMoney}"
-                  }
+                  "$if": "form.scope == org,host",
+                  "then": "{form.pauseMoney}"
                 },
                 "emailOwners": "{form.emailOwners}"
               },
@@ -5966,18 +5954,14 @@
                 "scope": "{form.scope}",
                 "targetId": "{form.targetId}",
                 "mode": {
-                  "$if": {
-                    "when": "form.scope == org,host",
-                    "then": "{form.mode}",
-                    "else": "full"
-                  }
+                  "$if": "form.scope == org,host",
+                  "then": "{form.mode}",
+                  "else": "full"
                 },
                 "enforcement": {
-                  "$if": {
-                    "when": "form.mode == read-only",
-                    "then": "standard",
-                    "else": "{form.enforcement}"
-                  }
+                  "$if": "form.mode == read-only",
+                  "then": "standard",
+                  "else": "{form.enforcement}"
                 },
                 "reason": "{form.reason}",
                 "message": "{form.message}",
@@ -5985,28 +5969,20 @@
                   "$afterHours": "{form.hours}"
                 },
                 "cancelSubscription": {
-                  "$if": {
-                    "when": "form.scope == org",
-                    "then": "{form.cancelBilling}"
-                  }
+                  "$if": "form.scope == org",
+                  "then": "{form.cancelBilling}"
                 },
                 "lockOwnedWorkspaces": {
-                  "$if": {
-                    "when": "form.scope == user",
-                    "then": "{form.lockOwned}"
-                  }
+                  "$if": "form.scope == user",
+                  "then": "{form.lockOwned}"
                 },
                 "pauseRenewals": {
-                  "$if": {
-                    "when": "form.scope == org,host",
-                    "then": "{form.pauseMoney}"
-                  }
+                  "$if": "form.scope == org,host",
+                  "then": "{form.pauseMoney}"
                 },
                 "pausePayouts": {
-                  "$if": {
-                    "when": "form.scope == org,host",
-                    "then": "{form.pauseMoney}"
-                  }
+                  "$if": "form.scope == org,host",
+                  "then": "{form.pauseMoney}"
                 },
                 "emailOwners": "{form.emailOwners}"
               },
@@ -6822,11 +6798,9 @@
                 "hostId": "{params.hostId}",
                 "mediaId": "{params.mediaId}",
                 "prefer": {
-                  "$if": {
-                    "when": "form.narrow",
-                    "then": "asset",
-                    "else": "hash"
-                  }
+                  "$if": "form.narrow",
+                  "then": "asset",
+                  "else": "hash"
                 },
                 "revokeRawUrl": "{form.revoke}",
                 "reason": "{form.reason}",
@@ -7385,7 +7359,7 @@
         "/admin/revenue"
       ],
       "load": {
-        "revenue": "/api/admin/revenue?period={params.period|now.previousMonth}"
+        "revenue": "/api/admin/revenue?period={params.period|now.prevMonth}"
       },
       "blocks": [
         {
@@ -7744,7 +7718,7 @@
               "label": "Period",
               "kind": "text",
               "required": true,
-              "initial": "{params.period|now.previousMonth}",
+              "initial": "{params.period|now.prevMonth}",
               "help": "A month as 2026-09 or a quarter as 2026-Q3. The console opens on last month; a month that has ended compares nothing against today's contracted base."
             }
           ],
@@ -16330,36 +16304,26 @@
               ],
               "body": {
                 "jurisdiction": {
-                  "$if": {
-                    "when": "form.subdivision",
-                    "then": "{form.country:upper}-{form.subdivision:upper}",
-                    "else": "{form.country:upper}"
-                  }
+                  "$if": "form.subdivision",
+                  "then": "{form.country:upper}-{form.subdivision:upper}",
+                  "else": "{form.country:upper}"
                 },
                 "firstTaxablePeriod": "{form.first}",
                 "note": "{form.note}",
                 "registrationId": {
-                  "$if": {
-                    "when": "form.remove",
-                    "then": "",
-                    "else": {
-                      "$if": {
-                        "when": "form.registrationId",
-                        "then": "{form.registrationId}"
-                      }
-                    }
+                  "$if": "form.remove",
+                  "then": "",
+                  "else": {
+                    "$if": "form.registrationId",
+                    "then": "{form.registrationId}"
                   }
                 },
                 "filingId": {
-                  "$if": {
-                    "when": "form.remove",
-                    "then": "",
-                    "else": {
-                      "$if": {
-                        "when": "form.filingId",
-                        "then": "{form.filingId}"
-                      }
-                    }
+                  "$if": "form.remove",
+                  "then": "",
+                  "else": {
+                    "$if": "form.filingId",
+                    "then": "{form.filingId}"
                   }
                 }
               },

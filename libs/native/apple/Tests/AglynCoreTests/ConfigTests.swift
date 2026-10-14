@@ -47,6 +47,18 @@ final class ConfigTests: XCTestCase {
     XCTAssertEqual(try AglynConfig.read(env, app: .aglyn).google, AglynGoogleClient(iosClientID: "ios", webClientID: "web"))
   }
 
+  func testPasskeysNeedALinkedDomainNotAnAddress() throws {
+    var env = base
+    XCTAssertNil(try AglynConfig.read(env, app: .aglyn).passkeyRelyingParty)
+    env["AGLYN_PASSKEY_RP_ID"] = " Aglyn.com "
+    XCTAssertEqual(try AglynConfig.read(env, app: .aglyn).passkeyRelyingParty, "aglyn.com")
+    // An origin, a port, a path or a local host is not a relying party.
+    for wrong in ["https://aglyn.com", "aglyn.com:443", "aglyn.com/app", "localhost", "127.0.0.1", "aglyn"] {
+      env["AGLYN_PASSKEY_RP_ID"] = wrong
+      XCTAssertNil(try AglynConfig.read(env, app: .aglyn).passkeyRelyingParty, wrong)
+    }
+  }
+
   func testProblemsNameWhatIsMissingAndAnEmulatorOnALiveConsole() throws {
     let empty = try AglynConfig.read([:], app: .pos)
     XCTAssertEqual(

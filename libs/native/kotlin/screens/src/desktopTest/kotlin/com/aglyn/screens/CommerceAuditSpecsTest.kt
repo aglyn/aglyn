@@ -128,7 +128,7 @@ class CommerceAuditSpecsTest : SpecTestBase() {
     assertEquals(listOf(false, true, false), listOf("physical", "digital", "service").map { ScreenValues.truthy(savedInitial(it)) })
     val submit = saved.form("settings")
     assertEquals("hosts/h1/settings/store", ScreenValues.render(submit.write!!.jsonObject["doc"]!!.let { (it as JsonPrimitive).content }, saved.context))
-    assertTrue((submit.write!!.jsonObject["siteWide"] as JsonPrimitive).content == "true")
+    assertTrue(submit.siteWide, "the save republishes the whole site")
     assertEquals(
       json("""{"returns":{"enabled":true,"windowDays":30,"eligibleTypes":["digital","physical"]}}"""),
       ScreenValues.resolveBody(submit.write!!.jsonObject["fields"]!!, ScreenContext.with(saved.context, "form", json("""{"enabled":true,"windowDays":30,"physical":true,"digital":true,"service":false}"""))),

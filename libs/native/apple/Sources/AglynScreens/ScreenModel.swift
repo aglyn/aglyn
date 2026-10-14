@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import Foundation
@@ -14,6 +15,11 @@ public struct AccountOperations: Sendable {
   public var changePassword: @Sendable (_ current: String, _ new: String) async throws -> Void
   /// Keeps the account's display name in step with the profile.
   public var updateDisplayName: @Sendable (_ name: String) async throws -> Void
+  /// Disconnects a sign-in provider (`google.com`) from the account.
+  public var unlinkProvider: @Sendable (_ providerID: String) async throws -> Void
+  /// Connects Google: opens the platform's auth sheet through `authenticate` (the URL to open and the
+  /// scheme it returns to), and links the credential it earns to the account.
+  public var linkGoogle: @Sendable (_ authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws -> Void
   /// The words a refusal from either shows.
   public var message: @Sendable (_ error: Error) -> String
 
@@ -22,10 +28,18 @@ public struct AccountOperations: Sendable {
       throw ConsoleAPIError(status: 0, message: "Changing the password is not available here.")
     },
     updateDisplayName: @escaping @Sendable (String) async throws -> Void = { _ in },
+    unlinkProvider: @escaping @Sendable (String) async throws -> Void = { _ in
+      throw ConsoleAPIError(status: 0, message: "Disconnecting a sign-in method is not available here.")
+    },
+    linkGoogle: @escaping @Sendable (@escaping @Sendable (URL, String) async throws -> URL) async throws -> Void = { _ in
+      throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
+    },
     message: @escaping @Sendable (Error) -> String = { $0.localizedDescription }
   ) {
     self.changePassword = changePassword
     self.updateDisplayName = updateDisplayName
+    self.unlinkProvider = unlinkProvider
+    self.linkGoogle = linkGoogle
     self.message = message
   }
 }
@@ -49,6 +63,11 @@ public struct ScreenSession: Sendable {
   /// pool it was minted in; the staff session is set aside and returns when the support session ends.
   public var impersonate: @Sendable (_ token: String, _ tenantId: String?) async throws -> Void
   public var account: AccountOperations
+  /// Whether this build can connect Google (its OAuth client is configured).
+  public var googleConfigured: Bool
+  /// The relying party passkeys are made for (`aglyn.com`): set where this build can make a passkey (it is
+  /// configured, linked to that domain, and the device can); nil hides the action.
+  public var passkeyRelyingParty: String?
 
   public init(
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
@@ -56,7 +75,8 @@ public struct ScreenSession: Sendable {
     reauthenticate: @escaping @Sendable (String) async throws -> Void = { _ in },
     refreshClaims: @escaping @Sendable () async -> Void = {},
     impersonate: @escaping @Sendable (String, String?) async throws -> Void = { _, _ in },
-    account: AccountOperations = AccountOperations()
+    account: AccountOperations = AccountOperations(), googleConfigured: Bool = false,
+    passkeyRelyingParty: String? = nil
   ) {
     self.email = email
     self.displayName = displayName
@@ -69,6 +89,8 @@ public struct ScreenSession: Sendable {
     self.refreshClaims = refreshClaims
     self.impersonate = impersonate
     self.account = account
+    self.googleConfigured = googleConfigured
+    self.passkeyRelyingParty = passkeyRelyingParty
   }
 
   /// The base context every template reads.
@@ -96,6 +118,14 @@ public struct ScreenSession: Sendable {
         "email": email.map(JSONValue.string) ?? .null,
         "name": displayName.map(JSONValue.string) ?? .null,
         "providers": .array(claims.signInMethods.map(JSONValue.string)),
+        // Google can be connected where this build has its client, the account is not on a company
+        // login (a tenant), and Google is not connected already.
+        "canLinkGoogle": .bool(
+          googleConfigured && claims.values["firebase"]?["tenant"] == nil && !claims.signInMethods.contains("google.com")),
+        // A passkey can be set up where this build can make one, the account is not on a company login
+        // (the routes refuse a tenant) and its email is verified (they refuse that too).
+        "canAddPasskey": .bool(
+          passkeyRelyingParty != nil && claims.values["firebase"]?["tenant"] == nil && claims.emailVerified),
         "emailVerified": .bool(claims.emailVerified),
       ],
       "staff": [
@@ -103,7 +133,7 @@ public struct ScreenSession: Sendable {
         "role": claims.staffRole.map(JSONValue.string) ?? .null,
         "super": .bool(claims.isSuper),
       ],
-      "app": ["origin": .string(origin)],
+      "app": ["origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null],
       "now": ScreenSession.now(),
       "params": .object(paramRecord),
       "data": [:],
@@ -113,24 +143,9 @@ public struct ScreenSession: Sendable {
 }
 
 extension ScreenSession {
-  /// Today, for routes that take a period: `month` (YYYY-MM) and `quarter` (YYYY-Qn), in UTC as the routes keep them.
-  static func now(_ date: Date = Date()) -> JSONValue {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC")!
-    let parts = calendar.dateComponents([.year, .month], from: date)
-    let year = parts.year ?? 2026
-    let month = parts.month ?? 1
-    let previousYear = month == 1 ? year - 1 : year
-    let previousMonth = month == 1 ? 12 : month - 1
-    return [
-      "month": .string(String(format: "%04d-%02d", year, month)),
-      "previousMonth": .string(String(format: "%04d-%02d", previousYear, previousMonth)),
-      "quarter": .string("\(year)-Q\((month - 1) / 3 + 1)"),
-      "ms": .number((date.timeIntervalSince1970 * 1000).rounded()),
-      // The last twelve months, newest first, as a report picks them: `{ from, to, label }` with ISO instants in UTC.
-      "months": .array(recentMonths(year: year, month: month)),
-    ]
-  }
+  /// Today, for routes that take a period: the keys of `ScreenValues.nowObject` (`month` YYYY-MM, `prevMonth`, `quarter`
+  /// YYYY-Qn, `day`, `ms`, in UTC as the routes keep them) and `months`.
+  static func now(_ date: Date = Date()) -> JSONValue { ScreenValues.nowObject(at: date) }
 
   static let monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
@@ -150,13 +165,37 @@ extension ScreenSession {
 
 extension EnvironmentValues {
   @Entry public var aglynScreenSession = ScreenSession()
+  /// Set on a screen opened by another's `gate`: told when the person finished what the gate asked for.
+  @Entry var aglynGateResolve: (() -> Void)?
+  /// The workspace, site and API the screen is drawn for, for an input that needs them (the media chooser).
+  @Entry var aglynPluginContext: NativePluginContext?
 }
 
 /// What running an action came to.
+/// Values an action keeps for later screens (`stash`): a chosen file, the plan read from it, the
+/// choices made on the way. In memory only, until the app closes.
+@MainActor
+public enum ScreenStash {
+  public private(set) static var values: [String: JSONValue] = [:]
+
+  public static func set(_ updates: JSONValue) {
+    guard case .object(let record) = updates else { return }
+    for (key, value) in record {
+      if value == .null { values[key] = nil } else { values[key] = value }
+    }
+  }
+
+  public static func clear() { values = [:] }
+}
+
 public enum ActionOutcome: Equatable {
   case done(message: String?, response: JSONValue?)
+  /// A route answered with a file to save or share.
+  case file(DownloadedFile, name: String, message: String?)
   /// The route wants a recent sign-in (`reauth-required`) before it acts.
   case needsReauth(String)
+  /// The route refused for something another screen settles (`gate`): that screen, and the route's words.
+  case gated(screen: String, message: String)
   case failed(String)
 }
 
@@ -196,6 +235,10 @@ public final class ScreenModel {
   @ObservationIgnored private let reader: FirestoreReader?
   @ObservationIgnored private let writer: FirestoreWriter?
   @ObservationIgnored private let account: AccountOperations?
+  /// Opens a URL in the platform's auth sheet and returns where it came back to; the screen sets it.
+  @ObservationIgnored public var authenticate: (@Sendable (URL, String) async throws -> URL)?
+  /// Makes a passkey through the platform; the screen sets it (nil where the device cannot).
+  @ObservationIgnored public var createPasskey: PasskeyCreator?
 
   public init(
     spec: ScreenSpec, context: JSONValue, api: ConsoleAPIClient?, reader: FirestoreReader? = nil,
@@ -215,7 +258,23 @@ public final class ScreenModel {
   /// Seeds data without a network (previews, snapshot tests).
   public func seed(_ data: JSONValue) {
     context = ScreenContext.with(context, "data", data)
+    applyDerived()
     phase = .ready
+  }
+
+  /// The screen's `derive` list (`[{ name, when }]`, in order) as `is.<name>`: conditions worked out once over
+  /// the loaded data, so a block can say `is.billed` where the condition itself would need brackets. A later
+  /// entry may read an earlier one.
+  private func applyDerived() {
+    let entries = spec.raw["derive"].array
+    guard !entries.isEmpty else { return }
+    var flags: [String: JSONValue] = [:]
+    for entry in entries {
+      guard let name = entry["name"]?.stringValue else { continue }
+      let seen = ScreenContext.with(context, "is", .object(flags))
+      flags[name] = .bool(ScreenValues.condition(entry["when"]?.stringValue, in: seen))
+    }
+    context = ScreenContext.with(context, "is", .object(flags))
   }
 
   public var data: JSONValue { context["data"] ?? [:] }
@@ -236,7 +295,8 @@ public final class ScreenModel {
         url += (url.contains("?") ? "&" : "?") + param + "=" + ScreenValues.encodeComponent(value)
       }
     }
-    if let cursor {
+    // A GET route pages through the query string; a POST route reads it from the body (`pageBody`).
+    if let cursor, load.method == .get {
       url += (url.contains("?") ? "&" : "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     }
     return url
@@ -300,21 +360,30 @@ public final class ScreenModel {
     return "filters=" + ScreenValues.encodeComponent(json)
   }
 
-  /// Every load the screen's conditions allow, in parallel. A failed load
-  /// fails the screen with the route's own words.
+  /// The most rows a per-row load (`each`) runs for.
+  static let eachCeiling = 50
+
+  /// Every load the screen's conditions allow, in parallel; the per-row ones (`each`) follow once
+  /// the rows they walk have arrived. A failed load fails the screen with the route's own words.
   public func load() async {
     if case .object(let record) = data, record.isEmpty { phase = .loading }
     guard let api else {
       phase = .failed("Sign in to continue.")
       return
     }
+    context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
+    context = ScreenContext.with(context, "now", ScreenValues.nowObject())
+    let loads = spec.loads.filter { ScreenValues.condition($0.when, in: context) }
     var results: [String: JSONValue] = [:]
     var nextCursors: [String: String] = [:]
     do {
-      // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too.
+      // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too. The
+      // per-row (`each`) and computed (`compute`) loads follow once every read has answered.
       for late in [false, true] {
         let scope = results.isEmpty ? context : ScreenContext.with(context, "data", .object(results))
-        let wave = spec.loads.filter { $0.late == late && ScreenValues.condition($0.when, in: scope) }
+        let wave = spec.loads.filter {
+          $0.late == late && $0.each == nil && $0.compute == nil && ScreenValues.condition($0.when, in: scope)
+        }
         if wave.isEmpty { continue }
         try await withThrowingTaskGroup(of: (String, JSONValue, String?).self) { group in
           let reader = reader
@@ -335,6 +404,36 @@ public final class ScreenModel {
           }
         }
       }
+      let walking = loads.filter { $0.each != nil }
+      if !walking.isEmpty {
+        let seen = ScreenContext.with(context, "data", .object(results))
+        for load in walking {
+          let rows = Array(ScreenValues.lookup(load.each ?? "", in: seen).array.prefix(Self.eachCeiling))
+          var answers: [JSONValue] = Array(repeating: .null, count: rows.count)
+          try await withThrowingTaskGroup(of: (Int, JSONValue).self) { group in
+            let reader = reader
+            for (index, row) in rows.enumerated() {
+              let scope = ScreenContext.with(seen, item: row)
+              let path = url(for: load, in: scope)
+              group.addTask {
+                do {
+                  return (index, try await Self.fetch(load, path: path, api: api, reader: reader, context: scope).1)
+                } catch where !(error is CancellationError) {
+                  return (index, .null)
+                }
+              }
+            }
+            for try await (index, value) in group { answers[index] = value }
+          }
+          results[load.key] = .array(answers)
+        }
+      }
+      // Pure functions over what has loaded (a diff of two items), in the order they are declared.
+      for load in loads where load.compute != nil {
+        let seen = ScreenContext.with(context, "data", .object(results))
+        let args = load.args.map { Double($0).map(JSONValue.number) ?? ScreenValues.lookup($0, in: seen) }
+        results[load.key] = ScreenFunctions.call(load.compute ?? "", args) ?? .null
+      }
     } catch is CancellationError {
       return
     } catch {
@@ -342,6 +441,7 @@ public final class ScreenModel {
       return
     }
     context = ScreenContext.with(context, "data", .object(results))
+    applyDerived()
     cursors = nextCursors
     phase = .ready
     await loadPluginColumns()
@@ -388,8 +488,37 @@ public final class ScreenModel {
       // A probe that answers 503 is reporting, and the report is the body.
       value = error.body ?? .null
     }
-    let cursor = load.cursor.flatMap { ScreenValues.lookup($0, in: value)?.stringValue }
-    return (load.key, value, cursor)
+    return (load.key, value, Self.cursor(of: load, in: value))
+  }
+
+  /// A paged route's next cursor: the text at `cursor`, or a number (a job's `createdAt`) as text.
+  nonisolated static func cursor(of load: LoadSpec, in page: JSONValue) -> String? {
+    guard let at = load.cursor, let found = ScreenValues.lookup(at, in: page) else { return nil }
+    switch found {
+    case .string(let text): return text.isEmpty ? nil : text
+    case .number: return ScreenValues.text(found)
+    default: return nil
+    }
+  }
+
+  /// The body of a paged POST load's next page: its own body with the cursor under `cursorParam`
+  /// (a number when the cursor reads as one, since the route compares it as one).
+  func pageBody(_ load: LoadSpec, cursor: String) -> JSONValue? {
+    guard load.method != .get else { return nil }
+    var body: [String: JSONValue] = [:]
+    if case .object(let record)? = load.body.map({ ScreenValues.resolveBody($0, in: context) }) { body = record }
+    body[load.cursorParam] = Double(cursor).map(JSONValue.number) ?? .string(cursor)
+    return .object(body)
+  }
+
+  /// Takes the session's people and workspace afresh (after the token's claims changed, such as a
+  /// sign-in method disconnected), keeping what the screen has loaded.
+  public func rebase(_ base: JSONValue) {
+    var next = context
+    for key in ["org", "site", "user", "staff"] {
+      if let value = base[key] { next = ScreenContext.with(next, key, value) }
+    }
+    context = next
   }
 
   /// The next page of a paged load, appended to its rows.
@@ -418,14 +547,13 @@ public final class ScreenModel {
     loadingMore.insert(key)
     defer { loadingMore.remove(key) }
     do {
-      let page = try await api.request(url(for: load, cursor: cursor)) ?? .null
+      let page = try await api.request(url(for: load, cursor: cursor), method: load.method, body: pageBody(load, cursor: cursor)) ?? .null
       let more = ScreenValues.lookup(itemsPath, in: page).array
       guard case .object(var record) = data, var current = record[key] else { return }
       current = Self.appending(more, at: itemsPath, in: current)
       record[key] = current
       context = ScreenContext.with(context, "data", .object(record))
-      cursors[key] = load.cursor.flatMap { ScreenValues.lookup($0, in: page)?.stringValue }
-      if cursors[key]?.isEmpty ?? true { cursors[key] = nil }
+      cursors[key] = Self.cursor(of: load, in: page)
     } catch {
       return
     }
@@ -448,7 +576,26 @@ public final class ScreenModel {
   /// item and the filled inputs under `form`).
   public func run(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     performed = nil
-    let outcome = await perform(action, in: scope)
+    var outcome = await perform(action, in: scope)
+    // `repeat`: asked again until the answer meets `until`, the stash taking each pass so a screen shows
+    // the progress; `stop` ends it as a failure with the route's own words.
+    if let again = action.repeating {
+      let ceiling = Int(again["max"]?.numberValue ?? 200)
+      var passes = 1
+      while case .done(_, let answer) = outcome, passes < ceiling {
+        let after = ScreenContext.with(scope, "response", answer ?? .null)
+        stashAnswer(of: action, outcome: outcome, scope: scope)
+        if let stop = again["stop"]?.stringValue, ScreenValues.condition(stop, in: after) {
+          return .failed(
+            ScreenValues.render(
+              again["stopMessage"]?.stringValue ?? "The action stopped. Run it again to carry on.", in: after))
+        }
+        if ScreenValues.condition(again["until"]?.stringValue ?? "response.done", in: after) { break }
+        outcome = await perform(action, in: scope)
+        passes += 1
+      }
+    }
+    stashAnswer(of: action, outcome: outcome, scope: scope)
     switch outcome {
     case .done(_, let response):
       remember(performed ?? action, response: response, in: scope)
@@ -463,8 +610,26 @@ public final class ScreenModel {
         armed.remove(key)
         publishSession()
       }
-    case .needsReauth:
+    case .needsReauth, .gated, .file:
       break
+    }
+    // A follow-up that must succeed runs with the stash just made and the answer in scope.
+    if case .done(_, let response) = outcome, let follow = action.after?.action {
+      let seen = ScreenContext.with(ScreenContext.with(scope, "stash", .object(ScreenStash.values)), "response", response ?? .null)
+      let next = await run(follow, in: seen)
+      switch next {
+      case .failed, .needsReauth, .gated: return next
+      default: break
+      }
+    }
+    // Plugins that asked to be heard once the action is done (`afterZone`) run their hooks; they never fail the action.
+    if case .done(_, let response) = outcome, let after = action.afterZone, let zone = after["zone"]?.stringValue {
+      let seen = ScreenContext.with(ScreenContext.with(scope, "stash", .object(ScreenStash.values)), "response", response ?? .null)
+      let said = await runHooks(zone: zone, in: seen)
+      if let key = after["stash"]?.stringValue {
+        ScreenStash.set([key: said.isEmpty ? .null : .string(said.joined(separator: " "))])
+        context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
+      }
     }
     return outcome
   }
@@ -616,6 +781,42 @@ public final class ScreenModel {
     return entries
   }
 
+  /// The hook of each screen contributed to `zone` whose `requires` holds: its `load` read into `data`, then its action
+  /// run over it. What each says (its success message, or why it failed) is returned; a hook that has nothing to do, or
+  /// whose action's `when` does not hold once the data is read, says nothing.
+  private func runHooks(zone: String, in scope: JSONValue) async -> [String] {
+    var said: [String] = []
+    for contributed in ScreenCatalog.shared.zone(zone) where ScreenValues.condition(contributed.requires, in: scope) {
+      guard let hook = contributed.hook, ScreenValues.condition(hook["when"]?.stringValue, in: scope),
+        let action = hook["action"].flatMap(ActionSpec.init),
+        let reading = ScreenSpec(["id": .string("\(contributed.id).hook"), "title": .string(contributed.title), "load": hook["load"] ?? [:]])
+      else { continue }
+      let sub = ScreenModel(spec: reading, context: scope, api: api, reader: reader, writer: writer, account: account)
+      await sub.load()
+      guard ScreenValues.condition(action.when, in: sub.context) else { continue }
+      switch await sub.run(action, in: sub.context) {
+      case .done(let message, _): if let message, !message.isEmpty { said.append(message) }
+      case .failed(let message), .gated(_, let message), .needsReauth(let message): said.append(message)
+      case .file: break
+      }
+    }
+    return said
+  }
+
+  /// Keeps what an action's `stash` asks for from its outcome.
+  private func stashAnswer(of action: ActionSpec, outcome: ActionOutcome, scope: JSONValue) {
+    guard let stash = action.stash else { return }
+    var response: JSONValue?
+    switch outcome {
+    case .done(_, let answer): response = answer ?? .null
+    case .file: response = .null
+    default: response = nil
+    }
+    guard let response else { return }
+    ScreenStash.set(ScreenValues.resolveBody(stash, in: ScreenContext.with(scope, "response", response)))
+    context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
+  }
+
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     if let operation = action.account {
       guard let account else { return .failed("That is not available here.") }
@@ -632,12 +833,45 @@ public final class ScreenModel {
           // A blank name is not written over the one the account has.
           let name = ScreenValues.text(form["name"]).trimmingCharacters(in: .whitespaces)
           if !name.isEmpty { try await account.updateDisplayName(name) }
+        case "linkGoogle":
+          guard let authenticate else { return .failed("Connecting Google is not available here.") }
+          try await account.linkGoogle(authenticate)
+        case "unlinkProvider":
+          let provider = ScreenValues.text(form["providerId"])
+          guard !provider.isEmpty else { return .failed("Choose a sign-in method.") }
+          try await account.unlinkProvider(provider)
         default:
           return .failed("That is not available here.")
         }
         return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
       } catch {
         return .failed(account.message(error))
+      }
+    }
+    if let passkey = action.passkey { return await registerPasskey(passkey, action: action, in: scope) }
+    if let profile = action.businessProfile {
+      guard let writer, let doc = profile["doc"]?.stringValue else { return .failed("Saving is not available here.") }
+      do {
+        let edited = ScreenValues.resolveBody(profile["edited"] ?? [:], in: scope)
+        let current = ScreenValues.lookup(profile["current"]?.stringValue ?? "", in: scope)
+        // One rule for the owner's save, shared with the site's profile: `businessProfileOwnerWrite` (AglynContracts).
+        let next = businessProfileOwnerWrite(
+          current.flatMap { FirestoreLoads.plain($0) as? [String: Any] }, FirestoreLoads.plain(edited) as? [String: Any] ?? [:])
+        let profileFields = ContractValues.shared.businessProfileFieldOrder
+        var fields: [String: JSONValue] = [:]
+        for field in profileFields { fields[field] = next[field].flatMap(jsonValue) ?? .null }
+        // `sources` replaces the stored map: a field with no source loses its key.
+        let written = next["sources"] as? [String: Any] ?? [:]
+        var sources: [String: JSONValue] = [:]
+        for field in profileFields { sources[field] = (written[field] as? String).map(JSONValue.string) ?? ["$delete": true] }
+        fields["sources"] = .object(sources)
+        fields["updatedAt"] = ["$serverTimestamp": true]
+        fields["updatedBy"] = scope["user"]?["uid"] ?? .null
+        try await writer.merge(
+          FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(.object(fields)) as? [String: Any] ?? [:])
+        return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
+      } catch {
+        return .failed(error.localizedDescription)
       }
     }
     if let write = action.write {
@@ -648,8 +882,8 @@ public final class ScreenModel {
       do {
         try await runWrite(write, scope, writer)
         // `siteWide`: the write changes every page of the site, so its cached pages are dropped as the console does.
-        if write["siteWide"] == .bool(true), let api {
-          await publishSiteWide(api: api, writer: writer, hostID: ScreenValues.render("{site.id}", in: scope))
+        if action.siteWide, let api, let reader, let hostID = scope["site"]?["id"]?.stringValue, !hostID.isEmpty {
+          await publishSiteWideChange(api: api, reader: reader, hostID: hostID)
         }
         return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
       } catch {
@@ -668,11 +902,40 @@ public final class ScreenModel {
     if let filters = Self.filtersParameter(action.filters, in: scope) { path += (path.contains("?") ? "&" : "?") + filters }
     let keyed = withAttempt(for: action, path: path, in: scope)
     let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: keyed) }
+    if let at = action.downloadAt, let name = action.download {
+      // The route answers with JSON; the file is the value at `at`, named from the answer.
+      do {
+        let answer = try await api.request(path, method: action.method, body: action.method == .get ? nil : (body ?? [:])) ?? .null
+        guard let value = ScreenValues.lookup(at, in: answer), value != .null else { return .failed("The route sent no file.") }
+        let named = ScreenValues.render(name, in: ScreenContext.with(scope, "response", answer))
+        let file = DownloadedFile(name: named, contentType: "application/json", data: try value.encoded(pretty: true))
+        return .file(file, name: named, message: action.success.map { ScreenValues.render($0, in: scope) })
+      } catch let error as ConsoleAPIError {
+        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        return .failed(error.message)
+      } catch {
+        return .failed(error.localizedDescription)
+      }
+    }
+    if let fallback = action.download {
+      do {
+        let file = try await api.download(path, method: action.method, body: action.method == .get ? nil : (body ?? [:]))
+        let name = file.name ?? ScreenValues.render(fallback, in: scope)
+        return .file(file, name: name, message: action.success.map { ScreenValues.render($0, in: scope) })
+      } catch let error as ConsoleAPIError {
+        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        return .failed(error.message)
+      } catch {
+        return .failed(error.localizedDescription)
+      }
+    }
     do {
       let sentBody = body ?? (action.method == .get ? nil : [:])
       let headers = action.headers.mapValues { ScreenValues.render($0, in: keyed) }
       let response: JSONValue?
-      if let loop = action.loop {
+      if let chunk = action.chunk {
+        response = try await Self.sendInParts(chunk, path: path, method: action.method, body: body ?? [:], api: api)
+      } else if let loop = action.loop {
         response = try await Self.paged(loop) { cursor in
           var page = sentBody ?? [:]
           if let cursor, case .object(var record) = page {
@@ -689,6 +952,11 @@ public final class ScreenModel {
     } catch let error as ConsoleAPIError {
       if Self.wantsReauth(error) { return .needsReauth(error.message) }
       if error.status == action.elseStatus, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
+      if let gate = action.gate, let screen = gate["screen"]?.stringValue,
+        ScreenValues.condition(gate["when"]?.stringValue, in: ["error": error.body ?? .null])
+      {
+        return .gated(screen: screen, message: error.message)
+      }
       return .failed(Self.refusal(for: action, error: error, in: scope))
     } catch {
       return .failed(error.localizedDescription)
@@ -765,25 +1033,77 @@ public final class ScreenModel {
     return ScreenContext.with(ScreenContext.with(scope, "attempt", .string(key)), "press", .string(UUID().uuidString.lowercased()))
   }
 
+  /// A file sent in parts, as the console's upload client sends it: each part's text under `field` with its
+  /// `part` and `parts`, the job the first answer names sent back with the rest. The last answer must say the
+  /// file is whole (`until`).
+  static func sendInParts(_ chunk: JSONValue, path: String, method: HTTPMethod, body: JSONValue, api: ConsoleAPIClient) async throws
+    -> JSONValue?
+  {
+    guard case .object(let record) = body, let field = chunk["field"]?.stringValue else {
+      return try await api.request(path, method: method, body: body)
+    }
+    let parts = ScreenValues.splitUpload(record[field]?.stringValue ?? "", budget: Int(chunk["bytes"]?.numberValue ?? 3_000_000))
+    let firstOnly = chunk["firstOnly"].arrayOfStrings
+    var jobId: String?
+    var last: JSONValue?
+    for (at, content) in parts.enumerated() {
+      var one = record
+      one[field] = .string(content)
+      if parts.count > 1 {
+        one["part"] = .number(Double(at))
+        one["parts"] = .number(Double(parts.count))
+      }
+      if at > 0 { for key in firstOnly { one[key] = nil } }
+      if let jobId, let key = chunk["idKey"]?.stringValue { one[key] = .string(jobId) }
+      last = try await api.request(path, method: method, body: .object(one))
+      if let from = chunk["idFrom"]?.stringValue, let id = last.flatMap({ ScreenValues.lookup(from, in: $0) })?.stringValue {
+        jobId = id
+      }
+    }
+    if let until = chunk["until"]?.stringValue, !ScreenValues.truthy(last.flatMap { ScreenValues.lookup(until, in: $0) }) {
+      throw ConsoleAPIError(status: 500, message: "The file did not finish uploading. Try again.")
+    }
+    return last
+  }
+
+  /// Sets up a passkey as the console's `registerPasskey` does: the options route answers a challenge, the
+  /// platform makes the credential, the verify route stores it. The routes read the ceremony's `Origin`
+  /// (they derive the relying party from it), so the options call sends the relying party's own origin and
+  /// the verify call the origin the platform signed into the credential.
+  private func registerPasskey(_ passkey: JSONValue, action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
+    guard let api, let createPasskey else { return .failed("Passkeys are not available on this device.") }
+    guard let optionsPath = passkey["options"]?.stringValue, let verifyPath = passkey["verify"]?.stringValue,
+      let origin = passkey["origin"]?.stringValue.map({ ScreenValues.render($0, in: scope) }), !origin.isEmpty
+    else { return .failed("Passkeys are not set up in this build.") }
+    do {
+      let started = try await api.request(
+        ScreenValues.renderURL(optionsPath, in: scope), method: .post, body: [:], headers: ["Origin": origin])
+      guard let challengeId = started?["challengeId"]?.stringValue, let options = started?["options"] else {
+        return .failed(ScreenPasskeys.message(for: ConsoleAPIError(status: 500, message: ""), in: passkey, scope: scope))
+      }
+      let credential = try await createPasskey(options)
+      var body: [String: JSONValue] = ["challengeId": .string(challengeId), "response": credential]
+      let label = ScreenValues.text(ScreenValues.resolveBody(action.body ?? [:], in: scope)["label"]).trimmingCharacters(in: .whitespaces)
+      if !label.isEmpty { body["label"] = .string(label) }
+      let verified = try await api.request(
+        ScreenValues.renderURL(verifyPath, in: scope), method: .post, body: .object(body),
+        headers: ["Origin": ScreenPasskeys.clientDataOrigin(of: credential) ?? origin])
+      let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", verified ?? .null)) }
+      return .done(message: message, response: verified)
+    } catch is PasskeyCancelled {
+      // Closing the prompt is the person's answer, not a failure worth alarming them with.
+      return .done(message: nil, response: nil)
+    } catch let error as ConsoleAPIError {
+      if Self.wantsReauth(error) { return .needsReauth(error.message) }
+      return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
+    } catch {
+      return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
+    }
+  }
+
   /// A route's "sign in again first" answer, in any of the shapes the routes use.
   static func wantsReauth(_ error: ConsoleAPIError) -> Bool {
     let words = [error.body?["error"], error.body?["code"], error.body?["reason"]].compactMap { $0?.stringValue }
     return words.contains { ["reauth-required", "recent-login-required", "requires-recent-login"].contains($0) }
   }
-}
-
-/// The console's `writeSiteWideChange` after a write: a `publishOutbox` entry so the drain re-renders the site if
-/// this run cannot, a revalidate request to do it now, and the entry retired when that worked. Like the console, a
-/// refused entry is not an error: the revalidate still runs.
-func publishSiteWide(api: ConsoleAPIClient, writer: FirestoreWriter, hostID: String) async {
-  let path = ["publishOutbox", newResourceID()]
-  var staged = false
-  do {
-    try await writer.merge(
-      path, ["hostId": hostID, "paths": ["/"], "createdAt": FirestoreSentinel.serverTimestamp, "attempts": 0, "entireHost": true])
-    staged = true
-  } catch {}
-  let answer = try? await api.request(
-    "/api/screens/revalidate", method: .post, body: ["hostId": .string(hostID), "entireHost": .bool(true)])
-  if staged, answer?["reason"]?.stringValue == "ok" { try? await writer.delete(path) }
 }

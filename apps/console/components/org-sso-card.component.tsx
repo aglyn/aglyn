@@ -17,6 +17,7 @@
 'use client'
 
 import { canManageOrg, checkEntitlement } from '@aglyn/aglyn'
+import { protectsIfDesignated, ssoEnforcementLoses } from '@aglyn/aglyn/app-utils/sso-enforcement'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -135,27 +136,6 @@ interface LockoutAssessment {
    * check is the shape where a swallowed error renders as a measured zero.
    */
   ownerLookupFailed?: boolean
-}
-
-/**
- * Would designating this account actually keep a way in?
- *
- * Mirrors `assessSsoLockoutRisk` deliberately, and over the same fact it
- * uses: an account protects the org only when it holds a provider that is
- * NOT the org's IdP. Designating an account whose sole credential is the SAML
- * link is the most natural way to get this wrong, because it looks exactly
- * like protection and fails in precisely the situation it exists for.
- *
- * The plan is read BEFORE designation, so both halves count: `unlinked` is
- * what enforcement would strip (all non-IdP by construction), and `kept` is
- * what it would leave — which for an already-designated or would-orphan
- * account is the whole set.
- */
-function protectsIfDesignated(
-  account: EnforcementAccount,
-  providerId: string | undefined,
-): boolean {
-  return [...account.unlinked, ...account.kept].some((id) => id !== providerId)
 }
 
 /** A read-only value the customer has to copy into their IdP. */
@@ -1131,11 +1111,7 @@ export function OrgSsoCard() {
                             </TableCell>
                             <TableCell>{account.email ?? account.uid}</TableCell>
                             <TableCell>
-                              {account.skipped === 'break-glass'
-                                ? 'Nothing — designated break-glass'
-                                : account.skipped
-                                  ? 'Nothing — it would be left with no way in'
-                                  : account.unlinked.join(', ') || '—'}
+                              {ssoEnforcementLoses(account)}
                             </TableCell>
                             <TableCell>{account.kept.join(', ') || '—'}</TableCell>
                           </TableRow>

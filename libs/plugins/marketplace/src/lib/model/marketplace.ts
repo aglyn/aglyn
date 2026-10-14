@@ -280,8 +280,13 @@ export {
   type InstallPin,
   type InstallTarget,
   LISTING_CATEGORIES,
+  type OrgInstallSite,
+  type OrgInstallSummary,
   type PluginInstallState,
+  resolveOrgInstallSummary,
   resolvePluginInstallState,
+  resolveUninstallTargets,
+  type UninstallTarget,
 } from './marketplace-catalog'
 import { ARTIFACT_TYPE_LABELS, INSTALL_TARGETS, type InstallPin, type InstallTarget, LISTING_CATEGORIES } from './marketplace-catalog'
 
@@ -303,130 +308,6 @@ export function installTargetsFor(listing: {
   return INSTALL_TARGETS[listingArtifactType(listing)] ?? ['host']
 }
 
-
-/** One site's slice of an org-scope install picture (AGL-997). */
-export interface OrgInstallSite {
-  hostId: string
-  label: string
-  /** The version that actually runs here, from the effective pin. */
-  version: string | null
-  /** Where that pin lives — a host pin shadows the org one, as the loader does. */
-  pinnedBy: InstallTarget
-  /** This site has its OWN pin on top of an org pin. */
-  shadowed: boolean
-}
-
-/**
- * The whole org's install picture for one listing (AGL-997).
- *
- * At org scope, "installed" is a SET, not a boolean. The detail page used to
- * resolve state against the single acting host, so a plugin installed on one
- * of five sites reported "Installed on this site" — describing one arbitrary
- * site and staying silent about the other four — and offered an Uninstall
- * that was all-or-nothing.
- *
- * `orgWide` and per-site pins are not exclusive: an org pin covers every
- * site including ones created later, and a host pin on top of it shadows it
- * for that one site. Both facts have to survive into the UI, which is why
- * this returns the sites AND the pins rather than a single scope.
- */
-export interface OrgInstallSummary {
-  /** An org pin exists: every site is covered, including future ones. */
-  orgWide: boolean
-  /** Version of the org pin, when there is one. */
-  orgVersion: string | null
-  /** Every site the listing effectively runs on. */
-  sites: OrgInstallSite[]
-  /** Sites carrying their own removable host pin. */
-  hostPinnedIds: string[]
-  /** Sites with no pin of their own and no org pin covering them. */
-  availableHostIds: string[]
-  installedAnywhere: boolean
-}
-
-export function resolveOrgInstallSummary(
-  hosts: ReadonlyArray<{ id: string; label: string }>,
-  hostPins: Readonly<Record<string, InstallPin | null | undefined>>,
-  orgPin: InstallPin | null | undefined,
-): OrgInstallSummary {
-  const orgWide = Boolean(orgPin)
-  const orgVersion = orgPin?.version != null ? String(orgPin.version) : null
-  const sites: OrgInstallSite[] = []
-  const hostPinnedIds: string[] = []
-  const availableHostIds: string[] = []
-  for (const host of hosts) {
-    const hostPin = hostPins[host.id]
-    if (hostPin) hostPinnedIds.push(host.id)
-    if (!hostPin && !orgPin) {
-      availableHostIds.push(host.id)
-      continue
-    }
-    sites.push({
-      hostId: host.id,
-      label: host.label,
-      version:
-        hostPin?.version != null ? String(hostPin.version) : orgVersion,
-      pinnedBy: hostPin ? 'host' : 'org',
-      shadowed: Boolean(hostPin && orgPin),
-    })
-  }
-  return {
-    orgWide,
-    orgVersion,
-    sites,
-    hostPinnedIds,
-    availableHostIds,
-    installedAnywhere: orgWide || hostPinnedIds.length > 0,
-  }
-}
-
-/** One site an uninstall would touch, and whether it really loses the plugin. */
-export interface UninstallTarget {
-  hostId: string
-  label: string
-  /**
-   * The plugin keeps running here. Removing a HOST pin while an org pin still
-   * covers the site, or the ORG pin while the site holds its own host pin,
-   * changes which pointer is in use and nothing a visitor can see.
-   */
-  stillCovered: boolean
-}
-
-/**
- * Which sites an uninstall actually affects (AGL-1027).
- *
- * The shadowing case is the whole reason this is a function rather than a
- * filter at the call site. A pin is not a boolean per site: an org pin covers
- * everything, a host pin names one site, and where both exist the host pin
- * wins. So "remove" means three different things depending on which pointer is
- * being dropped and what is left underneath — and the one thing the dialog must
- * never do is tell someone a plugin will stop working when it will not.
- *
- * Returns every site the operation touches, including the ones that keep the
- * plugin, so the dialog can say so explicitly instead of omitting them and
- * leaving the count unexplained.
- */
-export function resolveUninstallTargets(
-  orgInstall: OrgInstallSummary,
-  scope: 'org' | 'host',
-  hostId?: string,
-): UninstallTarget[] {
-  if (scope === 'host') {
-    const site = orgInstall.sites.find((entry) => entry.hostId === hostId)
-    if (!site) return []
-    // Its own pin goes; the org pin, if there is one, still covers it.
-    return [
-      { hostId: site.hostId, label: site.label, stillCovered: orgInstall.orgWide },
-    ]
-  }
-  // Dropping the org pin: every site loses it EXCEPT those holding a host pin
-  // of their own, which were already shadowing the org pin anyway.
-  return orgInstall.sites.map((site) => ({
-    hostId: site.hostId,
-    label: site.label,
-    stillCovered: site.pinnedBy === 'host',
-  }))
-}
 
 /** How the admin chose to target an install from the org marketplace. */
 export type InstallTargeting = 'all-sites' | 'selected-sites'

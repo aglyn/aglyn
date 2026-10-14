@@ -60,8 +60,12 @@ internal object ListColumns {
    * The rows by a `page` column, in the order asked: numbers as numbers, dates as moments, anything else as text; a row without the
    * value goes last whichever way it is read, and equal rows keep the order they came in.
    */
-  fun sorted(rows: List<JsonElement>, column: ListColumn, descending: Boolean, context: JsonElement): List<JsonElement> {
-    val path = column.page ?: return rows
+  fun sorted(rows: List<JsonElement>, column: ListColumn, descending: Boolean, context: JsonElement): List<JsonElement> =
+    order(rows, column, descending, context).map { rows[it] }
+
+  /** The positions of [rows] in the order [sorted] puts them in. */
+  fun order(rows: List<JsonElement>, column: ListColumn, descending: Boolean, context: JsonElement): List<Int> {
+    val path = column.page ?: return rows.indices.toList()
     fun missing(value: JsonElement?) = value == null || value is JsonNull || (value is JsonPrimitive && value.isString && value.content.isEmpty())
     val keyed = rows.mapIndexed { index, row -> Triple(index, row, ScreenValues.lookup(path, ScreenContext.withItem(context, row))) }
     fun compare(a: JsonElement?, b: JsonElement?): Int {
@@ -80,7 +84,7 @@ internal object ListColumns {
         !left && compare(a.third, b.third) != 0 -> compare(a.third, b.third)
         else -> a.first.compareTo(b.first)
       }
-    }.map { it.second }
+    }.map { it.first }
   }
 
   /** A row's visible columns as one line: `Label value`, joined, skipping what the row has nothing for. */

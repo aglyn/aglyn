@@ -703,6 +703,12 @@
         "SEO_MAX_KEYWORDS",
         "SEO_KEYWORD_LINES_MAX_CHARS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/time-zone-choices.ts": {
+      "values": [
+        "TIME_ZONE_CHOICES",
+        "TIME_ZONE_DEFAULT_LABEL"
+      ]
     }
   },
   "ints": [
@@ -12263,1340 +12269,6 @@
         ]
       ]
     },
-    "mediaNodeSrc": {
-      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
-      "args": [
-        [
-          {
-            "cdnPath": "/api/media/cdn/h1/m1",
-            "url": "https://example.com/a.png"
-          }
-        ],
-        [
-          {
-            "cdnPath": "/api/media/cdn/org:o1/m2"
-          }
-        ],
-        [
-          {
-            "cdnPath": "/api/media/cdn/org:o1:h1/m3",
-            "url": "https://example.com/b.png",
-            "private": false
-          }
-        ],
-        [
-          {
-            "cdnPath": "https://console.aglyn.com/api/media/cdn/h1/m4?w=320",
-            "url": "https://example.com/c.png"
-          }
-        ],
-        [
-          {
-            "cdnPath": "/api/media/cdn/bad scope/m",
-            "url": "https://example.com/d.png"
-          }
-        ],
-        [
-          {
-            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
-          }
-        ],
-        [
-          {
-            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
-            "private": false
-          }
-        ],
-        [
-          {
-            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media",
-            "private": true
-          }
-        ],
-        [
-          {
-            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
-          }
-        ],
-        [
-          {
-            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
-          }
-        ],
-        [
-          {
-            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
-          }
-        ],
-        [
-          {
-            "url": "https://example.com/photo.jpg"
-          }
-        ],
-        [
-          {}
-        ],
-        [
-          {
-            "cdnPath": null,
-            "url": null,
-            "private": null
-          }
-        ]
-      ]
-    },
-    "resolveMediaSrc": {
-      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
-      "args": [
-        [
-          "media:h1/m1"
-        ],
-        [
-          "media:h1/m1",
-          {
-            "hostId": "h9"
-          }
-        ],
-        [
-          "media:org:o1/m2",
-          {
-            "hostId": "h9"
-          }
-        ],
-        [
-          "media:org:o1:h1/m2",
-          {
-            "hostId": "h9"
-          }
-        ],
-        [
-          "media:org:o1/m2",
-          {
-            "hostId": "bad host"
-          }
-        ],
-        [
-          "media:h1/m1@abc123"
-        ],
-        [
-          "media:h1/m1@bad hash"
-        ],
-        [
-          "media:bad scope/m1"
-        ],
-        [
-          "media:h1/"
-        ],
-        [
-          "media:"
-        ],
-        [
-          "/api/media/cdn/h1/m1"
-        ],
-        [
-          "https://example.com/photo.jpg",
-          {
-            "hostId": "h9"
-          }
-        ],
-        [
-          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
-        ],
-        [
-          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
-          {
-            "hostId": "h2"
-          }
-        ],
-        [
-          ""
-        ],
-        [
-          null
-        ]
-      ]
-    },
-    "inheritedMediaAlt": {
-      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
-      "args": [
-        [
-          {}
-        ],
-        [
-          {
-            "assetAlt": "A red door"
-          }
-        ],
-        [
-          {
-            "placementAlt": "My own words",
-            "assetAlt": "A red door"
-          }
-        ],
-        [
-          {
-            "placementAlt": "   ",
-            "assetAlt": "A red door"
-          }
-        ],
-        [
-          {
-            "placementAlt": "",
-            "assetAlt": "  spaced out  "
-          }
-        ],
-        [
-          {
-            "decorative": true,
-            "assetAlt": "A red door"
-          }
-        ],
-        [
-          {
-            "assetAlt": "   "
-          }
-        ],
-        [
-          {
-            "assetAlt": 5
-          }
-        ],
-        [
-          {
-            "assetAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          }
-        ]
-      ]
-    },
-    "hostQualifiedCdnPath": {
-      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
-      "args": [
-        [
-          "/api/media/cdn/org:o1/m1",
-          [
-            "host:h1"
-          ],
-          "h1"
-        ],
-        [
-          "/api/media/cdn/org:o1/m1",
-          [
-            "org"
-          ],
-          "h1"
-        ],
-        [
-          "/api/media/cdn/org:o1/m1",
-          [
-            "org",
-            "host:h1"
-          ],
-          "h1"
-        ],
-        [
-          "/api/media/cdn/org:o1:h2/m1",
-          [
-            "host:h1"
-          ],
-          "h1"
-        ],
-        [
-          "/api/media/cdn/h1/m1",
-          [
-            "host:h1"
-          ],
-          "h1"
-        ],
-        [
-          "/api/media/cdn/org:o1/m1/abc123",
-          [
-            "host:h1",
-            "host:h2"
-          ],
-          "h2"
-        ],
-        [
-          "https://console.aglyn.com/api/media/cdn/org:o1/m1",
-          [
-            "host:h1"
-          ],
-          "h1"
-        ],
-        [
-          "/api/media/cdn/org:o1/m1",
-          [
-            "host:h1"
-          ],
-          null
-        ],
-        [
-          "/api/media/cdn/org:o1/m1",
-          null,
-          "h1"
-        ],
-        [
-          "/somewhere/else.png",
-          [
-            "host:h1"
-          ],
-          "h1"
-        ],
-        [
-          "",
-          [
-            "host:h1"
-          ],
-          "h1"
-        ],
-        [
-          null,
-          [
-            "host:h1"
-          ],
-          "h1"
-        ]
-      ]
-    },
-    "videoMediaProps": {
-      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
-      "args": [
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 63400,
-              "width": 1920,
-              "height": 1080
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 400,
-              "width": 640,
-              "height": 360
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 90500,
-              "width": 640,
-              "height": 360,
-              "codec": "avc1.640028"
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": "61000",
-              "width": "640",
-              "height": "360"
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 86400000,
-              "width": 1280,
-              "height": 720
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 86400001,
-              "width": 1280,
-              "height": 720
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 0,
-              "width": 1280,
-              "height": 720
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": -5,
-              "width": 1280,
-              "height": 720
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 5000,
-              "width": 1280
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 5000,
-              "width": 0,
-              "height": 720
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 5000,
-              "width": 16385,
-              "height": 720
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {
-              "durationMs": 5000,
-              "width": "wide",
-              "height": 720
-            }
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": {}
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": null
-          }
-        ],
-        [
-          {
-            "componentId": "video",
-            "propName": "src",
-            "assetVideo": "video"
-          }
-        ]
-      ]
-    },
-    "mediaQueryRequest": {
-      "module": "libs/aglyn/src/lib/app-utils/media-filter.ts",
-      "args": [
-        [
-          {
-            "field": "sizeMb",
-            "op": ">=",
-            "value": "2.5"
-          }
-        ],
-        [
-          {
-            "field": "sizeMb",
-            "op": "<=",
-            "value": "10"
-          }
-        ],
-        [
-          {
-            "field": "sizeMb",
-            "op": ">",
-            "value": " 0.001 "
-          }
-        ],
-        [
-          {
-            "field": "sizeMb",
-            "op": "<",
-            "value": "1e2"
-          }
-        ],
-        [
-          {
-            "field": "sizeMb",
-            "op": ">=",
-            "value": ""
-          }
-        ],
-        [
-          {
-            "field": "sizeMb",
-            "op": ">=",
-            "value": "  "
-          }
-        ],
-        [
-          {
-            "field": "sizeMb",
-            "op": ">=",
-            "value": "abc"
-          }
-        ],
-        [
-          {
-            "field": "type",
-            "op": "equals",
-            "value": "image"
-          }
-        ],
-        [
-          {
-            "field": "orientation",
-            "op": "equals",
-            "value": "landscape"
-          }
-        ]
-      ]
-    },
-    "resolveBusinessProfile": {
-      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
-      "args": [
-        [
-          {
-            "host": null
-          }
-        ],
-        [
-          {
-            "host": {}
-          }
-        ],
-        [
-          {
-            "host": {
-              "displayName": "Paws & Co",
-              "logoUrl": "https://cdn.example/logo.png",
-              "seo": {
-                "entity": {
-                  "name": "Paws and Company Grooming",
-                  "description": "Dog grooming with a calm, gentle hand.",
-                  "telephone": "(512) 555-0100",
-                  "email": "hello@paws.example",
-                  "openingHours": "Mo-Fr 09:00-17:00",
-                  "address": {
-                    "streetAddress": "1 Main St",
-                    "addressLocality": "Austin",
-                    "addressRegion": "TX"
-                  },
-                  "areaServed": [
-                    "Austin",
-                    "Round Rock"
-                  ],
-                  "businessType": "PetStore",
-                  "sameAs": [
-                    "https://facebook.com/paws",
-                    "http://nope.example",
-                    "https://facebook.com/paws"
-                  ]
-                }
-              },
-              "business": {
-                "supportEmail": "support@paws.example",
-                "address": "2 Side St\nAustin",
-                "socialLinks": [
-                  {
-                    "label": "Instagram",
-                    "url": "https://instagram.com/paws"
-                  },
-                  {
-                    "url": "http://insecure.example"
-                  },
-                  null
-                ]
-              }
-            }
-          }
-        ],
-        [
-          {
-            "host": {
-              "displayName": "Bare Site",
-              "business": {
-                "address": "9 Lane"
-              }
-            }
-          }
-        ],
-        [
-          {
-            "host": {
-              "displayName": "Paws & Co",
-              "logoUrl": "https://cdn.example/logo.png",
-              "seo": {
-                "entity": {
-                  "name": "Paws and Company Grooming",
-                  "description": "Dog grooming with a calm, gentle hand.",
-                  "telephone": "(512) 555-0100",
-                  "email": "hello@paws.example",
-                  "openingHours": "Mo-Fr 09:00-17:00",
-                  "address": {
-                    "streetAddress": "1 Main St",
-                    "addressLocality": "Austin",
-                    "addressRegion": "TX"
-                  },
-                  "areaServed": [
-                    "Austin",
-                    "Round Rock"
-                  ],
-                  "businessType": "PetStore",
-                  "sameAs": [
-                    "https://facebook.com/paws",
-                    "http://nope.example",
-                    "https://facebook.com/paws"
-                  ]
-                }
-              },
-              "business": {
-                "supportEmail": "support@paws.example",
-                "address": "2 Side St\nAustin",
-                "socialLinks": [
-                  {
-                    "label": "Instagram",
-                    "url": "https://instagram.com/paws"
-                  },
-                  {
-                    "url": "http://insecure.example"
-                  },
-                  null
-                ]
-              }
-            },
-            "site": {
-              "whatYouDo": "Mobile grooming",
-              "services": [
-                "Bath",
-                "Nail trim",
-                "bath"
-              ],
-              "audience": "Owners",
-              "tone": "friendly",
-              "toneNotes": "No exclamation marks",
-              "sources": {
-                "whatYouDo": "owner",
-                "services": "owner",
-                "audience": "ai",
-                "tone": "start"
-              }
-            }
-          }
-        ],
-        [
-          {
-            "host": {
-              "displayName": "Bare Site",
-              "business": {
-                "address": "9 Lane"
-              }
-            },
-            "site": {
-              "whatYouDo": "Mobile grooming",
-              "services": [
-                "Bath",
-                "Nail trim",
-                "bath"
-              ],
-              "audience": "Owners",
-              "tone": "friendly",
-              "toneNotes": "No exclamation marks",
-              "sources": {
-                "whatYouDo": "owner",
-                "services": "owner",
-                "audience": "ai",
-                "tone": "start"
-              }
-            },
-            "workspace": {
-              "whatYouDo": "Workspace line",
-              "services": [
-                "Default service"
-              ],
-              "audience": "Everyone",
-              "tone": "professional"
-            }
-          }
-        ],
-        [
-          {
-            "host": {
-              "displayName": "Bare Site",
-              "business": {
-                "address": "9 Lane"
-              }
-            },
-            "site": {
-              "whatYouDo": "A guess",
-              "services": [
-                "Full groom"
-              ],
-              "sources": {
-                "whatYouDo": "ai",
-                "services": "ai"
-              }
-            },
-            "workspace": {
-              "whatYouDo": "Workspace line",
-              "services": [
-                "Default service"
-              ],
-              "audience": "Everyone",
-              "tone": "professional"
-            }
-          }
-        ],
-        [
-          {
-            "host": {
-              "displayName": "Bare Site",
-              "business": {
-                "address": "9 Lane"
-              }
-            },
-            "workspace": {
-              "whatYouDo": "Workspace line",
-              "services": [
-                "Default service"
-              ],
-              "audience": "Everyone",
-              "tone": "professional"
-            }
-          }
-        ],
-        [
-          {
-            "host": {
-              "seo": {
-                "entity": {
-                  "areaServed": "A\nB\nA"
-                }
-              },
-              "logoUrl": "  ",
-              "displayName": " x "
-            }
-          }
-        ]
-      ]
-    },
-    "businessProfileSourceOf": {
-      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
-      "args": [
-        [
-          null,
-          "whatYouDo"
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          "whatYouDo"
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          "services"
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          "audience"
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          "tone"
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          "serviceArea"
-        ],
-        [
-          {
-            "whatYouDo": "x"
-          },
-          "whatYouDo"
-        ],
-        [
-          {
-            "whatYouDo": "x",
-            "sources": {
-              "whatYouDo": "junk"
-            }
-          },
-          "whatYouDo"
-        ],
-        [
-          {
-            "tone": "loud"
-          },
-          "tone"
-        ]
-      ]
-    },
-    "sanitizeBusinessProfileValues": {
-      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
-      "args": [
-        [
-          {}
-        ],
-        [
-          {
-            "whatYouDo": "  one   sentence  ",
-            "services": "a, b\nc, A",
-            "tone": "plain",
-            "toneNotes": "x"
-          }
-        ],
-        [
-          {
-            "services": [
-              "  Bath  ",
-              "",
-              "bath",
-              "B"
-            ],
-            "tone": "loud",
-            "audience": 42
-          }
-        ],
-        [
-          {
-            "whatYouDo": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "services": [
-              "s0",
-              "s1",
-              "s2",
-              "s3",
-              "s4",
-              "s5",
-              "s6",
-              "s7",
-              "s8",
-              "s9",
-              "s10",
-              "s11",
-              "s12",
-              "s13",
-              "s14",
-              "s15",
-              "s16",
-              "s17",
-              "s18",
-              "s19"
-            ],
-            "serviceArea": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
-          }
-        ]
-      ]
-    },
-    "businessProfileOwnerWrite": {
-      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
-      "args": [
-        [
-          null,
-          {
-            "whatYouDo": "Hi",
-            "services": "a\nb",
-            "tone": "plain"
-          }
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks"
-          }
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          {
-            "whatYouDo": "Changed",
-            "audience": "",
-            "tone": null
-          }
-        ],
-        [
-          {
-            "whatYouDo": "A guess",
-            "services": [
-              "Full groom"
-            ],
-            "sources": {
-              "whatYouDo": "ai",
-              "services": "ai"
-            }
-          },
-          {
-            "whatYouDo": "A guess",
-            "services": [
-              "Full groom",
-              "New"
-            ]
-          }
-        ],
-        [
-          {
-            "whatYouDo": "",
-            "sources": {
-              "whatYouDo": "owner"
-            }
-          },
-          {
-            "whatYouDo": ""
-          }
-        ],
-        [
-          {
-            "whatYouDo": "Mobile grooming",
-            "services": [
-              "Bath",
-              "Nail trim",
-              "bath"
-            ],
-            "audience": "Owners",
-            "tone": "friendly",
-            "toneNotes": "No exclamation marks",
-            "sources": {
-              "whatYouDo": "owner",
-              "services": "owner",
-              "audience": "ai",
-              "tone": "start"
-            }
-          },
-          {}
-        ]
-      ]
-    },
-    "normalizeAreaServed": {
-      "module": "libs/aglyn/src/lib/app-utils/local-business.ts",
-      "args": [
-        [
-          null
-        ],
-        [
-          "A\nB\r\na"
-        ],
-        [
-          [
-            "x",
-            " y ",
-            "x",
-            4
-          ]
-        ],
-        [
-          [
-            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
-          ]
-        ],
-        [
-          [
-            "c0",
-            "c1",
-            "c2",
-            "c3",
-            "c4",
-            "c5",
-            "c6",
-            "c7",
-            "c8",
-            "c9",
-            "c10",
-            "c11",
-            "c12",
-            "c13",
-            "c14",
-            "c15",
-            "c16",
-            "c17",
-            "c18",
-            "c19",
-            "c20",
-            "c21",
-            "c22",
-            "c23",
-            "c24",
-            "c25",
-            "c26",
-            "c27",
-            "c28",
-            "c29"
-          ]
-        ]
-      ]
-    },
-    "siteProfileUrls": {
-      "module": "libs/aglyn/src/lib/app-utils/content-authors.ts",
-      "args": [
-        [
-          null
-        ],
-        [
-          {
-            "displayName": "Paws & Co",
-            "logoUrl": "https://cdn.example/logo.png",
-            "seo": {
-              "entity": {
-                "name": "Paws and Company Grooming",
-                "description": "Dog grooming with a calm, gentle hand.",
-                "telephone": "(512) 555-0100",
-                "email": "hello@paws.example",
-                "openingHours": "Mo-Fr 09:00-17:00",
-                "address": {
-                  "streetAddress": "1 Main St",
-                  "addressLocality": "Austin",
-                  "addressRegion": "TX"
-                },
-                "areaServed": [
-                  "Austin",
-                  "Round Rock"
-                ],
-                "businessType": "PetStore",
-                "sameAs": [
-                  "https://facebook.com/paws",
-                  "http://nope.example",
-                  "https://facebook.com/paws"
-                ]
-              }
-            },
-            "business": {
-              "supportEmail": "support@paws.example",
-              "address": "2 Side St\nAustin",
-              "socialLinks": [
-                {
-                  "label": "Instagram",
-                  "url": "https://instagram.com/paws"
-                },
-                {
-                  "url": "http://insecure.example"
-                },
-                null
-              ]
-            }
-          }
-        ],
-        [
-          {
-            "business": {
-              "socialLinks": [
-                {
-                  "url": "https://a.example"
-                },
-                {
-                  "url": "https://a.example"
-                }
-              ]
-            }
-          }
-        ],
-        [
-          {
-            "seo": {
-              "entity": {
-                "sameAs": [
-                  "https://s0.example",
-                  "https://s1.example",
-                  "https://s2.example",
-                  "https://s3.example",
-                  "https://s4.example",
-                  "https://s5.example",
-                  "https://s6.example",
-                  "https://s7.example",
-                  "https://s8.example",
-                  "https://s9.example",
-                  "https://s10.example",
-                  "https://s11.example",
-                  "https://s12.example",
-                  "https://s13.example",
-                  "https://s14.example",
-                  "https://s15.example",
-                  "https://s16.example",
-                  "https://s17.example",
-                  "https://s18.example",
-                  "https://s19.example"
-                ]
-              }
-            }
-          }
-        ]
-      ]
-    },
-    "seoNormalizePath": {
-      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
-      "args": [
-        [
-          ""
-        ],
-        [
-          "/"
-        ],
-        [
-          "pricing"
-        ],
-        [
-          "/pricing/"
-        ],
-        [
-          "//a//"
-        ],
-        [
-          "  /about  "
-        ],
-        [
-          "/a/b/"
-        ]
-      ]
-    },
-    "readSeoKeywordLines": {
-      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
-      "args": [
-        [
-          ""
-        ],
-        [
-          null
-        ],
-        [
-          "/pricing: plans, pricing"
-        ],
-        [
-          "/pricing: plans\n/pricing: pricing, plans"
-        ],
-        [
-          "no colon here"
-        ],
-        [
-          ": noPath"
-        ],
-        [
-          "/: home, welcome\nabout: team, story, crew, staff, owners, founders"
-        ],
-        [
-          "/x: a, , A, b"
-        ],
-        [
-          "/x: ,  ,"
-        ],
-        [
-          "/a: one\n/b: two, three"
-        ]
-      ]
-    },
-    "seoKeywordSplit": {
-      "module": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
-      "args": [
-        [
-          ""
-        ],
-        [
-          "a, b\nc"
-        ],
-        [
-          "a, A, b, c, d, e, f, g"
-        ],
-        [
-          [
-            "x",
-            " y ",
-            "x"
-          ]
-        ],
-        [
-          null
-        ],
-        [
-          "  spaced   out ,word"
-        ]
-      ]
-    },
-    "seoAuditFindingCount": {
-      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
-      "args": [
-        [
-          {
-            "pages": [],
-            "site": []
-          }
-        ],
-        [
-          {
-            "pages": [
-              {
-                "findings": [
-                  {
-                    "code": "orphan"
-                  }
-                ]
-              },
-              {
-                "findings": []
-              },
-              {
-                "findings": [
-                  {
-                    "code": "orphan"
-                  },
-                  {
-                    "code": "title-missing"
-                  }
-                ]
-              }
-            ],
-            "site": [
-              {
-                "code": "search-discouraged"
-              }
-            ]
-          }
-        ]
-      ]
-    },
     "parseStructuredValue": {
       "module": "libs/plugins/logic/src/lib/model/structured-value.ts",
       "args": [
@@ -15229,6 +13901,2401 @@
         ]
       ]
     },
+    "businessProfileOwnerWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          null,
+          {
+            "whatYouDo": "Hi",
+            "services": "a\nb",
+            "tone": "plain"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {
+            "whatYouDo": "Changed",
+            "audience": "",
+            "tone": null
+          }
+        ],
+        [
+          {
+            "whatYouDo": "A guess",
+            "services": [
+              "Full groom"
+            ],
+            "sources": {
+              "whatYouDo": "ai",
+              "services": "ai"
+            }
+          },
+          {
+            "whatYouDo": "A guess",
+            "services": [
+              "Full groom",
+              "New"
+            ]
+          }
+        ],
+        [
+          {
+            "whatYouDo": "",
+            "sources": {
+              "whatYouDo": "owner"
+            }
+          },
+          {
+            "whatYouDo": ""
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {}
+        ],
+        [
+          null,
+          {
+            "whatYouDo": "  Grooming   for dogs ",
+            "services": [
+              "Full groom",
+              "full groom",
+              "Bath",
+              ""
+            ],
+            "tone": "friendly",
+            "serviceArea": "North Austin"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Grooming",
+            "sources": {
+              "whatYouDo": "start"
+            }
+          },
+          {
+            "whatYouDo": "Grooming"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Grooming",
+            "sources": {
+              "whatYouDo": "ai"
+            }
+          },
+          {
+            "whatYouDo": "Dog grooming"
+          }
+        ],
+        [
+          {
+            "audience": "Owners",
+            "sources": {
+              "audience": "ai"
+            }
+          },
+          {
+            "audience": ""
+          }
+        ],
+        [
+          {
+            "audience": "",
+            "sources": {
+              "audience": "owner"
+            }
+          },
+          {
+            "audience": ""
+          }
+        ],
+        [
+          {
+            "tone": "plain"
+          },
+          {
+            "tone": "loud"
+          }
+        ],
+        [
+          {
+            "serviceArea": "Austin"
+          },
+          {
+            "services": "a, b\nc"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Keep"
+          },
+          {
+            "toneNotes": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        ],
+        [
+          {
+            "services": [
+              "A",
+              "B"
+            ],
+            "sources": {
+              "services": "start"
+            }
+          },
+          {
+            "services": [
+              "A",
+              "B"
+            ]
+          }
+        ]
+      ]
+    },
+    "packageJsonDiff": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "args": [
+        [
+          {
+            "a": 1
+          },
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": 1,
+            "b": {
+              "c": 2
+            }
+          },
+          {
+            "a": 1,
+            "b": {
+              "c": 3
+            },
+            "d": 4
+          }
+        ],
+        [
+          {
+            "title": "Home",
+            "seo": {
+              "description": "Old",
+              "image": null
+            }
+          },
+          {
+            "title": "Home",
+            "seo": {
+              "description": "New",
+              "image": "/a.png"
+            }
+          }
+        ],
+        [
+          {
+            "list": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "list": [
+              1,
+              2,
+              4
+            ]
+          }
+        ],
+        [
+          {
+            "items": [
+              {
+                "x": 1
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "x": 1
+              },
+              {
+                "x": 2
+              }
+            ]
+          }
+        ],
+        [
+          "plain",
+          "other"
+        ],
+        [
+          null,
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": {
+              "b": {
+                "c": {
+                  "d": 1
+                }
+              }
+            }
+          },
+          {
+            "a": {
+              "b": {
+                "c": {
+                  "d": 2
+                }
+              }
+            }
+          }
+        ],
+        [
+          {
+            "a": 1,
+            "b": 2,
+            "c": 3
+          },
+          {
+            "a": 2,
+            "b": 3,
+            "c": 4
+          },
+          2
+        ],
+        [
+          {
+            "z": 1,
+            "a": 1
+          },
+          {
+            "z": 2,
+            "a": 2
+          }
+        ],
+        [
+          {},
+          {}
+        ],
+        [
+          {
+            "a": null
+          },
+          {}
+        ]
+      ]
+    },
+    "packageMergeKeys": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "args": [
+        [
+          {
+            "name": "Site",
+            "tagline": ""
+          },
+          {
+            "name": "File",
+            "tagline": "Hello",
+            "extra": 1
+          }
+        ],
+        [
+          {
+            "a": 1
+          },
+          {
+            "a": 1
+          }
+        ],
+        [
+          null,
+          {
+            "b": 2,
+            "a": 1
+          }
+        ],
+        [
+          {
+            "x": [
+              1,
+              2
+            ]
+          },
+          {
+            "x": [
+              1,
+              2,
+              3
+            ]
+          }
+        ],
+        [
+          "notAnObject",
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": 1
+          },
+          "notAnObject"
+        ],
+        [
+          {
+            "color": "#fff",
+            "font": null
+          },
+          {
+            "color": "#000",
+            "font": "Inter",
+            "zeta": 0,
+            "alpha": false
+          }
+        ]
+      ]
+    },
+    "packageItemChanges": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "args": [
+        [
+          {
+            "title": "Old",
+            "seo": {
+              "x": 1
+            }
+          },
+          {
+            "title": "New",
+            "seo": {
+              "x": 1
+            }
+          }
+        ],
+        [
+          null,
+          {
+            "title": "Home",
+            "nodes": [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Leads",
+            "schema": [
+              "name"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "2",
+                "name": "B"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          },
+          {
+            "name": "Leads 2",
+            "schema": [
+              "name",
+              "email"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A2",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "3",
+                "name": "C"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Leads",
+            "schema": [
+              "name"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "2",
+                "name": "B"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          },
+          {
+            "name": "Leads 2",
+            "schema": [
+              "name",
+              "email"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A2",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "3",
+                "name": "C"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          },
+          2
+        ],
+        [
+          {
+            "records": [
+              {
+                "$id": "1",
+                "n": 1
+              }
+            ]
+          },
+          {
+            "records": [
+              {
+                "$id": "1",
+                "n": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "records": [
+              {
+                "$id": "1",
+                "n": 1
+              }
+            ]
+          },
+          {
+            "name": "No records"
+          }
+        ],
+        [
+          {
+            "a": [
+              {
+                "$id": "1"
+              }
+            ],
+            "b": [
+              {
+                "$id": "2"
+              }
+            ]
+          },
+          {
+            "a": [
+              {
+                "$id": "1"
+              }
+            ],
+            "b": [
+              {
+                "$id": "3"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "entries": [
+              {
+                "$id": "x",
+                "v": 1
+              }
+            ]
+          },
+          {
+            "entries": [
+              {
+                "$id": "x",
+                "v": 1
+              },
+              {
+                "$id": "y",
+                "v": 2
+              }
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "entries": [
+              {
+                "$id": "x",
+                "v": 1
+              }
+            ]
+          }
+        ],
+        [
+          "plain",
+          "other"
+        ]
+      ]
+    },
+    "posDisplayEmail": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "args": [
+        [
+          "Ana@Shop.co "
+        ],
+        [
+          "nope"
+        ],
+        [
+          "a@b.c"
+        ],
+        [
+          "x y@z.co"
+        ],
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "UPPER@CASE.COM"
+        ],
+        [
+          "a@b.co."
+        ]
+      ]
+    },
+    "posDisplayPhone": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "args": [
+        [
+          "(555) 010-0199"
+        ],
+        [
+          "+1 555 010 0199"
+        ],
+        [
+          "12345"
+        ],
+        [
+          "abc"
+        ],
+        [
+          "+44 20 7946 0958"
+        ],
+        [
+          "1234567890123456"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "posTipProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "args": [
+        [
+          0,
+          1000
+        ],
+        [
+          250,
+          1000
+        ],
+        [
+          1000,
+          1000
+        ],
+        [
+          1001,
+          1000
+        ],
+        [
+          -1,
+          1000
+        ],
+        [
+          2.5,
+          1000
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "aiProductsImportJob": {
+      "module": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
+      "args": [
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "updated",
+              "recordId": "p9"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p2"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "skipped",
+              "recordId": "p3"
+            },
+            {
+              "outcome": "created"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p3"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "has space"
+            },
+            {
+              "outcome": "created",
+              "recordId": "ok_2"
+            },
+            {
+              "outcome": "created",
+              "recordId": "ok_2"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "p0"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p2"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p3"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p4"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p5"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p6"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p7"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p8"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p9"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p10"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p11"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p12"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p13"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p14"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p15"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p16"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p17"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p18"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p19"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p20"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p21"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p22"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p23"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p24"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p25"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p26"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p27"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p28"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p29"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p30"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p31"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p32"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p33"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p34"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p35"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p36"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p37"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p38"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p39"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p40"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p41"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p42"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p43"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p44"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p45"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p46"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p47"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p48"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p49"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p50"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p51"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p52"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p53"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p54"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p55"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p56"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p57"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p58"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p59"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "updated",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "failed",
+              "recordId": "p2"
+            }
+          ]
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "ssoEnforcementAccounts": {
+      "module": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
+      "args": [
+        [
+          [],
+          "saml.acme",
+          []
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          [
+            {
+              "uid": "u1",
+              "email": "a@acme.com",
+              "unlinked": [
+                "password"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            }
+          ],
+          "saml.acme",
+          []
+        ],
+        [
+          [
+            {
+              "uid": "u1",
+              "email": "a@acme.com",
+              "unlinked": [
+                "password"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            },
+            {
+              "uid": "u2",
+              "email": null,
+              "unlinked": [],
+              "kept": [
+                "saml.acme"
+              ],
+              "skipped": "no-other-way-in"
+            },
+            {
+              "uid": "u3",
+              "email": "c@acme.com",
+              "unlinked": [],
+              "kept": [
+                "password"
+              ],
+              "skipped": "break-glass"
+            }
+          ],
+          "saml.acme",
+          [
+            "u3"
+          ]
+        ],
+        [
+          [
+            {
+              "uid": "u4",
+              "email": "d@acme.com",
+              "unlinked": [
+                "password",
+                "google.com"
+              ],
+              "kept": []
+            },
+            {
+              "uid": "u5",
+              "email": "e@acme.com",
+              "unlinked": [
+                "saml.acme"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            }
+          ],
+          "saml.acme",
+          [
+            "u4",
+            "gone"
+          ]
+        ],
+        [
+          [
+            {
+              "uid": "u6",
+              "email": "f@acme.com",
+              "unlinked": [],
+              "kept": []
+            }
+          ],
+          "other",
+          null
+        ],
+        [
+          [
+            {
+              "uid": "u7",
+              "email": "g@acme.com",
+              "unlinked": [
+                "google.com"
+              ],
+              "kept": [
+                "google.com",
+                "saml.acme"
+              ]
+            }
+          ],
+          null,
+          [
+            "u7"
+          ]
+        ]
+      ]
+    },
+    "mediaNodeSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          {
+            "cdnPath": "/api/media/cdn/h1/m1",
+            "url": "https://example.com/a.png"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/org:o1/m2"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/org:o1:h1/m3",
+            "url": "https://example.com/b.png",
+            "private": false
+          }
+        ],
+        [
+          {
+            "cdnPath": "https://console.aglyn.com/api/media/cdn/h1/m4?w=320",
+            "url": "https://example.com/c.png"
+          }
+        ],
+        [
+          {
+            "cdnPath": "/api/media/cdn/bad scope/m",
+            "url": "https://example.com/d.png"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+            "private": false
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm7?alt=media",
+            "private": true
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm8__poster?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Ffiles%2Fm9?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2F%E0%A4%A?alt=media"
+          }
+        ],
+        [
+          {
+            "url": "https://example.com/photo.jpg"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "cdnPath": null,
+            "url": null,
+            "private": null
+          }
+        ]
+      ]
+    },
+    "resolveMediaSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          "media:h1/m1"
+        ],
+        [
+          "media:h1/m1",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1:h1/m2",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "bad host"
+          }
+        ],
+        [
+          "media:h1/m1@abc123"
+        ],
+        [
+          "media:h1/m1@bad hash"
+        ],
+        [
+          "media:bad scope/m1"
+        ],
+        [
+          "media:h1/"
+        ],
+        [
+          "media:"
+        ],
+        [
+          "/api/media/cdn/h1/m1"
+        ],
+        [
+          "https://example.com/photo.jpg",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media&token=abc"
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/orgs%2Fo1%2Fmedia%2Fm6?alt=media",
+          {
+            "hostId": "h2"
+          }
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "inheritedMediaAlt": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "My own words",
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "   ",
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "placementAlt": "",
+            "assetAlt": "  spaced out  "
+          }
+        ],
+        [
+          {
+            "decorative": true,
+            "assetAlt": "A red door"
+          }
+        ],
+        [
+          {
+            "assetAlt": "   "
+          }
+        ],
+        [
+          {
+            "assetAlt": 5
+          }
+        ],
+        [
+          {
+            "assetAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      ]
+    },
+    "hostQualifiedCdnPath": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "org"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "org",
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1:h2/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/h1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1/abc123",
+          [
+            "host:h1",
+            "host:h2"
+          ],
+          "h2"
+        ],
+        [
+          "https://console.aglyn.com/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          [
+            "host:h1"
+          ],
+          null
+        ],
+        [
+          "/api/media/cdn/org:o1/m1",
+          null,
+          "h1"
+        ],
+        [
+          "/somewhere/else.png",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          "",
+          [
+            "host:h1"
+          ],
+          "h1"
+        ],
+        [
+          null,
+          [
+            "host:h1"
+          ],
+          "h1"
+        ]
+      ]
+    },
+    "videoMediaProps": {
+      "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "args": [
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 63400,
+              "width": 1920,
+              "height": 1080
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 400,
+              "width": 640,
+              "height": 360
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 90500,
+              "width": 640,
+              "height": 360,
+              "codec": "avc1.640028"
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": "61000",
+              "width": "640",
+              "height": "360"
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 86400000,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 86400001,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 0,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": -5,
+              "width": 1280,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 1280
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 0,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": 16385,
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {
+              "durationMs": 5000,
+              "width": "wide",
+              "height": 720
+            }
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": {}
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": null
+          }
+        ],
+        [
+          {
+            "componentId": "video",
+            "propName": "src",
+            "assetVideo": "video"
+          }
+        ]
+      ]
+    },
+    "mediaQueryRequest": {
+      "module": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "args": [
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "2.5"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": "<=",
+            "value": "10"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">",
+            "value": " 0.001 "
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": "<",
+            "value": "1e2"
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": ""
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "  "
+          }
+        ],
+        [
+          {
+            "field": "sizeMb",
+            "op": ">=",
+            "value": "abc"
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "image"
+          }
+        ],
+        [
+          {
+            "field": "orientation",
+            "op": "equals",
+            "value": "landscape"
+          }
+        ]
+      ]
+    },
+    "resolveBusinessProfile": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          {
+            "host": null
+          }
+        ],
+        [
+          {
+            "host": {}
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Paws & Co",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": "Paws and Company Grooming",
+                  "description": "Dog grooming with a calm, gentle hand.",
+                  "telephone": "(512) 555-0100",
+                  "email": "hello@paws.example",
+                  "openingHours": "Mo-Fr 09:00-17:00",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX"
+                  },
+                  "areaServed": [
+                    "Austin",
+                    "Round Rock"
+                  ],
+                  "businessType": "PetStore",
+                  "sameAs": [
+                    "https://facebook.com/paws",
+                    "http://nope.example",
+                    "https://facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "support@paws.example",
+                "address": "2 Side St\nAustin",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "url": "http://insecure.example"
+                  },
+                  null
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Paws & Co",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": "Paws and Company Grooming",
+                  "description": "Dog grooming with a calm, gentle hand.",
+                  "telephone": "(512) 555-0100",
+                  "email": "hello@paws.example",
+                  "openingHours": "Mo-Fr 09:00-17:00",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX"
+                  },
+                  "areaServed": [
+                    "Austin",
+                    "Round Rock"
+                  ],
+                  "businessType": "PetStore",
+                  "sameAs": [
+                    "https://facebook.com/paws",
+                    "http://nope.example",
+                    "https://facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "support@paws.example",
+                "address": "2 Side St\nAustin",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "url": "http://insecure.example"
+                  },
+                  null
+                ]
+              }
+            },
+            "site": {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "site": {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "site": {
+              "whatYouDo": "A guess",
+              "services": [
+                "Full groom"
+              ],
+              "sources": {
+                "whatYouDo": "ai",
+                "services": "ai"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "seo": {
+                "entity": {
+                  "areaServed": "A\nB\nA"
+                }
+              },
+              "logoUrl": "  ",
+              "displayName": " x "
+            }
+          }
+        ]
+      ]
+    },
+    "businessProfileSourceOf": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          null,
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "services"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "audience"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "tone"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "serviceArea"
+        ],
+        [
+          {
+            "whatYouDo": "x"
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "x",
+            "sources": {
+              "whatYouDo": "junk"
+            }
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "tone": "loud"
+          },
+          "tone"
+        ]
+      ]
+    },
+    "sanitizeBusinessProfileValues": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "whatYouDo": "  one   sentence  ",
+            "services": "a, b\nc, A",
+            "tone": "plain",
+            "toneNotes": "x"
+          }
+        ],
+        [
+          {
+            "services": [
+              "  Bath  ",
+              "",
+              "bath",
+              "B"
+            ],
+            "tone": "loud",
+            "audience": 42
+          }
+        ],
+        [
+          {
+            "whatYouDo": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "services": [
+              "s0",
+              "s1",
+              "s2",
+              "s3",
+              "s4",
+              "s5",
+              "s6",
+              "s7",
+              "s8",
+              "s9",
+              "s10",
+              "s11",
+              "s12",
+              "s13",
+              "s14",
+              "s15",
+              "s16",
+              "s17",
+              "s18",
+              "s19"
+            ],
+            "serviceArea": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+          }
+        ]
+      ]
+    },
+    "normalizeAreaServed": {
+      "module": "libs/aglyn/src/lib/app-utils/local-business.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          "A\nB\r\na"
+        ],
+        [
+          [
+            "x",
+            " y ",
+            "x",
+            4
+          ]
+        ],
+        [
+          [
+            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+          ]
+        ],
+        [
+          [
+            "c0",
+            "c1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10",
+            "c11",
+            "c12",
+            "c13",
+            "c14",
+            "c15",
+            "c16",
+            "c17",
+            "c18",
+            "c19",
+            "c20",
+            "c21",
+            "c22",
+            "c23",
+            "c24",
+            "c25",
+            "c26",
+            "c27",
+            "c28",
+            "c29"
+          ]
+        ]
+      ]
+    },
+    "siteProfileUrls": {
+      "module": "libs/aglyn/src/lib/app-utils/content-authors.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "displayName": "Paws & Co",
+            "logoUrl": "https://cdn.example/logo.png",
+            "seo": {
+              "entity": {
+                "name": "Paws and Company Grooming",
+                "description": "Dog grooming with a calm, gentle hand.",
+                "telephone": "(512) 555-0100",
+                "email": "hello@paws.example",
+                "openingHours": "Mo-Fr 09:00-17:00",
+                "address": {
+                  "streetAddress": "1 Main St",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX"
+                },
+                "areaServed": [
+                  "Austin",
+                  "Round Rock"
+                ],
+                "businessType": "PetStore",
+                "sameAs": [
+                  "https://facebook.com/paws",
+                  "http://nope.example",
+                  "https://facebook.com/paws"
+                ]
+              }
+            },
+            "business": {
+              "supportEmail": "support@paws.example",
+              "address": "2 Side St\nAustin",
+              "socialLinks": [
+                {
+                  "label": "Instagram",
+                  "url": "https://instagram.com/paws"
+                },
+                {
+                  "url": "http://insecure.example"
+                },
+                null
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "business": {
+              "socialLinks": [
+                {
+                  "url": "https://a.example"
+                },
+                {
+                  "url": "https://a.example"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "sameAs": [
+                  "https://s0.example",
+                  "https://s1.example",
+                  "https://s2.example",
+                  "https://s3.example",
+                  "https://s4.example",
+                  "https://s5.example",
+                  "https://s6.example",
+                  "https://s7.example",
+                  "https://s8.example",
+                  "https://s9.example",
+                  "https://s10.example",
+                  "https://s11.example",
+                  "https://s12.example",
+                  "https://s13.example",
+                  "https://s14.example",
+                  "https://s15.example",
+                  "https://s16.example",
+                  "https://s17.example",
+                  "https://s18.example",
+                  "https://s19.example"
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "seoNormalizePath": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          "/"
+        ],
+        [
+          "pricing"
+        ],
+        [
+          "/pricing/"
+        ],
+        [
+          "//a//"
+        ],
+        [
+          "  /about  "
+        ],
+        [
+          "/a/b/"
+        ]
+      ]
+    },
+    "readSeoKeywordLines": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "/pricing: plans, pricing"
+        ],
+        [
+          "/pricing: plans\n/pricing: pricing, plans"
+        ],
+        [
+          "no colon here"
+        ],
+        [
+          ": noPath"
+        ],
+        [
+          "/: home, welcome\nabout: team, story, crew, staff, owners, founders"
+        ],
+        [
+          "/x: a, , A, b"
+        ],
+        [
+          "/x: ,  ,"
+        ],
+        [
+          "/a: one\n/b: two, three"
+        ]
+      ]
+    },
+    "seoKeywordSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          "a, b\nc"
+        ],
+        [
+          "a, A, b, c, d, e, f, g"
+        ],
+        [
+          [
+            "x",
+            " y ",
+            "x"
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          "  spaced   out ,word"
+        ]
+      ]
+    },
+    "seoAuditFindingCount": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          {
+            "pages": [],
+            "site": []
+          }
+        ],
+        [
+          {
+            "pages": [
+              {
+                "findings": [
+                  {
+                    "code": "orphan"
+                  }
+                ]
+              },
+              {
+                "findings": []
+              },
+              {
+                "findings": [
+                  {
+                    "code": "orphan"
+                  },
+                  {
+                    "code": "title-missing"
+                  }
+                ]
+              }
+            ],
+            "site": [
+              {
+                "code": "search-discouraged"
+              }
+            ]
+          }
+        ]
+      ]
+    },
     "weeklyHoursFromText": {
       "module": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
       "args": [
@@ -15598,91 +16665,2185 @@
         ]
       ]
     },
-    "posDisplayEmail": {
-      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+    "timeZoneChoices": {
+      "module": "libs/aglyn/src/lib/app-utils/time-zone-choices.ts",
+      "args": [
+        []
+      ]
+    },
+    "compareArtifactVersions": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "args": [
         [
-          "Ana@Shop.co "
+          "1.0.0",
+          "1.0.0"
         ],
         [
-          "nope"
+          "1.0.0",
+          "1.0.1"
         ],
         [
-          "a@b.c"
+          "1.10.0",
+          "1.9.0"
         ],
         [
-          "x y@z.co"
+          "10",
+          "9"
         ],
         [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          "1.0.0-beta",
+          "1.0.0"
+        ],
+        [
+          null,
+          "1"
+        ],
+        [
+          "1",
           null
         ],
         [
+          "",
+          "1"
+        ],
+        [
+          "1",
+          "1.0"
+        ],
+        [
+          "1.0",
+          "1"
+        ],
+        [
+          "1.2",
+          "1.10"
+        ],
+        [
+          "abc",
+          "abd"
+        ],
+        [
+          "2.0.0",
+          "2.0.0.1"
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    "updateStateLabel": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "state": "update-available",
+            "installedVersion": "1.0.0",
+            "availableVersion": "1.1.0"
+          }
+        ],
+        [
+          {
+            "state": "current",
+            "installedVersion": "2.3.0",
+            "availableVersion": "2.3.0"
+          }
+        ],
+        [
+          {
+            "state": "ahead",
+            "installedVersion": "3.0.0",
+            "availableVersion": "2.0.0"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": null,
+            "availableVersion": null,
+            "unknownReason": "no-provenance"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": "1.0.0",
+            "availableVersion": null,
+            "unknownReason": "nothing-published"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": "1.0.0-beta",
+            "availableVersion": "1.0.0",
+            "unknownReason": "incomparable"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": null,
+            "availableVersion": null
+          }
+        ]
+      ]
+    },
+    "pluginOfferedVersion": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "1.2.0",
+          null
+        ],
+        [
+          "1.2.0",
+          []
+        ],
+        [
+          "1.2.0",
+          [
+            "1.1.0"
+          ]
+        ],
+        [
+          "1.2.0",
+          [
+            "1.2.0"
+          ]
+        ],
+        [
+          "1.2.0",
+          "all"
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          "",
+          [
+            "1.0.0"
+          ]
+        ],
+        [
+          3,
+          [
+            "3"
+          ]
+        ],
+        [
+          3,
+          [
+            "2"
+          ]
+        ]
+      ]
+    },
+    "pluginUpdateStatus": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          null,
+          "1.0.0"
+        ],
+        [
+          {},
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "2.0.0"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          null
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
           ""
         ],
         [
-          "UPPER@CASE.COM"
+          {
+            "listingId": "l1",
+            "version": "1.0.0-beta"
+          },
+          "1.0.0"
         ],
         [
-          "a@b.co."
+          {
+            "listingId": "l1",
+            "version": 4
+          },
+          "4"
+        ],
+        [
+          {
+            "listingId": "l1"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "version": "1.0.0"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.1.0"
+            },
+            "version": "0.1"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "marketplace": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "source": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "1.5.0"
         ]
       ]
     },
-    "posDisplayPhone": {
-      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+    "resolveOrgInstallSummary": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "args": [
         [
-          "(555) 010-0199"
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {},
+          null
         ],
         [
-          "+1 555 010 0199"
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {},
+          {
+            "version": "1.0.0"
+          }
         ],
         [
-          "12345"
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            }
+          },
+          null
         ],
         [
-          "abc"
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            },
+            "h3": {
+              "version": "1.1.0"
+            }
+          },
+          null
         ],
         [
-          "+44 20 7946 0958"
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h2": {
+              "version": "2.0.0"
+            }
+          },
+          {
+            "version": "1.0.0"
+          }
         ],
         [
-          "1234567890123456"
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": null,
+            "h2": null
+          },
+          null
         ],
         [
+          [],
+          {},
+          {
+            "version": "3"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": 7
+            }
+          },
           null
         ]
       ]
     },
-    "posTipProblem": {
-      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+    "resolveUninstallTargets": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "args": [
         [
-          0,
-          1000
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "org"
         ],
         [
-          250,
-          1000
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "host",
+          "h1"
         ],
         [
-          1000,
-          1000
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "org"
         ],
         [
-          1001,
-          1000
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "host",
+          "h2"
         ],
         [
-          -1,
-          1000
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "host",
+          "h1"
         ],
         [
-          2.5,
-          1000
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "host",
+          "h2"
         ],
         [
-          0,
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "org"
+        ]
+      ]
+    },
+    "staleSites": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.2.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.1.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "2.0.0",
+              "pinnedBy": "host",
+              "shadowed": true
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "2.0.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "2.0.0",
+              "pinnedBy": "host",
+              "shadowed": true
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          null
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "1.0.1"
+        ]
+      ]
+    },
+    "pluginSiteSetSummary": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "5",
+            "sites": [],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
           0
+        ]
+      ]
+    },
+    "pluginUpdatePrompt": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "latestVersion": "1.2.0",
+            "label": "Blog",
+            "singleSite": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "latestVersion": "1.2.0",
+            "label": "2 sites",
+            "singleSite": false
+          }
+        ],
+        [
+          {
+            "name": "This plugin",
+            "latestVersion": "2.0.0",
+            "label": "every site in this organization",
+            "singleSite": false
+          }
+        ]
+      ]
+    },
+    "pluginUpdateAll": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "1.1.0"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ]
+      ]
+    },
+    "uninstallImpactView": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Home",
+                      "count": 2
+                    },
+                    {
+                      "type": "layout",
+                      "id": "l1",
+                      "name": "Header",
+                      "count": 1
+                    },
+                    {
+                      "type": "component",
+                      "id": "c1",
+                      "name": "Counter",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 3,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 1,
+              "placements": 3,
+              "affectedScreens": 3,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s0",
+                      "name": "Page 0",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Page 1",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s2",
+                      "name": "Page 2",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s3",
+                      "name": "Page 3",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s4",
+                      "name": "Page 4",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s5",
+                      "name": "Page 5",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s6",
+                      "name": "Page 6",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s7",
+                      "name": "Page 7",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s8",
+                      "name": "Page 8",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s9",
+                      "name": "Page 9",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s10",
+                      "name": "Page 10",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s11",
+                      "name": "Page 11",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s12",
+                      "name": "Page 12",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s13",
+                      "name": "Page 13",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 14,
+                  "truncated": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "stillCovered": true,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "x",
+                      "name": "Elsewhere",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 1,
+                  "truncated": false
+                },
+                {
+                  "hostId": "h3",
+                  "label": "Shop",
+                  "stillCovered": false,
+                  "placements": [],
+                  "affectedScreens": 0,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 2,
+              "placements": 15,
+              "affectedScreens": 15,
+              "truncated": true,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": true
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Home",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 1,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 1,
+              "placements": 1,
+              "affectedScreens": 1,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "this plugin",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [],
+            "impact": null,
+            "failed": false
+          }
+        ]
+      ]
+    },
+    "installPlanOutcome": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 3,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 2,
+            "errors": [],
+            "orgWide": false,
+            "updating": true,
+            "version": "1.2.0"
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": true,
+            "version": "1.2.0"
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": false,
+            "saved": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 2,
+            "errors": [
+              "Quota exceeded"
+            ],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 0,
+            "errors": [
+              "No approved version"
+            ],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 0,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": true,
+            "version": null
+          }
+        ]
+      ]
+    },
+    "installedPluginCaption": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "version": "1.2.0",
+            "orgWide": true,
+            "siteLabels": []
+          }
+        ],
+        [
+          {
+            "version": "1.0.0",
+            "orgWide": false,
+            "siteLabels": [
+              "Blog"
+            ]
+          }
+        ],
+        [
+          {
+            "version": 3,
+            "orgWide": false,
+            "siteLabels": [
+              "A",
+              "B"
+            ]
+          }
+        ]
+      ]
+    },
+    "manifestSettingsScreen": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "counter",
+          "Counter",
+          null
+        ],
+        [
+          "counter",
+          "Counter",
+          {}
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": []
+            }
+          }
+        ],
+        [
+          "",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "banner",
+                  "label": "Banner text",
+                  "type": "string"
+                },
+                {
+                  "key": "on",
+                  "label": "Show it",
+                  "type": "boolean"
+                }
+              ],
+              "defaults": {
+                "banner": "Welcome",
+                "on": true
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "banner",
+                  "label": "Banner text",
+                  "type": "string"
+                },
+                {
+                  "key": "on",
+                  "label": "Show it",
+                  "type": "boolean"
+                }
+              ],
+              "defaults": {
+                "banner": "Welcome",
+                "on": true
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": " greeting ",
+                  "label": "  Greeting ",
+                  "type": "string",
+                  "description": "Shown above the counter."
+                },
+                {
+                  "key": "limit",
+                  "type": "number",
+                  "min": 1,
+                  "max": 10
+                },
+                {
+                  "key": "limit",
+                  "type": "number"
+                },
+                {
+                  "key": "live",
+                  "label": "Live",
+                  "type": "boolean"
+                },
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "type": "select",
+                  "options": [
+                    {
+                      "value": "a",
+                      "label": "A"
+                    },
+                    {
+                      "value": 3,
+                      "label": "Three"
+                    },
+                    {
+                      "value": "b",
+                      "label": "B"
+                    }
+                  ]
+                },
+                {
+                  "key": "empty",
+                  "type": "select",
+                  "options": []
+                },
+                {
+                  "key": "bad",
+                  "type": "colour"
+                },
+                {
+                  "key": "",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "key": "plain"
+                },
+                {
+                  "key": "rate",
+                  "label": "Rate",
+                  "type": "number",
+                  "min": 0.5,
+                  "description": "Per hour."
+                },
+                {
+                  "key": "cap",
+                  "type": "number",
+                  "max": 20
+                }
+              ],
+              "defaults": {
+                "greeting": "Hello",
+                "limit": 99,
+                "live": "yes",
+                "mode": "b",
+                "plain": 4,
+                "rate": 0.25,
+                "cap": 7
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "f0",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f1",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f2",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f3",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f4",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f5",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f6",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f7",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f8",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f9",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f10",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f11",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f12",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f13",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f14",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f15",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f16",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f17",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f18",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f19",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f20",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f21",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f22",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f23",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f24",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f25",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f26",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f27",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f28",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f29",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f30",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f31",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f32",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f33",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f34",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f35",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f36",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f37",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f38",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f39",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f40",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f41",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f42",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f43",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f44",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f45",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f46",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f47",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f48",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f49",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f50",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f51",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f52",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f53",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f54",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f55",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f56",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f57",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f58",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f59",
+                  "type": "number",
+                  "max": 5
+                }
+              ],
+              "defaults": {
+                "f0": 3
+              }
+            }
+          }
+        ],
+        [
+          "x",
+          "X",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "k",
+                  "type": "select",
+                  "options": [
+                    {
+                      "value": "only",
+                      "label": "Only"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
         ]
       ]
     }

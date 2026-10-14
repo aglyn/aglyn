@@ -17,6 +17,7 @@ AGLYN_FIRESTORE_EMULATOR_HOST = 127.0.0.1:8082
 AGLYN_GOOGLE_IOS_CLIENT_ID =
 AGLYN_GOOGLE_WEB_CLIENT_ID =
 AGLYN_BRAND_NAME = Aglyn
+AGLYN_PASSKEY_RP_ID =
 
 // Debug builds only: with `-AglynAutoSignIn YES` on the launch arguments,
 // an emulator build signs in as this seeded test member (tools/scripts/

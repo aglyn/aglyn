@@ -42,6 +42,10 @@ class ScreenSpec private constructor(val raw: JsonElement) {
   val loads: List<LoadSpec> = raw.entries("load").map { (key, value) -> LoadSpec(key, value) }
   val blocks: List<BlockSpec> = raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } }
   val actions: List<ActionSpec> = raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
+  /** The `actions` entry the screen runs as it opens, once its data has loaded and the action's `when` holds (`start: { "action": "reviewLinked" }`): a link that carries a query (`?notice=`) opens the dialog it names. */
+  val startAction: String? = raw.obj("start").str("action")
+  /** `{ when, load, action }`: what this contributed screen does once a core action that names its zone (`afterZone`) has succeeded, and its `when` holds: the `load` is read, then the `action` runs over it. */
+  val hook: JsonElement? = raw.obj("hook")
   val requiresSite: Boolean get() = scope == "site"
 
   companion object {
@@ -93,6 +97,14 @@ class LoadSpec(val key: String, json: JsonElement) {
    * absent). The query is read again with the larger limit, so a collection too big for one read can still be gone through to its end.
    */
   val more: Int? = ScreenValues.number(json.obj("more"))?.toInt()
+  /**
+   * A path to rows an earlier load brought (`data.sites.sites`): this load then runs once per row, with the row
+   * as `item`, and its key holds the list of answers (a failed one is null).
+   */
+  val each: String? = json.str("each")
+  /** A pure function to call over data already loaded (`packageJsonDiff`, `packageMergeKeys`), its answer under this key; [args] are the paths (or numbers) it is given. */
+  val compute: String? = json.str("compute")
+  val args: List<String> = json.arr("args").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
@@ -167,6 +179,17 @@ class LoopSpec(json: JsonElement) {
 
 class NavigateSpec(val screen: String, val params: Map<String, String>)
 
+/** What an `export` action opens the export dialog on: the resource, the dialog's title, the site (none: the workspace), the file's
+ * name, which records (`{ kind: all }` or a filter) and the narrowed field list. */
+class ExportRequest(
+  val resource: String,
+  val title: String,
+  val hostId: String?,
+  val fileStem: String,
+  val scope: Map<String, Any?> = mapOf("kind" to "all"),
+  val filter: Map<String, Any?>? = null,
+)
+
 class ActionSpec private constructor(json: JsonElement, val label: String) {
   val id: String = json.str("id") ?: label
   val icon: String? = materialIcon(json.str("icon"))
@@ -199,31 +222,56 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     }
   }
   val back: Boolean = json.isTrue("back")
-  val reload: Boolean = !json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null)
+  val reload: Boolean =
+    json.isTrue("reload") ||
+      (!json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null || json.obj("passkey") != null))
   val whenCondition: String? = json.str("when")
   val link: String? = json.str("link")
   /** A Besigner path (whole, from the console root) opened in the app's web view. */
   val besigner: String? = json.str("besigner")
+  /** A console path (a route's `href`) followed the way a notification's link is: the native screen that claims it. */
+  val route: String? = json.str("route")
   val copy: String? = json.str("copy")
   /**
    * A Firestore document path (a template): the stored document is read when the action runs and is `overlay` in the body,
    * without its timestamps, for a route that replaces the document with the person's edits on top (`$overlay`).
    */
   val overlay: String? = json.str("overlay")
-  /**
-   * `{ resource, title, fileStem, scope, filter }`: opens the export dialog on a transfer resource (`commerce.products`),
-   * which asks for the columns and the format and hands the file to the device. `scope` is `{ "kind": "all" }` unless it
-   * names a filter; `title`, `fileStem` and `filter` are templates.
-   */
-  val export: JsonElement? = json.obj("export")
   val reveal: String? = json.str("reveal")
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
   /** The status of the answer that runs `else` (404 unless the spec names another, such as 409). */
   val elseStatus: Int = ((json.obj("elseStatus") as? JsonPrimitive)?.contentOrNull)?.toIntOrNull() ?: 404
+  /** `gate: { when, screen }`: when the route refuses with a body that meets `when` (read as `error`), `screen` opens over this one and, once it reports `resume`, the very same action is sent again (the console's publisher agreement gate). */
+  val gate: JsonElement? = json.obj("gate")
+  /** This action, finishing inside a gate's screen, tells the screen below to send its action again. */
+  val resume: Boolean = json.isTrue("resume")
+  /** `afterZone: { zone, stash }`: once the action has succeeded, the `hook` of every screen contributed to `zone` whose `requires` holds runs (best effort, in order); what they say is kept as `stash.<stash>` for the screen that follows. */
+  val afterZone: JsonElement? = json.obj("afterZone")
   /** A follow-up the action makes once it succeeds (best effort, like the console's). */
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** A change to the signed-in person's own sign-in, made through the session (`changePassword`, `updateDisplayName`); its inputs are the body. */
   val account: String? = json.str("account")
+
+  /** The route answers with a file (an export), not JSON; the person saves it. Its value names the file when the route names none. */
+  val download: String? = json.str("download") ?: if (json.isTrue("download")) "download" else null
+  /** `export: { resource, title, hostId, fileStem, scope, filter }`: the platform's export dialog for a transfer resource (`commerce.products`, `crm.contacts`): its fields, the format, then the file saved or shared, as every list opens it. Each is a template; see [exportRequest]. */
+  val export: JsonElement? = json.obj("export")
+  /** `chunk: { field, bytes, idFrom, idKey, firstOnly, until }`: the file text in `field` of the body goes in parts of at most `bytes` (JSON-encoded), each with `part` and `parts`, the job the first answer names (`idFrom`) sent back as `idKey`; keys in `firstOnly` ride on the first part alone; `until` is the answer path that must be true when the last part has landed. */
+  val chunk: JsonElement? = json.obj("chunk")
+  /** `repeat: { until, max, stop, stopMessage }`: the action runs again while its answer does not meet `until` (a condition over `response`), as the console calls apply until the route says it is done; the stash takes every pass's answer, so a screen can show the progress; `stop` ends it as a failure. */
+  val repeating: JsonElement? = json.obj("repeat")
+  /** A follow-up that must succeed (unlike `then`): it runs once the action and its stash are done, with the stash and the action's answer in scope, and a failure of its own fails the action. */
+  val after: ActionSpec? = json.obj("after")?.let { parse(it) }
+  /** The route answers with JSON, and the file is the value at this path of it (a workspace package export wraps its file as `{ fileName, package }`); `download` is then a template over `response` that names the file. */
+  val downloadAt: String? = json.str("downloadAt")
+
+  /**
+   * `passkey: { options, verify, origin, errors, otherwise }`: sets up a passkey on this device. The options route
+   * answers a WebAuthn challenge, the platform makes the credential, and the verify route stores it; `origin` is the
+   * `Origin` the routes check the ceremony against (`https://<relying party>`), `errors` maps a route's reason to the
+   * words shown and `otherwise` words any other failure.
+   */
+  val passkey: JsonElement? = json.obj("passkey")
   /**
    * `{ when, title, text }` (or a list of them, the first that matches wins): when the route's answer
    * meets `when`, `text` (a template over `response`) is shown in place of the success message.
@@ -271,6 +319,35 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
    * session and is shown nowhere.
    */
   val impersonate: ImpersonateSpec? = json.obj("impersonate")?.let { ImpersonateSpec.parse(it) }
+  /** `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds, until the app closes. */
+  val stash: JsonElement? = json.obj("stash")
+
+  /**
+   * The export dialog's request (`export: { resource, title, hostId, fileStem, scope, filter }`), with the action's templates read in
+   * [scope]; null when the action opens none. `hostId` names the site a site's resource is read for (none: the workspace's); `scope`
+   * is `{ "kind": "all" }` unless it names a filter; `fileStem` is the resource key when not given.
+   */
+  fun exportRequest(scope: JsonElement): ExportRequest? {
+    val spec = export ?: return null
+    val key = spec.str("resource")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() } ?: return null
+    fun text(name: String) = spec.str(name)?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
+    @Suppress("UNCHECKED_CAST")
+    fun plainMap(name: String) = spec.obj(name)?.let { ScreenModel.plain(ScreenValues.resolveBody(it, scope)) } as? Map<String, Any?>
+    return ExportRequest(
+      resource = key,
+      title = text("title") ?: ScreenValues.render(label, scope),
+      hostId = text("hostId"),
+      fileStem = text("fileStem") ?: key.replace(':', '-').replace('.', '-'),
+      scope = plainMap("scope") ?: mapOf("kind" to "all"),
+      filter = plainMap("filter"),
+    )
+  }
+
+  /** `{ doc, current, edited }`: the owner's save of a business profile (`edited` the typed values, `current` the path to the stored document); the write follows `businessProfileOwnerWrite` of the contracts module. */
+  val businessProfile: JsonElement? = json.obj("businessProfile")
+
+  /** After a `write` to the site document that changes how pages render, stage the site-wide republish the console's host-document writes do (`publishSiteWideChange`). */
+  val siteWide: Boolean = json.isTrue("siteWide")
 
   /**
    * Every field the action asks for before it runs: its prompt, with any `fieldsFrom` entry expanded from the data in [scope] and a
@@ -321,6 +398,16 @@ class FieldSpec private constructor(
   val each: String? = null,
   /** A `lookup` field's sources: the kinds of record a person can search, and what picking one fills in. */
   val groups: List<LookupGroup> = emptyList(),
+  /** `dollars`: the typed value and the template are both read as a dollar amount (`60`, `$60.00`, `1,250 USD`) and compared in cents, as the gift card import's Confirm step reads a typed total. */
+  val mustMatchAs: String? = null,
+  /** What to say under the field while something is typed that does not match. */
+  val mismatch: String? = null,
+  /** For a `file` field: `json` parses the chosen file and sends the value, else its text is sent. */
+  val parse: String? = null,
+  /** For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an import must have acknowledged, each one). */
+  val coversAll: Boolean = false,
+  /** The field's own JSON, for a kind that reads more than the common keys (`upload`'s limits). */
+  val config: JsonElement? = null,
 ) {
   /** This field as it is asked: itself, or one per row of its `each` list, its templates rendered over the row. */
   fun expanded(scope: JsonElement): List<FieldSpec> {
@@ -357,7 +444,7 @@ class FieldSpec private constructor(
 
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
-    if (mustMatch != null && ScreenValues.text(value) != ScreenValues.render(mustMatch, context)) return true
+    if (mismatches(value, context)) return true
     if (pattern != null) ScreenValues.text(value).let { typed -> if (typed.isNotEmpty() && !Regex(pattern).containsMatchIn(typed)) return true }
     if (kind == "number") {
       ScreenValues.number(value)?.let { number ->
@@ -365,9 +452,25 @@ class FieldSpec private constructor(
         if (max != null && number > max) return true
       }
     }
+    if (coversAll && kind == "multiselect") {
+      val chosen = ((value as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
+      if (choices(context).any { it.first !in chosen }) return true
+    }
     // A number field is finished by any number, zero too.
     val finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != null)
     return required && kind != "toggle" && !finished
+  }
+
+  /** Whether a value is not what the field must match (a field with nothing to match never mismatches). */
+  fun mismatches(value: JsonElement, context: JsonElement): Boolean {
+    if (mustMatch == null) return false
+    val typed = ScreenValues.text(value)
+    val expected = ScreenValues.render(mustMatch, context)
+    if (mustMatchAs == "dollars") {
+      val cents = ScreenValues.dollarsToCents(typed) ?: return true
+      return cents != ScreenValues.dollarsToCents(expected)
+    }
+    return typed != expected
   }
 
   fun choices(context: JsonElement): List<Pair<String, String>> {
@@ -377,15 +480,15 @@ class FieldSpec private constructor(
     val path = from.str("items") ?: return options
     val valueTemplate = from.str("value") ?: "{item.\$id}"
     val labelTemplate = from.str("label") ?: valueTemplate
-    // A map (the site's screens by id) offers one choice per entry: `{ $id: key, $value: value }`, by value.
-    val rows = when (val source = ScreenValues.lookup(path, context)) {
-      is JsonArray -> source
-      is JsonObject -> source.entries.map { JsonObject(mapOf("\$id" to JsonPrimitive(it.key), "\$value" to it.value)) }.sortedBy { ScreenValues.text(it["\$value"]).lowercase() }
-      else -> emptyList()
+    // A map (the site's screens by id) offers one choice per entry: `{ $id: key, $value: value }`, by value. A list offers one per
+    // row that meets `filter`, or, given `within`, one per row of each row's inner list (the outer row as `parent`).
+    val scopes = when (val source = ScreenValues.lookup(path, context)) {
+      is JsonObject -> source.entries.map { JsonObject(mapOf("\$id" to JsonPrimitive(it.key), "\$value" to it.value)) }
+        .sortedBy { ScreenValues.text(it["\$value"]).lowercase() }.map { ScreenContext.withItem(context, it) }
+        .filter { ScreenValues.condition(from.str("filter"), it) }
+      else -> ScreenValues.scopes(path, from.str("within"), from.str("filter"), context)
     }
-    // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
-    val keep = from.str("where")
-    return options + rows.map { ScreenContext.withItem(context, it) }.filter { ScreenValues.condition(keep, it) }.map { scope ->
+    return options + scopes.map { scope ->
       // A label built from parts that may be empty reads clean: runs of spaces become one, and the ends are trimmed.
       ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope).replace(Regex(" {2,}"), " ").trim()
     }
@@ -470,6 +573,11 @@ class FieldSpec private constructor(
         generate = json.obj("generate"),
         each = json.str("each"),
         groups = json.arr("groups").mapNotNull { LookupGroup.parse(it) },
+        mustMatchAs = json.str("mustMatchAs"),
+        mismatch = json.str("mismatch"),
+        parse = json.str("parse"),
+        coversAll = json.isTrue("coversAll"),
+        config = json,
       )
     }
   }

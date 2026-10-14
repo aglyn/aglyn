@@ -46,11 +46,22 @@ interface AuthSession {
   /** Throws [AuthError] with words for the sign-in form. */
   suspend fun signInWithEmail(email: String, password: String)
 
+  /** Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner). */
+  suspend fun signInWithCustomToken(token: String): Unit = throw AuthError("Signing in with a passkey is not available here.")
+
   suspend fun signOut()
 
   /** Proves [current], then sets [new]. Throws [AuthError] with words for the form. */
   suspend fun changePassword(current: String, new: String): Unit =
     throw AuthError("Changing the password is not available here.")
+
+  /** Disconnects a sign-in provider (`google.com`) from the account, as the console's Account section does with `unlink`. */
+  suspend fun unlinkProvider(providerId: String): Unit =
+    throw AuthError("Disconnecting a sign-in method is not available here.")
+
+  /** Attaches Google's credential (the ID token a [GoogleCredentialSource] returned) to the account, as the console's `linkWithPopup` does. */
+  suspend fun linkGoogle(googleIdToken: String): Unit =
+    throw AuthError("Connecting Google is not available here.")
 
   /** Keeps the account's display name in step with the profile (rosters and comments read it). */
   suspend fun updateDisplayName(name: String) {}

@@ -66,10 +66,6 @@
       "why": "Reached by media-filter: media kinds, orientation and the name-token normalizer the library search asks with."
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/media-ref.ts",
-      "why": "The media: reference grammar the pickers write and the previews read (mediaNodeSrc, resolveMediaSrc); its one import is the tenant apex constant (AGL-3668)."
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/message-search.ts",
       "why": "Who sent a form submission (`messageSender`), which the native submissions list and detail name the same way (AGL-3668)."
     },
@@ -144,6 +140,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/where-used-summary.ts",
       "why": "The where-used scan's answer and its one-line summary; the native Logic screens word a delete's warning from it (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "why": "What an imported site item changes: the leaf-by-leaf diff and the keys a merge chooses between, shown by the site package import (AGL-3671)."
     },
     {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
@@ -228,6 +228,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-returns.ts",
+      "why": "The return reasons and their labels, so the register's return sheet offers the same ones the console does (AGL-3609); imports only commerce, commerce-orders and order-fulfillment."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
@@ -320,6 +324,22 @@
     {
       "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",
       "why": "The submissions list query declarations; the native submissions screens plan the same query (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/formula-names.ts",
+      "why": "The names a function's formula can read, grouped as the builder lists them (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/formula.ts",
+      "why": "The formula builder: the expression a picked operation and its values write; the native function editors build the same text (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
+      "why": "A function parameter's choices as rows and back to the stored options (AGL-3668); a type-only import."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/structured-value.ts",
+      "why": "A dictionary or list variable as rows and back to the stored JSON string; the native Logic editors show and save the same rows (AGL-3668). No imports."
     },
     {
       "path": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
@@ -598,15 +618,27 @@
       "why": "Reached by sequence-validation: a thread's subject."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/business-profile-values.ts",
+      "why": "The business profile's fields, limits, sources and owner-write rule, no imports: the native workspace defaults replay them (AGL-3671)."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
+      "why": "The copy job a landed product import starts: its brief, inputs and the created ids read from the import's results; no imports, so the native apps replay it (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
+      "why": "The single sign-on rehearsal table's rows and the break-glass eligibility rule, no imports: the native workspace settings replay them (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "why": "The media: reference grammar the pickers write and the previews read (mediaNodeSrc, resolveMediaSrc); its one import is the tenant apex constant (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/business-profile.ts",
       "why": "A site's business profile: what the owner typed, what the site's own settings say and the workspace defaults, field by field with where each came from, and the owner's save; the native Business profile section reads and writes the same document (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/content-authors.ts",
-      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/media-ref.ts",
       "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
@@ -634,28 +666,12 @@
       "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
-      "path": "libs/plugins/commerce/src/lib/model/commerce-returns.ts",
-      "why": "The return reasons and their labels, so the register's return sheet offers the same ones the console does (AGL-3609); imports only commerce, commerce-orders and order-fulfillment."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/formula-names.ts",
-      "why": "The names a function's formula can read, grouped as the builder lists them (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/formula.ts",
-      "why": "The formula builder: the expression a picked operation and its values write; the native function editors build the same text (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
-      "why": "A function parameter's choices as rows and back to the stored options (AGL-3668); a type-only import."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/structured-value.ts",
-      "why": "A dictionary or list variable as rows and back to the stored JSON string; the native Logic editors show and save the same rows (AGL-3668). No imports."
-    },
-    {
       "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
       "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/time-zone-choices.ts",
+      "why": "The time zones the pickers offer and how they are labeled, as data with no imports: the native workspace and site settings show the console's list (AGL-3671)."
     }
   ]
 }

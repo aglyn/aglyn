@@ -1,0 +1,354 @@
+{
+  "$comment": "The email list import's own steps (AGL-3671), contributed to the transferStep zone of the import wizard's review: whether the file may change the contact details of people already held, and the statement of permission under what the file holds. Each asks /api/transfer/plan again with its answer under extras['email-existing'] and extras['email-consent'], as the console's steps do. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "email.import.existing",
+      "title": "People already on this list",
+      "subtitle": "Whether the file may change their contact details",
+      "icon": "person.2|group",
+      "scope": "org",
+      "zones": [
+        "transferStep"
+      ],
+      "requires": "stash.importResource ~= email.list-members",
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Somebody already on this list stays on it exactly as they are: the import never re-adds them or rewrites their membership. What the file can change is the contact record of people the workspace already holds — their name, phone, company and title."
+        },
+        {
+          "type": "form",
+          "id": "existing",
+          "fields": [
+            {
+              "key": "update",
+              "label": "Update their contact details from the file",
+              "kind": "toggle",
+              "initial": "false",
+              "help": "Off: leave them as they are. The file’s contact details fill in only a contact the import creates. On: update their contact details from the file, under the field choices on the Conflicts step. A blank cell never empties one."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/transfer/plan",
+            "body": {
+              "$merge": [
+                "{stash.importPlanBody}",
+                {
+                  "extras": {
+                    "$put": {
+                      "map": "{stash.importExtras}",
+                      "key": "email-existing",
+                      "value": {
+                        "updateContacts": "{form.update}"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "stash": {
+              "importPlan": "{response}",
+              "importExtras": {
+                "$put": {
+                  "map": "{stash.importExtras}",
+                  "key": "email-existing",
+                  "value": {
+                    "updateContacts": "{form.update}"
+                  }
+                }
+              },
+              "importPlanBody": {
+                "$merge": [
+                  "{stash.importPlanBody}",
+                  {
+                    "extras": {
+                      "$put": {
+                        "map": "{stash.importExtras}",
+                        "key": "email-existing",
+                        "value": {
+                          "updateContacts": "{form.update}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "back": true,
+            "reload": false,
+            "success": "Saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "email.import.consent",
+      "title": "Permission",
+      "subtitle": "The statement of permission, under what the file holds",
+      "icon": "checkmark.shield|verified",
+      "scope": "org",
+      "zones": [
+        "transferStep"
+      ],
+      "requires": "stash.importResource ~= email.list-members",
+      "load": {
+        "screening": {
+          "url": "/api/email/list-import-screening",
+          "method": "POST",
+          "body": {
+            "hostId": "{params.hostId}",
+            "listId": "{params.resource:instance}",
+            "jobId": "{params.jobId}"
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.screening.screening.purchaseTellColumns",
+          "text": "This file looks bought or appended. Its columns include {data.screening.screening.purchaseTellColumns}. Purchased, rented and appended lists are not allowed, and importing one puts every site sending through this domain at risk. If the column name is a coincidence, carry on."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.screening.screening.roleAccounts",
+          "text": "{data.screening.screening.roleAccounts:number} shared mailboxes. Addresses like {data.screening.screening.roleAccountSamples:first3} reach a mailbox several people read, or nobody. They are a common sign of a list built by collecting addresses rather than by people signing up. They are added if you go ahead."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.screening.screening.sample.size && data.screening.screening.sample.needAttestation",
+          "text": "{data.screening.screening.sample.optedIn:number} already have an opt-in on record, {data.screening.screening.sample.needAttestation:number} have no opt-in on record, and {data.screening.screening.sample.refused:number} cannot be added at all. Checked {data.screening.screening.sample.size:number} of {data.screening.screening.sample.of:number} new addresses."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.screening.screening.sample.size && !data.screening.screening.sample.needAttestation",
+          "text": "{data.screening.screening.sample.optedIn:number} already have an opt-in on record, none have no opt-in on record, and {data.screening.screening.sample.refused:number} cannot be added at all. Checked {data.screening.screening.sample.size:number} of {data.screening.screening.sample.of:number} new addresses."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.screening && !data.screening.screening.sample.size",
+          "text": "Nobody new is added by this file."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.screening",
+          "text": "What the file holds could not be read. You can still answer: the server records who did."
+        },
+        {
+          "type": "actions",
+          "title": "Permission",
+          "items": [
+            {
+              "id": "attest",
+              "label": "I have permission to email everyone in this file",
+              "icon": "checkmark.shield|verified",
+              "confirm": "I have these people’s permission to send them marketing email, and I can produce the record of it if asked. This statement is stored against my account, with today’s date, on every address it admits.",
+              "url": "/api/transfer/plan",
+              "body": {
+                "$merge": [
+                  "{stash.importPlanBody}",
+                  {
+                    "extras": {
+                      "$put": {
+                        "map": "{stash.importExtras}",
+                        "key": "email-consent",
+                        "value": {
+                          "attest": true
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "stash": {
+                "importPlan": "{response}",
+                "importExtras": {
+                  "$put": {
+                    "map": "{stash.importExtras}",
+                    "key": "email-consent",
+                    "value": {
+                      "attest": true
+                    }
+                  }
+                },
+                "importPlanBody": {
+                  "$merge": [
+                    "{stash.importPlanBody}",
+                    {
+                      "extras": {
+                        "$put": {
+                          "map": "{stash.importExtras}",
+                          "key": "email-consent",
+                          "value": {
+                            "attest": true
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "back": true,
+              "reload": false,
+              "success": "Statement recorded"
+            },
+            {
+              "id": "only",
+              "label": "Only add people who already have an opt-in on record",
+              "icon": "person.crop.circle.badge.checkmark|person",
+              "url": "/api/transfer/plan",
+              "body": {
+                "$merge": [
+                  "{stash.importPlanBody}",
+                  {
+                    "extras": {
+                      "$put": {
+                        "map": "{stash.importExtras}",
+                        "key": "email-consent",
+                        "value": {
+                          "attest": false
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "stash": {
+                "importPlan": "{response}",
+                "importExtras": {
+                  "$put": {
+                    "map": "{stash.importExtras}",
+                    "key": "email-consent",
+                    "value": {
+                      "attest": false
+                    }
+                  }
+                },
+                "importPlanBody": {
+                  "$merge": [
+                    "{stash.importPlanBody}",
+                    {
+                      "extras": {
+                        "$put": {
+                          "map": "{stash.importExtras}",
+                          "key": "email-consent",
+                          "value": {
+                            "attest": false
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "back": true,
+              "reload": false,
+              "success": "Saved"
+            }
+          ],
+          "footer": "Whichever you choose, people who unsubscribed, bounced, marked a message as spam or said no are never added, and an import never sends a confirmation email."
+        }
+      ]
+    },
+    {
+      "id": "email.list.transfer",
+      "title": "Import and export",
+      "subtitle": "{params.name}",
+      "icon": "arrow.up.arrow.down|sync",
+      "scope": "site",
+      "requires": "org.manager",
+      "load": {
+        "unfinished": {
+          "url": "/api/transfer/jobs",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "unfinished": true
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Import people into this list from a file. Each address is checked against consent and suppressions before anything is added, and an import can be undone for seven days."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{params.resource}",
+                  "hostId": "{site.id}",
+                  "title": "Import into {params.name}"
+                }
+              }
+            },
+            {
+              "id": "export",
+              "label": "Export",
+              "icon": "square.and.arrow.up|download",
+              "export": {
+                "resource": "{params.resource}",
+                "title": "Export {params.name}",
+                "hostId": "{site.id}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Resume import",
+          "when": "data.unfinished.unfinished",
+          "items": "data.unfinished.unfinished",
+          "filter": "item.resource == @params.resource",
+          "count": true,
+          "primary": "{item.fileName|item.label}",
+          "secondary": "Left {item.updatedAt:datetime}",
+          "icon": "tray.and.arrow.down|inbox",
+          "actions": [
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play|play_arrow",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.jobId}"
+                }
+              }
+            },
+            {
+              "id": "discard",
+              "label": "Discard",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Throw this import away? Nothing was written, so nothing changes.",
+              "url": "/api/transfer/jobs",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "discard",
+                "jobId": "{item.jobId}"
+              },
+              "success": "Discarded"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

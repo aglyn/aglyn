@@ -33,6 +33,7 @@ public struct MediaPickField: View {
   let value: String
   let kind: String
   let enabled: Bool
+  let workspaceOnly: Bool
   let supporting: String?
   let onPick: (ChosenMedia) -> Void
   let onClear: () -> Void
@@ -40,16 +41,18 @@ public struct MediaPickField: View {
   @State private var choosing = false
   @State private var linkOpen: Bool
 
+  /// `workspaceOnly` offers the workspace's library alone, whichever site is picked (a workspace's own logo or favicon).
   public init(
     context: NativePluginContext, label: String, value: String, kind: String = "image", enabled: Bool = true,
-    supporting: String? = nil, onPick: @escaping (ChosenMedia) -> Void, onClear: @escaping () -> Void,
-    onLink: ((String) -> Void)? = nil
+    workspaceOnly: Bool = false, supporting: String? = nil, onPick: @escaping (ChosenMedia) -> Void,
+    onClear: @escaping () -> Void, onLink: ((String) -> Void)? = nil
   ) {
     self.context = context
     self.label = label
     self.value = value
     self.kind = kind
     self.enabled = enabled
+    self.workspaceOnly = workspaceOnly
     self.supporting = supporting
     self.onPick = onPick
     self.onClear = onClear
@@ -107,7 +110,7 @@ public struct MediaPickField: View {
       }
     }
     .sheet(isPresented: $choosing) {
-      MediaChooserSheet(context: context, kind: kind) { chosen in
+      MediaChooserSheet(context: context, kind: kind, workspaceOnly: workspaceOnly) { chosen in
         linkOpen = false
         onPick(chosen)
       }

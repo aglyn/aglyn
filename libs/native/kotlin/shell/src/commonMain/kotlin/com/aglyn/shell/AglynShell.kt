@@ -152,7 +152,13 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
   val authState by services.auth.state.collectAsState()
   val user = (authState as? AuthState.SignedIn)?.user
+  // A passkey can be made where the app is configured for one and the platform bound a creator.
+  val passkeyRelyingParty = services.config.passkeyRelyingParty.takeIf { com.aglyn.screens.LocalPasskeyCreator.current != null }
+  // Google can be connected where the platform bound a way to sign in to it.
+  val googleSource = com.aglyn.screens.LocalGoogleCredentialSource.current
   val screenSession = com.aglyn.screens.ScreenSession(
+    passkeyRelyingParty = passkeyRelyingParty,
+    googleConfigured = googleSource != null,
     email = user?.email,
     displayName = user?.displayName,
     orgName = workspace.org?.name,
@@ -168,6 +174,15 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     account = com.aglyn.screens.AccountOperations(
       changePassword = { current, new -> services.auth.changePassword(current, new) },
       updateDisplayName = { name -> services.auth.updateDisplayName(name) },
+      linkGoogle = {
+        val source = googleSource ?: throw com.aglyn.core.GoogleLinkError("Connecting Google is not set up in this build.")
+        services.auth.linkGoogle(source.idToken(user?.email))
+        claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull())
+      },
+      unlinkProvider = { provider ->
+        services.auth.unlinkProvider(provider)
+        claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull())
+      },
     ),
   )
 

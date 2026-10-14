@@ -1,0 +1,1037 @@
+{
+  "$comment": "Imports and exports (AGL-3671): the console's Settings → Imports & exports hub over /api/transfer/*, /api/hosts/import. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.settings.data",
+      "title": "Imports and exports",
+      "icon": "arrow.up.arrow.down|sync",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": [
+        "/settings/data"
+      ],
+      "constants": {
+        "status": {
+          "draft": "Uploaded",
+          "analyzed": "Being set up",
+          "planned": "Ready to import",
+          "applying": "Importing",
+          "applied": "Imported",
+          "failed": "Stopped",
+          "undone": "Undone",
+          "refused": "Refused"
+        }
+      },
+      "load": {
+        "jobs": {
+          "url": "/api/transfer/jobs",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "limit": 25,
+            "sitePackages": true
+          },
+          "cursor": "next",
+          "cursorParam": "after",
+          "items": "jobs"
+        },
+        "unfinished": {
+          "url": "/api/transfer/jobs",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "unfinished": true
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every import shows what it would do before it writes anything, asks how to handle each conflict, and can be undone for seven days."
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Records and packages",
+              "subtitle": "Export what each plugin keeps, or move a package",
+              "icon": "tablecells|view_agenda",
+              "screen": "core.settings.data.records"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "packageExport",
+              "label": "Export a package",
+              "icon": "arrow.down.doc|download",
+              "navigate": {
+                "screen": "core.settings.data.packageExport"
+              }
+            },
+            {
+              "id": "packageImport",
+              "label": "Import a package",
+              "icon": "square.and.arrow.down|upload",
+              "navigate": {
+                "screen": "core.settings.data.packageImport"
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Unfinished imports",
+          "when": "data.unfinished.unfinished",
+          "items": "data.unfinished.unfinished",
+          "count": true,
+          "primary": "{item.fileName|item.label}",
+          "secondary": "{item.label} · {const.status[@item.status]|item.status:title}",
+          "tertiary": "Left {item.updatedAt:datetime}",
+          "icon": "tray.and.arrow.down|inbox",
+          "actions": [
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play|play_arrow",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.jobId}"
+                }
+              }
+            },
+            {
+              "id": "discard",
+              "label": "Discard",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Throw this import away? Nothing was written, so nothing changes.",
+              "url": "/api/transfer/jobs",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "discard",
+                "jobId": "{item.jobId}"
+              },
+              "success": "Discarded"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "History",
+          "load": "jobs",
+          "items": "data.jobs.jobs",
+          "count": true,
+          "primary": "{item.label}",
+          "secondary": "{item.fileName|item.resource} · {item.createdByEmail|'A former member'}",
+          "tertiary": "{item.results.created|'0'} created · {item.results.updated|'0'} updated · {item.results.unchanged|'0'} unchanged · {item.results.skipped|'0'} skipped · {item.results.failed|'0'} failed",
+          "trailing": "{item.createdAt:date}",
+          "icon": "arrow.up.arrow.down|sync",
+          "badges": [
+            {
+              "text": "{const.status[@item.status]|item.status:title}",
+              "tones": {
+                "Imported": "success",
+                "Stopped": "error",
+                "Refused": "error",
+                "Undone": "warning",
+                "Ready to import": "info",
+                "Importing": "info",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "Nothing has been imported into this workspace yet.",
+          "actions": [
+            {
+              "id": "results",
+              "label": "Download results",
+              "icon": "arrow.down.doc|download",
+              "when": "item.resultFile",
+              "url": "/api/transfer/status",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{item.id}",
+                "download": "results"
+              },
+              "download": "import-{item.id}-results.csv",
+              "success": "Results ready to save"
+            },
+            {
+              "id": "open",
+              "label": "Open",
+              "icon": "arrow.up.right.square|open_in_new",
+              "when": "item.kind == records && item.status != undone",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.id}"
+                }
+              }
+            },
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "item.kind == package && item.undo.available",
+              "stash": {
+                "undoDecisions": {}
+              },
+              "navigate": {
+                "screen": "core.settings.data.packageUndo",
+                "params": {
+                  "jobId": "{item.id}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Site package imports",
+          "when": "data.jobs.sitePackageImports",
+          "items": "data.jobs.sitePackageImports",
+          "count": true,
+          "primary": "Site package · {item.hostName|item.hostId}",
+          "secondary": "{item.source|''} · {item.actorEmail|'A former member'}",
+          "tertiary": "{item.startedAt:datetime}",
+          "icon": "externaldrive|backup",
+          "badges": [
+            {
+              "text": "{const.status[@item.status]|item.status:title}",
+              "tones": {
+                "Imported": "success",
+                "Stopped": "error",
+                "Refused": "error",
+                "Undone": "warning",
+                "Ready to import": "info",
+                "Importing": "info",
+                "*": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "item.undo.available",
+              "navigate": {
+                "screen": "core.settings.data.sitePackageUndo",
+                "params": {
+                  "hostId": "{item.hostId}",
+                  "importId": "{item.importId}"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "subtitle": "Move records and packages in and out of this workspace"
+    },
+    {
+      "id": "core.settings.data.packageExport",
+      "title": "Export a package",
+      "icon": "arrow.down.doc|download",
+      "scope": "org",
+      "requires": "org.manager",
+      "load": {
+        "catalog": {
+          "url": "/api/transfer/package",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "list"
+          }
+        }
+      },
+      "subtitle": "Sequences, campaigns, automations and email templates as one file",
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every sequence, campaign, automation and email template this workspace holds, grouped by what it is. Pick what to include; what the picked ones need can be added. The file imports into any workspace."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "No plugin this workspace runs exports a package yet.",
+          "when": "!data.catalog.resources"
+        },
+        {
+          "type": "list",
+          "title": "What a package holds",
+          "when": "data.catalog.resources",
+          "items": "data.catalog.resources",
+          "count": false,
+          "primary": "{item.label}",
+          "secondary": "{item.description|''}",
+          "trailing": "{item.items.length}",
+          "icon": "shippingbox|inventory_2"
+        },
+        {
+          "type": "actions",
+          "when": "data.catalog.resources",
+          "items": [
+            {
+              "id": "export",
+              "label": "Export",
+              "icon": "arrow.down.doc|download",
+              "prompt": [
+                {
+                  "key": "items",
+                  "label": "Items to export",
+                  "kind": "multiselect",
+                  "required": true,
+                  "initial": "{data.catalog.resources[key=params.resource].items.*.key|data.catalog.resources.*.items.*.key}",
+                  "optionsFrom": {
+                    "items": "data.catalog.resources",
+                    "within": "items",
+                    "value": "{item.key}",
+                    "label": "{parent.label}: {item.name|item.id}"
+                  }
+                },
+                {
+                  "key": "dependencies",
+                  "label": "Include what they need",
+                  "kind": "toggle",
+                  "initial": "true",
+                  "help": "Adds what a picked item names that this workspace holds as a package item."
+                }
+              ],
+              "url": "/api/transfer/package",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "export",
+                "items": "{form.items}",
+                "dependencies": "{form.dependencies}"
+              },
+              "download": "{response.fileName|'aglyn-package.json'}",
+              "downloadAt": "package",
+              "success": "Package ready to save",
+              "reload": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.packageImport",
+      "title": "Import a package",
+      "icon": "square.and.arrow.down|upload",
+      "scope": "org",
+      "requires": "org.manager",
+      "subtitle": "Review every item, then import it; undo for seven days",
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Choose a package exported from this or another workspace. Nothing is written until you have reviewed every item."
+        },
+        {
+          "type": "form",
+          "id": "package",
+          "fields": [
+            {
+              "key": "package",
+              "label": "Package file",
+              "kind": "file",
+              "parse": "json",
+              "required": true,
+              "help": "A package file (JSON) made in Aglyn, at most 3 MB. A file changed after it was made is refused."
+            }
+          ],
+          "submit": {
+            "label": "Review the import",
+            "url": "/api/transfer/package",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "plan",
+              "package": "{form.package}"
+            },
+            "stash": {
+              "plan": "{response}",
+              "decisions": {},
+              "dependencyChoices": {},
+              "ack": null,
+              "result": null
+            },
+            "navigate": {
+              "screen": "core.settings.data.packageReview"
+            },
+            "reload": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.packageReview",
+      "title": "Review the import",
+      "icon": "checklist|inventory_2",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "decision": {
+          "create": {
+            "label": "Create",
+            "description": "Add it to this workspace."
+          },
+          "replace": {
+            "label": "Replace yours",
+            "description": "Write the package’s version over the one you have. Undo puts yours back for seven days."
+          },
+          "keepBoth": {
+            "label": "Keep both",
+            "description": "Add it as a copy beside yours, and point the package’s other items at the copy."
+          },
+          "skip": {
+            "label": "Skip",
+            "description": "Leave it out; anything in the package that names it uses yours."
+          },
+          "merge": {
+            "label": "Merge",
+            "description": "Fill in what yours has not set."
+          }
+        },
+        "status": {
+          "new": "New",
+          "identical": "Same as yours",
+          "differs": "Differs from yours",
+          "missingDependency": "Needs something missing"
+        },
+        "verdict": {
+          "create": "Creates",
+          "replace": "Replaces",
+          "keepBoth": "Adds a copy",
+          "skip": "Skipped",
+          "fail": "Fails"
+        },
+        "reason": {
+          "unknownKind": "Nothing in this workspace imports this kind — a plugin it does not run.",
+          "chosen": "You chose to skip it.",
+          "identical": "It is the same as the one you have.",
+          "missingDependency": "Something it needs was set to skip what needs it.",
+          "problems": "Its plugin would refuse it."
+        },
+        "dep": {
+          "import": {
+            "label": "Import the package’s copy",
+            "description": "Create the one the package carries."
+          },
+          "mapTo": {
+            "label": "Use one you have",
+            "description": "Point every item that names it at one of yours."
+          },
+          "dropReference": {
+            "label": "Leave it out",
+            "description": "Remove the reference from every item that names it."
+          },
+          "skipItem": {
+            "label": "Skip what needs it",
+            "description": "Skip every item that names it."
+          }
+        },
+        "warning": {
+          "replace": {
+            "title": "Items you have are replaced",
+            "description": "The items set to Replace are overwritten with the package’s version. Undo puts them back for seven days."
+          },
+          "dropReference": {
+            "title": "References are left out",
+            "description": "What you chose to leave out is removed from every item that names it."
+          },
+          "failed": {
+            "title": "Some items are not imported",
+            "description": "The items marked Fails are refused by their plugin and are left out; the rest are imported."
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "{stash.plan.job.fileName|'This package'}",
+          "when": "stash.plan",
+          "rows": [
+            {
+              "label": "From",
+              "value": "{stash.plan.job.package.source|''}",
+              "when": "stash.plan.job.package.source"
+            },
+            {
+              "label": "Creates",
+              "value": "{stash.plan.summary.create|'0'}"
+            },
+            {
+              "label": "Replaces yours",
+              "value": "{stash.plan.summary.replace|'0'}"
+            },
+            {
+              "label": "Adds a copy",
+              "value": "{stash.plan.summary.keepBoth|'0'}"
+            },
+            {
+              "label": "Skipped",
+              "value": "{stash.plan.summary.skip|'0'}"
+            },
+            {
+              "label": "Fails",
+              "value": "{stash.plan.summary.fail|'0'}",
+              "when": "stash.plan.summary.fail"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Some items are left out: nothing this workspace runs imports {stash.plan.unknownKinds}. Turn on the plugin that does and import again.",
+          "when": "stash.plan.unknownKinds"
+        },
+        {
+          "type": "list",
+          "title": "Items",
+          "when": "stash.plan.items",
+          "items": "stash.plan.items",
+          "count": true,
+          "primary": "{item.rename.name|item.name|item.id}",
+          "secondary": "{stash.plan.resources[@item.kind].label|item.kind} · {const.status[@item.status]}",
+          "tertiary": "{item.problems|const.reason[@item.reason]|''}",
+          "trailing": "{const.decision[@stash.decisions[@item.key]].label|''}",
+          "icon": "doc.on.doc|content_copy",
+          "badges": [
+            {
+              "text": "{const.verdict[@item.verdict]}",
+              "tones": {
+                "Creates": "success",
+                "Replaces": "warning",
+                "Adds a copy": "info",
+                "Skipped": "neutral",
+                "Fails": "error"
+              }
+            },
+            {
+              "text": "Matches yours: {item.existing.name|item.existing.id} (by {item.matchedBy})",
+              "when": "item.existing && item.matchedBy != id"
+            }
+          ],
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose what happens",
+              "icon": "slider.horizontal.3|tune",
+              "when": "item.decisions.1",
+              "prompt": [
+                {
+                  "key": "decision",
+                  "label": "What happens to it",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{item.decision}",
+                  "optionsFrom": {
+                    "items": "item.decisions",
+                    "value": "{item}",
+                    "label": "{const.decision[@item].label}"
+                  },
+                  "help": "Replace writes the package’s version over yours; undo puts yours back for seven days. Keep both adds a copy beside yours. Skip leaves it out."
+                }
+              ],
+              "url": "/api/transfer/package",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "plan",
+                "jobId": "{stash.plan.job.id}",
+                "decisions": {
+                  "$put": {
+                    "map": "{stash.decisions}",
+                    "key": "{item.key}",
+                    "value": "{form.decision}"
+                  }
+                },
+                "dependencyChoices": "{stash.dependencyChoices}"
+              },
+              "stash": {
+                "plan": "{response}",
+                "decisions": {
+                  "$put": {
+                    "map": "{stash.decisions}",
+                    "key": "{item.key}",
+                    "value": "{form.decision}"
+                  }
+                }
+              },
+              "reload": false
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Things this workspace does not have",
+          "when": "stash.plan.references",
+          "items": "stash.plan.references",
+          "count": true,
+          "primary": "{item.label}: {item.name|item.id}",
+          "secondary": "Named by {item.neededBy.length} items",
+          "tertiary": "{const.dep[@item.choice.action].label|'Choose what it becomes'}",
+          "icon": "questionmark.circle|help_outline",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose what it becomes",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "action",
+                  "label": "What it becomes",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{item.choice.action}",
+                  "optionsFrom": {
+                    "items": "item.choices",
+                    "value": "{item}",
+                    "label": "{const.dep[@item].label}",
+                    "filter": "item != mapTo || parent.targets.0"
+                  },
+                  "help": "Neither the package nor this workspace has it. Use one you have points every item that names it at one of yours."
+                },
+                {
+                  "key": "target",
+                  "label": "Which one of yours",
+                  "kind": "select",
+                  "when": "form.action == mapTo",
+                  "initial": "{item.choice.id|item.targets.0.id}",
+                  "optionsFrom": {
+                    "items": "item.targets",
+                    "value": "{item.id}",
+                    "label": "{item.name|item.id}"
+                  }
+                }
+              ],
+              "url": "/api/transfer/package",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "plan",
+                "jobId": "{stash.plan.job.id}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices": {
+                  "$put": {
+                    "map": "{stash.dependencyChoices}",
+                    "key": "{item.key}",
+                    "value": {
+                      "action": "{form.action}",
+                      "id": "{form.target}"
+                    }
+                  }
+                }
+              },
+              "stash": {
+                "plan": "{response}",
+                "dependencyChoices": {
+                  "$put": {
+                    "map": "{stash.dependencyChoices}",
+                    "key": "{item.key}",
+                    "value": {
+                      "action": "{form.action}",
+                      "id": "{form.target}"
+                    }
+                  }
+                }
+              },
+              "reload": false
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Rules every import keeps",
+          "items": "stash.plan.resources",
+          "filter": "item.value.rules && stash.plan.items.*.kind ~= @item.key",
+          "count": false,
+          "primary": "{item.value.label}",
+          "secondary": "{item.value.rules.*.label}",
+          "tertiary": "{item.value.rules.*.reason}",
+          "icon": "lock|lock"
+        },
+        {
+          "type": "list",
+          "title": "Before this can be imported",
+          "when": "stash.plan.blocking",
+          "items": "stash.plan.blocking",
+          "count": false,
+          "primary": "{item}",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "actions",
+          "when": "stash.plan",
+          "items": [
+            {
+              "id": "apply",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "stash.plan.acknowledgementsRequired && !stash.plan.blocking",
+              "prompt": [
+                {
+                  "key": "ack",
+                  "label": "Before importing",
+                  "kind": "multiselect",
+                  "coversAll": true,
+                  "optionsFrom": {
+                    "items": "stash.plan.acknowledgementsRequired",
+                    "value": "{item}",
+                    "label": "{const.warning[@item].title}: {const.warning[@item].description}"
+                  },
+                  "help": "Tick each one to confirm you understand it."
+                }
+              ],
+              "confirm": "Import this package into the workspace? Items it replaces are kept for seven days, so the import can be undone.",
+              "url": "/api/transfer/package",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "apply",
+                "jobId": "{stash.plan.job.id}",
+                "acknowledged": "{form.ack}"
+              },
+              "stash": {
+                "result": "{response}",
+                "ack": "{form.ack}"
+              },
+              "navigate": {
+                "screen": "core.settings.data.packageDone"
+              },
+              "reload": false
+            },
+            {
+              "id": "applyNow",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "!stash.plan.acknowledgementsRequired && !stash.plan.blocking",
+              "confirm": "Import this package into the workspace? Items it replaces are kept for seven days, so the import can be undone.",
+              "url": "/api/transfer/package",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "apply",
+                "jobId": "{stash.plan.job.id}"
+              },
+              "stash": {
+                "result": "{response}",
+                "ack": null
+              },
+              "navigate": {
+                "screen": "core.settings.data.packageDone"
+              },
+              "reload": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.packageDone",
+      "title": "Imported",
+      "icon": "checkmark.circle|check_circle",
+      "scope": "org",
+      "requires": "org.manager",
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "success",
+          "text": "Imported: {stash.result.job.results.created|'0'} created, {stash.result.job.results.updated|'0'} replaced, {stash.result.job.results.skipped|'0'} skipped, {stash.result.job.results.failed|'0'} failed.",
+          "when": "stash.result.done"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "The import stopped part of the way ({stash.result.job.results.total|'0'} items written so far). Continue to write the rest.",
+          "when": "!stash.result.done"
+        },
+        {
+          "type": "list",
+          "title": "Not imported",
+          "when": "stash.result.results",
+          "items": "stash.result.results",
+          "filter": "item.outcome == failed",
+          "count": true,
+          "primary": "{stash.plan.items[row=item.row].name|stash.plan.items[row=item.row].key|'An item'}",
+          "secondary": "{item.message|'Its plugin refused it.'}",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "You can undo this import for seven days, here or from the history."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "continue",
+              "label": "Continue the import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "!stash.result.done",
+              "url": "/api/transfer/package",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "apply",
+                "jobId": "{stash.plan.job.id}",
+                "acknowledged": "{stash.ack}"
+              },
+              "stash": {
+                "result": "{response}"
+              },
+              "reload": false
+            },
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "stash.plan.job.id",
+              "stash": {
+                "undoDecisions": {}
+              },
+              "navigate": {
+                "screen": "core.settings.data.packageUndo",
+                "params": {
+                  "jobId": "{stash.plan.job.id}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.packageUndo",
+      "title": "Undo the import",
+      "icon": "arrow.uturn.backward|undo",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "action": {
+          "created": "Delete it",
+          "updated": "Put back what it held"
+        },
+        "choice": {
+          "keep": "Keep the edit",
+          "revert": "Undo it too"
+        }
+      },
+      "load": {
+        "undo": {
+          "url": "/api/transfer/package",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "undoPlan",
+            "jobId": "{params.jobId}"
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "This import can no longer be checked. Imports can be undone for seven days.",
+          "when": "!data.undo"
+        },
+        {
+          "type": "fields",
+          "title": "What undoing does",
+          "when": "data.undo",
+          "rows": [
+            {
+              "label": "Replaced items put back",
+              "value": "{data.undo.counts.restore|'0'}"
+            },
+            {
+              "label": "Created items removed",
+              "value": "{data.undo.counts.delete|'0'}"
+            },
+            {
+              "label": "Need nothing (already back, or gone)",
+              "value": "{data.undo.counts.nothing|'0'}",
+              "when": "data.undo.counts.nothing"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "{data.undo.conflicts.length} items changed since the import. Each is kept as it is unless you choose to undo it too.",
+          "when": "data.undo.conflicts"
+        },
+        {
+          "type": "list",
+          "title": "Edited since the import",
+          "when": "data.undo.conflicts",
+          "items": "data.undo.conflicts",
+          "count": true,
+          "primary": "{item.name|item.id}",
+          "secondary": "{item.resource} · {const.action[@item.action]}",
+          "trailing": "{const.choice[@stash.undoDecisions[@item.id]]|'Keep the edit'}",
+          "icon": "pencil|edit",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "decision",
+                  "label": "What undo does to it",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.undoDecisions[@item.id]|'keep'}",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "Keep the edit"
+                    },
+                    {
+                      "value": "revert",
+                      "label": "Undo it too"
+                    }
+                  ]
+                }
+              ],
+              "stash": {
+                "undoDecisions": {
+                  "$put": {
+                    "map": "{stash.undoDecisions}",
+                    "key": "{item.id}",
+                    "value": "{form.decision}"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "data.undo",
+          "items": [
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "confirm": "Undo this import? Items you edited since are kept unless you chose to undo them too.",
+              "url": "/api/transfer/package",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "undo",
+                "jobId": "{params.jobId}",
+                "decisions": "{stash.undoDecisions}",
+                "otherwise": "keep"
+              },
+              "success": "Undone: {response.undo.counts.restore|'0'} put back, {response.undo.counts.delete|'0'} removed, {response.undo.counts.conflict|'0'} kept as edited.",
+              "back": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.sitePackageUndo",
+      "title": "Undo the site package import",
+      "icon": "arrow.uturn.backward|undo",
+      "scope": "org",
+      "requires": "org.manager",
+      "load": {
+        "undo": {
+          "url": "/api/hosts/import",
+          "method": "POST",
+          "body": {
+            "hostId": "{params.hostId}",
+            "action": "undoPlan",
+            "importId": "{params.importId}"
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "This import can no longer be checked. Imports can be undone for seven days.",
+          "when": "!data.undo"
+        },
+        {
+          "type": "fields",
+          "title": "What undoing does",
+          "when": "data.undo",
+          "rows": [
+            {
+              "label": "Items put back as they were",
+              "value": "{data.undo.counts.restore|'0'}"
+            },
+            {
+              "label": "Items the import added, removed",
+              "value": "{data.undo.counts.delete|'0'}"
+            },
+            {
+              "label": "Edited since the import",
+              "value": "{data.undo.counts.conflict|'0'}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Edited since the import",
+          "when": "data.undo.conflicts",
+          "items": "data.undo.conflicts",
+          "count": false,
+          "primary": "{item.name|item.targetId}",
+          "secondary": "{item.kind:title}: {item.step:title}"
+        },
+        {
+          "type": "actions",
+          "when": "data.undo",
+          "items": [
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "prompt": [
+                {
+                  "key": "otherwise",
+                  "label": "Items edited since",
+                  "kind": "select",
+                  "initial": "keep",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "Keep my edits"
+                    },
+                    {
+                      "value": "revert",
+                      "label": "Revert them too"
+                    }
+                  ]
+                }
+              ],
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{params.hostId}",
+                "action": "undo",
+                "importId": "{params.importId}",
+                "otherwise": "{form.otherwise}",
+                "decisions": {}
+              },
+              "success": "Undone",
+              "back": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

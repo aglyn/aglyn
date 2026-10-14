@@ -225,6 +225,16 @@ public final class AuthSession {
     _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
   }
 
+  /// Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner).
+  public func signIn(customToken: String) async throws {
+    if let rest {
+      user = try await rest.signIn(customToken: customToken)
+      await refreshStanding()
+      return
+    }
+    _ = try await Auth.auth().signIn(withCustomToken: customToken)
+  }
+
   /// Changes the password, after proving the current one.
   public func changePassword(current: String, new: String) async throws {
     guard let email = user?.email else { throw IdentityToolkitError(code: "INVALID_LOGIN_CREDENTIALS", status: 401) }
@@ -251,6 +261,20 @@ public final class AuthSession {
     user = AglynUser(uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed)
   }
 
+  /// Disconnects a sign-in provider (`google.com`), as the console's Account section does with `unlink`.
+  public func unlinkProvider(_ providerID: String) async throws {
+    if let rest {
+      try await rest.deleteProvider(providerID)
+      await refreshStanding()
+      return
+    }
+    guard let signedIn = Auth.auth().currentUser else { throw IdentityToolkitError(code: nil, status: 401) }
+    _ = try await signedIn.unlink(fromProvider: providerID)
+    // The token's identities are read for the provider list, so ask for a fresh one.
+    _ = try await signedIn.getIDToken(forcingRefresh: true)
+    await refreshStanding()
+  }
+
   public func resetPassword(email: String) async throws {
     let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
     if let rest {
@@ -273,7 +297,7 @@ public final class AuthSession {
     if impersonation != nil { await endImpersonation() }
     let aside = user
     let session = makeImpersonationAuth()
-    let customer = try await session.signInWithCustomToken(token, tenantId: tenantId)
+    let customer = try await session.signIn(customToken: token, tenantId: tenantId)
     staffAside = aside
     impersonated = session
     impersonationFlag.set(true)

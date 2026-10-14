@@ -1,0 +1,223 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  TRANSFER_API_ROUTES,
+  TRANSFER_CSV_DELIMITERS,
+  TRANSFER_UPLOAD_MAX_BYTES,
+  TRANSFER_UPLOAD_PART_MAX_BYTES,
+  transferResourceImports,
+} from '@aglyn/aglyn/data-transfer'
+import {
+  BLANK_WORDS,
+  MATCH_KIND_WORDS,
+  MATCH_REASON_WORDS,
+  MODE_WORDS,
+  NORMALIZER_WORDS,
+  ON_AMBIGUOUS_WORDS,
+  ON_MATCH_WORDS,
+  ON_NEW_WORDS,
+  REASON_WORDS as ROW_REASON_WORDS,
+  VERDICT_WORDS as ROW_VERDICT_WORDS,
+  WARNING_CLASS_WORDS,
+} from '@aglyn/aglyn-transfer-ui'
+import { CSV_UPLOAD_MAX_CHARACTERS } from '@aglyn/aglyn/app-utils/csv-upload'
+import { FIRST_PARTY_PLUGINS } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
+import { listDeclaredTransferResources } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import {
+  DECISION_WORDS,
+  DEPENDENCY_WORDS,
+  JOB_STATUS_WORDS,
+  PACKAGE_WARNING_WORDS,
+  REASON_WORDS,
+  STATUS_WORDS,
+  VERDICT_WORDS,
+} from '../components/transfer-hub/hub-words'
+
+/**
+ * The native Imports and exports hub speaks the console's words and calls
+ * its routes: the package review's choices, statuses, verdicts, reasons and
+ * warnings are the sentences `hub-words.ts` holds, and the actions it sends
+ * to `/api/transfer/package` are the ones the hub client sends.
+ */
+interface Screen {
+  id: string
+  constants?: Record<string, Record<string, unknown>>
+}
+
+const screens = (
+  JSON.parse(readFileSync(join(__dirname, '../../../libs/native/screens/transfer.screens.json'), 'utf8')) as {
+    screens: Screen[]
+  }
+).screens
+const text = readFileSync(join(__dirname, '../../../libs/native/screens/transfer.screens.json'), 'utf8')
+const constants = (id: string) => screens.find((screen) => screen.id === id)?.constants ?? {}
+
+describe('native imports and exports hub', () => {
+  it('shows the package review in the console words', () => {
+    const review = constants('core.settings.data.packageReview')
+    expect(review['decision']).toEqual(DECISION_WORDS)
+    expect(review['status']).toEqual(STATUS_WORDS)
+    expect(review['verdict']).toEqual(VERDICT_WORDS)
+    expect(review['reason']).toEqual(REASON_WORDS)
+    expect(review['dep']).toEqual(DEPENDENCY_WORDS)
+    expect(review['warning']).toEqual(PACKAGE_WARNING_WORDS)
+  })
+
+  it('names each job status as the history does', () => {
+    const labels = Object.fromEntries(Object.entries(JOB_STATUS_WORDS).map(([status, word]) => [status, word.label]))
+    expect(constants('core.settings.data')['status']).toEqual(labels)
+  })
+
+  it('tones the history badges by the console colors', () => {
+    const tones = Object.fromEntries(
+      Object.values(JOB_STATUS_WORDS)
+        .filter((word) => word.color !== 'default')
+        .map((word) => [word.label, word.color === 'warning' || word.color === 'error' || word.color === 'success' ? word.color : 'info']),
+    )
+    const hub = screens.find((screen) => screen.id === 'core.settings.data') as unknown as {
+      blocks: Array<{ title?: string; badges?: Array<{ tones: Record<string, string> }> }>
+    }
+    const history = hub.blocks.find((block) => block.title === 'History')
+    expect(history?.badges?.[0]?.tones).toMatchObject(tones)
+  })
+
+  it('sends the package actions the hub client sends', () => {
+    for (const action of ['list', 'export', 'plan', 'apply', 'undoPlan', 'undo']) {
+      expect(text).toContain(`"action": "${action}"`)
+    }
+    for (const route of [TRANSFER_API_ROUTES.package, TRANSFER_API_ROUTES.jobs, TRANSFER_API_ROUTES.status]) {
+      expect(text).toContain(`"${route}"`)
+    }
+  })
+
+  it('discards an unfinished import and downloads a result file through the console routes', () => {
+    expect(text).toContain('"action": "discard"')
+    expect(text).toContain('"download": "results"')
+    expect(text).toContain('"unfinished": true')
+    expect(text).toContain('"sitePackages": true')
+  })
+
+  it('lists every resource the plugins declare, once, where the console lists it', () => {
+    const generated = JSON.parse(
+      readFileSync(join(__dirname, '../../../libs/native/screens/transfer-resources.screens.json'), 'utf8'),
+    ) as { screens: Array<{ id: string; constants: Record<string, Array<{ key: string; imports: boolean; kind: string }>> }> }
+    const listed = (id: string) =>
+      Object.values(generated.screens.find((screen) => screen.id === id)?.constants ?? {}).flat()
+    const org = listed('core.settings.data.records')
+    const site = listed('core.site.data')
+    const declared = listDeclaredTransferResources().filter((resource) => !resource.instances)
+    expect(org.map((row) => row.key).sort()).toEqual(
+      declared.filter((resource) => resource.scope === 'org').map((resource) => resource.key).sort(),
+    )
+    expect(site.map((row) => row.key).sort()).toEqual(
+      declared.filter((resource) => resource.scope === 'host').map((resource) => resource.key).sort(),
+    )
+    for (const row of [...org, ...site]) {
+      const resource = declared.find((one) => one.key === row.key)
+      expect(row.imports).toBe(transferResourceImports(resource ?? {}))
+      expect(row.kind).toBe(resource?.kinds.includes('package') ? 'package' : 'records')
+    }
+  })
+
+  it('asks the switchboard about plugins the app knows', () => {
+    const generated = readFileSync(join(__dirname, '../../../libs/native/screens/transfer-resources.screens.json'), 'utf8')
+    const asked = [...generated.matchAll(/data\.sw\.rows\[id='([^']+)'\]/g)].map((match) => match[1])
+    expect(asked.length).toBeGreaterThan(0)
+    const known = new Set(FIRST_PARTY_PLUGINS.map((plugin) => plugin.id))
+    for (const id of asked) expect(known.has(id)).toBe(true)
+  })
+
+  describe('the records import wizard', () => {
+    const importText = readFileSync(join(__dirname, '../../../libs/native/screens/transfer-import.screens.json'), 'utf8')
+    const wizard = (JSON.parse(importText) as { screens: Screen[] }).screens
+    const words = (id: string) => wizard.find((screen) => screen.id === id)?.constants ?? {}
+
+    it('says every code in the kit\u2019s words', () => {
+      const review = words('core.settings.data.import.review')
+      expect(review['warning']).toEqual(WARNING_CLASS_WORDS)
+      expect(review['verdict']).toEqual(ROW_VERDICT_WORDS)
+      expect(review['reason']).toEqual(ROW_REASON_WORDS)
+      expect(review['mode']).toEqual(MODE_WORDS)
+      const rules = words('core.settings.data.import.rules')
+      expect(rules['mode']).toEqual(MODE_WORDS)
+      expect(rules['blank']).toEqual(BLANK_WORDS)
+      expect(words('core.settings.data.import.columns')['matchReason']).toEqual(MATCH_REASON_WORDS)
+      const matching = words('core.settings.data.import.matching')
+      expect(matching['matchKind']).toEqual(MATCH_KIND_WORDS)
+      expect(matching['normalizer']).toEqual(NORMALIZER_WORDS)
+      expect(words('core.settings.data.import.done')['reason']).toEqual(ROW_REASON_WORDS)
+    })
+
+    it('offers the record rules the console offers, with its sentences', () => {
+      const rules = wizard.find((screen) => screen.id === 'core.settings.data.import.rules') as unknown as {
+        blocks: Array<{ id?: string; fields?: Array<{ key: string; options: Array<{ value: string; label: string }> }> }>
+      }
+      const policy = rules.blocks.find((block) => block.id === 'policy')?.fields ?? []
+      const options = (key: string) => Object.fromEntries((policy.find((field) => field.key === key)?.options ?? []).map((one) => [one.value, one.label]))
+      expect(options('onMatch')).toEqual(ON_MATCH_WORDS)
+      expect(options('onNew')).toEqual(ON_NEW_WORDS)
+      expect(options('onAmbiguous')).toEqual(ON_AMBIGUOUS_WORDS)
+      // Append only suits a list field, so the default for every field does not offer it.
+      expect(Object.keys(options('mode'))).toEqual(Object.keys(MODE_WORDS).filter((mode) => mode !== 'append'))
+      expect(options('blank')).toEqual(Object.fromEntries(Object.entries(BLANK_WORDS).map(([key, word]) => [key, word.label])))
+    })
+
+    it('keeps the plan it asked for and sends a plugin step\u2019s answers with it, as the console\u2019s wizard does', () => {
+      // The plan request carries what a plugin\u2019s extra wizard steps collected (`extras`), by step id (TransferPlanChoices).
+      expect(importText).toContain('"extras?": "{stash.importExtras}"')
+      expect(importText).toContain('"importPlanBody"')
+      // The review draws the steps a plugin contributes for this resource, in the zone it names.
+      const review = (JSON.parse(importText) as { screens: Array<{ id: string; blocks: Array<{ type: string; name?: string }> }> }).screens.find(
+        (screen) => screen.id === 'core.settings.data.import.review',
+      )
+      expect(review?.blocks.filter((block) => block.type === 'zone').map((block) => block.name)).toEqual(['transferStep'])
+    })
+
+    it('uploads in the parts, with the separators and the choices the routes take', () => {
+      expect(importText).toContain(`"bytes": ${TRANSFER_UPLOAD_PART_MAX_BYTES}`)
+      expect(TRANSFER_UPLOAD_MAX_BYTES).toBe(24_000_000)
+      // The upload field is told the resource's own limits, as the console's upload step is (`resource.limits.maxBytes ??
+      // CSV_UPLOAD_MAX_CHARACTERS`); the server holds every file to TRANSFER_UPLOAD_MAX_BYTES whatever a resource says.
+      expect(importText).toContain('"kind": "upload"')
+      expect(importText).toContain('"maxBytes": "{data.info.resource.limits.maxBytes}"')
+      expect(importText).toContain('"maxRows": "{data.info.resource.limits.maxRows}"')
+      expect(importText).toContain('"formats": "{data.info.resource.formats}"')
+      // Both platforms fall back to the console's own ceiling for a resource with none of its own.
+      for (const source of ['apple/Sources/AglynCore/TransferUploadDraft.swift', 'kotlin/core/src/commonMain/kotlin/com/aglyn/core/TransferUploadDraft.kt']) {
+        expect(readFileSync(join(__dirname, '../../../libs/native', source), 'utf8')).toContain(String(CSV_UPLOAD_MAX_CHARACTERS).replace(/(\d)(?=(\d{3})+$)/g, '$1_'))
+      }
+      // The separator is read from the file (or chosen on the upload field) and rides the first part only, as the console's client sends it.
+      const upload = (JSON.parse(importText) as { screens: Array<{ id: string; blocks: Array<{ id?: string; submit?: { chunk?: { firstOnly?: string[] } } }> }> }).screens.find(
+        (screen) => screen.id === 'core.settings.data.import',
+      )?.blocks.find((block) => block.id === 'file')?.submit?.chunk
+      expect(upload?.firstOnly).toEqual(['delimiter', 'headerRow'])
+      expect(TRANSFER_CSV_DELIMITERS).toEqual([',', ';', '\t'])
+      for (const route of ['fields', 'upload', 'analyze', 'plan', 'apply', 'status', 'undo'] as const) {
+        expect(importText).toContain(`"${TRANSFER_API_ROUTES[route]}"`)
+      }
+      for (const action of ['mapTo', 'addValue', 'leaveBlank', 'refuseRow', 'create']) expect(importText).toContain(`"${action}"`)
+      expect(words('core.settings.data.import.values')['picklistAction']).toEqual({
+        mapTo: 'Map to a list value',
+        addValue: 'Add it to the list',
+        leaveBlank: 'Leave the field blank',
+        refuseRow: 'Refuse these rows',
+      })
+    })
+  })
+})

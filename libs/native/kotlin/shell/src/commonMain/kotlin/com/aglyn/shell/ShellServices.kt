@@ -210,13 +210,14 @@ internal class ShellPluginContext(
     if (link != null) openLink(link)
   }
 
-  fun openLink(link: String) {
+  override fun openLink(link: String): Boolean {
     when (val target = DeepLinks.resolve(link, services.registry.deepLinks())) {
       is NativeLinkTarget.Screen -> navigator.push(Route.Screen(target.screen, target.params))
       is NativeLinkTarget.Besigner -> navigator.push(Route.Besigner(target.path))
       is NativeLinkTarget.Unmatched -> nativeFor(target.path)
-      null -> Unit
+      null -> return false
     }
+    return true
   }
 
   /** The shell's own native answer to a console page no plugin claims. */

@@ -139,7 +139,23 @@ final class AppModel {
           try await self?.auth?.changePassword(current: current, new: new)
         },
         updateDisplayName: { [weak self] name in try await self?.auth?.updateDisplayName(name) },
-        message: { passwordChangeMessage($0) }))
+        unlinkProvider: { [weak self] provider in
+          try await self?.auth?.unlinkProvider(provider)
+          await self?.refreshClaims(force: true)
+        },
+        linkGoogle: { [weak self] authenticate in
+          let parts = await MainActor.run { (self?.config, self?.auth, self?.auth?.user?.email) }
+          guard let config = parts.0, let client = config.google, let auth = parts.1 else {
+            throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
+          }
+          try await GoogleLink.link(
+            iosClientID: client.iosClientID, apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost,
+            loginHint: parts.2, transport: URLSession.shared,
+            firebaseIDToken: { try await auth.idToken(forceRefresh: true) }, authenticate: authenticate)
+          await self?.refreshClaims(force: true)
+        },
+        message: { passwordChangeMessage($0) }),
+      googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty)
   }
 
   func signOut() async {
@@ -192,7 +208,11 @@ final class AppModel {
         guard let navigation else { return }
         _ = navigation.paths[navigation.section]?.popLast()
       },
-      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) })
+      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) },
+      openLink: { [weak self, weak navigation] link in
+        guard let self, let navigation else { return }
+        self.open(link, in: navigation)
+      })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's

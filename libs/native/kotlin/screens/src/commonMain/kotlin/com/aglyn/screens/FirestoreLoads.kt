@@ -52,6 +52,20 @@ internal object FirestoreLoads {
 
   suspend fun document(reader: FirestoreReader, path: String): JsonElement = reader.get(path)?.let { json(it) } ?: JsonNull
 
+  /** `2026-10-13T04:00:00Z` (fraction optional, or a bare date) as a timestamp, else null. */
+  internal fun isoInstant(text: String): FirestoreTimestamp? {
+    val match = Regex("""^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z)?$""").find(text) ?: return null
+    val (y, m, d) = match.groupValues.slice(1..3).map { it.toInt() }
+    val clock = match.groupValues.slice(4..6).map { it.toIntOrNull() ?: 0 }
+    val fraction = match.groupValues[7].padEnd(9, '0').take(9).toIntOrNull() ?: 0
+    val yy = if (m <= 2) y - 1 else y
+    val era = (if (yy >= 0) yy else yy - 399) / 400
+    val yoe = yy - era * 400
+    val doy = (153 * (m + (if (m > 2) -3 else 9)) + 2) / 5 + d - 1
+    val days = era * 146097L + (yoe * 365 + yoe / 4 - yoe / 100 + doy) - 719468
+    return FirestoreTimestamp(days * 86400 + clock[0] * 3600 + clock[1] * 60 + clock[2], fraction)
+  }
+
   /**
    * Whether the workspace carries a plan feature, as the console's `checkEntitlement` answers from the workspace's own
    * document, with the name of the cheapest plan that includes it (what an upsell says): `{ carried, label }`.
@@ -108,7 +122,8 @@ internal object FirestoreLoads {
   fun queryLimit(spec: JsonElement): Int = ScreenValues.number(spec.obj("limit"))?.toInt() ?: 50
 
   /**
-   * `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. [limit] replaces the spec's own
+   * `spec` is `{ collection, where: [[field, op, value, condition?]], orderBy: "field desc", limit, aggregate }`; a value may be
+   * `{ "$date": ISO }` for a timestamp. [limit] replaces the spec's own
    * when a list has been asked for more rows (a growing window, as the console's lists page).
    */
   suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement, limit: Int? = null): JsonElement {
@@ -135,6 +150,8 @@ internal object FirestoreLoads {
       fun plain(raw: JsonElement): Any? {
         // A number or flag written into the spec is compared as itself, not as its text.
         if (raw is JsonNull) return null
+        // `{ "$date": ISO }`: a timestamp.
+        if (raw is JsonObject) return raw.str("\$date")?.let { isoInstant(it) } ?: ScreenValues.text(raw)
         (raw as? JsonPrimitive)?.takeIf { !it.isString }?.let { literal ->
           return if (literal.content == "true" || literal.content == "false") literal.content == "true" else literal.content.toDoubleOrNull()
         }
@@ -160,7 +177,11 @@ internal object FirestoreLoads {
     // shows "Unavailable" instead of a zero.
     spec.obj("aggregate")?.let { aggregate ->
       val whole = FirestoreQuery(collection, filters, order)
-      val count = if ((aggregate.obj("count") as? JsonPrimitive)?.content == "true") reader.count(whole) else null
+      val counting = (aggregate.obj("count") as? JsonPrimitive)?.content == "true"
+      // `rows: <ceiling>`: where the reader cannot count, the rows are read up to the ceiling and counted (a usage meter).
+      val count = if (!counting) null else reader.count(whole) ?: ScreenValues.number(aggregate.obj("rows"))?.let { ceiling ->
+        reader.page(FirestoreQuery(collection, filters, order, ceiling.toInt())).docs.size.toLong()
+      }
       val sum = aggregate.str("sum")?.let { reader.sum(whole, it) }
       return JsonObject(
         buildMap {
