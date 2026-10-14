@@ -28,6 +28,7 @@ import kotlinx.serialization.json.doubleOrNull
 /** The setup sections, in the console's order (`setup-sections.ts`). */
 enum class SetupSection(val id: String, val title: String, val supporting: String, val icon: String) {
   DETAILS("details", "Basic details", "Logo, business details, layout and languages", "info"),
+  BUSINESS("business", "Business profile", "What the business is, for everything that writes about it", "storefront"),
   SEO("seo", "SEO", "Search title, social image, business profile and verification", "travel_explore"),
   TRACKING("tracking", "Tracking", "Analytics, ad tags and the consent banner", "analytics"),
   THEME("theme", "Theme", "Colors, font, shape and your saved themes", "palette"),

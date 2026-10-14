@@ -142,6 +142,7 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
               if (!canEdit) NoticeBanner("You can view this site's setup. Changing it needs the author, editor or admin role.", StatusTone.INFO)
               when (section) {
                 SetupSection.DETAILS -> DetailsSection(context, hostId, doc.data, api, canEdit)
+                SetupSection.BUSINESS -> BusinessSection(context, hostId, doc.data, canEdit)
                 SetupSection.SEO -> SeoSection(doc.data, api, canEdit)
                 SetupSection.TRACKING -> TrackingSection(doc.data, api, canEdit)
                 SetupSection.THEME -> ThemeSection(context, hostId, doc.data, api, canEdit)

@@ -14,8 +14,16 @@
       "why": "Reached by variables: the binding token grammar."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "why": "A site's business profile: what the owner typed, what the site's own settings say and the workspace defaults, field by field with where each came from, and the owner's save; the native Business profile section reads and writes the same document (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/collection-entry-date.ts",
       "why": "Reached by entry-list-declaration: the entry date fields and publish sort key, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/content-authors.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/content-schema-type.ts",
@@ -64,6 +72,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "why": "Reached by media-filter: media kinds, orientation and the name-token normalizer the library search asks with."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/message-search.ts",
@@ -134,6 +146,10 @@
       "why": "Reached by host-naming: the tenant apex domain constants."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/url-slug.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/variables.ts",
       "why": "A site variable's types, labels, name rule and how its value reads; the native Logic screens list and edit variables from it (AGL-3668)."
     },
@@ -144,6 +160,10 @@
     {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
       "why": "Reached by booking-contact-fields: contact shapes and the phone normalizer; no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/platform.types.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",

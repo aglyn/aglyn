@@ -295,7 +295,8 @@
         "LOCAL_BUSINESS_TYPE_OPTIONS",
         "AREA_SERVED_MAX",
         "PRICE_RANGE_MAX_LENGTH",
-        "PAYMENT_ACCEPTED_MAX_LENGTH"
+        "PAYMENT_ACCEPTED_MAX_LENGTH",
+        "AREA_SERVED_NAME_MAX_LENGTH"
       ]
     },
     "libs/aglyn/src/lib/app-utils/search-engine-verification.ts": {
@@ -639,6 +640,24 @@
         "ARTIFACT_TYPE_LABELS",
         "INSTALL_TARGETS",
         "LISTING_CATEGORIES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/business-profile.ts": {
+      "values": [
+        "BUSINESS_TONE_LABELS",
+        "BUSINESS_PROFILE_MAX_CHARS",
+        "BUSINESS_PROFILE_MAX_SERVICES",
+        "BUSINESS_PROFILE_ORIGIN_LABELS",
+        "BUSINESS_PROFILE_SUBCOLLECTION",
+        "BUSINESS_PROFILE_SITE_DOC",
+        "BUSINESS_PROFILE_WORKSPACE_DOC",
+        "BUSINESS_TONE_ORDER",
+        "BUSINESS_PROFILE_FIELD_ORDER"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/content-authors.ts": {
+      "values": [
+        "AUTHOR_SAME_AS_MAX"
       ]
     }
   },
@@ -12194,6 +12213,690 @@
         [
           "component",
           "C"
+        ]
+      ]
+    },
+    "resolveBusinessProfile": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          {
+            "host": null
+          }
+        ],
+        [
+          {
+            "host": {}
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Paws & Co",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": "Paws and Company Grooming",
+                  "description": "Dog grooming with a calm, gentle hand.",
+                  "telephone": "(512) 555-0100",
+                  "email": "hello@paws.example",
+                  "openingHours": "Mo-Fr 09:00-17:00",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX"
+                  },
+                  "areaServed": [
+                    "Austin",
+                    "Round Rock"
+                  ],
+                  "businessType": "PetStore",
+                  "sameAs": [
+                    "https://facebook.com/paws",
+                    "http://nope.example",
+                    "https://facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "support@paws.example",
+                "address": "2 Side St\nAustin",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "url": "http://insecure.example"
+                  },
+                  null
+                ]
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Paws & Co",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": "Paws and Company Grooming",
+                  "description": "Dog grooming with a calm, gentle hand.",
+                  "telephone": "(512) 555-0100",
+                  "email": "hello@paws.example",
+                  "openingHours": "Mo-Fr 09:00-17:00",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX"
+                  },
+                  "areaServed": [
+                    "Austin",
+                    "Round Rock"
+                  ],
+                  "businessType": "PetStore",
+                  "sameAs": [
+                    "https://facebook.com/paws",
+                    "http://nope.example",
+                    "https://facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "support@paws.example",
+                "address": "2 Side St\nAustin",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "url": "http://insecure.example"
+                  },
+                  null
+                ]
+              }
+            },
+            "site": {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "site": {
+              "whatYouDo": "Mobile grooming",
+              "services": [
+                "Bath",
+                "Nail trim",
+                "bath"
+              ],
+              "audience": "Owners",
+              "tone": "friendly",
+              "toneNotes": "No exclamation marks",
+              "sources": {
+                "whatYouDo": "owner",
+                "services": "owner",
+                "audience": "ai",
+                "tone": "start"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "site": {
+              "whatYouDo": "A guess",
+              "services": [
+                "Full groom"
+              ],
+              "sources": {
+                "whatYouDo": "ai",
+                "services": "ai"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "displayName": "Bare Site",
+              "business": {
+                "address": "9 Lane"
+              }
+            },
+            "workspace": {
+              "whatYouDo": "Workspace line",
+              "services": [
+                "Default service"
+              ],
+              "audience": "Everyone",
+              "tone": "professional"
+            }
+          }
+        ],
+        [
+          {
+            "host": {
+              "seo": {
+                "entity": {
+                  "areaServed": "A\nB\nA"
+                }
+              },
+              "logoUrl": "  ",
+              "displayName": " x "
+            }
+          }
+        ]
+      ]
+    },
+    "businessProfileSourceOf": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          null,
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "services"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "audience"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "tone"
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          "serviceArea"
+        ],
+        [
+          {
+            "whatYouDo": "x"
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "whatYouDo": "x",
+            "sources": {
+              "whatYouDo": "junk"
+            }
+          },
+          "whatYouDo"
+        ],
+        [
+          {
+            "tone": "loud"
+          },
+          "tone"
+        ]
+      ]
+    },
+    "sanitizeBusinessProfileValues": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "whatYouDo": "  one   sentence  ",
+            "services": "a, b\nc, A",
+            "tone": "plain",
+            "toneNotes": "x"
+          }
+        ],
+        [
+          {
+            "services": [
+              "  Bath  ",
+              "",
+              "bath",
+              "B"
+            ],
+            "tone": "loud",
+            "audience": 42
+          }
+        ],
+        [
+          {
+            "whatYouDo": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "services": [
+              "s0",
+              "s1",
+              "s2",
+              "s3",
+              "s4",
+              "s5",
+              "s6",
+              "s7",
+              "s8",
+              "s9",
+              "s10",
+              "s11",
+              "s12",
+              "s13",
+              "s14",
+              "s15",
+              "s16",
+              "s17",
+              "s18",
+              "s19"
+            ],
+            "serviceArea": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+          }
+        ]
+      ]
+    },
+    "businessProfileOwnerWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "args": [
+        [
+          null,
+          {
+            "whatYouDo": "Hi",
+            "services": "a\nb",
+            "tone": "plain"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks"
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {
+            "whatYouDo": "Changed",
+            "audience": "",
+            "tone": null
+          }
+        ],
+        [
+          {
+            "whatYouDo": "A guess",
+            "services": [
+              "Full groom"
+            ],
+            "sources": {
+              "whatYouDo": "ai",
+              "services": "ai"
+            }
+          },
+          {
+            "whatYouDo": "A guess",
+            "services": [
+              "Full groom",
+              "New"
+            ]
+          }
+        ],
+        [
+          {
+            "whatYouDo": "",
+            "sources": {
+              "whatYouDo": "owner"
+            }
+          },
+          {
+            "whatYouDo": ""
+          }
+        ],
+        [
+          {
+            "whatYouDo": "Mobile grooming",
+            "services": [
+              "Bath",
+              "Nail trim",
+              "bath"
+            ],
+            "audience": "Owners",
+            "tone": "friendly",
+            "toneNotes": "No exclamation marks",
+            "sources": {
+              "whatYouDo": "owner",
+              "services": "owner",
+              "audience": "ai",
+              "tone": "start"
+            }
+          },
+          {}
+        ]
+      ]
+    },
+    "normalizeAreaServed": {
+      "module": "libs/aglyn/src/lib/app-utils/local-business.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          "A\nB\r\na"
+        ],
+        [
+          [
+            "x",
+            " y ",
+            "x",
+            4
+          ]
+        ],
+        [
+          [
+            "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+          ]
+        ],
+        [
+          [
+            "c0",
+            "c1",
+            "c2",
+            "c3",
+            "c4",
+            "c5",
+            "c6",
+            "c7",
+            "c8",
+            "c9",
+            "c10",
+            "c11",
+            "c12",
+            "c13",
+            "c14",
+            "c15",
+            "c16",
+            "c17",
+            "c18",
+            "c19",
+            "c20",
+            "c21",
+            "c22",
+            "c23",
+            "c24",
+            "c25",
+            "c26",
+            "c27",
+            "c28",
+            "c29"
+          ]
+        ]
+      ]
+    },
+    "siteProfileUrls": {
+      "module": "libs/aglyn/src/lib/app-utils/content-authors.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "displayName": "Paws & Co",
+            "logoUrl": "https://cdn.example/logo.png",
+            "seo": {
+              "entity": {
+                "name": "Paws and Company Grooming",
+                "description": "Dog grooming with a calm, gentle hand.",
+                "telephone": "(512) 555-0100",
+                "email": "hello@paws.example",
+                "openingHours": "Mo-Fr 09:00-17:00",
+                "address": {
+                  "streetAddress": "1 Main St",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX"
+                },
+                "areaServed": [
+                  "Austin",
+                  "Round Rock"
+                ],
+                "businessType": "PetStore",
+                "sameAs": [
+                  "https://facebook.com/paws",
+                  "http://nope.example",
+                  "https://facebook.com/paws"
+                ]
+              }
+            },
+            "business": {
+              "supportEmail": "support@paws.example",
+              "address": "2 Side St\nAustin",
+              "socialLinks": [
+                {
+                  "label": "Instagram",
+                  "url": "https://instagram.com/paws"
+                },
+                {
+                  "url": "http://insecure.example"
+                },
+                null
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "business": {
+              "socialLinks": [
+                {
+                  "url": "https://a.example"
+                },
+                {
+                  "url": "https://a.example"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "sameAs": [
+                  "https://s0.example",
+                  "https://s1.example",
+                  "https://s2.example",
+                  "https://s3.example",
+                  "https://s4.example",
+                  "https://s5.example",
+                  "https://s6.example",
+                  "https://s7.example",
+                  "https://s8.example",
+                  "https://s9.example",
+                  "https://s10.example",
+                  "https://s11.example",
+                  "https://s12.example",
+                  "https://s13.example",
+                  "https://s14.example",
+                  "https://s15.example",
+                  "https://s16.example",
+                  "https://s17.example",
+                  "https://s18.example",
+                  "https://s19.example"
+                ]
+              }
+            }
+          }
         ]
       ]
     }
