@@ -733,8 +733,17 @@ Every door reads its row rather than a constant of its own.
   does not — at 5,000 of room it cut the page ceiling to 879. The room stays sized at
   medium, and so do the figures priced or measured from it — the Free wall's page and
   layout, and the measured tables in `ai-credit-estimate.ts` — so none moved: low draws
-  less, and a quote is never under what is drawn. The theme step already thought
-  adaptively, at the model's default effort, and is unchanged.
+  less, and a quote is never under what is drawn.
+- **Three more rows moved after the golden A/B of 2026-10-14** (AGL-3781;
+  arm B against the defaults, one brief a kind): the theme step thinks
+  adaptively at `effort: medium` (its brief passed with the default's scores
+  and half the output tokens; a site start's look keeps its own thinking-off
+  setting), a template asks `effort: medium` with thinking off (both briefs
+  passed, about a third fewer output tokens), and a text answer thinks at
+  `effort: low` (the tagline passed and scored higher). The arm also lowered
+  products, components, forms, email, workflows and logic, and lost
+  quality on the catalog, a component and a workflow, so those rows keep
+  their defaults.
 
 ## Planning, and a job that waits for a person
 

@@ -217,8 +217,11 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['layout'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
   'job.template': {
+    // Medium since the golden A/B of 2026-10-14 (AGL-3781): both template
+    // briefs passed at medium as at the default, with about a third fewer
+    // output tokens.
     thinking: 'off',
-    effort: null,
+    effort: 'medium',
     maxTokens: 8000,
     maxTokensBasis:
       "tighter than the doctrine's default for a template, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
@@ -384,15 +387,20 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['seo'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
   'job.text': {
+    // Low since the golden A/B of 2026-10-14 (AGL-3781): the tagline brief
+    // passed at low, its copy scored higher than at the default.
     thinking: 'adaptive',
-    effort: null,
+    effort: 'low',
     maxTokens: 1024,
     maxTokensBasis: 'a few paragraphs of copy; a brief asking for more gets a draft to extend',
     eval: { kinds: ['text'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
   'job.theme': {
+    // Medium since the golden A/B of 2026-10-14 (AGL-3781): the theme brief
+    // passed at medium with the default's scores and half its output tokens.
+    // A site start's look runs its own setting (`ai-job-site-look.ts`).
     thinking: 'adaptive',
-    effort: null,
+    effort: 'medium',
     maxTokens: 8000,
     maxTokensBasis:
       'the largest answer the theme tool accepts, about 2,500 tokens of JSON as ai-job-theme-step.spec.ts measures it, with as much again to think in',
