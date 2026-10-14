@@ -204,6 +204,16 @@ public final class AuthSession {
     _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
   }
 
+  /// Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner).
+  public func signIn(customToken: String) async throws {
+    if let rest {
+      user = try await rest.signIn(customToken: customToken)
+      await refreshStanding()
+      return
+    }
+    _ = try await Auth.auth().signIn(withCustomToken: customToken)
+  }
+
   /// Changes the password, after proving the current one.
   public func changePassword(current: String, new: String) async throws {
     guard let email = user?.email else { throw IdentityToolkitError(code: "INVALID_LOGIN_CREDENTIALS", status: 401) }

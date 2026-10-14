@@ -158,6 +158,9 @@ val LocalGoogleCredentialSource = compositionLocalOf<com.aglyn.core.GoogleCreden
 
 sealed interface ActionOutcome {
   data class Done(val message: String?, val response: JsonElement?) : ActionOutcome
+/** Signs in with a passkey on this device; the app provides it where the device can (null elsewhere, and the desktop). */
+val LocalPasskeyAsserter = compositionLocalOf<PasskeyAsserter?> { null }
+
   /** A route answered with a file to save. */
   class File(val name: String, val mimeType: String, val bytes: ByteArray, val message: String?) : ActionOutcome
   data class NeedsReauth(val message: String) : ActionOutcome

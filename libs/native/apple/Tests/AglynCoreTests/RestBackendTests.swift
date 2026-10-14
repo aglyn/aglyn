@@ -75,6 +75,24 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(store.load()?.uid, "u1")
   }
 
+  func testSignsInWithACustomTokenAndAsksWhoItIs() async throws {
+    let transport = RecordingTransport([
+      (200, #"{"idToken":"id9","refreshToken":"r9","expiresIn":"3600","isNewUser":false}"#),
+      (200, #"{"users":[{"localId":"u9","email":"p@example.test","displayName":"Pat"}]}"#),
+    ])
+    let store = MemoryCredentialStore()
+    let user = try await auth(transport, store: store).signIn(customToken: "minted")
+    XCTAssertEqual(user, AglynUser(uid: "u9", email: "p@example.test", displayName: "Pat"))
+    XCTAssertEqual(
+      transport.requests.map { $0.url?.lastPathComponent },
+      ["accounts:signInWithCustomToken?key=key", "accounts:lookup?key=key"])
+    XCTAssertEqual(transport.json(0)["token"] as? String, "minted")
+    XCTAssertEqual(transport.json(0)["returnSecureToken"] as? Bool, true)
+    XCTAssertEqual(transport.json(1)["idToken"] as? String, "id9")
+    XCTAssertEqual(store.load()?.refreshToken, "r9")
+    XCTAssertEqual(store.load()?.uid, "u9")
+  }
+
   func testAPasswordChangeProvesTheCurrentOneThenReplacesTheTokens() async throws {
     let transport = RecordingTransport([
       (200, signedIn),

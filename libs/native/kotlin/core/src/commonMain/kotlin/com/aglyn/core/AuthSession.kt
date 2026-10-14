@@ -29,6 +29,9 @@ interface AuthSession {
   /** Throws [AuthError] with words for the sign-in form. */
   suspend fun signInWithEmail(email: String, password: String)
 
+  /** Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner). */
+  suspend fun signInWithCustomToken(token: String): Unit = throw AuthError("Signing in with a passkey is not available here.")
+
   suspend fun signOut()
 
   /** Proves [current], then sets [new]. Throws [AuthError] with words for the form. */

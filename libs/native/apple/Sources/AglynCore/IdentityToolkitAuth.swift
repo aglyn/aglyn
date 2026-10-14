@@ -201,6 +201,24 @@ public actor IdentityToolkitAuth {
     return user
   }
 
+  /// Signs in with a Firebase custom token (the server mints one for a passkey that signed its challenge). The answer
+  /// names no account, so the account is asked for with the ID token it gave.
+  @discardableResult
+  public func signIn(customToken: String) async throws -> AglynUser {
+    let body = try await post(
+      "\(identityBase)/v1/accounts:signInWithCustomToken?key=\(apiKey)",
+      json: ["token": .string(customToken), "returnSecureToken": .bool(true)])
+    guard case .string(let idToken)? = body["idToken"], case .string(let refreshToken)? = body["refreshToken"]
+    else { throw IdentityToolkitError(code: nil, status: 200) }
+    let lookup = try await post("\(identityBase)/v1/accounts:lookup?key=\(apiKey)", json: ["idToken": .string(idToken)])
+    guard case .array(let accounts)? = lookup["users"], let account = accounts.first, let uid = account["localId"]?.stringValue
+    else { throw IdentityToolkitError(code: nil, status: 200) }
+    let user = AglynUser(
+      uid: uid, email: account["email"]?.stringValue, displayName: account["displayName"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
+    accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+    return user
+  }
+
   public func sendPasswordReset(email: String) async throws {
     _ = try await post(
       "\(identityBase)/v1/accounts:sendOobCode?key=\(apiKey)",

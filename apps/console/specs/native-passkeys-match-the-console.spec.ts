@@ -92,4 +92,37 @@ describe('native passkeys', () => {
     expect(server).toContain('/^android:apk-key-hash:([A-Za-z0-9_-]{43})$/')
     expect(server).toContain('PASSKEY_ANDROID_APK_KEY_HASHES')
   })
+
+  it('signs in with a passkey through the routes and in the words of the console’s sign-in page', () => {
+    const swift = read('libs/native/apple/Sources/AglynScreens/PasskeySignIn.swift')
+    const kotlin = read('libs/native/kotlin/screens/src/commonMain/kotlin/com/aglyn/screens/ScreenPasskeys.kt')
+    for (const source of [swift, kotlin]) {
+      expect(source).toContain('/api/auth/passkeys/signin/options')
+      expect(source).toContain('/api/auth/passkeys/signin/verify')
+    }
+    expect(client).toContain("'/api/auth/passkeys/signin/options'")
+    expect(client).toContain("'/api/auth/passkeys/signin/verify'")
+    // The verify route answers the custom token the app signs in with.
+    expect(read('apps/console/app/api/auth/passkeys/signin/verify/route.ts')).toContain('createCustomToken(assertion.uid)')
+    expect(read('apps/console/app/api/auth/passkeys/signin/verify/route.ts')).toContain('{ token }')
+    // The refusals have the console's sentences, which the console keeps by reason, and the prompt closed is its own.
+    const flat = (text: string) => text.replace(/\s+/g, ' ').replace(/["'`] \+ ["'`]/g, '')
+    expect(flat(client)).toContain('No passkey was used to sign in.')
+    expect(flat(client)).toContain("Passkey sign-in failed.")
+    for (const [reason, words] of [
+      ['rate-limited', 'Too many passkey attempts from this network. Wait a few minutes and try again.'],
+      ['bad-origin', 'Passkey sign-in is not available on this address.'],
+      ['passkey-signin-failed', 'That passkey could not be used to sign in. Try another sign-in method, then re-add the passkey from Manage account → Security.'],
+      ['credential-cloned', 'That passkey was refused for security reasons. Sign in another way and remove it from Manage account → Security.'],
+      ['challenge-invalid', 'The passkey request expired. Try again.'],
+      ['verification-failed', 'That passkey could not be verified.'],
+    ] as const) {
+      expect(flat(client)).toContain(words)
+      expect(flat(swift)).toContain(`"${reason}"`)
+      expect(flat(swift)).toContain(words)
+      expect(flat(kotlin)).toContain(words)
+    }
+    // The console offers the button on the sign-in page, labeled "Passkey"; the apps offer it with their own words.
+    expect(read('apps/console/app/(auth)/signin/page.tsx')).toContain('passkeySupported')
+  })
 })

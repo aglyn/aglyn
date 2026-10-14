@@ -39,6 +39,16 @@ class FirebaseAuthSession(private val auth: FirebaseAuth) : AuthSession {
     }
   }
 
+  override suspend fun signInWithCustomToken(token: String) {
+    try {
+      auth.signInWithCustomToken(token).await()
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(authErrorMessage(error.errorCode), error)
+    } catch (error: Exception) {
+      throw AuthError(authErrorMessage(null), error)
+    }
+  }
+
   override suspend fun changePassword(current: String, new: String) {
     val user = auth.currentUser
     val email = user?.email ?: throw AuthError(passwordChangeMessage(null))

@@ -1,5 +1,7 @@
 package com.aglyn.screens
 
+import com.aglyn.core.ApiMethod
+import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -19,6 +21,15 @@ class PasskeyCancelled : Exception("Passkey cancelled")
  */
 fun interface PasskeyCreator {
   suspend fun create(options: JsonElement): JsonElement
+}
+
+/**
+ * Signs in with a passkey on this device: given the WebAuthn authentication options the server answered (the JSON the console
+ * hands `navigator.credentials.get`), it asks the platform to sign the challenge with a discoverable passkey and returns the
+ * assertion the server verifies (`AuthenticationResponseJSON`). Throws [PasskeyCancelled] when the person dismisses the prompt.
+ */
+fun interface PasskeyAsserter {
+  suspend fun get(options: JsonElement): JsonElement
 }
 
 /** The parts of a passkey ceremony that are not the platform's: the encodings it speaks and the words a failure is shown in. */
@@ -53,5 +64,54 @@ object ScreenPasskeys {
       if (known != null) return known
     }
     return words(passkey.obj("otherwise")) ?: "Adding the passkey failed. Try again."
+  }
+}
+
+/**
+ * Signing in with a passkey, as the console's sign-in page does (`signInWithPasskey`): the options route answers a challenge,
+ * the platform signs it, and the verify route answers a Firebase custom token for the credential's owner, which the app signs
+ * in with ([com.aglyn.core.AuthSession.signInWithCustomToken]). Both routes are asked without a session, and read the
+ * ceremony's `Origin`: the relying party's own for the options, and the origin the platform signed into the credential for
+ * the verify.
+ */
+object PasskeySignIn {
+  private val refusals = mapOf(
+    "rate-limited" to "Too many passkey attempts from this network. Wait a few minutes and try again.",
+    "bad-origin" to "Passkey sign-in is not available on this address.",
+    "passkey-signin-failed" to
+      "That passkey could not be used to sign in. Try another sign-in method, then re-add the passkey from Manage account → Security.",
+    "credential-unknown" to "That passkey is not registered to an Aglyn account. It may have been removed.",
+    "credential-cloned" to "That passkey was refused for security reasons. Sign in another way and remove it from Manage account → Security.",
+    "challenge-invalid" to "The passkey request expired. Try again.",
+    "verification-failed" to "That passkey could not be verified.",
+  )
+
+  /** Whether [error] came from the ceremony or the passkey routes (their words), rather than the Firebase sign-in after them. */
+  fun failed(error: Throwable): Boolean = error is PasskeyCancelled || error is ConsoleApiError
+
+  /** The words for a failed sign-in, the console's: closing the prompt, a route's reason, or the general one. */
+  fun message(error: Throwable, brand: String = "Aglyn"): String {
+    if (error is PasskeyCancelled) return "No passkey was used to sign in."
+    if (error is ConsoleApiError) {
+      val reason = ((error.body as? JsonObject)?.get("error") as? JsonPrimitive)?.contentOrNull
+      refusals[reason]?.let { return it.replace("Aglyn", brand) }
+    }
+    return "Passkey sign-in failed."
+  }
+
+  /** The custom token for the passkey [asserter] signs the server's challenge with (the platform's prompt). */
+  suspend fun token(api: ConsoleApiClient, relyingParty: String, asserter: PasskeyAsserter): String {
+    val origin = "https://$relyingParty"
+    val started = api.request("/api/auth/passkeys/signin/options", ApiMethod.POST, JsonObject(emptyMap()), anonymous = true, headers = mapOf("Origin" to origin))
+    val challengeId = started.str("challengeId")
+    val options = started.obj("options")
+    if (challengeId == null || options == null) throw ConsoleApiError("internal", 500, JsonObject(mapOf("error" to JsonPrimitive("internal"))))
+    val credential = asserter.get(options)
+    val verified = api.request(
+      "/api/auth/passkeys/signin/verify", ApiMethod.POST,
+      JsonObject(mapOf("challengeId" to JsonPrimitive(challengeId), "response" to credential)),
+      anonymous = true, headers = mapOf("Origin" to (ScreenPasskeys.clientDataOrigin(credential) ?: origin)),
+    )
+    return verified.str("token")?.takeIf { it.isNotEmpty() } ?: throw ConsoleApiError("internal", 500, JsonObject(mapOf("error" to JsonPrimitive("internal"))))
   }
 }

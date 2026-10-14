@@ -139,4 +139,48 @@ class ScreenPasskeyTest {
     assertTrue(canAdd(ScreenSession(claims = verified, passkeyRelyingParty = "aglyn.com")).toBoolean())
     assertFalse(canAdd(ScreenSession()).toBoolean())
   }
+
+  @Test
+  fun signingInWithAPasskeyAsksTheRoutesWithoutASessionAndReturnsTheCustomToken() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"challengeId":"c9","options":{"rpId":"aglyn.com","challenge":"Y2hhbGxlbmdl"}}""", 200 to """{"token":"custom-1"}""", sent = sent)
+    val signed = registration("android:apk-key-hash:AbC")
+    var offered: JsonElement? = null
+    val token = PasskeySignIn.token(api, "aglyn.com") { options -> offered = options; signed }
+    assertEquals("custom-1", token)
+    assertEquals(JsonPrimitive("Y2hhbGxlbmdl"), (offered as JsonObject)["challenge"])
+    assertEquals(listOf("/api/auth/passkeys/signin/options", "/api/auth/passkeys/signin/verify"), sent.map { it.url.encodedPath })
+    // Nobody is signed in yet: neither request carries a token, and the routes read the ceremony's origin.
+    assertNull(sent[0].headers["Authorization"])
+    assertNull(sent[1].headers["Authorization"])
+    assertEquals("https://aglyn.com", sent[0].headers["Origin"])
+    assertEquals("android:apk-key-hash:AbC", sent[1].headers["Origin"])
+    assertEquals(JsonPrimitive("c9"), body(sent, 1)["challengeId"])
+    assertEquals(signed, body(sent, 1)["response"])
+  }
+
+  @Test
+  fun aFailedPasskeySignInSaysWhatTheConsoleSays() = runTest {
+    assertEquals("No passkey was used to sign in.", PasskeySignIn.message(PasskeyCancelled()))
+    val refused = client(200 to """{"challengeId":"c9","options":{}}""", 401 to """{"error":"passkey-signin-failed"}""", sent = mutableListOf())
+    val error = runCatching { PasskeySignIn.token(refused, "aglyn.com") { registration("https://aglyn.com") } }.exceptionOrNull()!!
+    assertTrue(PasskeySignIn.failed(error))
+    assertEquals(
+      "That passkey could not be used to sign in. Try another sign-in method, then re-add the passkey from Manage account → Security.",
+      PasskeySignIn.message(error),
+    )
+    for ((reason, words) in listOf(
+      "rate-limited" to "Too many passkey attempts from this network. Wait a few minutes and try again.",
+      "bad-origin" to "Passkey sign-in is not available on this address.",
+      "something-else" to "Passkey sign-in failed.",
+    )) {
+      assertEquals(words, PasskeySignIn.message(com.aglyn.core.ConsoleApiError(reason, 400, json("""{"error":"$reason"}"""))))
+    }
+    // A closed prompt asks nothing further.
+    val sent = mutableListOf<HttpRequestData>()
+    val closed = runCatching { PasskeySignIn.token(client(200 to """{"challengeId":"c9","options":{}}""", sent = sent), "aglyn.com") { throw PasskeyCancelled() } }.exceptionOrNull()
+    assertTrue(closed is PasskeyCancelled)
+    assertEquals(1, sent.size)
+    assertFalse(PasskeySignIn.failed(com.aglyn.core.AuthError("Could not sign in.")))
+  }
 }
