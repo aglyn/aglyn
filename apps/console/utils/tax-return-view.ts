@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { TaxReturnSectionTable } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
 import { taxRegistrationSetupHint } from './tax-jurisdictions'
 import {
@@ -68,12 +69,12 @@ export const TAX_RETURN_COPY = {
   boundsNote:
     'The exact window swept, echoed so a filed return can be reproduced from the same bounds later.',
   ownSalesIntro: (filingName: string) =>
-    'Aglyn’s own subscription and add-on revenue, by the customer’s state. ' +
+    `${PLATFORM_BRAND_NAME}’s own subscription and add-on revenue, by the customer’s state. ` +
     `${filingName} is the return; the other rows are the record of why the rest of the period is not on it. ` +
     'For nexus from MERCHANTS’ sales, read “Facilitated sales by buyer state” above — a different taxpayer’s money, ' +
     'and never summed with this.',
   ownSalesFootnote:
-    '“Excluded (internal)” is Aglyn’s own purchases (AGL-1582) — marked at checkout, kept out of every other column ' +
+    `“Excluded (internal)” is ${PLATFORM_BRAND_NAME}’s own purchases (AGL-1582) — marked at checkout, kept out of every other column ` +
     'here and out of the filing figures above, because a purchase the platform made from itself is not a sale to a ' +
     'state. It is stated rather than subtracted quietly so the figures can be checked. The mark is written when the ' +
     'purchase is made and cannot be added afterwards.',
@@ -90,7 +91,7 @@ export function taxReturnExcludedNote(payload: TaxReturnPayload | null): string 
   const parts: string[] = []
   if (internal) {
     parts.push(
-      `${internal} ${internal === 1 ? 'row is' : 'rows are'} Aglyn’s own purchases and are excluded from every ` +
+      `${internal} ${internal === 1 ? 'row is' : 'rows are'} ${PLATFORM_BRAND_NAME}’s own purchases and are excluded from every ` +
         'figure below',
     )
   }
