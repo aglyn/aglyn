@@ -165,6 +165,9 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds
+  /// (a chosen package, the plan read from it), until the app closes.
+  public let stash: JSONValue?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
@@ -203,6 +206,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.stash = json["stash"]
     self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)
     self.instead = json["instead"]
   }
@@ -244,6 +248,8 @@ public struct FieldSpec: Sendable, Identifiable {
   public let when: String?
   /// A template the typed value must equal (type the workspace name to delete it).
   public let mustMatch: String?
+  /// For a `file` field: `json` parses the chosen file and sends the value, else its text is sent.
+  public let parse: String?
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
@@ -263,6 +269,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = nil
     self.when = nil
     self.mustMatch = nil
+    self.parse = nil
   }
 
   init?(_ json: JSONValue) {
@@ -281,6 +288,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = json["optionsFrom"]
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
+    self.parse = json["parse"]?.stringValue
   }
 
   /// The choices for a `select`: the static options, then any read from data.
@@ -288,7 +296,9 @@ public struct FieldSpec: Sendable, Identifiable {
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
-    let rows = ScreenValues.lookup(path, in: context).array
+    let rows = ScreenValues.lookup(path, in: context).array.filter {
+      ScreenValues.condition(from["filter"]?.stringValue, in: ScreenContext.with(context, item: $0))
+    }
     return options + rows.map { row in
       let scope = ScreenContext.with(context, item: row)
       return (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))

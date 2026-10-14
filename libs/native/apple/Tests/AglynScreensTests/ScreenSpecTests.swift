@@ -197,6 +197,37 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testAFileFieldSendsTheParsedFileAndAnActionKeepsWhatItLearnedForTheNextScreen() async throws {
+    let file = try XCTUnwrap(FieldSpec(["key": "package", "kind": "file", "parse": "json"]))
+    XCTAssertEqual(fieldJSON(file, .text(#"{"manifest":{"items":[]}}"#)), ["manifest": ["items": []]])
+    XCTAssertEqual(fieldJSON(file, .text("not json")), .null)
+    XCTAssertEqual(fieldJSON(file, .text("")), .null)
+    let transport = RecordingTransport(responses: [(200, #"{"plan":{"items":[{"key":"page/a","needsChoice":true,"choices":["replace","skip"]}]}}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.import" })
+    let form = try XCTUnwrap(spec.blocks.first { $0.id == "package" })
+    let plan = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+    let model = ScreenModel(spec: spec, context: [:], api: api)
+    ScreenStash.clear()
+    let scope: JSONValue = ["site": ["id": "h1"], "form": ["package": ["manifest": ["items": []]]]]
+    _ = await model.run(plan, in: scope)
+    XCTAssertEqual(ScreenStash.values["package"], ["manifest": ["items": []]])
+    XCTAssertEqual(ScreenValues.lookup("plan.plan.items.0.key", in: .object(ScreenStash.values)), "page/a")
+    XCTAssertEqual(ScreenStash.values["decisions"], [:])
+    // The review screen picks a decision for an item and keeps it for the apply.
+    let review = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.import.review" })
+    let list = try XCTUnwrap(review.blocks.first { $0.type == "list" })
+    let choose = try XCTUnwrap(list["actions"].array.first.flatMap(ActionSpec.init))
+    let row: JSONValue = ["key": "page/a", "choices": ["replace", "keepBoth", "merge", "skip"]]
+    let picking = ScreenContext.with(ScreenContext.with(["stash": .object(ScreenStash.values)], item: row), "form", ["decision": "skip"])
+    _ = await ScreenModel(spec: review, context: [:], api: api).run(choose, in: picking)
+    XCTAssertEqual(ScreenStash.values["decisions"], ["page/a": "skip"])
+    let options = try XCTUnwrap(choose.prompt.first).choices(in: picking).map(\.value)
+    XCTAssertEqual(options, ["replace", "keepBoth", "skip"])  // merge needs per-field choices and is not offered
+    ScreenStash.clear()
+  }
+
+  @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
     let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)

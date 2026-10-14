@@ -307,6 +307,9 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
     // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
     let chosen = text.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
     return chosen.isEmpty ? .null : .array(chosen.map(JSONValue.string))
+  case ("file", .text(let text)?):
+    if text.isEmpty { return .null }
+    return field.parse == "json" ? (JSONValue.decode(Data(text.utf8)) ?? .null) : .string(text)
   case ("number", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
     return trimmed.isEmpty ? .null : Double(trimmed).map(JSONValue.number) ?? .string(trimmed)
@@ -334,6 +337,8 @@ struct FieldInput: View {
   let field: FieldSpec
   let context: JSONValue
   @Binding var value: FieldValue
+  @State private var picking: PickSource?
+  @State private var fileName: String?
 
   private var text: Binding<String> {
     Binding(get: { if case .text(let t) = value { t } else { "" } }, set: { value = .text($0) })
@@ -369,6 +374,18 @@ struct FieldInput: View {
                   text.wrappedValue = next.joined(separator: "\n")
                 }))
           }
+        }
+      case "file":
+        HStack {
+          Button(text.wrappedValue.isEmpty ? "Choose a file" : "Choose a different file") { picking = .files }
+          if !text.wrappedValue.isEmpty {
+            Text(fileName ?? "File chosen").font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
+          }
+        }
+        .aglynMediaPicker($picking, multiple: false) { files in
+          guard let file = files.first else { return }
+          fileName = file.name
+          text.wrappedValue = String(data: file.data, encoding: .utf8) ?? ""
         }
       case "multiline":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)

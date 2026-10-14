@@ -89,6 +89,24 @@ data class ScreenSession(
 
 val LocalScreenSession = compositionLocalOf { ScreenSession() }
 
+/**
+ * Values an action keeps for later screens (`stash`): a chosen file, the plan read from it, the choices made
+ * on the way. In memory only, until the app closes.
+ */
+object ScreenStash {
+  var values: JsonObject = JsonObject(emptyMap())
+    private set
+
+  fun set(updates: JsonElement) {
+    val record = updates as? JsonObject ?: return
+    val next = values.toMutableMap()
+    for ((key, value) in record) if (value == JsonNull) next.remove(key) else next[key] = value
+    values = JsonObject(next)
+  }
+
+  fun clear() { values = JsonObject(emptyMap()) }
+}
+
 sealed interface ActionOutcome {
   data class Done(val message: String?, val response: JsonElement?) : ActionOutcome
   /** A route answered with a file to save. */
@@ -143,6 +161,7 @@ class ScreenModel(
       phase = Phase.Failed("Sign in to continue.")
       return
     }
+    context = ScreenContext.with(context, "stash", ScreenStash.values)
     val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
     val results = try {
       coroutineScope {
@@ -217,6 +236,17 @@ class ScreenModel(
 
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
     val outcome = perform(action, scope)
+    action.stash?.let { stash ->
+      val answer: JsonElement? = when (outcome) {
+        is ActionOutcome.Done -> outcome.response ?: JsonNull
+        is ActionOutcome.File -> JsonNull
+        else -> null
+      }
+      if (answer != null) {
+        ScreenStash.set(ScreenValues.resolveBody(stash, ScreenContext.with(scope, "response", answer)))
+        context = ScreenContext.with(context, "stash", ScreenStash.values)
+      }
+    }
     if (outcome is ActionOutcome.Done) action.then?.let { perform(it, ScreenContext.with(scope, "response", outcome.response)) }
     return outcome
   }

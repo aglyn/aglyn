@@ -120,6 +120,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val instead: JsonElement? = json.obj("instead")
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
+  /** `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds, until the app closes. */
+  val stash: JsonElement? = json.obj("stash")
 
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>
@@ -143,6 +145,8 @@ class FieldSpec private constructor(
   val whenCondition: String?,
   /** A template the typed value must equal (type the workspace name to delete it). */
   val mustMatch: String? = null,
+  /** For a `file` field: `json` parses the chosen file and sends the value, else its text is sent. */
+  val parse: String? = null,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
@@ -155,7 +159,9 @@ class FieldSpec private constructor(
     val path = from.str("items") ?: return options
     val valueTemplate = from.str("value") ?: "{item.\$id}"
     val labelTemplate = from.str("label") ?: valueTemplate
-    val rows = (ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()
+    val rows = ((ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()).filter {
+      ScreenValues.condition(from.str("filter"), ScreenContext.withItem(context, it))
+    }
     return options + rows.map { row ->
       val scope = ScreenContext.withItem(context, row)
       ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope)
@@ -182,6 +188,7 @@ class FieldSpec private constructor(
         optionsFrom = json.obj("optionsFrom"),
         whenCondition = json.str("when"),
         mustMatch = json.str("mustMatch"),
+        parse = json.str("parse"),
       )
     }
   }

@@ -709,6 +709,8 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
   // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
   field.kind == "multiselect" && value is FieldValue.Text ->
     value.value.split('\n').filter { it.isNotEmpty() }.let { chosen -> if (chosen.isEmpty()) JsonNull else JsonArray(chosen.map { JsonPrimitive(it) }) }
+  field.kind == "file" && value is FieldValue.Text ->
+    if (value.value.isEmpty()) JsonNull else if (field.parse == "json") runCatching { kotlinx.serialization.json.Json.parseToJsonElement(value.value) }.getOrDefault(JsonNull) else JsonPrimitive(value.value)
   field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
@@ -734,6 +736,28 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
       "toggle" -> SwitchRow(field.label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
+      "file" -> {
+        // The chosen file is read whole as text (a package, a CSV); its name sits beside the button.
+        val picker = com.aglyn.ui.LocalMediaPicker.current
+        val chooser = rememberCoroutineScope()
+        var fileName by remember { mutableStateOf<String?>(null) }
+        Text(field.label, style = MaterialTheme.typography.titleSmall)
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          OutlinedButton(
+            enabled = picker != null,
+            onClick = {
+              chooser.launch {
+                picker?.pick(com.aglyn.ui.PickSource.FILES, multiple = false)?.firstOrNull()?.let { file ->
+                  fileName = file.name
+                  onChange(FieldValue.Text(file.bytes.decodeToString()))
+                }
+              }
+            },
+          ) { Text(if (text.isEmpty()) "Choose a file" else "Choose a different file") }
+          if (text.isNotEmpty()) Text(fileName ?: "File chosen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
       "multiselect" -> {
         // Each choice a switch; the chosen ids are kept one per line. An id the list no longer offers is kept, not dropped.
         val choices = field.choices(context)

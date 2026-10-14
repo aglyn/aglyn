@@ -100,6 +100,22 @@ extension EnvironmentValues {
 }
 
 /// What running an action came to.
+/// Values an action keeps for later screens (`stash`): a chosen file, the plan read from it, the
+/// choices made on the way. In memory only, until the app closes.
+@MainActor
+public enum ScreenStash {
+  public private(set) static var values: [String: JSONValue] = [:]
+
+  public static func set(_ updates: JSONValue) {
+    guard case .object(let record) = updates else { return }
+    for (key, value) in record {
+      if value == .null { values[key] = nil } else { values[key] = value }
+    }
+  }
+
+  public static func clear() { values = [:] }
+}
+
 public enum ActionOutcome: Equatable {
   case done(message: String?, response: JSONValue?)
   /// A route answered with a file to save or share.
@@ -171,6 +187,7 @@ public final class ScreenModel {
       phase = .failed("Sign in to continue.")
       return
     }
+    context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
     let loads = spec.loads.filter { ScreenValues.condition($0.when, in: context) }
     var results: [String: JSONValue] = [:]
     var nextCursors: [String: String] = [:]
@@ -265,6 +282,18 @@ public final class ScreenModel {
   /// item and the filled inputs under `form`).
   public func run(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     let outcome = await perform(action, in: scope)
+    if let stash = action.stash {
+      var response: JSONValue?
+      switch outcome {
+      case .done(_, let answer): response = answer ?? .null
+      case .file: response = .null
+      default: response = nil
+      }
+      if let response {
+        ScreenStash.set(ScreenValues.resolveBody(stash, in: ScreenContext.with(scope, "response", response)))
+        context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
+      }
+    }
     if case .done(_, let response) = outcome, let then = action.then?.action {
       _ = await perform(then, in: ScreenContext.with(scope, "response", response ?? .null))
     }
