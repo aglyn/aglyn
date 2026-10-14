@@ -148,4 +148,52 @@ final class MarketplacePublishTests: XCTestCase {
     let sent = try XCTUnwrap(accepting.requests[0].httpBody.flatMap(JSONValue.decode))
     XCTAssertEqual(sent, ["action": "accept-agreement", "orgId": "o1", "version": version ?? .null])
   }
+
+  func testEveryOtherKindPublishesWithWhatItIsAndTheListingTheRouteTakes() async throws {
+    // Each kind: the screen, the route, and the fields that say which one it is.
+    let kinds: [(String, String, [String: JSONValue])] = [
+      ("marketplace.publishLayout", "/api/marketplace/publish-layout", ["hostId": "h1", "layoutId": "x1"]),
+      ("marketplace.publishComponent", "/api/marketplace/publish", ["hostId": "h1", "componentId": "x1"]),
+      ("marketplace.publishTheme", "/api/marketplace/publish-theme", ["hostId": "h1"]),
+      ("marketplace.publishDatasetSchema", "/api/marketplace/publish-dataset-schema", ["orgId": "o1", "datasetId": "x1"]),
+      ("marketplace.publishEmailTemplate", "/api/marketplace/publish-email-template", ["hostId": "h1", "templateKey": "x1"]),
+      ("marketplace.publishEmailStarter", "/api/marketplace/publish-email-starter", ["hostId": "h1", "screenId": "x1"]),
+    ]
+    for (id, route, identity) in kinds {
+      let publish = try spec(id)
+      let form = try XCTUnwrap(publish.blocks.first { $0.type == "form" })
+      let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+      let transport = RecordingTransport(responses: [(200, #"{"ok":true,"version":2}"#)])
+      let model = ScreenModel(spec: publish, context: [:], api: api(transport))
+      let context: JSONValue = [
+        "org": ["id": "o1"], "site": ["id": "h1"], "params": ["id": "x1"],
+        "form": ["name": "Hero", "description": "A hero", "category": "Hero", "price": 0],
+      ]
+      let outcome = await model.run(submit, in: context)
+      XCTAssertEqual(outcome, .done(message: "Published v2 to the marketplace", response: ["ok": true, "version": 2]), id)
+      XCTAssertEqual(transport.requests[0].url?.path, route, id)
+      let body = try XCTUnwrap(transport.requests[0].httpBody.flatMap(JSONValue.decode))
+      var expected = identity
+      expected["displayName"] = "Hero"
+      expected["description"] = "A hero"
+      expected["category"] = "Hero"
+      expected["priceUsd"] = 0
+      XCTAssertEqual(body, .object(expected), id)
+      // The form opens with the name and description the thing already has, handed over as the screen's parameters.
+      let fields = form["fields"].array.compactMap(FieldSpec.init)
+      let params: JSONValue = ["params": ["name": "Hero band", "description": "The top of the page"]]
+      XCTAssertEqual(
+        ["name", "description"].map { key in ScreenValues.render(fields.first { $0.key == key }?.initial ?? "", in: params) },
+        ["Hero band", "The top of the page"], id)
+      XCTAssertTrue(try XCTUnwrap(fields.first { $0.key == "name" }).required, id)
+      // The agreement is asked for exactly as the site template asks.
+      let (offered, blocks) = shown(publish, profile: ["handle": "studio"])
+      XCTAssertEqual(
+        texts(blocks, offered).filter { $0.contains("terms") },
+        ["Your organization has not accepted these terms. They must be accepted before anything is published."], id)
+    }
+    XCTAssertEqual(try spec("marketplace.publishDatasetSchema").scope, "org")
+    XCTAssertEqual(try spec("marketplace.publishLayout").scope, "site")
+    XCTAssertTrue(try spec("marketplace.publishLayout").zones.isEmpty)
+  }
 }

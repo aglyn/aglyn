@@ -44,6 +44,7 @@ import {
 interface Screen {
   id: string
   zones?: string[]
+  scope?: string
   constants?: { agreement?: Record<string, unknown> }
   blocks: Array<{
     type: string
@@ -146,5 +147,38 @@ describe('native publishing to the marketplace', () => {
     expect(price?.help).toBe(marketplacePriceFloorHint('Paid listings need payouts set up on your marketplace profile.'))
     expect(price?.help).toContain(`$${marketplaceMinPriceUsd()} and up`)
     expect(form?.fields?.find((field) => field.key === 'name')?.required).toBe(true)
+  })
+
+  it('publishes every other artifact kind through the route and payload the console sends', () => {
+    const kinds: Array<[string, string, string[]]> = [
+      ['marketplace.publishLayout', 'marketplace/publish-layout', ['hostId', 'layoutId']],
+      ['marketplace.publishComponent', 'marketplace/publish', ['hostId', 'componentId']],
+      ['marketplace.publishTheme', 'marketplace/publish-theme', ['hostId']],
+      ['marketplace.publishDatasetSchema', 'marketplace/publish-dataset-schema', ['orgId', 'datasetId']],
+      ['marketplace.publishEmailTemplate', 'marketplace/publish-email-template', ['hostId', 'templateKey']],
+      ['marketplace.publishEmailStarter', 'marketplace/publish-email-starter', ['hostId', 'screenId']],
+    ]
+    const source = flat(publishDialog)
+    for (const [id, endpoint, keys] of kinds) {
+      const one = screen(id)
+      const form = one.blocks.find((block) => block.type === 'form')
+      expect(form?.submit?.url).toBe(`/api/${endpoint}`)
+      // The dialog names the endpoint and then the identifying fields it adds to the listing.
+      const payload = new RegExp(`endpoint: '${endpoint}', payload: \\{ ([^}]*) \\}`).exec(source)
+      expect(payload).not.toBeNull()
+      const named = (payload?.[1] ?? '').split(',').map((entry) => entry.trim().split(':')[0].trim())
+      expect(named).toEqual(keys)
+      expect(Object.keys(form?.submit?.body ?? {}).sort()).toEqual([...keys, 'category', 'description', 'displayName', 'priceUsd'].sort())
+      // The same agreement, price floor and success sentence as the site template's.
+      expect(one.constants?.agreement).toEqual(screen('marketplace.publishTemplate').constants?.agreement)
+      const price = form?.fields?.find((field) => field.key === 'price')
+      expect(price?.help).toBe(marketplacePriceFloorHint('Paid listings need payouts set up on your marketplace profile.'))
+      expect(form?.submit && (form.submit as { success?: string }).success).toBe('Published v{response.version} to the marketplace')
+      expect(form?.fields?.find((field) => field.key === 'name')?.required).toBe(true)
+      expect(one.zones).toBeUndefined()
+    }
+    // A dataset's schema is the workspace's; every other kind is a site's.
+    expect(screen('marketplace.publishDatasetSchema').scope).toBe('org')
+    expect(kinds.filter(([id]) => id !== 'marketplace.publishDatasetSchema').every(([id]) => screen(id).scope === 'site')).toBe(true)
   })
 })
