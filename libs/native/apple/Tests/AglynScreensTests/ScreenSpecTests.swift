@@ -201,6 +201,50 @@ final class ScreenSpecTests: XCTestCase {
     default: return []
     }
   }
+
+  /// A form or prompt that lists the service's own fields from the data (a carrier's credentials).
+  func testFieldsFromDataBecomeFields() throws {
+    let context: JSONValue = [
+      "data": ["fields": [
+        ["key": "account_number", "label": "Account number", "secret": false],
+        ["key": "password", "label": "Password", "helper": "Kept sealed.", "secret": true, "required": true],
+        ["key": "is_test", "label": "Test account", "checkbox": true],
+        ["key": "unit", "label": "Unit", "options": [["value": "kg", "label": "Kilograms"], ["value": "lb", "label": "Pounds"]]],
+      ]]
+    ]
+    let entry: JSONValue = [
+      "fieldsFrom": [
+        "items": "data.fields", "key": "{item.key}", "label": "{item.label}", "help": "{item.helper}",
+        "required": "required", "options": "options", "kinds": ["secret": "password", "checkbox": "yesno"],
+      ]
+    ]
+    let fields = FieldSpec.parseAll([entry], in: context)
+    XCTAssertEqual(fields.map(\.key), ["account_number", "password", "is_test", "unit"])
+    XCTAssertEqual(fields.map(\.kind), ["text", "password", "select", "select"])
+    XCTAssertEqual(fields.map(\.required), [false, true, false, false])
+    XCTAssertEqual(fields[1].help, "Kept sealed.")
+    XCTAssertEqual(fields[2].options.map(\.value), ["", "true"])
+    XCTAssertEqual(fields[3].options.map(\.label), ["Kilograms", "Pounds"])
+    XCTAssertEqual(fields[3].initial, "kg")
+  }
+
+  /// `where` keeps only the rows a condition holds for; a row's field of every row projects with `*`.
+  func testOptionsCanBeFilteredAndRowsProjected() throws {
+    let context: JSONValue = [
+      "data": ["accounts": [
+        ["id": "a1", "name": "Sales", "classification": "income"],
+        ["id": "a2", "name": "Main bank", "classification": "bank"],
+      ]]
+    ]
+    let field = try XCTUnwrap(
+      FieldSpec(
+        [
+          "key": "clearing", "kind": "select",
+          "optionsFrom": ["items": "data.accounts", "where": "item.classification == bank", "value": "{item.id}", "label": "{item.name}"],
+        ]))
+    XCTAssertEqual(field.choices(in: context).map(\.value), ["a2"])
+    XCTAssertEqual(ScreenValues.render("{data.accounts.*.name}", in: context), "Sales, Main bank")
+  }
 }
 
 final class RecordingTransport: HTTPTransport, @unchecked Sendable {
@@ -218,4 +262,5 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
     let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
     return (Data(body.utf8), response)
   }
+
 }

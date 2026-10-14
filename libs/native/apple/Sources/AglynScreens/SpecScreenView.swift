@@ -365,7 +365,7 @@ struct SpecScreenBody: View {
   }
 
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
-    if !action.inputs.isEmpty {
+    if action.asksInputs {
       prompting = PendingAction(action: action, scope: scope)
     } else if action.confirm != nil, ScreenValues.condition(action.confirmWhen, in: scope) {
       confirming = PendingAction(action: action, scope: scope)

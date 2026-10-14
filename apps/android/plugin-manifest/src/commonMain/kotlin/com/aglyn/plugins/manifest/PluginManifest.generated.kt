@@ -34,6 +34,7 @@ import com.aglyn.plugins.printondemand.registerPrintOnDemandNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
 import com.aglyn.plugins.reviewplatforms.registerReviewPlatformsNative
 import com.aglyn.plugins.saleschannels.registerSalesChannelsNative
+import com.aglyn.plugins.shipping.registerShippingNative
 import com.aglyn.plugins.sms.registerSmsNative
 import com.aglyn.plugins.taxengines.registerTaxEnginesNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
@@ -180,6 +181,11 @@ object NativePluginManifest {
             id = "sales-channels",
             contributes = mapOf("screens" to listOf("sales-channels.channel", "sales-channels.diagnostics", "sales-channels.diagnosticsChannel", "sales-channels.service")),
             register = ::registerSalesChannelsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "shipping",
+            contributes = mapOf("screens" to listOf("shipping.billing", "shipping.boxes", "shipping.carriers", "shipping.connectCarrier", "shipping.connectOwn", "shipping.labels", "shipping.own", "shipping.service", "shipping.services", "shipping.shipFrom", "shipping.spend")),
+            register = ::registerShippingNative,
         ),
         NativePluginManifestEntry(
             id = "sms",

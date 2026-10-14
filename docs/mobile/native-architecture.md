@@ -913,6 +913,14 @@ row (`item.classification == bank`); and a comparison's right side may be anothe
 path (`a != @b.c`). A load names the query parameter its route searches by with
 `searchParam` (the catalog route reads `q`, the default is `search`).
 
+A form or prompt can list fields from the data: an entry
+`{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
+field per row (a carrier that names its own credential fields), `kinds` mapping a
+row flag to a kind (`password`, or `yesno` for a No/Yes pick that sends "" or
+"true"). Body operations grow `{"$replace": {list, key, match, value}}` (the row
+whose key matches, replaced) and `{"$uuid": "box_"}` (a fresh id with that prefix), and
+`{form}` reads the whole form as an object.
+
 ### The plugin switchboard
 
 `{ "switchboard": "org" }` reads `orgs/{org}` and `{ "switchboard": "site" }`

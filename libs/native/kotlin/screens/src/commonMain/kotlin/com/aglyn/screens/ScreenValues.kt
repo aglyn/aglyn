@@ -215,6 +215,18 @@ object ScreenValues {
       val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
       if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
       JsonObject(map)
+    } else if (body.size == 1 && body["\$uuid"] is JsonPrimitive) {
+      // `{"$uuid": "box_"}`: the prefix and eight random hex digits, a fresh id for a row the person is adding.
+      JsonPrimitive(text(resolveBody(body.getValue("\$uuid"), context)) + (1..8).map { "0123456789abcdef".random() }.joinToString(""))
+    } else if (body.size == 1 && body["\$replace"] is JsonObject) {
+      // `{"$replace": {"list": "{a}", "key": "id", "match": "{b}", "value": {...}}}`: the list with the row whose
+      // `key` equals `match` replaced by `value`.
+      val spec = body["\$replace"] as JsonObject
+      val list = (spec["list"]?.let { resolveBody(it, context) } as? JsonArray) ?: JsonArray(emptyList())
+      val key = (spec["key"] as? JsonPrimitive)?.content.orEmpty()
+      val match = text(spec["match"]?.let { resolveBody(it, context) })
+      val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
+      JsonArray(list.map { row -> if (text(lookup(key, row)) == match) value else row })
     } else if (body.size == 1 && body["\$split"] != null) {
       // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       val parts = text(resolveBody(body.getValue("\$split"), context)).split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }

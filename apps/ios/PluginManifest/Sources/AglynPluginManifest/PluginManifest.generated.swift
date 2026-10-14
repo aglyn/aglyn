@@ -29,6 +29,7 @@ import AglynPrintOnDemandPlugin
 import AglynRedirectsPlugin
 import AglynReviewPlatformsPlugin
 import AglynSalesChannelsPlugin
+import AglynShippingPlugin
 import AglynSmsPlugin
 import AglynTaxEnginesPlugin
 import AglynWorkflowsPlugin
@@ -160,6 +161,11 @@ public enum NativePluginManifest {
       id: "sales-channels",
       contributes: ["screens": ["sales-channels.channel", "sales-channels.diagnostics", "sales-channels.diagnosticsChannel", "sales-channels.service"]],
       register: AglynSalesChannelsPlugin.registerSalesChannelsNative
+    ),
+    NativePluginManifestEntry(
+      id: "shipping",
+      contributes: ["screens": ["shipping.billing", "shipping.boxes", "shipping.carriers", "shipping.connectCarrier", "shipping.connectOwn", "shipping.labels", "shipping.own", "shipping.service", "shipping.services", "shipping.shipFrom", "shipping.spend"]],
+      register: AglynShippingPlugin.registerShippingNative
     ),
     NativePluginManifestEntry(
       id: "sms",

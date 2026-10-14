@@ -231,7 +231,7 @@ private fun SpecBody(
 
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
-      action.inputs.isNotEmpty() -> prompting = Pending(action, actionScope)
+      action.asksInputs -> prompting = Pending(action, actionScope)
       action.confirm != null && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
@@ -376,7 +376,7 @@ private fun SpecBody(
 @Composable
 private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismiss: () -> Unit) {
   val values = remember(pending) { mutableStateMapOf<String, FieldValue>() }
-  val inputs = pending.action.inputs
+  val inputs = pending.action.inputsFor(pending.scope)
   fun filled(): JsonElement = ScreenContext.with(
     pending.scope, "form",
     JsonObject(inputs.associate { it.key to fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)) }),
@@ -789,7 +789,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
 
 @Composable
 private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, submit: (ActionSpec, JsonElement) -> Unit) {
-  val fields = block.raw.arr("fields").mapNotNull { FieldSpec.parse(it) }
+  val fields = FieldSpec.parseAll(block.raw.arr("fields"), context)
   val base = block.string("object")?.let { ScreenValues.lookup(it, context) }
   val scope = base?.let { ScreenContext.withItem(context, it) } ?: context
   // Re-seeded whenever the loaded data changes, as after a save.

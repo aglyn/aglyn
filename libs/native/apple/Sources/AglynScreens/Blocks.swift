@@ -399,7 +399,7 @@ struct FormBlock: View {
   @State private var seededFrom: JSONValue?
 
   private var fields: [FieldSpec] {
-    block["fields"].array.compactMap(FieldSpec.init)
+    FieldSpec.parseAll(block["fields"].array, in: scope)
   }
 
   private var scope: JSONValue {
@@ -467,7 +467,7 @@ struct ActionInputSheet: View {
   @Environment(\.dismiss) private var dismiss
   @State private var values: [String: FieldValue] = [:]
 
-  private var inputs: [FieldSpec] { pending.action.inputs }
+  private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
 
   private var filled: JSONValue {
     var form: [String: JSONValue] = [:]

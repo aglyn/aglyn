@@ -2960,6 +2960,32 @@
     },
     {
       "id": "shipping",
+      "mobile": {
+        "$comment": "AGL-3652: shipping natively: where parcels ship from, boxes, label format, signature and insurance, checkout services, paying for labels, carrier accounts, the merchant's own Easyship/Sendcloud/ShipperHQ account, and the label spend on Billing, from the spec in src/android/screens/shipping.screens.json. Buying a label on an order is the order screen's.",
+        "ios": {
+          "module": "AglynShippingPlugin",
+          "register": "registerShippingNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.shipping",
+          "register": "registerShippingNative"
+        },
+        "contributes": {
+          "screens": [
+            "shipping.service",
+            "shipping.shipFrom",
+            "shipping.boxes",
+            "shipping.labels",
+            "shipping.services",
+            "shipping.billing",
+            "shipping.carriers",
+            "shipping.connectCarrier",
+            "shipping.own",
+            "shipping.connectOwn",
+            "shipping.spend"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-shipping",
       "register": {
         "console": "registerShippingConsole",

@@ -236,6 +236,19 @@ public enum ScreenValues {
         if truthy(value) { map[key] = value } else { map[key] = nil }
       }
       return .object(map)
+    case .object(let record) where record.count == 1 && record["$uuid"] != nil:
+      // `{"$uuid": "box_"}`: the prefix and eight random hex digits, a fresh id for a row the person is adding.
+      return .string(Self.text(resolveBody(record["$uuid"] ?? .null, in: context)) + String(UUID().uuidString.lowercased().prefix(8)))
+    case .object(let record) where record.count == 1 && record["$replace"] != nil:
+      // `{"$replace": {"list": "{a}", "key": "id", "match": "{b}", "value": {...}}}`: the list with the row whose
+      // `key` equals `match` replaced by `value`.
+      let spec = record["$replace"] ?? .null
+      var list: [JSONValue] = []
+      if case .array(let items) = resolveBody(spec["list"] ?? .null, in: context) { list = items }
+      let key = spec["key"]?.stringValue ?? ""
+      let match = Self.text(resolveBody(spec["match"] ?? .null, in: context))
+      let value = resolveBody(spec["value"] ?? .null, in: context)
+      return .array(list.map { row in Self.text(lookup(key, in: row)) == match ? value : row })
     case .object(let record) where record.count == 1 && record["$split"] != nil:
       // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))

@@ -98,6 +98,7 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val destructive: Boolean = json.isTrue("destructive")
   val reason: Boolean = json.isTrue("reason")
   val prompt: List<FieldSpec> = json.arr("prompt").mapNotNull { FieldSpec.parse(it) }
+  private val promptRaw: List<JsonElement> = json.arr("prompt")
   val success: String? = json.str("success")
   val openUrl: String? = json.str("open")
   val navigate: NavigateSpec? = json.obj("navigate")?.let { nav ->
@@ -124,6 +125,13 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>
     get() = if (reason) prompt + FieldSpec.reason() else prompt
+
+  /** Whether the action asks for anything before it runs (a prompt, even one the data fills in, or a reason). */
+  val asksInputs: Boolean get() = promptRaw.isNotEmpty() || reason
+
+  /** The fields to ask for, with any `fieldsFrom` entry expanded from the data in [context]. */
+  fun inputsFor(context: JsonElement): List<FieldSpec> =
+    FieldSpec.parseAll(promptRaw, context).let { if (reason) it + FieldSpec.reason() else it }
 
   companion object {
     fun parse(json: JsonElement?): ActionSpec? = json?.str("label")?.let { ActionSpec(json, it) }
@@ -165,6 +173,39 @@ class FieldSpec private constructor(
 
   companion object {
     fun reason() = FieldSpec("reason", "Reason", "multiline", null, null, "Recorded in the audit log.", true, emptyList(), null, null)
+
+    /**
+     * Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of
+     * data (a service that names its own credential fields): `items` is the path to the rows; `key`, `label` and
+     * `help` are templates over `item`; `kinds` maps a row flag to a field kind (first set flag wins, else text),
+     * `yesno` being a No/Yes pick that sends "" or "true"; `options` names the row field holding `{value,label}`
+     * choices, which make a select; `required` names the row flag.
+     */
+    fun parseAll(items: List<JsonElement>, context: JsonElement): List<FieldSpec> = items.flatMap { entry ->
+      val from = entry.obj("fieldsFrom") ?: return@flatMap listOfNotNull(parse(entry))
+      ScreenValues.rows(ScreenValues.lookup(from.str("items").orEmpty(), context)).mapNotNull { row ->
+        val scope = ScreenContext.withItem(context, row)
+        val key = ScreenValues.render(from.str("key") ?: "{item.key}", scope).ifEmpty { return@mapNotNull null }
+        val choices = row.arr(from.str("options") ?: "options").map { ScreenValues.text(it.obj("value")) to ScreenValues.text(it.obj("label") ?: it.obj("value")) }
+        val flagged = (from.obj("kinds") as? JsonObject)?.entries.orEmpty().sortedBy { it.key }.firstOrNull { ScreenValues.truthy(ScreenValues.lookup(it.key, row)) }?.value
+        val kind = (flagged as? JsonPrimitive)?.contentOrNull
+        FieldSpec(
+          key = key,
+          label = ScreenValues.render(from.str("label") ?: "{item.label}", scope),
+          kind = when {
+            kind == "yesno" || choices.isNotEmpty() -> "select"
+            else -> kind ?: "text"
+          },
+          initial = if (kind == "yesno") null else choices.firstOrNull()?.first,
+          placeholder = null,
+          help = from.str("help")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() },
+          required = from.str("required")?.let { ScreenValues.truthy(ScreenValues.lookup(it, row)) } ?: false,
+          options = if (kind == "yesno") listOf("" to "No", "true" to "Yes") else choices,
+          optionsFrom = null,
+          whenCondition = null,
+        )
+      }
+    }
 
     fun parse(json: JsonElement): FieldSpec? {
       val key = json.str("key") ?: return null

@@ -942,4 +942,165 @@ class CommerceServiceSpecsTest {
     assertEquals(json("""{"orgId":"o1","all":true}"""), ScreenValues.resolveBody(attention.actions.first().body!!, model.context))
     assertTrue(spec("accounting", "accounting.activity").actions.isEmpty(), "retry all belongs to the attention list")
   }
+
+  // ---- shipping ----------------------------------------------------------------------------------------------------
+
+  private val shippingSettings = """{"settings":{"packages":[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200},{"id":"box_2","name":"Mailer","lengthCm":25,"widthCm":20,"heightCm":5,"emptyWeightGrams":50}],
+    "shipFromId":"loc1","labelFormat":"pdf_4x6","insurance":"none","signature":"none","checkoutServices":["usps:priority"],"customsSigner":"Ada"},
+    "places":[{"id":"loc1","name":"Warehouse","address":{"country":"US"}}],"shipFromResolved":true,
+    "services":[{"serviceKey":"usps:priority","label":"USPS Priority"},{"serviceKey":"ups:ground","label":"UPS Ground"}],"provider":"Shippo","testMode":false}"""
+
+  private fun ship(id: String, extra: String = "", params: Map<String, String> = emptyMap()) =
+    screen(spec("shipping", id), params, """{"s":$shippingSettings,"avail":{"available":true,"provider":"Shippo","testMode":false,"ownAccount":false,"ownAccounts":true,"platform":true}$extra}""")
+
+  private fun settingsOf(vararg overrides: Pair<String, String>): JsonObject {
+    val base = mutableMapOf(
+      "packages" to """[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200},{"id":"box_2","name":"Mailer","lengthCm":25,"widthCm":20,"heightCm":5,"emptyWeightGrams":50}]""",
+      "shipFromId" to "\"loc1\"", "labelFormat" to "\"pdf_4x6\"", "insurance" to "\"none\"", "signature" to "\"none\"",
+      "checkoutServices" to """["usps:priority"]""", "customsSigner" to "\"Ada\"",
+    )
+    overrides.forEach { (k, v) -> base[k] = v }
+    return json("""{"hostId":"h1","settings":{${base.entries.joinToString(",") { "\"${it.key}\":${it.value}" }}}}""")
+  }
+
+  @Test
+  fun shippingLinksToItsSectionsAndWarnsWhenThereIsNoShipFromAddress() {
+    val model = ship("shipping.service")
+    assertEquals(listOf("sections"), model.shown())
+    val links = model.spec.blocks.first { it.id == "sections" }.raw.jsonObject["items"]!!.jsonArray
+    val shown = links.filter { ScreenValues.condition(it.jsonObject["when"]?.let { w -> (w as JsonPrimitive).content }, model.context) }.map { (it.jsonObject["screen"] as JsonPrimitive).content }
+    assertEquals(listOf("shipping.shipFrom", "shipping.boxes", "shipping.labels", "shipping.services", "shipping.billing", "shipping.carriers", "shipping.own"), shown)
+    val unavailable = screen(spec("shipping", "shipping.service"), emptyMap(), """{"s":{"shipFromResolved":false},"avail":{"available":false}}""")
+    assertEquals(listOf("unavailable"), unavailable.shown())
+    val unresolved = screen(spec("shipping", "shipping.service"), emptyMap(), """{"s":{"shipFromResolved":false},"avail":{"available":true,"ownAccount":true}}""")
+    assertEquals(listOf("unresolved", "sections"), unresolved.shown())
+  }
+
+  @Test
+  fun everyShippingSaveSendsTheWholeSettingsWithOnlyItsOwnChangeOnTop() {
+    val boxes = ship("shipping.boxes")
+    val list = boxes.spec.blocks.first { it.id == "boxes" }
+    fun box(index: Int) = ScreenContext.with(boxes.context, "item", boxes.context.jsonObject["data"]!!.jsonObject["s"]!!.jsonObject["settings"]!!.jsonObject["packages"]!!.jsonArray[index])
+    val actions = list.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.associateBy { it.id }
+    assertEquals(settingsOf("defaultPackageId" to "\"box_2\""), ScreenValues.resolveBody(actions.getValue("makeDefault").body!!, box(1)))
+    assertEquals(
+      settingsOf("packages" to """[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200}]"""),
+      ScreenValues.resolveBody(actions.getValue("remove").body!!, box(1)),
+    )
+    val edited = ScreenValues.resolveBody(actions.getValue("edit").body!!, ScreenContext.with(box(1), "form", json("""{"name":"Big mailer","lengthCm":30,"widthCm":25,"heightCm":8,"emptyWeightGrams":60}""")))
+    assertEquals(
+      settingsOf("packages" to """[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200},{"id":"box_2","name":"Big mailer","lengthCm":30,"widthCm":25,"heightCm":8,"emptyWeightGrams":60}]"""),
+      edited,
+    )
+    assertEquals(listOf("name", "lengthCm", "widthCm", "heightCm", "emptyWeightGrams"), actions.getValue("edit").prompt.map { it.key })
+    assertEquals("{item.name}", actions.getValue("edit").prompt.first().initial)
+    val add = boxes.action("add", "addBox")
+    val added = ScreenValues.resolveBody(add.body!!, ScreenContext.with(boxes.context, "form", json("""{"name":"Tube","lengthCm":60,"widthCm":8,"heightCm":8,"emptyWeightGrams":90}""")))
+    val packages = added.jsonObject["settings"]!!.jsonObject["packages"]!!.jsonArray
+    assertEquals(3, packages.size)
+    assertTrue(Regex("box_[0-9a-f]{8}").matches((packages[2].jsonObject["id"] as JsonPrimitive).content), "a fresh id for the new box")
+    assertEquals("Tube", (packages[2].jsonObject["name"] as JsonPrimitive).content)
+    // The default box badge: the stored default, else the first box.
+    val badges = list.raw.jsonObject["badges"]!!.jsonArray.map { (it.jsonObject["when"] as JsonPrimitive).content }
+    assertTrue(ScreenValues.condition(badges[1], box(0)) && !ScreenValues.condition(badges[1], box(1)))
+  }
+
+  @Test
+  fun theShipFromLocationHidesTheAddressFieldsAndLabelsSaveTheirChoices() {
+    val from = ship("shipping.shipFrom")
+    val fields = from.spec.blocks.first { it.id == "shipFrom" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+    fun shown(form: String) = fields.filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(from.context, "form", json(form))) }.map { it.key }
+    assertEquals(listOf("shipFromId"), shown("""{"shipFromId":"loc1"}"""))
+    assertEquals(listOf("shipFromId", "name", "company", "line1", "line2", "city", "state", "postalCode", "country", "phone"), shown("""{"shipFromId":""}"""))
+    assertEquals(listOf("", "loc1"), fields.first().choices(from.context).map { it.first })
+    val labels = ship("shipping.labels")
+    assertEquals(
+      settingsOf("labelFormat" to "\"zpl\"", "signature" to "\"adult\"", "insurance" to "\"order_value\"", "customsSigner" to "\"Grace\""),
+      labels.body(labels.form("labels"), """{"labelFormat":"zpl","signature":"adult","insurance":"order_value","customsSigner":"Grace"}"""),
+    )
+  }
+
+  @Test
+  fun checkoutServicesAreSwitchedOnAndOffByTheirKey() {
+    val model = ship("shipping.services")
+    val block = model.spec.blocks.first { it.id == "services" }
+    val toggle = block.raw.jsonObject["toggle"]!!.jsonObject
+    fun row(key: String) = ScreenContext.with(model.context, "item", json("""{"serviceKey":"$key","label":"x"}"""))
+    assertEquals("usps:priority", ScreenValues.render((toggle["value"] as JsonPrimitive).content, row("usps:priority")))
+    assertEquals("", ScreenValues.render((toggle["value"] as JsonPrimitive).content, row("ups:ground")), "a service not in the list reads as off")
+    assertEquals(settingsOf("checkoutServices" to """["usps:priority","ups:ground"]"""), ScreenValues.resolveBody(ActionSpec.parse(toggle["on"])!!.body!!, row("ups:ground")))
+    assertEquals(settingsOf("checkoutServices" to "[]"), ScreenValues.resolveBody(ActionSpec.parse(toggle["off"])!!.body!!, row("usps:priority")))
+  }
+
+  @Test
+  fun carrierAccountsSwitchOnAndOffAndConnectByTheCarriersOwnFields() {
+    val carriers = """{"accounts":[{"id":"ca1","carrierName":"UPS","accountNumber":"A1","active":true,"platformOwned":false,"authorization":"connected"}],"canConnect":true,"canToggle":true,
+      "connectable":[{"carrier":"ups","label":"UPS","flow":"contact","fields":[]},{"carrier":"dhl_express","label":"DHL Express","flow":"credentials","fields":[{"key":"account_number","label":"Account number","secret":false},{"key":"password","label":"Password","secret":true},{"key":"is_test","label":"Test account","secret":false,"checkbox":true}]}]}"""
+    val list = screen(spec("shipping", "shipping.carriers"), emptyMap(), """{"carriers":$carriers}""")
+    assertEquals(listOf("hint", "accounts", "connectable"), list.shown())
+    val toggle = list.spec.blocks.first { it.id == "accounts" }.raw.jsonObject["toggle"]!!.jsonObject
+    val item = ScreenContext.with(list.context, "item", json("""{"id":"ca1","active":true,"carrierName":"UPS"}"""))
+    assertEquals(json("""{"hostId":"h1","carrierAccountId":"ca1","active":false}"""), ScreenValues.resolveBody(ActionSpec.parse(toggle["off"])!!.body!!, item))
+
+    val dhl = screen(spec("shipping", "shipping.connectCarrier"), mapOf("carrier" to "dhl_express"), """{"carriers":$carriers}""")
+    assertEquals(listOf("credentials"), dhl.shown())
+    val dynamic = FieldSpec.parseAll(dhl.spec.blocks.first { it.id == "credentials" }.raw.jsonObject["fields"]!!.jsonArray, dhl.context)
+    assertEquals(listOf("account_number", "password", "is_test"), dynamic.map { it.key })
+    assertEquals(listOf("text", "password", "select"), dynamic.map { it.kind })
+    assertEquals(listOf("" to "No", "true" to "Yes"), dynamic.last().choices(dhl.context))
+    assertEquals(
+      json("""{"hostId":"h1","carrier":"dhl_express","credentials":{"account_number":"123","password":"pw","is_test":""}}"""),
+      ScreenValues.resolveBody(dhl.spec.blocks.first { it.id == "credentials" }.raw.jsonObject["submit"]!!.jsonObject["body"]!!, ScreenContext.with(dhl.context, "form", json("""{"account_number":"123","password":"pw","is_test":""}"""))),
+    )
+    val ups = screen(spec("shipping", "shipping.connectCarrier"), mapOf("carrier" to "ups"), """{"carriers":$carriers}""")
+    assertEquals(listOf("ups", "account"), ups.shown())
+    assertEquals("authorizeUrl", ActionSpec.parse(ups.spec.blocks.first { it.id == "account" }.raw.jsonObject["submit"])!!.openUrl)
+  }
+
+  @Test
+  fun anOwnShippingAccountConnectsByItsServicesFieldsAndDisconnects() {
+    val own = """{"services":[
+      {"kind":"easyship","label":"Easyship","summary":"Buy labels from Easyship.","role":"labels","fields":[{"key":"apiKey","label":"API access token","helper":"In Easyship.","secret":true,"required":true},{"key":"weightUnit","label":"Weight unit","helper":"","options":[{"value":"kg","label":"Kilograms"},{"value":"lb","label":"Pounds"}]}]},
+      {"kind":"sendcloud","label":"Sendcloud","summary":"Sendcloud labels.","role":"labels","fields":[]}],
+      "connections":[{"kind":"sendcloud","label":"Sendcloud","role":"labels","accountName":"Acme","testMode":false,"connectedAtMs":1,"followsParcels":false,"webhookUrl":"https://console.test/hook","settings":{}}]}"""
+    val list = screen(spec("shipping", "shipping.own"), emptyMap(), """{"own":$own}""")
+    val connectable = list.spec.blocks.first { it.id == "connectable" }
+    fun shown(kind: String) = ScreenValues.condition(connectable.string("filter"), ScreenContext.with(list.context, "item", json("""{"kind":"$kind"}""")))
+    assertTrue(shown("easyship") && !shown("sendcloud"), "a connected service is not offered again")
+    val connected = list.spec.blocks.first { it.id == "connections" }
+    val row = ScreenContext.with(list.context, "item", list.context.jsonObject["data"]!!.jsonObject["own"]!!.jsonObject["connections"]!!.jsonArray[0])
+    val actions = connected.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }
+    assertEquals(json("""{"hostId":"h1","kind":"sendcloud"}"""), ScreenValues.resolveBody(actions.first { it.id == "disconnect" }.body!!, row))
+    assertTrue(ScreenValues.condition(connected.raw.jsonObject["badges"]!!.jsonArray.last().jsonObject["when"].let { (it as JsonPrimitive).content }, row), "tracking is not set up")
+
+    val connect = screen(spec("shipping", "shipping.connectOwn"), mapOf("kind" to "easyship"), """{"own":$own}""")
+    val fields = FieldSpec.parseAll(connect.spec.blocks.first { it.id == "connect" }.raw.jsonObject["fields"]!!.jsonArray, connect.context)
+    assertEquals(listOf("apiKey", "weightUnit"), fields.map { it.key })
+    assertEquals(listOf("password", "select"), fields.map { it.kind })
+    assertTrue(fields[0].required && !fields[1].required)
+    assertEquals(listOf("kg" to "Kilograms", "lb" to "Pounds"), fields[1].choices(connect.context))
+    assertEquals("kg", fields[1].initial, "a pick starts on its first option")
+    assertEquals(
+      json("""{"hostId":"h1","kind":"easyship","values":{"apiKey":"tok","weightUnit":"lb"}}"""),
+      ScreenValues.resolveBody(connect.spec.blocks.first { it.id == "connect" }.raw.jsonObject["submit"]!!.jsonObject["body"]!!, ScreenContext.with(connect.context, "form", json("""{"apiKey":"tok","weightUnit":"lb"}"""))),
+    )
+  }
+
+  @Test
+  fun payingForLabelsAsksForConsentAndTheSpendIsOnBilling() {
+    fun billing(acct: String) = screen(spec("shipping", "shipping.billing"), emptyMap(), """{"acct":$acct}""")
+    val open = billing("""{"opened":true,"ownAccount":false,"provider":"Shippo","consent":null,"consentText":"I agree labels are debited.","markupPct":5}""")
+    assertEquals(listOf("markup", "terms", "consent", "manage"), open.shown())
+    assertEquals(listOf("accept"), open.actionsShown("manage"))
+    assertEquals(json("""{"hostId":"h1","accepted":true}"""), open.body(open.action("manage", "accept")))
+    assertEquals(listOf("withdraw"), billing("""{"ownAccount":false,"consent":{"acceptedAtMs":1},"consentText":"x","markupPct":0}""").actionsShown("manage"))
+    assertEquals(listOf("own"), billing("""{"ownAccount":true,"provider":"Easyship"}""").shown())
+    val spend = spec("shipping", "shipping.spend")
+    assertEquals(listOf("orgBillingUsage"), spend.zones)
+    val model = screen(spend, emptyMap(), """{"spend":{"available":true,"markupPct":0,"months":[{"month":"2026-10","labels":3,"chargedCents":1500,"creditedCents":200,"debitedCents":1000,"invoicedCents":500}]}}""")
+    assertEquals(listOf("noMarkup", "months"), model.shown())
+    val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["spend"]!!.jsonObject["months"]!!.jsonArray[0])
+    assertEquals("3 labels · $10.00 from Stripe balance · $5.00 on invoice", ScreenValues.render(spend.blocks.first { it.id == "months" }.string("secondary")!!, row))
+    assertEquals("/api/shipping/spend?orgId=o1", ScreenValues.renderUrl(spend.loads.first().url, model.context))
+  }
 }

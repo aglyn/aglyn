@@ -346,6 +346,36 @@
       "expect": {
         "clear": null
       }
+    },
+    {
+      "body": {
+        "swapped": {
+          "$replace": {
+            "list": "{data.members}",
+            "key": "$id",
+            "match": "{params.uid}",
+            "value": {
+              "$id": "{params.uid}",
+              "role": "viewer"
+            }
+          }
+        }
+      },
+      "expect": {
+        "swapped": [
+          {
+            "$id": "u1",
+            "email": "a@acme.test",
+            "displayName": "Ada",
+            "role": "owner",
+            "count": 0
+          },
+          {
+            "$id": "u2",
+            "role": "viewer"
+          }
+        ]
+      }
     }
   ],
   "condition": [

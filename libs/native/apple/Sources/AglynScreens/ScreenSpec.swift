@@ -150,6 +150,7 @@ public struct ActionSpec: Sendable, Identifiable {
   public let destructive: Bool
   public let reason: Bool
   public let prompt: [FieldSpec]
+  let promptRaw: [JSONValue]
   public let success: String?
   /// A response field holding a URL to open in the secure in-app browser (Stripe's pages).
   public let openURL: String?
@@ -191,6 +192,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.destructive = json["destructive"] == .bool(true)
     self.reason = json["reason"] == .bool(true)
     self.prompt = json["prompt"].array.compactMap(FieldSpec.init)
+    self.promptRaw = json["prompt"].array
     self.success = json["success"]?.stringValue
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
@@ -213,6 +215,17 @@ public struct ActionSpec: Sendable, Identifiable {
       ? prompt + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true,
           help: "Recorded in the audit log.")]
       : prompt
+  }
+
+  /// Whether the action asks for anything before it runs (a prompt, even one the data fills in, or a reason).
+  public var asksInputs: Bool { !promptRaw.isEmpty || reason }
+
+  /// The fields to ask for, with any `fieldsFrom` entry expanded from the data in `context`.
+  public func inputs(in context: JSONValue) -> [FieldSpec] {
+    let asked = FieldSpec.parseAll(promptRaw, in: context)
+    return reason
+      ? asked + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true, help: "Recorded in the audit log.")]
+      : asked
   }
 }
 
@@ -249,6 +262,53 @@ public struct FieldSpec: Sendable, Identifiable {
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
     if let mustMatch, ScreenValues.text(value) != ScreenValues.render(mustMatch, in: context) { return true }
     return required && kind != "toggle" && !ScreenValues.truthy(value)
+  }
+
+  init(
+    key: String, label: String, kind: String, initial: String?, help: String?, required: Bool,
+    options: [(value: String, label: String)]
+  ) {
+    self.key = key
+    self.label = label
+    self.kind = kind
+    self.initial = initial
+    self.placeholder = nil
+    self.help = help
+    self.required = required
+    self.options = options
+    self.optionsFrom = nil
+    self.when = nil
+    self.mustMatch = nil
+  }
+
+  /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
+  /// (a service that names its own credential fields): `items` is the path to the rows; `key`, `label` and `help`
+  /// are templates over `item`; `kinds` maps a row flag to a field kind (first set flag wins, else text), `yesno`
+  /// being a No/Yes pick that sends "" or "true"; `options` names the row field holding `{value,label}` choices,
+  /// which make a select; `required` names the row flag.
+  static func parseAll(_ items: [JSONValue], in context: JSONValue) -> [FieldSpec] {
+    items.flatMap { entry -> [FieldSpec] in
+      guard let from = entry["fieldsFrom"] else { return FieldSpec(entry).map { [$0] } ?? [] }
+      let rows = ScreenValues.rows(ScreenValues.lookup(from["items"]?.stringValue ?? "", in: context))
+      return rows.compactMap { row -> FieldSpec? in
+        let scope = ScreenContext.with(context, item: row)
+        let key = ScreenValues.render(from["key"]?.stringValue ?? "{item.key}", in: scope)
+        if key.isEmpty { return nil }
+        let choices = row[from["options"]?.stringValue ?? "options"].array.map {
+          (ScreenValues.text($0["value"]), ScreenValues.text($0["label"] ?? $0["value"]))
+        }
+        let kind = from["kinds"].objectEntries.first { ScreenValues.truthy(ScreenValues.lookup($0.key, in: row)) }?
+          .value.stringValue
+        let yesno = kind == "yesno"
+        let help = from["help"]?.stringValue.map { ScreenValues.render($0, in: scope) }
+        return FieldSpec(
+          key: key, label: ScreenValues.render(from["label"]?.stringValue ?? "{item.label}", in: scope),
+          kind: yesno || !choices.isEmpty ? "select" : (kind ?? "text"),
+          initial: yesno ? nil : choices.first?.0, help: (help?.isEmpty ?? true) ? nil : help,
+          required: from["required"]?.stringValue.map { ScreenValues.truthy(ScreenValues.lookup($0, in: row)) } ?? false,
+          options: yesno ? [("", "No"), ("true", "Yes")] : choices)
+      }
+    }
   }
 
   init(key: String, label: String, kind: String, required: Bool, help: String?) {
