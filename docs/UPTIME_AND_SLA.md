@@ -998,7 +998,8 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `beacon-heartbeat console` | `app.aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `scheduled-jobs` | `app.aglyn.com/api/health/crons` | HTTP 2xx and `$.status == "ok"` | 15 min |
-| Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
+| Cloud Functions | `execution_count{status != ok}`, every function except `beforeSignupCreate` | > 2 failures in 5 min | metric |
+| `beforeSignupCreate` | `blocking_fn_post_errors`: POST with HTTP status ≥ 500 | any | log-based metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR`, every job except the three high-frequency beats | any | log match |
 | Cloud Scheduler, per-minute beats | `scheduler_beat_attempt_errors` for `pluginJobsBeat` and `consoleAiJobsBeat` | > 2 failed attempts in 10 min, per job | log-based metric |
 | Cloud Scheduler, `consoleFastCrons` (every 15 min) | `scheduler_beat_attempt_errors` for `consoleFastCrons` | > 1 failed tick in 30 min | log-based metric |
@@ -1018,6 +1019,18 @@ failed attempts inside ten minutes for one job, which is a beat that has
 actually stopped. The threshold was set by an agent asked to fix the alerts, not
 chosen by the account owner; move it if three minutes of a dead beat is too
 long to wait.
+
+`beforeSignupCreate` left the `execution_count` condition on 2026-10-14. It
+is an Identity Platform blocking function, so its URL is public and
+internet scanners fetch it with GET within seconds of each deploy. Those
+GETs get 400 or 404, and they count as failed executions: four of them
+after the 19:28Z deploy that day paged "Cloud Function executions
+failing" while every real sign-up returned 200. In the thirty days before
+that, every non-200 on the function was a scanner GET. Identity Platform
+always calls it with POST, and a refusal by design (a rate limit or a fraud
+rule) is a 400. So the policy (`14477715269922902903`) counts it
+through the log-based metric `blocking_fn_post_errors` instead: any POST
+that ends in a 5xx, which is a sign-up the function failed to decide.
 
 `consoleFastCrons` joined the beats on 2026-09-30 (AGL-3423). It runs every
 fifteen minutes with `retryCount: 0` and both of its routes are idempotent
