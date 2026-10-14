@@ -159,6 +159,17 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testTheForumOffersTheRoutesCategoriesAndFiltersByThem() throws {
+    let forum = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.support.forum" })
+    let list = try XCTUnwrap(forum.blocks.first { $0.type == "list" })
+    XCTAssertEqual(list["chips"]?["field"], "category")
+    let context: JSONValue = ["data": ["forum": ["categories": ["General", "Building"]]]]
+    XCTAssertEqual(ScreenValues.lookup(list["chips"]?["from"]?.stringValue ?? "", in: context).array.map { ScreenValues.text($0) }, ["General", "Building"])
+    let create = try XCTUnwrap(forum.raw["actions"].array.first.flatMap(ActionSpec.init))
+    XCTAssertEqual(create.prompt.first?.choices(in: context).map(\.value), ["General", "Building"])
+  }
+
+  @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
     let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)

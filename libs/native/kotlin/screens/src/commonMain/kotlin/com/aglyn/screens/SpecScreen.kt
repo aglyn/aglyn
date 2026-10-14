@@ -575,11 +575,31 @@ private fun ListBlock(
   trigger: (ActionSpec, JsonElement) -> Unit,
 ) {
   val scope = rememberCoroutineScope()
+  // `chips: { field, from, label }`: a filter over the values in `from`, narrowing the rows to those whose
+  // `field` equals the choice (the forum's category filter).
+  var chosen by remember { mutableStateOf("") }
+  val chips = block["chips"]
+  val chipField = chips?.str("field")
+  val chipValues = chips?.let { (ScreenValues.lookup(it.str("from").orEmpty(), context) as? JsonArray)?.map { v -> ScreenValues.text(v) } }.orEmpty()
   val rows = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
     .filter { ScreenValues.condition(block.string("filter"), ScreenContext.withItem(context, it)) }
+    .filter { row -> chipField == null || chosen.isEmpty() || ScreenValues.text(ScreenValues.lookup(chipField, row)) == chosen }
   val loadKey = block.string("load")
   SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {
     Column(Modifier.fillMaxWidth()) {
+      if (chipValues.isNotEmpty()) {
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(Modifier.padding(horizontal = space(2f), vertical = space(1f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          for (value in chipValues) {
+            androidx.compose.material3.FilterChip(
+              selected = chosen == value,
+              onClick = { chosen = if (chosen == value) "" else value },
+              label = { Text(value) },
+              modifier = Modifier.testTag("list-chip-$value"),
+            )
+          }
+        }
+      }
       if (rows.isEmpty()) {
         Text(
           ScreenValues.render(block.string("empty") ?: "Nothing here yet.", context),
