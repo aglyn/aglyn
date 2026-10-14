@@ -92,7 +92,7 @@
                   ],
                   "optionsFrom": {
                     "items": "data.products.items",
-                    "where": "item.subscription",
+                    "filter": "item.subscription",
                     "value": "{item.$id}",
                     "label": "Subscribers of {item.name}"
                   }
@@ -742,7 +742,7 @@
                   ],
                   "optionsFrom": {
                     "items": "data.store.shipping.rates",
-                    "where": "item.kind != carrier && item.zoneId == @parent.zoneId",
+                    "filter": "item.kind != carrier && item.zoneId == @parent.zoneId",
                     "value": "{item.id}",
                     "label": "{item.name|'Unnamed rate'}"
                   },
@@ -973,7 +973,7 @@
                   ],
                   "optionsFrom": {
                     "items": "data.store.shipping.rates",
-                    "where": "item.kind != carrier",
+                    "filter": "item.kind != carrier",
                     "value": "{item.id}",
                     "label": "{item.name|'Unnamed rate'}"
                   },

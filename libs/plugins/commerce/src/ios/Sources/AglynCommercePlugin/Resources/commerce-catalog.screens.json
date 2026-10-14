@@ -117,7 +117,7 @@
                   ],
                   "optionsFrom": {
                     "items": "data.categories.items",
-                    "where": "item.$id != @parent.$id",
+                    "filter": "item.$id != @parent.$id",
                     "value": "{item.$id}",
                     "label": "{item.name}"
                   }

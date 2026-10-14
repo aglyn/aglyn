@@ -1561,7 +1561,7 @@ final class ScreenSpecTests: XCTestCase {
       FieldSpec(
         [
           "key": "clearing", "kind": "select",
-          "optionsFrom": ["items": "data.accounts", "where": "item.classification == bank", "value": "{item.id}", "label": "{item.name}"],
+          "optionsFrom": ["items": "data.accounts", "filter": "item.classification == bank", "value": "{item.id}", "label": "{item.name}"],
         ]))
     XCTAssertEqual(field.choices(in: context).map(\.value), ["a2"])
     XCTAssertEqual(ScreenValues.render("{data.accounts.*.name}", in: context), "Sales, Main bank")

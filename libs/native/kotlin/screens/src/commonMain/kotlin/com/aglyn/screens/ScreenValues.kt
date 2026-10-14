@@ -738,29 +738,40 @@ object ScreenValues {
         val holds = if (left is JsonArray) left.any { text(it) == right } else text(left).contains(right)
         return if (negated) !holds else holds
       }
-      // `a > b`, `a >= b`, `a < b`, `a <= b`: numbers, each side a literal or a path.
+      // `a > b`, `a >= b`, `a < b`, `a <= b`: numbers and times. Each side is a literal, a path (a time reads as epoch
+      // milliseconds) or arithmetic (`max(0, a - b) > 0`, `a + b >= c`); the right side may be `@path` with an optional offset
+      // (`@now.ms+7d`). A projected list on the left (`holds.*.expiresAtMs > @now.ms`) holds when any of its values does. A
+      // missing side is false, except two months or other texts (`2026-09 <= now.month`), which are ordered as text.
       for (op in listOf(">=", "<=", ">", "<")) {
         val place = clause.indexOf(op)
         if (place < 0) continue
-        // A side may itself be arithmetic: `max(0, a - b) > 0`, `a + b >= c`.
-        fun side(part: String): Double? = part.trim().let { trimmed ->
-          trimmed.toDoubleOrNull() ?: when {
-            calculates(trimmed) -> calculate(trimmed, context)
-            arithmeticTerms(trimmed) != null -> number(evaluate(trimmed, context))
-            else -> number(lookup(trimmed, context))
-          }
+        val leftText = clause.substring(0, place).trim()
+        val rightText = clause.substring(place + op.length).trim()
+        val timed = rightText.startsWith("@")
+        fun measure(value: JsonElement?): Double? = if (timed) comparable(value) else number(value) ?: epochMillis(value)?.toDouble()
+        fun side(trimmed: String): Double? = trimmed.toDoubleOrNull() ?: when {
+          trimmed.startsWith("@") -> operand(trimmed, context)
+          calculates(trimmed) -> calculate(trimmed, context)
+          arithmeticTerms(trimmed) != null -> number(evaluate(trimmed, context))
+          else -> measure(lookup(trimmed, context))
         }
-        val left = side(clause.substring(0, place))
-        val right = side(clause.substring(place + op.length))
+        fun holds(left: Double, right: Double) = when (op) {
+          ">=" -> left >= right
+          "<=" -> left <= right
+          ">" -> left > right
+          else -> left < right
+        }
+        val right = side(rightText)
+        val projected = if (calculates(leftText) || arithmeticTerms(leftText) != null) null else lookup(leftText, context) as? JsonArray
+        if (right != null && projected != null) return projected.mapNotNull { measure(it) }.any { holds(it, right) }
+        val left = side(leftText)
         if (left == null || right == null) {
-          // Two months (`2026-09 <= 2026-10`) or two other texts that are not numbers: ordered as text.
           // A literal month or date (`2026-10`) stands for itself; a path that found nothing is empty.
-          fun words(part: String): String = part.trim().let { trimmed ->
+          fun words(trimmed: String): String =
             text(lookup(trimmed, context)).ifEmpty { if (trimmed.isNotEmpty() && trimmed.all { it.isDigit() || it == '-' }) trimmed else "" }
-          }
-          val a = words(clause.substring(0, place))
-          val b = words(clause.substring(place + op.length))
-          if (a.isEmpty() || b.isEmpty() || left != null) return false
+          val a = words(leftText)
+          val b = words(rightText)
+          if (a.isEmpty() || b.isEmpty() || left != null || timed) return false
           return when (op) {
             ">=" -> a >= b
             "<=" -> a <= b
@@ -768,12 +779,7 @@ object ScreenValues {
             else -> a < b
           }
         }
-        return when (op) {
-          ">=" -> left >= right
-          "<=" -> left <= right
-          ">" -> left > right
-          else -> left < right
-        }
+        return holds(left, right)
       }
     }
     for (op in listOf("!=", "==")) {
@@ -791,23 +797,6 @@ object ScreenValues {
           return if (op == "==") hit else !hit
         }
         return if (op == "==") left in options else left !in options
-      }
-    }
-    // `path < @now.ms+7d`: numbers and times compared; the right side is a number or `@path` with an optional offset.
-    for (op in listOf("<=", ">=", "<", ">")) {
-      val at = clause.indexOf(op)
-      if (at < 0) continue
-      val found = lookup(clause.substring(0, at), context)
-      val right = operand(clause.substring(at + op.length).trim(), context) ?: return false
-      // A projected list (`holds.*.expiresAtMs > @now.ms`) holds when any of its values does.
-      val lefts = if (found is JsonArray) found.mapNotNull { comparable(it) } else listOfNotNull(comparable(found))
-      return lefts.any { left ->
-        when (op) {
-          "<=" -> left <= right
-          ">=" -> left >= right
-          "<" -> left < right
-          else -> left > right
-        }
       }
     }
     if (clause.startsWith("!")) return !truthy(lookup(clause.substring(1), context))

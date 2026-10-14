@@ -733,30 +733,46 @@ public enum ScreenValues {
       if case .array(let items)? = left { holds = items.contains { text($0) == right } } else { holds = text(left).contains(right) }
       return negated ? !holds : holds
     }
-    // `a > b`, `a >= b`, `a < b`, `a <= b`: numbers, each side a literal or a path.
+    // `a > b`, `a >= b`, `a < b`, `a <= b`: numbers and times. Each side is a literal, a path (a time reads as epoch
+    // milliseconds) or arithmetic (`max(0, a - b) > 0`, `a + b >= c`); the right side may be `@path` with an optional offset
+    // (`@now.ms+7d`). A projected list on the left (`holds.*.expiresAtMs > @now.ms`) holds when any of its values does. A
+    // missing side is false, except two months or other texts (`2026-09 <= now.month`), which are ordered as text.
     if !clause.contains("=="), !clause.contains("!=") {
       for op in [">=", "<=", ">", "<"] {
         guard let range = clause.range(of: op) else { continue }
-        func side(_ text: Substring) -> Double? {
-          let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let leftText = clause[..<range.lowerBound].trimmingCharacters(in: .whitespaces)
+        let rightText = clause[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        let timed = rightText.hasPrefix("@")
+        func measure(_ value: JSONValue?) -> Double? { timed ? comparable(value) : (number(value) ?? epochMillis(value).map(Double.init)) }
+        func side(_ trimmed: String) -> Double? {
           if let literal = Double(trimmed) { return literal }
-          // A side may itself be arithmetic: `max(0, a - b) > 0`, `a + b >= c`.
+          if trimmed.hasPrefix("@") { return operand(trimmed, in: context) }
           if calculates(trimmed) { return calculate(trimmed, in: context) }
           if arithmeticTerms(trimmed) != nil { return number(evaluate(trimmed, in: context)) }
-          return number(lookup(trimmed, in: context))
+          return measure(lookup(trimmed, in: context))
         }
-        guard let left = side(clause[..<range.lowerBound]), let right = side(clause[range.upperBound...]) else {
-          // Two months (`2026-09 <= 2026-10`) or two other texts that are not numbers: ordered as text.
-          func words(_ part: Substring) -> String {
-            let trimmed = part.trimmingCharacters(in: .whitespaces)
+        func holds(_ left: Double, _ right: Double) -> Bool {
+          switch op {
+          case ">=": return left >= right
+          case "<=": return left <= right
+          case ">": return left > right
+          default: return left < right
+          }
+        }
+        let right = side(rightText)
+        if let right, !calculates(leftText), arithmeticTerms(leftText) == nil, case .array(let list)? = lookup(leftText, in: context) {
+          return list.compactMap { measure($0) }.contains { holds($0, right) }
+        }
+        guard let left = side(leftText), let right else {
+          func words(_ trimmed: String) -> String {
             let found = text(lookup(trimmed, in: context))
             if !found.isEmpty { return found }
             // A literal month or date (`2026-10`), not a path that found nothing.
             return !trimmed.isEmpty && trimmed.allSatisfy { $0.isNumber || $0 == "-" } ? trimmed : ""
           }
-          let a = words(clause[..<range.lowerBound])
-          let b = words(clause[range.upperBound...])
-          guard !a.isEmpty, !b.isEmpty, side(clause[..<range.lowerBound]) == nil else { return false }
+          let a = words(leftText)
+          let b = words(rightText)
+          guard !a.isEmpty, !b.isEmpty, side(leftText) == nil, !timed else { return false }
           switch op {
           case ">=": return a >= b
           case "<=": return a <= b
@@ -764,12 +780,7 @@ public enum ScreenValues {
           default: return a < b
           }
         }
-        switch op {
-        case ">=": return left >= right
-        case "<=": return left <= right
-        case ">": return left > right
-        default: return left < right
-        }
+        return holds(left, right)
       }
     }
     for op in ["!=", "=="] {
@@ -789,23 +800,6 @@ public enum ScreenValues {
           return op == "==" ? hit : !hit
         }
         return op == "==" ? options.contains(left) : !options.contains(left)
-      }
-    }
-    // `path < @now.ms+7d`: numbers and times compared; the right side is a number or `@path` with an optional offset.
-    for op in ["<=", ">=", "<", ">"] {
-      guard let range = clause.range(of: op) else { continue }
-      let found = lookup(String(clause[..<range.lowerBound]), in: context)
-      guard let right = operand(clause[range.upperBound...].trimmingCharacters(in: .whitespaces), in: context) else { return false }
-      // A projected list (`holds.*.expiresAtMs > @now.ms`) holds when any of its values does.
-      let lefts: [Double]
-      if case .array(let list)? = found { lefts = list.compactMap { comparable($0) } } else { lefts = comparable(found).map { [$0] } ?? [] }
-      return lefts.contains { left in
-        switch op {
-        case "<=": return left <= right
-        case ">=": return left >= right
-        case "<": return left < right
-        default: return left > right
-        }
       }
     }
     if clause.hasPrefix("!") { return !truthy(lookup(String(clause.dropFirst()), in: context)) }
