@@ -373,6 +373,30 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun theAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() {
+    val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }
+    val list = spec.blocks.first { it.type == "list" }
+    val set = ActionSpec.parse(list.raw.arr("actions").first())!!
+    assertNotNull(set.check)
+    assertTrue(set.asksConfirmation)
+    fun scope(form: String, extra: String) = Json.parseToJsonElement(
+      """{"data":{"addons":{"interval":"month","catalog":{"hosts":{"unitUsd":5}}}},"item":{"kind":"hosts","label":"Extra sites"},"form":$form,$extra}""",
+    )
+    assertEquals(
+      "Extra sites: 3? $12.50 will be charged to your card now, prorated for the rest of this period, including tax. Ongoing: 3 at $5.00/mo each.",
+      set.confirmText(scope("""{"quantity":3}""", """"preview":{"chargedNowCents":1250,"currency":"usd","taxCents":100,"taxComplete":true}""")),
+    )
+    assertEquals(
+      "Extra sites: 0? Nothing is charged and nothing is refunded. You keep this capacity for the rest of the period you have paid for, and it ends on Nov 1, 2026. From then: nothing, this add-on is removed.",
+      set.confirmText(scope("""{"quantity":0}""", """"preview":{"defersToPeriodEnd":true,"effectiveAt":"2026-11-01T00:00:00Z","currency":"usd"}""")),
+    )
+    val bank = scope("{}", """"response":{"paymentPending":true,"requiresAction":true,"hostedInvoiceUrl":"https://invoice.test/i"}""")
+    assertEquals("hostedInvoiceUrl", set.insteadEntry(bank).str("open"))
+    assertEquals("Card declined", set.insteadEntry(scope("{}", """"response":{"paymentPending":true,"declined":true}""")).str("title"))
+    assertNull(set.insteadEntry(scope("{}", """"response":{"ok":true,"quantities":{"hosts":3}}""")))
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)
