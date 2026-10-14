@@ -95,7 +95,7 @@ describe('usePosPairing', () => {
 describe('posRegistersSettingsHref', () => {
   it('points from the register page to the POS registers card', () => {
     expect(posRegistersSettingsHref('/acme/hosts/shop/pos')).toBe(
-      '/acme/hosts/shop/products/settings#pos-registers',
+      '/acme/hosts/shop/products/pos#pos-registers',
     )
     expect(posRegistersSettingsHref(undefined)).toBeUndefined()
     expect(posRegistersSettingsHref('/acme/hosts/shop/products')).toBeUndefined()

@@ -16,11 +16,11 @@ Dropship suppliers are part of the **Pro** plan and above. On a lower plan the
 
 ## Add a supplier {#add-a-supplier}
 
-The **Dropship suppliers** card, in the store's settings, lists the partners
+The **Dropship suppliers** card, on **Products → Shipping & delivery**, lists the partners
 that ship orders for you: select **Add supplier**, enter its name and how it
 hears about orders, and select **Save**.
 
-1. Open your site's **Products** page and choose **Settings**.
+1. Open your site's **Products** page and choose **Shipping & delivery**.
 2. On the **Dropship suppliers** card, select **Add supplier**.
 3. Enter the supplier's **Name**.
 4. Choose how it hears about orders. Fill in one or both:

@@ -6,7 +6,7 @@ description: What an order webhook posts to your endpoint, the headers that come
 
 # Order webhooks for developers
 
-A store's managers add an endpoint under **Settings** → **Order webhooks** in the
+A store's managers add an endpoint under **Notifications** → **Order webhooks** in the
 Products hub, choose its events, and copy its **signing secret** — see
 [Order webhooks](../commerce-and-bookings/commerce/orders-and-returns.md#order-webhooks)
 for that side and the list of events. This page is for whoever builds the endpoint.

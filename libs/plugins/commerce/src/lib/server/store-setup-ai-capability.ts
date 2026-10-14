@@ -74,8 +74,16 @@ export const STORE_PICKUP_AI_OP = 'store-pickup'
 export const STORE_DELIVERY_AI_OP = 'store-delivery'
 export const STORE_TAX_AI_OP = 'store-tax'
 
-/** Where a person finds what the build set. */
-const WHERE = 'Products → Settings'
+/**
+ * Where a person finds what the build set: the settings page each section's
+ * card is on (AGL-3713). Pickup is per location, on Shipping & delivery.
+ */
+const WHERE: Readonly<Record<StoreSetupSection, string>> = {
+  shipping: 'Products → Shipping & delivery',
+  pickup: 'Products → Shipping & delivery',
+  'local-delivery': 'Products → Shipping & delivery',
+  tax: 'Products → Taxes',
+}
 
 /** The writer's content for an item: its arguments, tagged with the section its op changes. */
 export function storeSetupContentFromArgs(
@@ -100,7 +108,7 @@ function storeSetupCapability(
 ): PluginAiCapability {
   return {
     op,
-    where: WHERE,
+    where: WHERE[section],
     ...rest,
     // Free includes no commerce.
     freeAllowed: false,

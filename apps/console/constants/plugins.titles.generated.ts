@@ -85,8 +85,15 @@ export const PLUGIN_SURFACE_SECTIONS: Readonly<
     returns: 'Returns',
     promotions: 'Promotions',
     reservations: 'Reservations',
-    settings: 'Settings',
     analytics: 'Analytics',
+    payments: 'Payments',
+    checkout: 'Checkout',
+    taxes: 'Taxes',
+    shipping: 'Shipping & delivery',
+    notifications: 'Notifications',
+    pos: 'Point of sale',
+    channels: 'Sales channels',
+    integrations: 'Integrations',
   },
 }
 

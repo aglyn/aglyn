@@ -22,6 +22,8 @@ export interface AccountSection {
   id: 'account' | 'emails' | 'profile' | 'basic' | 'security' | 'close'
   label: string
   href: string
+  /** The rail group it is drawn under (AGL-3713); none is the first. */
+  group?: string
 }
 
 /**
@@ -68,10 +70,13 @@ export const ACCOUNT_SECTIONS: readonly AccountSection[] = [
     label: 'Security',
     href: buildRoute(Route.MANAGE_USER_SECURITY),
   },
+  // Set apart under a divider (AGL-3713): the one section that cannot be
+  // undone, kept from reading as one more settings page.
   {
     id: 'close',
     label: 'Close account',
     href: buildRoute(Route.MANAGE_USER_CLOSE),
+    group: 'Danger zone',
   },
 ]
 

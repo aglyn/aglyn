@@ -31,7 +31,10 @@ const NewestSiteUsersCard = lazy(
 const SiteMemberPurchases = lazy(
   () => import('./components/console/site-member-purchases.component'),
 )
-import { COMMERCE_CONSOLE_SECTIONS } from './components/commerce-console-sections'
+import {
+  COMMERCE_CONSOLE_SECTIONS,
+  COMMERCE_RETIRED_SECTIONS,
+} from './components/commerce-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { registerCommerceRecordLists } from './model/commerce-record-lists'
@@ -127,6 +130,9 @@ export function registerCommerceConsole(): void {
         // real URLs the shell resolves and gates, so the page mounts the one
         // being read instead of subscribing all six.
         sections: COMMERCE_CONSOLE_SECTIONS,
+        // `/products/settings` was split into a page per setting (AGL-3713);
+        // links to it open the first of them.
+        retiredSections: COMMERCE_RETIRED_SECTIONS,
         header: {
           title: 'Products',
           icon: { path: mdiStorefrontOutline.path },

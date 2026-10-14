@@ -24,7 +24,15 @@ import {
   mdiLockOutline,
 } from '@aglyn/shared-ui-jsx'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
-import { Box, Tab, Tabs, useMediaQuery, useTheme } from '@mui/material'
+import {
+  Box,
+  Divider,
+  Tab,
+  Tabs,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material'
 import { usePathname } from 'next/navigation'
 import {
   type ReactNode,
@@ -217,6 +225,13 @@ export interface HubSection {
    * hid the section would hide the reason to upgrade.
    */
   locked?: boolean
+  /**
+   * The group the section is drawn in, named (AGL-3713). Consecutive
+   * sections naming the same group are one run: the rail draws a divider
+   * between two runs and the group's name above its run. No group is the
+   * unnamed group, drawn without words.
+   */
+  group?: string
 }
 
 export interface HubSectionsProps {
@@ -328,9 +343,103 @@ function LockedSectionLabel(props: { label: string }) {
   )
 }
 
+/**
+ * Where a group of sections starts in the rail: a divider, and the group's
+ * name above it when it has one (AGL-3713) — MUI's guidance for dividing the
+ * sections of a list, a `Divider` and an overline subheader.
+ *
+ * A child of `Tabs`, which clones every child it is given with a tab's props
+ * (`value`, `selected`, `indicator`, `onChange` …). Those are taken here and
+ * dropped rather than reaching the DOM, and the divider is not a tab — the
+ * keyboard's roving focus only walks what registered as one. Presentational
+ * to assistive tech: the tablist owns tabs, and the group's name is read as
+ * the words it is.
+ *
+ * On the stacked strip (a phone, a wide page) the divider stands upright
+ * between two tabs and the name is left off: the strip is one scrolling row,
+ * and a word in it would read as a tab that does nothing.
+ */
+function HubSectionGroupStart(props: {
+  label?: string
+  first: boolean
+  stacked: boolean
+  // The props `Tabs` adds to each child — swallowed, see above.
+  value?: unknown
+}) {
+  const { label, first, stacked } = props
+  if (stacked)
+    return (
+      <Divider orientation="vertical" flexItem role="presentation" sx={{ my: 1 }} />
+    )
+  return (
+    <Box role="presentation" data-hub-section-group={label ?? ''}>
+      {first ? null : <Divider role="presentation" sx={{ my: 1 }} />}
+      {label ? (
+        <Typography
+          variant="overline"
+          component="div"
+          color="text.secondary"
+          sx={{ px: 2, lineHeight: 2.5 }}
+        >
+          {label}
+        </Typography>
+      ) : null}
+    </Box>
+  )
+}
+
+/**
+ * The rail's children: a tab per shown section, with a group start wherever
+ * the group changes, and above the first section when it names a group.
+ */
+function hubSectionRailItems(
+  shown: readonly HubSection[],
+  activeHref: string | null,
+  stacked: boolean,
+): ReactNode[] {
+  const items: ReactNode[] = []
+  shown.forEach((section, index) => {
+    const previous = index > 0 ? shown[index - 1] : undefined
+    // Nothing above the first tab of the stacked strip, where only a divider
+    // is drawn: `Tabs` places its indicator by DOM child index, so every
+    // child pushed here must render an element.
+    const startsGroup = previous
+      ? (previous.group ?? '') !== (section.group ?? '')
+      : Boolean(section.group) && !stacked
+    if (startsGroup)
+      items.push(
+        <HubSectionGroupStart
+          key={`group:${index}:${section.group ?? ''}`}
+          // A value no tab carries, so `Tabs` never selects it.
+          value={`group:${index}`}
+          label={section.group}
+          first={!previous}
+          stacked={stacked}
+        />,
+      )
+    items.push(
+      <Tab
+        key={section.href}
+        value={section.href}
+        label={
+          section.locked ? (
+            <LockedSectionLabel label={section.label} />
+          ) : (
+            section.label
+          )
+        }
+        component={AppLink}
+        href={section.href}
+        aria-current={section.href === activeHref ? 'page' : undefined}
+      />,
+    )
+  })
+  return items
+}
+
 export function HubSections(props: HubSectionsProps) {
   const { sections, children, navHeader = 'Navigation', wide = false } = props
-  const { narrow, tabsProps } = useRailLayout(wide)
+  const { narrow, stacked, tabsProps } = useRailLayout(wide)
   const shown = useMemo(
     () => sections.filter((section) => section.visible !== false),
     [sections],
@@ -359,24 +468,7 @@ export function HubSections(props: HubSectionsProps) {
                 aria-label={navHeader}
                 value={activeHref ?? false}
               >
-                {shown.map((section) => (
-                  <Tab
-                    key={section.href}
-                    value={section.href}
-                    label={
-                      section.locked ? (
-                        <LockedSectionLabel label={section.label} />
-                      ) : (
-                        section.label
-                      )
-                    }
-                    component={AppLink}
-                    href={section.href}
-                    aria-current={
-                      section.href === activeHref ? 'page' : undefined
-                    }
-                  />
-                ))}
+                {hubSectionRailItems(shown, activeHref, stacked)}
               </Tabs>
             </CardDisplay>
           ),
