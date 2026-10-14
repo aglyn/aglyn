@@ -99,6 +99,31 @@ export function aiRatesAtList(
   }
 }
 
+/**
+ * THE PLATFORM'S MARKUP over provider cost (AGL-3781): what a customer's
+ * credits are charged for a model over what the model costs us, on every
+ * figure. The balanced tier's list (Sonnet, $3 / $15 billed over $2 / $10),
+ * a picture and the fast tier are billed at it, so a credit carries the same
+ * margin whichever of them it is spent on.
+ */
+export const AI_BILLED_MARKUP = 1.5
+
+/** `rates` at the platform's markup: every figure times {@link AI_BILLED_MARKUP}. */
+export function aiRatesMarkedUp(rates: AiTokenRates): AiTokenRates {
+  return {
+    inputPerToken: rates.inputPerToken * AI_BILLED_MARKUP,
+    outputPerToken: rates.outputPerToken * AI_BILLED_MARKUP,
+    cacheReadPerToken: rates.cacheReadPerToken * AI_BILLED_MARKUP,
+    cacheWritePerToken: rates.cacheWritePerToken * AI_BILLED_MARKUP,
+  }
+}
+
+/** A row billed at the platform's markup over the provider's list price per MTok. */
+export function aiRatesAtMarkup(inputPerMTok: number, outputPerMTok: number): AiCatalogRates {
+  const providerRates = aiRatesPerMTok(inputPerMTok, outputPerMTok)
+  return { providerRates, billedRates: aiRatesMarkedUp(providerRates) }
+}
+
 /** {@link aiRatesAtList} for a model whose cache read is not a tenth of its input price. */
 export function aiRatesAtListWithCacheRead(
   inputPerMTok: number,
@@ -320,16 +345,15 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     //
     // The provider list is $0.10 / $0.50 for a prompt of 100,000 tokens or
     // fewer and five times that above it; no door sends a prompt near it.
-    // Its tokenizer counts the same text as about 30% more tokens, so a
-    // customer is billed Haiku 4.5's rate per token and the fast tier's
-    // price per token does not move when its default does; the margin is in
-    // the rate, as on the balanced row above.
+    // Billed at the platform's markup on every figure, $0.15 / $0.75, as the
+    // balanced tier and pictures are: Haiku 4.5 was billed at its cost, with
+    // no margin at all. Its tokenizer counts the same text as about 30% more
+    // tokens than Haiku 4.5's, which the credit figures derived from it say.
     id: 'claude-haiku-5-5',
     provider: ANTHROPIC,
     label: 'Claude Haiku 5.5',
     capabilities: anthropicCapabilities,
-    providerRates: aiRatesPerMTok(0.1, 0.5),
-    billedRates: aiRatesPerMTok(1, 5),
+    ...aiRatesAtMarkup(0.1, 0.5),
     tier: 'fast',
     cacheMinTokens: 512,
   },
@@ -428,7 +452,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
  * pricing page on 2026-10-06; a regional endpoint lists 10% higher, so a
  * deployment that moves off `global` reads its cost low by that much.
  *
- * Every billed figure is the provider figure at `AI_IMAGE_BILLED_MARKUP`:
+ * Every billed figure is the provider figure at `AI_BILLED_MARKUP`:
  * the same ratio the balanced text tier is billed at over its provider rate
  * (Claude Sonnet 5, $3/$15 billed over $2/$10), so a credit buys the same
  * share of margin whether it is spent on words or on pictures. A picture is
@@ -456,16 +480,10 @@ export interface AiImageCatalogEntry extends AiCatalogRates {
 }
 
 /**
- * The billed rate over the provider rate: the balanced text tier's own markup
- * (`claude-sonnet-5`, 3 / 2), restated as a number so an image row cannot be
- * written at list by accident.
- */
-export const AI_IMAGE_BILLED_MARKUP = 1.5
-
-/**
  * An image row's four figures from Google's list prices — USD per output
  * picture, and USD per million input and text-output tokens — each billed at
- * `AI_IMAGE_BILLED_MARKUP`.
+ * the platform's markup, `AI_BILLED_MARKUP`, so an image row cannot be written
+ * at list by accident.
  */
 export function aiImageRatesAtMarkup(
   providerUsdPerImage: number,
@@ -477,12 +495,8 @@ export function aiImageRatesAtMarkup(
 > {
   return {
     providerUsdPerImage,
-    billedUsdPerImage: roundUsd(providerUsdPerImage * AI_IMAGE_BILLED_MARKUP),
-    providerRates: aiRatesPerMTok(inputPerMTok, outputPerMTok),
-    billedRates: aiRatesPerMTok(
-      inputPerMTok * AI_IMAGE_BILLED_MARKUP,
-      outputPerMTok * AI_IMAGE_BILLED_MARKUP,
-    ),
+    billedUsdPerImage: roundUsd(providerUsdPerImage * AI_BILLED_MARKUP),
+    ...aiRatesAtMarkup(inputPerMTok, outputPerMTok),
   }
 }
 

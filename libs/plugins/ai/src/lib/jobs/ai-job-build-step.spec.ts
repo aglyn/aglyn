@@ -533,15 +533,16 @@ describe('a Free build is admitted on its measured p90, and asks before it start
     reads.length = 0
   })
 
-  it('quotes it at its measured figures: about 141 (p90 229, up to 650), each page as a page written on its own', () => {
-    // Home 6 sections 16 + 6×6 = 52 (p90 30 + 6×12 = 102), quote 3 sections
-    // 34 (66), a build's own layout 26 (30) and the form 29 (31).
-    expect(aiBuildCreditRange(STILLWING, { ops: OPS })).toEqual({ likely: 141, p90: 229, ceiling: 650 })
+  it('quotes it at its measured figures: about 137 (p90 225, up to 650), each page as a page written on its own', () => {
+    // Home 6 sections 14 + 6×6 = 50 (p90 28 + 6×12 = 100), quote 3 sections
+    // 32 (64), a build's own layout 26 (30) and the form 29 (31), each page's
+    // listing on the fast tier at Haiku 5.5's billed rate (AGL-3781).
+    expect(aiBuildCreditRange(STILLWING, { ops: OPS })).toEqual({ likely: 137, p90: 225, ceiling: 650 })
   })
 
   it('admits it with no prompt when its p90 fits', async () => {
     await expect(ask(240)).resolves.toBeNull()
-    await expect(ask(229)).resolves.toBeNull()
+    await expect(ask(225)).resolves.toBeNull()
     expect(reads).toEqual(['org-1', 'org-1'])
   })
 
@@ -551,8 +552,8 @@ describe('a Free build is admitted on its measured p90, and asks before it start
     expect(home.screens.map((one) => one.title)).toEqual(['Home'])
     expect(home.create.map((one) => one.name)).toEqual(['Frame'])
     const prompt = {
-      likely: 141,
-      p90: 229,
+      likely: 137,
+      p90: 225,
       ceiling: 650,
       left: 100,
       resetsOn: '2026-11-01',
@@ -560,7 +561,7 @@ describe('a Free build is admitted on its measured p90, and asks before it start
     }
     expect(refused).toEqual({ status: 409, error: aiCreditsPromptText(prompt, 'build'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt })
     expect(refused?.error).toBe(
-      'This build is about 141 credits (up to 650). You have 100 left, so it will build as much as it can and pause when ' +
+      'This build is about 137 credits (up to 650). You have 100 left, so it will build as much as it can and pause when ' +
         'your credits run out. You can upgrade or resume when they renew on November 1.',
     )
   })
@@ -568,8 +569,8 @@ describe('a Free build is admitted on its measured p90, and asks before it start
   it('admits it on the go-ahead and tells the door what was confirmed; the smaller first build fits on its own', async () => {
     const confirmed: unknown[] = []
     await expect(ask(100, { creditsConfirmed: true, onCreditsConfirmed: (one: unknown) => confirmed.push(one) })).resolves.toBeNull()
-    expect(confirmed).toEqual([expect.objectContaining({ likely: 141, p90: 229, left: 100 })])
-    // The home page and its layout: 78, p90 132.
+    expect(confirmed).toEqual([expect.objectContaining({ likely: 137, p90: 225, left: 100 })])
+    // The home page and its layout: 76, p90 130.
     await expect(ask(140, { plan: aiBuildFirstPagePlan(STILLWING) })).resolves.toBeNull()
   })
 

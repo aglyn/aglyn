@@ -2965,8 +2965,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,058 tokens the
-  first section pass costs 45 credits, and the Free page that builds its layout
+  1,050 fits the Free page's wall with little to spare: past 1,077 tokens the first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
   palette learned the layout elements' Color scheme (AGL-3284): 20 estimated
@@ -3063,7 +3062,7 @@ the document's one main) and no raw binding token; and every section fits the
 balanced tier's answer ceiling in real tokens, at the ratio measured live, under
 the element budget its request asks for.
 
-- **Credits per page: an estimate.** 48 credits per page: the median
+- **Credits per page: an estimate.** 46 credits per page: the median
   (the higher middle value) of the ten golden pages, each priced from the
   requests the step sent and the golden answers at four characters a token,
   at the catalog rates of the models the routing table picks, with the cached
@@ -3105,12 +3104,11 @@ the element budget its request asks for.
   its answer ceiling, the first writing the cache; and the listing at the SEO step's
   nominal usage. Characters are read four to a token and scaled by what the live
   run measured against the ledger's estimate, the higher of the plan's and the
-  layout's ratios. The four-section Free page comes to at most 190 credits of the
-  300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
+  layout's ratios. The four-section Free page comes to at most 188 credits of the 300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
   no layout yet, the page job builds the one layout the Free plan includes first
   (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
   6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
-  the same page that creates its layout first comes to at most 254 credits, and a
+  the same page that creates its layout first comes to at most 252 credits, and a
   Free page fits 6 sections with its layout. Those two counts are what the plan rules
   hold a Free plan to (AGL-3070): the spec computes them with the plan rules' own
   `aiFreePageSectionsWithin` and holds each exchange's figure to
@@ -3135,17 +3133,20 @@ the element budget its request asks for.
   nearly all thinking. `ai-job-free-site.spec.ts` replays a Free two-page site through
   the real plan step (a three-page answer re-asked to two) and prices both requests
   at their ceilings, never under the measured input, the first writing the cache and
-  the second paying for the prefix as plain input: a Free site's plan comes to at most
-  36 credits, its answer and its re-ask together (35 until its tool asked for the photo
-  words in English, AGL-3760). The site's look (AGL-3660) is one
-  fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts.
+  the second reading it, which the fast tier caches since AGL-3781: a Free site's plan
+  comes to at most 5 credits, its answer and its re-ask together, on Claude Haiku 5.5 at
+  the platform's markup (36 on Claude Haiku 4.5 at its cost; 35 until its tool asked for
+  the photo words in English, AGL-3760). The site's look (AGL-3660) is one fast-tier
+  answer that is never re-asked: 2 credits at its ceiling writing its cache, never under
+  the dearest production look of October 8–14 (4,870 input and 467 output tokens on
+  Haiku 4.5, about 30% more on Haiku 5.5), which is the figure the wall counts.
   The build is priced as the layout language builds it (re-derived in AGL-3660; the
   per-section passes it replaced no longer run on a site): a guided start creates its
   site EMPTY, so it builds its layout (23, the live guided start's layout step, above the
   frame's prefix and its largest live answer) and its saved form (29, the live form
   step) before its pages, and a Free start writes no welcome email. A page is ONE
   answer: 43 for its prefix written, its turn and the whole 2,000-token thinking room,
-  4 a section at the 250 tokens a section is written in at most, and 3 for its listing.
+  4 a section at the 250 tokens a section is written in at most, and 1 for its listing.
   The wall keeps room for one retried page — the dearest page asked again, reading its
   prefix, with its thinking room and a full page of eight sections: 64. Those figures
   price a page's thinking room and sections, not its whole 5,000-token ceiling, and the
@@ -3153,12 +3154,12 @@ the element budget its request asks for.
   ceilings; every answer at its full ceiling would come to more than the 300 for the
   layout, the form and two pages alone, which no section count changes. A Free site
   plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
-  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 283 credits
-  of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 243 credits of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
   figures it derives, and the Free wall holds a Free site's plan to that section count
-  and to its page cap. That leaves 18 credits, and one post at its worst on the fast
-  tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
-  blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 86 credits
+  and to its page cap. That leaves 57 credits, and one post at its worst on the fast
+  tier — its answer at the `copy.blog` ceiling and its re-ask — is 4, within the 57 the wall
+  leaves since AGL-3781; a Free blog still writes no first posts (AGL-3676), because the
+  guided start gives a Free site no content part, whatever the wall leaves. On a paid workspace a site plan's one answer comes to at most 86 credits
   for five pages, where the routing table's ceiling with thinking spent 227. (84 before a paid plan could
   create datasets: the record-template plan tool and the dataset sentence, AGL-3616; 85 before a form could
   write to one: the plan tool's `writesTo` and the form-dataset sentence.)
