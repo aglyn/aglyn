@@ -15,6 +15,7 @@ import AglynFormsPlugin
 import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
 import AglynInboxPlugin
+import AglynLogicPlugin
 import AglynMarketingPlugin
 import AglynMarketplacePlugin
 import AglynOutreachPlugin
@@ -80,6 +81,11 @@ public enum NativePluginManifest {
       id: "inbox",
       contributes: ["screens": ["inbox.people", "inbox.submission", "inbox.submissions"], "widgets": ["inbox.glance"], "quickActions": ["inbox.open", "inbox.people"], "deepLinks": ["inbox.page", "inbox.people-page", "inbox.submissions-page"]],
       register: AglynInboxPlugin.registerInboxNative
+    ),
+    NativePluginManifestEntry(
+      id: "logic",
+      contributes: ["screens": ["logic.function", "logic.page"], "quickActions": ["logic.open"], "deepLinks": ["logic.page"]],
+      register: AglynLogicPlugin.registerLogicNative
     ),
     NativePluginManifestEntry(
       id: "marketing",
