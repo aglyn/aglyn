@@ -15691,6 +15691,106 @@
         }
       ]
     },
+    "posDisplayEmail": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "cases": [
+        {
+          "args": [
+            "Ana@Shop.co "
+          ],
+          "result": "ana@shop.co"
+        },
+        {
+          "args": [
+            "nope"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "a@b.c"
+          ],
+          "result": "a@b.c"
+        },
+        {
+          "args": [
+            "x y@z.co"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "UPPER@CASE.COM"
+          ],
+          "result": "upper@case.com"
+        },
+        {
+          "args": [
+            "a@b.co."
+          ],
+          "result": "a@b.co."
+        }
+      ]
+    },
+    "posDisplayPhone": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "cases": [
+        {
+          "args": [
+            "(555) 010-0199"
+          ],
+          "result": "5550100199"
+        },
+        {
+          "args": [
+            "+1 555 010 0199"
+          ],
+          "result": "+15550100199"
+        },
+        {
+          "args": [
+            "12345"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "abc"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            "+44 20 7946 0958"
+          ],
+          "result": "+442079460958"
+        },
+        {
+          "args": [
+            "1234567890123456"
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": ""
+        }
+      ]
+    },
     "posOfflineChangeCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
@@ -16011,6 +16111,60 @@
             null
           ],
           "result": "A PIN is 4 to 6 digits."
+        }
+      ]
+    },
+    "posTipProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "cases": [
+        {
+          "args": [
+            0,
+            1000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            250,
+            1000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            1000,
+            1000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            1001,
+            1000
+          ],
+          "result": "A tip can be at most the amount being paid. Check the amount and try again."
+        },
+        {
+          "args": [
+            -1,
+            1000
+          ],
+          "result": "Enter a tip of $0 or more."
+        },
+        {
+          "args": [
+            2.5,
+            1000
+          ],
+          "result": "Enter a tip of $0 or more."
+        },
+        {
+          "args": [
+            0,
+            0
+          ],
+          "result": null
         }
       ]
     },

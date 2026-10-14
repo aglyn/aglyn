@@ -70,6 +70,17 @@ class FunctionCasesTest {
   }
 
   @Test
+  fun whatACustomerTypesOnTheDisplayIsCheckedAsTheConsoleChecksIt() {
+    cases("posDisplayEmail").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, posDisplayEmail(str(args[0])), args.toString()) }
+    cases("posDisplayPhone").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, posDisplayPhone(str(args[0])), args.toString()) }
+  }
+
+  @Test
+  fun aTipIsWholeCentsAndNoMoreThanThePayment() = cases("posTipProblem").forEach { (args, result) ->
+    assertEquals(str(result), posTipProblem(args[0].jsonPrimitive.double, args[1].jsonPrimitive.double), args.toString())
+  }
+
+  @Test
   fun formatOrderNumberCases() = cases("formatOrderNumber").forEach { (args, result) ->
     assertEquals(result.jsonPrimitive.content, formatOrderNumber(order(args[0]), str(args.getOrNull(1))), args.toString())
   }

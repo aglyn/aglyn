@@ -139,7 +139,8 @@ public final class ConsoleAPIClient: Sendable {
     body: JSONValue? = nil,
     idempotencyKey: String? = nil,
     anonymous: Bool = false,
-    rawBody: (data: Data, contentType: String)? = nil
+    rawBody: (data: Data, contentType: String)? = nil,
+    headers: [String: String] = [:]
   ) async throws -> JSONValue? {
     let retryable = method == .get || idempotencyKey != nil
     var forceRefresh = false
@@ -150,6 +151,8 @@ public final class ConsoleAPIClient: Sendable {
       var request = URLRequest(url: url)
       request.httpMethod = method.rawValue
       request.setValue("application/json", forHTTPHeaderField: "Accept")
+      // A paired device's own credential (the customer display's token), where there is no signed-in member.
+      for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
       if !anonymous {
         guard let token = try await getIDToken(forceRefresh) else {
           throw ConsoleAPIError(status: 401, message: "Sign in to continue.")

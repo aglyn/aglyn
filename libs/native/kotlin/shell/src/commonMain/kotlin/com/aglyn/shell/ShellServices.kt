@@ -114,6 +114,30 @@ class ShellNavigator(initialTop: String = HOME) {
   }
 }
 
+/**
+ * The context a device screen is handed: nobody is signed in, so it holds no member, no workspace and no site, and
+ * calls the console anonymously with its own pairing token. [leave] returns the tablet to sign-in.
+ */
+internal class DeviceContext(
+  private val services: ShellServices,
+  private val leave: () -> Unit,
+) : NativePluginContext {
+  override val uid: String = ""
+  override val orgId: String? = null
+  override val hostId: String? = null
+  override val orgSlug: String? = null
+  override val hostSlug: String? = null
+  override val firestore get() = services.firestore
+  override val api get() = services.api
+  override val deviceStore get() = services.prefs
+
+  override fun navigate(screenId: String, params: NativeParams) = Unit
+
+  override fun back() = leave()
+
+  override fun openBesigner(path: String, scope: ConsoleScope): Boolean = false
+}
+
 internal class ShellPluginContext(
   override val uid: String,
   private val workspace: WorkspaceState,

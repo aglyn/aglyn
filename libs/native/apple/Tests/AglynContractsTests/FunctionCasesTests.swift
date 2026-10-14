@@ -124,6 +124,19 @@ final class FunctionCasesTests: XCTestCase {
     }
   }
 
+  func testWhatACustomerTypesOnTheDisplayIsCheckedAsTheConsoleChecksIt() {
+    for item in cases("posDisplayEmail") { XCTAssertEqual(posDisplayEmail(string(item.args[0])), item.result as? String, item.label) }
+    for item in cases("posDisplayPhone") { XCTAssertEqual(posDisplayPhone(string(item.args[0])), item.result as? String, item.label) }
+  }
+
+  func testATipIsWholeCentsAndNoMoreThanThePayment() {
+    for item in cases("posTipProblem") {
+      let tip = (item.args[0] as? NSNumber)?.doubleValue ?? 0
+      let amount = (item.args[1] as? NSNumber)?.doubleValue ?? 0
+      XCTAssertEqual(posTipProblem(tipCents: tip, amountCents: amount), item.result as? String, item.label)
+    }
+  }
+
   func testOrderNumbersReadAsTheConsoleWritesThem() throws {
     for item in cases("formatOrderNumber") {
       let docId = item.args.count > 1 ? string(item.args[1]) : nil

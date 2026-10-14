@@ -45,6 +45,14 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
     CardReadersScreen(context: context)
   }
 
+  // A tablet set up as the screen facing the customer: no one signs in; a register's code pairs it.
+  r.screen(
+    commerceDisplayScreen, title: "Customer display", requiresSite: false, apps: [.pos], icon: "rectangle.on.rectangle",
+    placement: .device
+  ) { context, _ in
+    PosCustomerDisplayScreen(context: context)
+  }
+
   r.screen(commerceOrdersScreen, title: "Orders", requiresSite: true, icon: "bag") { context, params in
     OrdersScreen(context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all)
   }

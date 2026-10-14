@@ -18,7 +18,9 @@ import com.aglyn.plugins.commerce.sales.COMMERCE_SALES_SCREEN
 import com.aglyn.plugins.commerce.sales.SalesScreen
 import com.aglyn.plugins.commerce.sales.SalesTrendWidget
 import com.aglyn.plugins.commerce.sales.TodaySalesWidget
+import com.aglyn.plugins.commerce.pos.COMMERCE_DISPLAY_SCREEN
 import com.aglyn.plugins.commerce.pos.CardReadersScreen
+import com.aglyn.plugins.commerce.pos.PosCustomerDisplayScreen
 import com.aglyn.plugins.commerce.pos.RegisterScreen
 
 const val COMMERCE_REGISTER_SCREEN = "commerce.register"
@@ -56,6 +58,16 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
     icon = "credit_card",
     placement = PosPlacement.MENU,
   ) { context, _ -> CardReadersScreen(context) }
+
+  // A tablet set up as the screen facing the customer: no one signs in; a register's code pairs it.
+  r.screen(
+    COMMERCE_DISPLAY_SCREEN,
+    title = "Customer display",
+    requiresSite = false,
+    apps = setOf(NativeApp.POS),
+    icon = "tablet",
+    placement = PosPlacement.DEVICE,
+  ) { context, _ -> PosCustomerDisplayScreen(context) }
 
   r.screen(COMMERCE_ORDERS_SCREEN, title = "Orders", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     OrdersScreen(context, initialOrderId = params["order"])
