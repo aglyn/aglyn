@@ -22,6 +22,9 @@ struct RootView<Shell: View>: View {
         AglynEmptyState(
           "This build is not configured", systemImage: "wrench.and.screwdriver",
           message: model.configProblems.joined(separator: "\n"))
+      } else if let device = model.deviceScreen, let context = model.deviceContext() {
+        // A paired customer display or kiosk: nobody signs in, and it comes back as it was after a relaunch.
+        device.make(context, [:]).id(device.id)
       } else if let auth = model.auth {
         // The launch view stays up until Auth has answered, so a signed-in
         // relaunch goes from the launch screen straight to the shell.

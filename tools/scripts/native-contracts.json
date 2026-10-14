@@ -649,6 +649,20 @@
         "INSTALL_TARGETS",
         "LISTING_CATEGORIES"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos.ts": {
+      "types": [
+        "PosDisplayMode",
+        "PosDisplayLine",
+        "PosDisplayCart",
+        "PosDisplayResponse",
+        "PosDisplayState"
+      ],
+      "values": [
+        "POS_DISPLAY_MAX_LINES",
+        "POS_DISPLAY_PAIRING_TTL_MS",
+        "POS_DISPLAY_THANKS_MS"
+      ]
     }
   },
   "ints": [
@@ -13835,6 +13849,94 @@
               "value": ""
             }
           }
+        ]
+      ]
+    },
+    "posDisplayEmail": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "args": [
+        [
+          "Ana@Shop.co "
+        ],
+        [
+          "nope"
+        ],
+        [
+          "a@b.c"
+        ],
+        [
+          "x y@z.co"
+        ],
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "UPPER@CASE.COM"
+        ],
+        [
+          "a@b.co."
+        ]
+      ]
+    },
+    "posDisplayPhone": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "args": [
+        [
+          "(555) 010-0199"
+        ],
+        [
+          "+1 555 010 0199"
+        ],
+        [
+          "12345"
+        ],
+        [
+          "abc"
+        ],
+        [
+          "+44 20 7946 0958"
+        ],
+        [
+          "1234567890123456"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "posTipProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "args": [
+        [
+          0,
+          1000
+        ],
+        [
+          250,
+          1000
+        ],
+        [
+          1000,
+          1000
+        ],
+        [
+          1001,
+          1000
+        ],
+        [
+          -1,
+          1000
+        ],
+        [
+          2.5,
+          1000
+        ],
+        [
+          0,
+          0
         ]
       ]
     }

@@ -61,24 +61,28 @@ export interface AccountingConnectionSectionProps {
   navigate?: (url: string) => void
 }
 
-/** A heading both ledger guides carry, so either can be opened at it. */
+/** A heading every ledger guide carries, so any of them can be opened at it. */
 export type AccountingDocsAnchor = PluginDocsAnchor<'connectQuickbooksOnline'> &
-  PluginDocsAnchor<'connectXero'>
+  PluginDocsAnchor<'connectXero'> &
+  PluginDocsAnchor<'connectOtherAccounting'>
 
 /**
  * The help affordance for an Accounting card: the guide for the ledger the
- * workspace is connected to, at one of the headings the two guides share.
- * With no connection yet the QuickBooks Online guide stands in, since the two
- * walk through the same steps.
+ * workspace is connected to, at one of the headings the guides share. A Codat
+ * connection opens its own guide (AGL-3776), not QuickBooks Online's. With no
+ * connection yet the QuickBooks Online guide stands in, since the guides walk
+ * through the same steps.
  */
 export function accountingDocsHelp(
   provider: AccountingProviderId | null | undefined,
   anchor: AccountingDocsAnchor,
   excerpt: string,
 ): ReturnType<typeof pluginDocsHelp> {
-  return provider === 'xero'
-    ? pluginDocsHelp('connectXero', { anchor, excerpt })
-    : pluginDocsHelp('connectQuickbooksOnline', { anchor, excerpt })
+  if (provider === 'xero') return pluginDocsHelp('connectXero', { anchor, excerpt })
+  if (provider === 'codat') {
+    return pluginDocsHelp('connectOtherAccounting', { anchor, excerpt })
+  }
+  return pluginDocsHelp('connectQuickbooksOnline', { anchor, excerpt })
 }
 
 /** The connect buttons' names, spelled once for the specs. */
@@ -372,7 +376,7 @@ function TenantPicker(props: { connection: AccountingConnectionView; api: Accoun
       header={codat ? 'Choose your books' : 'Choose a Xero organization'}
       help={
         codat
-          ? pluginDocsHelp('connectQuickbooksOnline', { anchor: '#choose-your-books' })
+          ? pluginDocsHelp('connectOtherAccounting', { anchor: '#choose-your-books' })
           : pluginDocsHelp('connectXero', { anchor: '#choose-an-organization' })
       }
       contentGutterX

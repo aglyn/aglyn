@@ -31,7 +31,7 @@ object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
         NativePluginManifestEntry(
             id = "ai",
-            contributes = mapOf("screens" to listOf("ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
+            contributes = mapOf("screens" to listOf("ai.allotment", "ai.credits", "ai.hostMember", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
             register = ::registerAINative,
         ),
         NativePluginManifestEntry(
@@ -41,7 +41,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "commerce",
-            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.orders-page", "commerce.products-page")),
+            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.orders-page", "commerce.products-page")),
             register = ::registerCommerceNative,
         ),
         NativePluginManifestEntry(

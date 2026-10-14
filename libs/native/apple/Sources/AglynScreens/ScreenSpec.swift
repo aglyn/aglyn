@@ -223,6 +223,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let file: FileSpec?
   /// Repeats the request page by page until the route is done, and answers the totals.
   public let loop: LoopSpec?
+  /// A change to the signed-in person's own sign-in, made through the
+  /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
+  public let account: String?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
@@ -256,7 +259,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
-    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil)
+    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil)
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.then = json["then"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.when = json["when"]?.stringValue
@@ -273,6 +276,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.impersonate = json["impersonate"].flatMap(ImpersonateSpec.init)
     self.loop = json["loop"].flatMap(LoopSpec.init)
     self.file = json["file"].flatMap(FileSpec.init)
+    self.account = json["account"]?.stringValue
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }

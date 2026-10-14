@@ -26,6 +26,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,6 +59,9 @@ fun sitesThatCanSell(sites: List<WorkspaceSite>): List<WorkspaceSite> =
 
 internal fun posStoreKey(uid: String) = "aglyn.pos.store.$uid"
 
+/** The screen this tablet was set up as instead of a register (a customer display or a kiosk), remembered so it comes back with nobody signed in. */
+internal const val POS_DEVICE_MODE_KEY = "aglyn.pos.deviceMode"
+
 /**
  * The "Aglyn POS" app: sign-in, the store this device sells for (remembered
  * per person), then the register. The register is the POS-placement screens
@@ -66,11 +70,27 @@ internal fun posStoreKey(uid: String) = "aglyn.pos.store.$uid"
 @Composable
 fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean? = null) {
   AglynTheme(dark = dark ?: androidx.compose.foundation.isSystemInDarkTheme()) {
-    val auth by services.auth.state.collectAsState()
-    when (val state = auth) {
-      AuthState.Restoring -> Loading()
-      AuthState.SignedOut -> SignInScreen(services, autoSignIn)
-      is AuthState.SignedIn -> PosSignedIn(services, state.user.uid)
+    val version by services.registry.version.collectAsState()
+    var deviceMode by remember { mutableStateOf(services.prefs.get(POS_DEVICE_MODE_KEY)) }
+    val deviceScreens = remember(version) { services.registry.screens(NativeApp.POS).filter { it.placement == PosPlacement.DEVICE } }
+    val device = deviceScreens.firstOrNull { it.id == deviceMode }
+    if (device != null) {
+      // A paired customer display or kiosk: nobody signs in, and it comes back as it was after a relaunch.
+      val leave = {
+        services.prefs.set(POS_DEVICE_MODE_KEY, null)
+        deviceMode = null
+      }
+      key(device.id) { device.content(DeviceContext(services, leave), emptyMap()) }
+    } else {
+      val auth by services.auth.state.collectAsState()
+      when (val state = auth) {
+        AuthState.Restoring -> Loading()
+        AuthState.SignedOut -> SignInScreen(services, autoSignIn, deviceScreens) { chosen ->
+          services.prefs.set(POS_DEVICE_MODE_KEY, chosen.id)
+          deviceMode = chosen.id
+        }
+        is AuthState.SignedIn -> PosSignedIn(services, state.user.uid)
+      }
     }
   }
 }

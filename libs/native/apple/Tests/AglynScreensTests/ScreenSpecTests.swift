@@ -778,6 +778,23 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ScreenValues.flatten(sources, through: "tables").count, 3)
   }
 
+  func testTheTokenSaysHowTheAccountSignsIn() {
+    func token(_ claims: String) -> TokenClaims {
+      let payload = Data(claims.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+      return TokenClaims(idToken: "h.\(payload).s")
+    }
+    let both = token(#"{"email_verified":true,"firebase":{"identities":{"google.com":["1"],"email":["a@b.c"]},"sign_in_provider":"password"}}"#)
+    XCTAssertEqual(both.signInMethods, ["password", "google.com"])
+    XCTAssertTrue(both.emailVerified)
+    XCTAssertEqual(token("{}").signInMethods, [])
+    XCTAssertFalse(token("{}").emailVerified)
+    let session = ScreenSession(email: "a@b.c", claims: both)
+    let context = session.context(nil, params: [:])
+    XCTAssertEqual(ScreenValues.lookup("user.providers", in: context), ["password", "google.com"])
+    XCTAssertEqual(ScreenValues.render("{user.emailVerified:yesno}", in: context), "Yes")
+  }
+
   @MainActor
   func testAnActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() throws {
     let action = try XCTUnwrap(
@@ -844,6 +861,42 @@ final class ScreenSpecTests: XCTestCase {
     let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
     let outcome = await model.run(try XCTUnwrap(ActionSpec(["label": "Close", "url": "/api/account/close"])), in: [:])
     guard case .needsReauth = outcome else { return XCTFail("expected a reauth, got \(outcome)") }
+  }
+
+  @MainActor
+  func testAccountActionsChangeThePasswordAndNameThroughTheSession() async throws {
+    final class Calls: @unchecked Sendable { var passwords: [[String]] = []; var names: [String] = [] }
+    let calls = Calls()
+    let account = AccountOperations(
+      changePassword: { calls.passwords.append([$0, $1]) }, updateDisplayName: { calls.names.append($0) },
+      message: { _ in "nope" })
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: RecordingTransport(responses: []))
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api, account: account)
+    let change = try XCTUnwrap(
+      ActionSpec([
+        "label": "Change", "account": "changePassword",
+        "body": ["current": "{form.current}", "new": "{form.password}", "confirm": "{form.confirm}"], "success": "Done",
+      ]))
+    let short: JSONValue = ["form": ["current": "old", "password": "short", "confirm": "short"]]
+    do { let outcome = await model.run(change, in: short); XCTAssertEqual(outcome, .failed("Use at least 12 characters.")) }
+    let mismatch: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "different-long-one"]]
+    do { let outcome = await model.run(change, in: mismatch); XCTAssertEqual(outcome, .failed("The two new passwords do not match.")) }
+    XCTAssertTrue(calls.passwords.isEmpty)
+    let good: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "a-long-enough-one"]]
+    do { let outcome = await model.run(change, in: good); XCTAssertEqual(outcome, .done(message: "Done", response: nil)) }
+    XCTAssertEqual(calls.passwords, [["old", "a-long-enough-one"]])
+    let name = try XCTUnwrap(ActionSpec(["label": "Name", "account": "updateDisplayName", "body": ["name": "{form.first} {form.last}"]]))
+    _ = await model.run(name, in: ["form": ["first": "Ada", "last": "Lovelace"]])
+    XCTAssertEqual(calls.names, ["Ada Lovelace"])
+  }
+
+  @MainActor
+  func testWriteTurnsSentinelObjectsIntoFirestoreSentinels() throws {
+    let plain = FirestoreLoads.plain(["a": ["$serverTimestamp": true], "b": ["$delete": true], "c": ["d": "x"]])
+    let record = try XCTUnwrap(plain as? [String: Any])
+    XCTAssertEqual(record["a"] as? FirestoreSentinel, .serverTimestamp)
+    XCTAssertEqual(record["b"] as? FirestoreSentinel, .delete)
+    XCTAssertEqual((record["c"] as? [String: Any])?["d"] as? String, "x")
   }
 
   @MainActor
