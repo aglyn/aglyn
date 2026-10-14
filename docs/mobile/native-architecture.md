@@ -1043,6 +1043,25 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   (the console's `ssoEnforcementAccounts`, `sso-enforcement.ts`): one row per account with the address, what enforcing
   would remove, what it keeps, whether it can be break-glass and whether it is. The enforcement screen keeps the
   rehearsal in `stash.ssoPreview` and draws the rows, the lockout alerts and the break-glass choice from it.
+- A field of `kind: "media"` is a file chosen from the workspace's media library, never typed (the console's
+  `MediaUrlField` for a logo or a favicon): the Setup pickers' `MediaPickField` over the workspace's library alone
+  (`workspaceOnly`), whichever site is picked. Its value is what the console stores, the file's `cdnPath` else its address.
+- `timeZoneChoices` is a `compute` function with nothing to ask: the time zone picker's rows, `[{ value, label }]`, the
+  default (an empty value, which the route stores as no zone) first and then the console's list with its underscores read
+  as spaces. The list is `TIME_ZONE_CHOICES` (`time-zone-choices.ts`), a snapshot of `Intl.supportedValuesOf('timeZone')`
+  that the console's route accepts every name of; a `select` over it is `optionsFrom` the load, a site's adds its own first
+  row (`options`) and filters the default one out (`filter: "item.value"`).
+- A screen may name `start: { "action": id }`: once its data has loaded it runs that one of its own `actions` as if it had
+  been chosen, when the action's `when` holds. A link's query (`?notice=<id>`) reaches the screen as `params.notice`, so
+  the holds screen opens that notice's review request, as the console's holds card does.
+- A `zone` block may carry `params`; a plugin's slot widget (`r.widget(…, slot: …)`) reads them (`aglynSlotParams` on
+  Apple, `LocalSlotParams` on Android), as the console's `PluginWidgetSlot` hands its widget props. The workspace's
+  Plugins pages use two: `orgPluginInstalls`, and `pluginInstallation` with the plugin's id, both filled by the
+  Marketplace: the plugins installed from it (every site's pins, a chip where a newer version is on offer), and one
+  plugin's page (current or behind, where it runs, update, add, split, promote and remove with the uninstall impact
+  check, its settings from its manifest, and what it may do). The rules are `marketplace-catalog.ts`'s, replayed from
+  the cases; a marketplace plugin's settings screen is built at run time by `manifestSettingsScreen`, the very screen the
+  generator makes for a built-in plugin's schema (`native-plugin-settings.test.mjs` holds them equal).
 - A field with `mustMatch` is unfinished until the typed text equals it; `mustMatchAs: "dollars"` reads both sides as a
   dollar amount instead (`60`, `$60.00`, `1,250 USD` all mean 6000 cents, as the gift card Confirm step reads a typed
   total), and `mismatch` is what is said under the field while something typed does not match.
