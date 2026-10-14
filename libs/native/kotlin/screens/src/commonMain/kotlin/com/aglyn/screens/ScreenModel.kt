@@ -277,7 +277,7 @@ class ScreenModel(
       when {
         wantsReauth(error) -> ActionOutcome.NeedsReauth(error.body.str("message") ?: error.message)
         error.status == 404 && action.otherwise != null -> perform(action.otherwise, scope)
-        else -> ActionOutcome.Failed(error.message)
+        else -> ActionOutcome.Failed(refusal(action, error, scope))
       }
     } catch (error: Throwable) {
       ActionOutcome.Failed(error.message ?: "That did not work. Try again.")
@@ -289,7 +289,17 @@ class ScreenModel(
     val context = ScreenContext.with(scope, "response", response)
     val lines = mutableListOf<String>()
     action.success?.let { lines += ScreenValues.render(it, context) }
-    for (line in action.report) {
+    lines += reportLines(action.report, context)
+    return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+  }
+
+  /** What an action says when the route refuses: the route's own words, then its `failure` lines over the answer. */
+  internal fun refusal(action: ActionSpec, error: ConsoleApiError, scope: JsonElement): String =
+    (listOf(error.message) + reportLines(action.failure, ScreenContext.with(scope, "response", error.body))).joinToString("\n")
+
+  internal fun reportLines(report: List<ReportLine>, context: JsonElement): List<String> {
+    val lines = mutableListOf<String>()
+    for (line in report) {
       if (!ScreenValues.condition(line.whenCondition, context)) continue
       if (line.each != null) {
         for (row in ScreenValues.rows(ScreenValues.lookup(line.each, context))) lines += ScreenValues.render(line.text, ScreenContext.withItem(context, row))
@@ -297,7 +307,7 @@ class ScreenModel(
         lines += ScreenValues.render(line.text, context)
       }
     }
-    return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+    return lines
   }
 
   /**

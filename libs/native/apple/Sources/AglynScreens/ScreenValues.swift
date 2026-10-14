@@ -483,6 +483,23 @@ public enum ScreenValues {
   /// An object's plain values as `words: value`, joined by " · ": the readings of a check that
   /// have no screen of their own. Keys are sorted and split from camelCase; `ok`, `ms` and `code`
   /// are shown elsewhere, and nested values are left out.
+  /// An object's entries as `key: value`, the keys as they are (ids, which `facts` would split into words).
+  static func pairs(_ value: JSONValue?) -> String {
+    guard case .object(let record)? = value else { return text(value) }
+    return record.keys.sorted().compactMap { key -> String? in
+      let shown = text(record[key])
+      return shown.isEmpty ? nil : "\(key): \(shown)"
+    }.joined(separator: ", ")
+  }
+
+  /// A random value of `length` characters from `alphabet`, from the system's secure generator.
+  public static func generated(length: Int, alphabet: String) -> String {
+    let characters = Array(alphabet)
+    guard !characters.isEmpty, length > 0 else { return "" }
+    var generator = SystemRandomNumberGenerator()
+    return String((0..<length).map { _ in characters.randomElement(using: &generator)! })
+  }
+
   static func facts(_ value: JSONValue?) -> String {
     guard case .object(let record)? = value else { return text(value) }
     return record.keys.sorted().compactMap { key -> String? in
@@ -540,6 +557,8 @@ public enum ScreenValues {
       return text(value).uppercased()
     case "facts":
       return facts(value)
+    case "pairs":
+      return pairs(value)
     case "duration":
       // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
       guard let millis = number(value), millis.isFinite else { return "unknown" }

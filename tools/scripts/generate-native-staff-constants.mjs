@@ -64,6 +64,10 @@ export async function staffSources() {
   const domain = await jiti.import(join(ROOT, 'apps/console/utils/domain-status.ts'))
   const leaving = await jiti.import(join(ROOT, 'apps/console/utils/staff-leaving-notice.ts'))
   const apex = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/tenant-apex.ts'))
+  const identity = await jiti.import(join(ROOT, 'apps/console/utils/staff-identity-source.ts'))
+  const passwordPolicy = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/password-policy.ts'))
+  const passwordGenerator = await jiti.import(join(ROOT, 'apps/console/utils/password-generator.ts'))
+  const organizations = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/organizations.ts'))
   const overrideReasons = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/org-override-reason.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
   const model = (file) => jiti.import(join(ROOT, `libs/plugins/marketplace/src/lib/model/${file}.ts`))
@@ -72,6 +76,18 @@ export async function staffSources() {
   const statuses = await model('plugin-review-status')
   const attestation = await model('publisher-attestation')
   return {
+    user: {
+      identitySources: identity.IDENTITY_SOURCE_LABEL,
+      userTypes: {
+        manager: organizations.CONSOLE_USER_TYPE_LABELS.manager,
+        collaborator: organizations.CONSOLE_USER_TYPE_LABELS.collaborator,
+      },
+      password: {
+        minLength: passwordPolicy.PASSWORD_MIN_LENGTH,
+        alphabet: passwordGenerator.PASSWORD_GENERATOR_ALPHABET,
+        length: passwordGenerator.PASSWORD_GENERATOR_LENGTH,
+      },
+    },
     site: {
       tenantApex: apex.TENANT_APEX,
       // What the console's domain card says for each verdict the hosting platform can give.
@@ -465,6 +481,7 @@ replace('core.staff.site', (screen) => ({
       : {}),
   })),
 }))
+replace('core.staff.user', (screen) => ({ ...screen, constants: sources.user }))
 replace('core.staff.maintenance', () => maintenanceScreen(sources.jobs, sources.reasonMin))
 replace('core.staff.orgOverride', () => orgOverrideScreen(sources.override))
 

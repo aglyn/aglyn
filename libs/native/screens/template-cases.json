@@ -199,6 +199,10 @@
       "expect": "degraded episodes: 2 · held: yes · last beat age minutes: 1,500 · newest ready age days: 3 · schedule: 0 4 * * *"
     },
     {
+      "template": "{data.access:pairs}|{data.list:pairs}",
+      "expect": "h1: editor, h2: viewer|x, y"
+    },
+    {
       "template": "{data.msA:duration}|{data.msB:duration}|{data.msC:duration}|{data.msD:duration}|{data.nothing:duration}",
       "expect": "under a minute|12 min|3h 5m|4 days|unknown"
     },

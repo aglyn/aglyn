@@ -330,7 +330,7 @@ public final class ScreenModel {
     } catch let error as ConsoleAPIError {
       if Self.wantsReauth(error) { return .needsReauth(error.message) }
       if error.status == 404, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
-      return .failed(error.message)
+      return .failed(Self.refusal(for: action, error: error, in: scope))
     } catch {
       return .failed(error.localizedDescription)
     }
@@ -341,7 +341,19 @@ public final class ScreenModel {
     let context = ScreenContext.with(scope, "response", response ?? .null)
     var lines: [String] = []
     if let success = action.success { lines.append(ScreenValues.render(success, in: context)) }
-    for line in action.report where ScreenValues.condition(line.when, in: context) {
+    lines += reportLines(action.report, in: context)
+    return lines.isEmpty ? nil : lines.joined(separator: "\n")
+  }
+
+  /// What an action says when the route refuses: the route's own words, then its `failure` lines over the answer.
+  static func refusal(for action: ActionSpec, error: ConsoleAPIError, in scope: JSONValue) -> String {
+    let context = ScreenContext.with(scope, "response", error.body ?? .null)
+    return ([error.message] + reportLines(action.failure, in: context)).joined(separator: "\n")
+  }
+
+  static func reportLines(_ report: [ReportLine], in context: JSONValue) -> [String] {
+    var lines: [String] = []
+    for line in report where ScreenValues.condition(line.when, in: context) {
       if let each = line.each {
         for row in ScreenValues.rows(ScreenValues.lookup(each, in: context)) {
           lines.append(ScreenValues.render(line.text, in: ScreenContext.with(context, item: row)))
@@ -350,7 +362,7 @@ public final class ScreenModel {
         lines.append(ScreenValues.render(line.text, in: context))
       }
     }
-    return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    return lines
   }
 
   /// Sends a page at a time until the route says it is done, and answers the totals: numbers add

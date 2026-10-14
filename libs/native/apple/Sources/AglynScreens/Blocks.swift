@@ -362,6 +362,11 @@ struct FieldInput: View {
           #endif
           .autocorrectionDisabled(field.kind != "text")
       }
+      if field.generate != nil {
+        Button("Generate") { text.wrappedValue = field.generatedValue(in: context) ?? "" }
+          .buttonStyle(.borderless)
+          .accessibilityIdentifier("generate-\(field.key)")
+      }
       if let help = field.help {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
       }

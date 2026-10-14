@@ -184,6 +184,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let write: JSONValue?
   /// Lines the result is reported in, after `success`: `{ when, each, text }`, one per line.
   public let report: [ReportLine]
+  /// Lines a refusal is explained in, after the route's own words, over the route's answer as `response`
+  /// (the workspaces that still need an owner, the addresses another account holds).
+  public let failure: [ReportLine]
   /// Repeats the request page by page until the route is done, and answers the totals.
   public let loop: LoopSpec?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
@@ -223,6 +226,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
     self.report = json["report"].array.compactMap(ReportLine.init)
+    self.failure = json["failure"].array.compactMap(ReportLine.init)
     self.loop = json["loop"].flatMap(LoopSpec.init)
     self.instead = json["instead"]
   }
@@ -303,6 +307,20 @@ public struct FieldSpec: Sendable, Identifiable {
   public let when: String?
   /// A template the typed value must equal (type the workspace name to delete it).
   public let mustMatch: String?
+  /// `{ length, alphabet }`: the field offers a button that fills it with a random value of that many
+  /// characters drawn from the alphabet (a template; the console's password generator).
+  public let generate: JSONValue?
+
+  /// A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name
+  /// the console's own constants); nil for a field that does not.
+  public func generatedValue(in context: JSONValue) -> String? {
+    guard let generate else { return nil }
+    let length = generate["length"].flatMap { raw -> Double? in
+      raw.stringValue.map { ScreenValues.number(ScreenValues.resolve($0, in: context)) } ?? ScreenValues.number(raw)
+    }
+    return ScreenValues.generated(
+      length: Int(length ?? 20), alphabet: ScreenValues.render(generate["alphabet"]?.stringValue ?? "", in: context))
+  }
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
@@ -322,6 +340,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = nil
     self.when = nil
     self.mustMatch = nil
+    self.generate = nil
   }
 
   init?(_ json: JSONValue) {
@@ -340,6 +359,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = json["optionsFrom"]
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
+    self.generate = json["generate"]
   }
 
   /// The choices for a `select`: the static options, then any read from data.

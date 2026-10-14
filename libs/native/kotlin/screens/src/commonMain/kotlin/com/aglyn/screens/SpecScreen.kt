@@ -778,6 +778,12 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         modifier = Modifier.fillMaxWidth(),
       )
     }
+    if (field.generate != null) {
+      TextButton(
+        onClick = { onChange(FieldValue.Text(field.generatedValue(context).orEmpty())) },
+        modifier = Modifier.testTag("generate-${field.key}"),
+      ) { Text("Generate") }
+    }
     if (help != null && field.kind != "toggle") {
       Text(help, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

@@ -154,6 +154,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val write: JsonElement? = json.obj("write")
   /** Lines the result is reported in, after `success`: `{ when, each, text }`, one per line. */
   val report: List<ReportLine> = json.arr("report").mapNotNull { ReportLine.parse(it) }
+  /** Lines a refusal is explained in, after the route's own words, over the route's answer as `response` (the workspaces that still need an owner). */
+  val failure: List<ReportLine> = json.arr("failure").mapNotNull { ReportLine.parse(it) }
   /** Repeats the request page by page until the route is done, and answers the totals. */
   val loop: LoopSpec? = json.obj("loop")?.let { LoopSpec(it) }
 
@@ -179,7 +181,17 @@ class FieldSpec private constructor(
   val whenCondition: String?,
   /** A template the typed value must equal (type the workspace name to delete it). */
   val mustMatch: String? = null,
+  /** `{ length, alphabet }`: the field offers a button that fills it with a random value of that many characters drawn from the alphabet (a template; the console's password generator). */
+  val generate: JsonElement? = null,
 ) {
+  /** A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name the console's own constants); null for a field that does not. */
+  fun generatedValue(context: JsonElement): String? {
+    val spec = generate ?: return null
+    val raw = spec.obj("length")
+    val length = ((raw as? JsonPrimitive)?.takeIf { it.isString }?.let { ScreenValues.number(ScreenValues.resolve(it.content, context)) } ?: ScreenValues.number(raw))?.toInt() ?: 20
+    return ScreenValues.generated(length, ScreenValues.render(spec.str("alphabet").orEmpty(), context))
+  }
+
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
     if (mustMatch != null && ScreenValues.text(value) != ScreenValues.render(mustMatch, context)) return true
@@ -218,6 +230,7 @@ class FieldSpec private constructor(
         optionsFrom = json.obj("optionsFrom"),
         whenCondition = json.str("when"),
         mustMatch = json.str("mustMatch"),
+        generate = json.obj("generate"),
       )
     }
   }

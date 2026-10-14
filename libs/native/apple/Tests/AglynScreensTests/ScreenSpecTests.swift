@@ -236,6 +236,40 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(reader.equalities, ["role"])
   }
 
+  /// A refusal says what the route says, then its `failure` lines over the route's answer.
+  @MainActor
+  func testARefusalIsExplainedFromTheRoutesAnswer() async throws {
+    let transport = RecordingTransport(responses: [
+      (409, #"{"error":"This person owns workspaces","blockers":[{"orgName":"Acme","otherMembers":2},{"orgName":"Beta","otherMembers":0}]}"#)
+    ])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Erase", "url": "/api/admin/users/manage",
+        "failure": [["each": "response.blockers", "text": "{item.orgName}: {item.otherMembers} other members"], ["text": "none", "when": "response.shared"]],
+      ]))
+    let outcome = await model.run(action, in: model.context)
+    XCTAssertEqual(outcome, .failed("This person owns workspaces\nAcme: 2 other members\nBeta: 0 other members"))
+  }
+
+  /// A field can fill itself with a random value from an alphabet; `pairs` prints a map's keys as they are.
+  func testAGeneratedValueIsTheLengthAskedFromTheAlphabet() {
+    let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    let first = ScreenValues.generated(length: 20, alphabet: alphabet)
+    XCTAssertEqual(first.count, 20)
+    XCTAssertTrue(first.allSatisfy { alphabet.contains($0) })
+    XCTAssertNotEqual(first, ScreenValues.generated(length: 20, alphabet: alphabet))
+    XCTAssertEqual(ScreenValues.generated(length: 5, alphabet: ""), "")
+    XCTAssertEqual(ScreenValues.render("{h:pairs}", in: ["h": ["Ab1xY": "editor", "z9": "viewer"]]), "Ab1xY: editor, z9: viewer")
+    // A spec names the console's own length and alphabet as constants.
+    let field = FieldSpec(["key": "password", "kind": "text", "generate": ["length": "{const.n}", "alphabet": "{const.a}"]])
+    let made = field?.generatedValue(in: ["const": ["n": 12, "a": "ab"]])
+    XCTAssertEqual(made?.count, 12)
+    XCTAssertTrue(made?.allSatisfy { "ab".contains($0) } ?? false)
+    XCTAssertNil(FieldSpec(["key": "name"])?.generatedValue(in: [:]))
+  }
+
   /// A list can walk down into the lists inside its rows; each row found knows the row it came from.
   func testFlattenWalksDownAndKeepsTheParent() {
     let sources: [JSONValue] = [

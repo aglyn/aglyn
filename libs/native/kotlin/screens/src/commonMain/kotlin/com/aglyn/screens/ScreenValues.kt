@@ -444,6 +444,22 @@ object ScreenValues {
    * have no screen of their own. Keys are sorted and split from camelCase; `ok`, `ms` and `code`
    * are shown elsewhere, and nested values are left out.
    */
+  /** An object's entries as `key: value`, the keys as they are (ids, which `facts` would split into words). */
+  internal fun pairs(value: JsonElement?): String {
+    val record = value as? JsonObject ?: return text(value)
+    return record.keys.sorted().mapNotNull { key ->
+      val shown = text(record[key])
+      if (shown.isEmpty()) null else "$key: $shown"
+    }.joinToString(", ")
+  }
+
+  /** A random value of [length] characters from [alphabet], from the platform's secure generator. */
+  fun generated(length: Int, alphabet: String): String {
+    if (alphabet.isEmpty() || length <= 0) return ""
+    val bytes = com.aglyn.core.secureRandomBytes(length)
+    return String(CharArray(length) { alphabet[(bytes[it].toInt() and 0xff) % alphabet.length] })
+  }
+
   internal fun facts(value: JsonElement?): String {
     val record = value as? JsonObject ?: return text(value)
     return record.keys.sorted().mapNotNull { key ->
@@ -483,6 +499,7 @@ object ScreenValues {
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
       "upper" -> text(value).uppercase()
       "facts" -> facts(value)
+      "pairs" -> pairs(value)
       // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
       "duration" -> number(value)?.takeIf { it.isFinite() }?.let { millis ->
         val minutes = (millis / 60_000).toLong()

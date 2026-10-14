@@ -269,6 +269,40 @@ class ScreenSpecTest {
     assertEquals(listOf("role"), reader.equalities)
   }
 
+  /** A refusal says what the route says, then its `failure` lines over the route's answer. */
+  @Test
+  fun aRefusalIsExplainedFromTheRoutesAnswer() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(409 to """{"error":"This person owns workspaces","blockers":[{"orgName":"Acme","otherMembers":2},{"orgName":"Beta","otherMembers":0}]}""", sent = sent)
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Erase","url":"/api/admin/users/manage","failure":[{"each":"response.blockers","text":"{item.orgName}: {item.otherMembers} other members"},{"text":"none","when":"response.shared"}]}""",
+      ),
+    )!!
+    val outcome = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Failed>(outcome)
+    assertEquals("This person owns workspaces\nAcme: 2 other members\nBeta: 0 other members", outcome.message)
+  }
+
+  /** A field can fill itself with a random value from an alphabet; `pairs` prints a map's keys as they are. */
+  @Test
+  fun aGeneratedValueIsTheLengthAskedFromTheAlphabet() {
+    val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    val first = ScreenValues.generated(20, alphabet)
+    assertEquals(20, first.length)
+    assertTrue(first.all { it in alphabet })
+    assertNotEquals(first, ScreenValues.generated(20, alphabet))
+    assertEquals("", ScreenValues.generated(5, ""))
+    assertEquals("Ab1xY: editor, z9: viewer", ScreenValues.render("{h:pairs}", Json.parseToJsonElement("""{"h":{"Ab1xY":"editor","z9":"viewer"}}""")))
+    // A spec names the console's own length and alphabet as constants.
+    val field = FieldSpec.parse(Json.parseToJsonElement("""{"key":"password","kind":"text","generate":{"length":"{const.n}","alphabet":"{const.a}"}}"""))!!
+    val made = field.generatedValue(Json.parseToJsonElement("""{"const":{"n":12,"a":"ab"}}"""))
+    assertEquals(12, made?.length)
+    assertTrue(made?.all { it in "ab" } == true)
+    assertNull(FieldSpec.parse(Json.parseToJsonElement("""{"key":"name"}"""))!!.generatedValue(JsonObject(emptyMap())))
+  }
+
   /** A list can walk down into the lists inside its rows; each row found knows the row it came from. */
   @Test
   fun flattenWalksDownAndKeepsTheParent() {

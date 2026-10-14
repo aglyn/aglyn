@@ -3208,6 +3208,7 @@
         },
         {
           "type": "fields",
+          "title": "Identity",
           "object": "data.detail.user",
           "rows": [
             {
@@ -3215,35 +3216,121 @@
               "value": "{item.displayName}"
             },
             {
+              "label": "Name comes from",
+              "value": "the {const.identitySources[@item.displayNameSource]}",
+              "when": "item.displayName && item.displayNameSource && item.displayNameSource != auth"
+            },
+            {
               "label": "Email",
-              "value": "{item.email}"
+              "value": "{item.email}",
+              "empty": "no email"
             },
             {
               "label": "Account ID",
               "value": "{item.uid}"
             },
             {
-              "label": "Sign-in methods",
-              "value": "{item.providers}"
+              "label": "Account",
+              "value": "Active",
+              "chip": true,
+              "tone": "success",
+              "when": "!item.disabled"
             },
             {
-              "label": "Staff",
-              "value": "{item.staffRole|'—'}",
+              "label": "Account",
+              "value": "Disabled",
+              "chip": true,
+              "tone": "error",
+              "when": "item.disabled"
+            },
+            {
+              "label": "Email",
+              "value": "Email verified",
+              "chip": true,
+              "tone": "success",
+              "when": "item.email && item.emailVerified"
+            },
+            {
+              "label": "Email",
+              "value": "Email not verified",
+              "chip": true,
+              "tone": "warning",
+              "when": "item.email && !item.emailVerified"
+            },
+            {
+              "label": "Role",
+              "value": "Staff: {item.staffRole|'support'}",
+              "chip": true,
+              "tone": "info",
               "when": "item.staff"
             },
             {
-              "label": "Disabled",
-              "value": "{item.disabled:yesno}"
+              "label": "Role",
+              "value": "Customer account",
+              "chip": true,
+              "tone": "neutral",
+              "when": "!item.staff"
             },
             {
               "label": "Created",
-              "value": "{item.createdAt:date}"
+              "value": "{item.createdAt:datetime}"
             },
             {
               "label": "Last signed in",
               "value": "{item.lastSignInAt:datetime}"
+            },
+            {
+              "label": "Last activity",
+              "value": "{item.lastActiveAt:datetime}"
+            },
+            {
+              "label": "Phone",
+              "value": "{item.phoneNumber}",
+              "when": "item.phoneNumber"
+            },
+            {
+              "label": "Phone",
+              "value": "Erased at their request ({item.phoneNumberErasedAt:datetime})",
+              "when": "!item.phoneNumber && item.phoneNumberErasedAt"
+            },
+            {
+              "label": "Phone",
+              "value": "",
+              "when": "!item.phoneNumber && !item.phoneNumberErasedAt"
+            },
+            {
+              "label": "May we contact them?",
+              "value": "Do-not-contact list unreadable. Treat as opted out",
+              "chip": true,
+              "tone": "warning",
+              "when": "item.phoneContact.lookupFailed"
+            },
+            {
+              "label": "May we contact them?",
+              "value": "Do not contact: {item.phoneContact.channels|'calls, texts'}",
+              "chip": true,
+              "tone": "error",
+              "when": "item.phoneContact.suppressed && !item.phoneContact.lookupFailed"
+            },
+            {
+              "label": "May we contact them?",
+              "value": "No opt-out recorded",
+              "chip": true,
+              "tone": "neutral",
+              "when": "item.phoneContact && !item.phoneContact.suppressed"
             }
-          ]
+          ],
+          "footer": "No recorded opt-out is not consent to market. Check before calling or texting. Recording or clearing an opt-out is the audited contact-suppressions form."
+        },
+        {
+          "type": "list",
+          "title": "Sign-in methods",
+          "items": "data.detail.user.providers",
+          "primary": "{item.providerId}",
+          "secondary": "{item.email}",
+          "icon": "key|key",
+          "count": false,
+          "empty": "None."
         },
         {
           "type": "fields",
@@ -3276,6 +3363,30 @@
             }
           ],
           "footer": "Sends follow the marketing contact and the suppression lists, not the answer alone."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "They said yes in the console, but their marketing contact will not be mailed. Sends follow the contact and the suppression lists, not the answer above.",
+          "when": "data.detail.marketing.answer.decision == granted && data.detail.marketing.reach.status == read && data.detail.marketing.reach.suppression"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "They said yes in the console, but their marketing contact will not be mailed. Sends follow the contact and the suppression lists, not the answer above.",
+          "when": "data.detail.marketing.answer.decision == granted && data.detail.marketing.reach.status == read && data.detail.marketing.reach.verdict == withheld"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "They said yes in the console, but their marketing contact will not be mailed. Sends follow the contact and the suppression lists, not the answer above.",
+          "when": "data.detail.marketing.answer.decision == granted && data.detail.marketing.reach.status == read && data.detail.marketing.reach.topic.state == opted-out,pending"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "They said no in the console, but their marketing contact can still be mailed. Check the contact.",
+          "when": "data.detail.marketing.answer.decision == declined && data.detail.marketing.reach.status == read && !data.detail.marketing.reach.suppression && data.detail.marketing.reach.verdict != withheld && data.detail.marketing.reach.topic.state != opted-out,pending"
         },
         {
           "type": "fields",
@@ -3323,93 +3434,353 @@
         },
         {
           "type": "list",
-          "title": "Workspaces",
-          "items": "data.detail.user.memberships",
+          "title": "Organizations",
+          "footer": "Which seat a membership uses: a team manager reaches the whole workspace, a site collaborator only the sites listed.",
+          "items": "data.detail.memberships",
           "primary": "{item.orgName|item.orgId}",
-          "secondary": "{item.role:title}",
+          "secondary": "{item.role|'—'}",
+          "tertiary": "{item.hostAccess:pairs}",
           "icon": "building.2|business",
+          "badges": [
+            {
+              "text": "{const.userTypes.manager}",
+              "when": "item.role == owner,admin || item.allHosts",
+              "tone": "info"
+            },
+            {
+              "text": "{const.userTypes.collaborator}",
+              "when": "item.role != owner,admin && !item.allHosts",
+              "tone": "neutral"
+            },
+            {
+              "text": "All sites",
+              "when": "item.allHosts",
+              "tone": "neutral"
+            },
+            {
+              "text": "Custom role",
+              "when": "item.roleId",
+              "tone": "neutral"
+            }
+          ],
           "open": {
             "screen": "core.staff.org",
             "params": {
               "orgId": "{item.orgId}"
             }
           },
-          "empty": "None."
+          "empty": "Not a member of any organization."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "This account has no email address, so password help is not available for it.",
+          "when": "!data.detail.user.email"
+        },
+        {
+          "type": "actions",
+          "title": "Password",
+          "when": "staff.super",
+          "items": [
+            {
+              "id": "reset",
+              "label": "Send a password reset email",
+              "icon": "key|password",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "sendPasswordReset",
+                "uid": "{params.uid}"
+              },
+              "success": "Reset email sent to {data.detail.user.email}",
+              "when": "data.detail.user.email",
+              "confirm": "{data.detail.user.email} gets a link to choose a new password. Their current password keeps working until they use it."
+            },
+            {
+              "id": "setPassword",
+              "label": "Set a password directly",
+              "icon": "key.viewfinder|password",
+              "destructive": true,
+              "when": "data.detail.user.email",
+              "url": "/api/admin/users/manage",
+              "prompt": [
+                {
+                  "key": "password",
+                  "label": "New password",
+                  "kind": "text",
+                  "required": true,
+                  "generate": {
+                    "length": "{const.password.length}",
+                    "alphabet": "{const.password.alphabet}"
+                  },
+                  "help": "At least {const.password.minLength} characters. Shown in the clear so you can pass it on accurately."
+                }
+              ],
+              "confirm": "{data.detail.user.displayName|data.detail.user.email} is signed out everywhere and can only sign back in with the password you set here. They are emailed to say an admin changed it. Make sure you can pass the new password to them over a channel you trust.",
+              "body": {
+                "action": "setPassword",
+                "uid": "{params.uid}",
+                "password": "{form.password}"
+              },
+              "success": "Password set. The account holder was emailed."
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!staff.super",
+          "title": "Sign-in history",
+          "text": "Signing a device out requires the super staff role. Ask someone who holds it, or walk the account holder through Manage account, Security, where the same control is self-serve."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "staff.super && data.detail.devices.lookupFailed",
+          "title": "Sign-in history",
+          "text": "The device registry could not be read. This is NOT the same as \"no other devices\". Do not tell anyone their account is clean from this page until it loads."
         },
         {
           "type": "list",
-          "title": "Devices",
-          "items": "data.detail.user.devices",
-          "primary": "{item.deviceName|item.userAgent|'Unknown device'}",
-          "secondary": "{item.location} · last used {item.lastSeenMs:datetime}",
+          "title": "Sign-in history",
+          "when": "staff.super && !data.detail.devices.lookupFailed",
+          "footer": "Signing one device out ends every session on the account. They sign in again and keep working, that device stays refused. The account is not disabled and no password changes. Audited.",
+          "items": "data.detail.devices.rows",
+          "primary": "{item.deviceName|item.userAgent|'Unrecognised device'}",
+          "secondary": "{item.location|'Unknown location'} · IP {item.ip|'unknown'} · last used {item.lastSeenMs:datetime}",
+          "tertiary": "First seen {item.firstSeenMs:datetime}",
+          "icon": "iphone|devices",
+          "badges": [
+            {
+              "text": "Signed out {item.revokedAtMs:datetime}",
+              "when": "item.revokedAtMs",
+              "tone": "neutral"
+            },
+            {
+              "text": "No email sent: same network and system as a device already known",
+              "when": "item.alertSuppressedAtMs",
+              "tone": "neutral"
+            }
+          ],
           "actions": [
             {
               "id": "signOut",
-              "label": "Sign out everywhere",
+              "label": "Sign this device out",
               "icon": "rectangle.portrait.and.arrow.right|logout",
               "destructive": true,
-              "when": "staff.super",
-              "confirm": "Sign this person out of every device?",
+              "when": "!item.revokedAtMs",
+              "confirm": "Signing out {item.deviceName|'this device'} ends every session on {data.detail.user.email|data.detail.user.uid}’s account. They can sign in again straight away on their own devices; this one stays refused. The account is not disabled and the password does not change. It takes effect on our servers within a few seconds; a page already open on the signed-out device may keep reading and changing data for up to an hour, though file uploads stop at once.",
               "url": "/api/admin/users/manage",
               "body": {
                 "action": "signOutDevice",
                 "uid": "{params.uid}",
                 "deviceId": "{item.id}"
               },
-              "success": "Signed out"
+              "success": "Device signed out (audited). Every session on the account ended; they can sign in again, that device cannot."
             }
           ],
-          "empty": "None recorded."
+          "empty": "No sign-ins recorded on this account yet."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.detail.addressesIncomplete",
+          "text": "One source of this account’s addresses could not be read, so this list may be short. Mail to an address missing from it would not appear here."
         },
         {
           "type": "list",
-          "title": "Activity",
-          "load": "activity",
-          "items": "data.activity.entries",
-          "primary": "{item.action:title}",
-          "secondary": "{item.scopePath}",
-          "tertiary": "{item.createdAt:datetime}",
+          "title": "Addresses this account holds",
+          "footer": "The delivery log files mail under the address it went to, so every address below is read. A shared address appears on both accounts and belongs to neither exclusively.",
+          "items": "data.detail.addresses",
+          "primary": "{item.address}",
+          "secondary": "{item.sources}",
+          "icon": "at|alternate_email",
+          "badges": [
+            {
+              "text": "Shared with another account",
+              "when": "item.shared",
+              "tone": "info"
+            },
+            {
+              "text": "Claim refused: another account holds it",
+              "when": "item.indexConflict",
+              "tone": "warning"
+            }
+          ],
           "count": false,
-          "empty": "Nothing yet."
+          "empty": "No addresses."
         },
         {
           "type": "list",
-          "title": "Email history",
+          "title": "Delivery records removed",
+          "when": "data.detail.emails.erasures",
+          "footer": "The absence of rows below for these addresses is the erasure, not evidence that no mail was sent.",
+          "items": "data.detail.emails.erasures",
+          "primary": "{item.key}",
+          "secondary": "Removed under an erasure request on {item.value.at:datetime}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!data.mail",
+          "text": "The delivery log could not be read. This is NOT the same as \"we never emailed them\". Do not tell anyone their mail was or was not sent from this page until it loads."
+        },
+        {
+          "type": "list",
+          "title": "Email delivery",
           "items": "data.mail.rows",
           "primary": "{item.subject|'No subject recorded'}",
           "secondary": "{item.to} · {item.status:title} · opened {item.openCount:number}, clicked {item.clickCount:number}",
           "tertiary": "{item.firstSeenAtMs:datetime}",
           "icon": "envelope|mail",
           "load": "mail",
-          "empty": "No mail recorded for this person's addresses.",
+          "empty": "No delivery events recorded. The log holds what the delivery feed reported; mail sent before that feed was connected, or while it was down, does not appear, so an empty table is not proof that nothing was sent.",
           "open": {
             "screen": "core.staff.emailMessage",
             "params": {
               "messageId": "{item.messageId}"
             }
-          }
+          },
+          "footer": "Newest first. Open a row to read the message and see which links were followed. Opens are approximate: an inbox that blocks images never reports one, so a missing open is not evidence the mail was unread. A click is a real action and is reliable.",
+          "search": true
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Legal acceptances",
+          "when": "!data.detail.legal || data.detail.legal.lookupFailed",
+          "text": "The acceptance records could not be read. This is NOT the same as \"no acceptance on file\". Do not answer a dispute from this screen until it loads."
+        },
+        {
+          "type": "fields",
+          "title": "Legal acceptances",
+          "object": "data.detail.legal",
+          "when": "data.detail.legal && !data.detail.legal.lookupFailed",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Accepted the current version ({item.currentVersion})",
+              "chip": true,
+              "tone": "success",
+              "when": "item.accepted"
+            },
+            {
+              "label": "Status",
+              "value": "No acceptance on file",
+              "chip": true,
+              "tone": "error",
+              "when": "!item.accepted && item.reacceptanceReason == never-accepted"
+            },
+            {
+              "label": "Status",
+              "value": "Accepted {item.latestAcceptedVersion|'—'}. Current is {item.currentVersion}",
+              "chip": true,
+              "tone": "warning",
+              "when": "!item.accepted && item.reacceptanceReason != never-accepted"
+            },
+            {
+              "label": "Re-acceptance",
+              "value": "Prompted in the console",
+              "chip": true,
+              "tone": "warning",
+              "when": "item.reacceptanceRequired"
+            },
+            {
+              "label": "Arbitration opt-out (ToS §18.5)",
+              "value": "First accepted {item.arbitration.firstAcceptedAt:datetime}",
+              "when": "item.arbitration.firstAcceptedAt"
+            },
+            {
+              "label": "Opt-out window",
+              "value": "OPEN, closes {item.arbitration.deadline:datetime} ({item.arbitration.daysRemaining} day(s) left)",
+              "chip": true,
+              "tone": "warning",
+              "when": "item.arbitration.firstAcceptedAt && item.arbitration.open"
+            },
+            {
+              "label": "Opt-out window",
+              "value": "CLOSED since {item.arbitration.deadline:datetime}",
+              "chip": true,
+              "tone": "neutral",
+              "when": "item.arbitration.firstAcceptedAt && !item.arbitration.open"
+            },
+            {
+              "label": "Arbitration opt-out (ToS §18.5)",
+              "value": "No acceptance on file, so there is no window to measure. Not a closed one.",
+              "when": "!item.arbitration.firstAcceptedAt"
+            }
+          ],
+          "footer": "The window is 30 days from FIRST accepting, so a re-acceptance does not restart it."
         },
         {
           "type": "list",
-          "title": "Changes to and by this account",
+          "title": "Acceptances on file",
+          "when": "data.detail.legal && !data.detail.legal.lookupFailed",
+          "items": "data.detail.legal.acceptances",
+          "primary": "Version {item.version}",
+          "secondary": "{item.acceptedAt:datetime} · {item.context|'—'}",
+          "tertiary": "IP {item.ipAddress|'—'}",
+          "icon": "checkmark.seal|verified",
+          "count": false,
+          "empty": "Nothing recorded. Accounts created before clickwrap capture, and accounts created through SSO, can legitimately have no record."
+        },
+        {
+          "type": "list",
+          "title": "Documents accepted (sha256)",
+          "when": "data.detail.legal.acceptances.0.documents",
+          "items": "data.detail.legal.acceptances",
+          "flatten": "documents",
+          "primary": "{item.key}",
+          "secondary": "{item.sha256}",
+          "tertiary": "Version {item.$parent.version}",
+          "icon": "doc.text|description",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Activity by this account",
+          "load": "activity",
+          "items": "data.activity.entries",
+          "primary": "{item.action}",
+          "secondary": "{item.target.name|item.target.type:title}",
+          "tertiary": "{item.scopeName|item.scopePath|'—'} · {item.actorEmail|item.actorEmailNow|'System'} · {item.createdAt:datetime}",
+          "count": false,
+          "empty": "Nothing yet.",
+          "footer": "Console actions logged for this account, across every organization and site. An empty feed means nothing was logged, not that nothing was done. Not the same as the staff actions below, which were done TO it.",
+          "search": true
+        },
+        {
+          "type": "list",
+          "title": "Recent audit trail",
           "items": "data.changes.rows",
           "primary": "{item.action|'Entry'}",
           "secondary": "{item.target|'—'} · {item.reason|item.note|'no reason recorded'}",
           "tertiary": "{item.at:datetime}",
           "icon": "list.bullet.clipboard|fact_check",
           "load": "changes",
-          "empty": "None."
+          "empty": "No audited actions involve this account.",
+          "footer": "Audited staff actions performed BY or ON this account. Not the same as the activity above, which is what the account itself did. Data staff merely LOOKED at is the card below. The whole log is on the Audit log page."
         },
         {
           "type": "list",
-          "title": "Sign-ins and reads",
+          "title": "Data access by staff",
           "items": "data.access.rows",
           "primary": "{item.action|'Entry'}",
           "secondary": "{item.target|'—'} · {item.reason|item.note|'no reason recorded'}",
           "tertiary": "{item.at:datetime}",
           "icon": "list.bullet.clipboard|fact_check",
           "load": "access",
-          "empty": "None."
+          "empty": "No audited staff reads of this account's data.",
+          "footer": "Times a staff member opened this account’s private data without changing it, a sent message for example. Repeats of a single opening collapse onto one row and say how many; two separate openings are two rows.",
+          "badges": [
+            {
+              "text": "Opened {item.repeatCount} times, last {item.lastAt:datetime}",
+              "when": "item.repeatCount != 1",
+              "tone": "neutral"
+            }
+          ]
         },
         {
           "type": "zone",
@@ -3421,175 +3792,8 @@
         },
         {
           "type": "actions",
-          "title": "Staff actions",
-          "when": "staff.super",
+          "title": "Email this person",
           "items": [
-            {
-              "id": "profile",
-              "label": "Edit profile",
-              "icon": "square.and.pencil|edit",
-              "url": "/api/admin/users/manage",
-              "prompt": [
-                {
-                  "key": "displayName",
-                  "label": "Name",
-                  "kind": "text",
-                  "initial": "{data.detail.user.displayName}"
-                },
-                {
-                  "key": "email",
-                  "label": "Email",
-                  "kind": "email",
-                  "initial": "{data.detail.user.email}"
-                },
-                {
-                  "key": "photoUrl",
-                  "label": "Photo URL",
-                  "kind": "url",
-                  "initial": "{data.detail.user.photoUrl}"
-                }
-              ],
-              "body": {
-                "action": "updateProfile",
-                "uid": "{params.uid}",
-                "displayName": "{form.displayName}",
-                "email": "{form.email}",
-                "photoUrl": "{form.photoUrl}"
-              },
-              "success": "Saved"
-            },
-            {
-              "id": "reset",
-              "label": "Send a password reset",
-              "icon": "key|password",
-              "url": "/api/admin/users/manage",
-              "body": {
-                "action": "sendPasswordReset",
-                "uid": "{params.uid}"
-              },
-              "success": "Sent"
-            },
-            {
-              "id": "impersonate",
-              "label": "Sign in as this person",
-              "icon": "person.fill.questionmark|person_search",
-              "url": "/api/admin/impersonate",
-              "reason": true,
-              "body": {
-                "uid": "{params.uid}",
-                "reason": "{form.reason}"
-              },
-              "reveal": "token",
-              "success": "Impersonation token issued; use it in the console within the hour."
-            },
-            {
-              "id": "grantStaff",
-              "label": "Make staff",
-              "icon": "person.badge.shield.checkmark|admin_panel_settings",
-              "when": "!data.detail.user.staff",
-              "confirm": "Give this person the staff role?",
-              "url": "/api/admin/users/manage",
-              "body": {
-                "action": "grantStaff",
-                "uid": "{params.uid}"
-              },
-              "success": "Staff now"
-            },
-            {
-              "id": "setRole",
-              "label": "Set staff role",
-              "icon": "person.badge.key|manage_accounts",
-              "when": "data.detail.user.staff",
-              "url": "/api/admin/users/manage",
-              "prompt": [
-                {
-                  "key": "role",
-                  "label": "Role",
-                  "kind": "select",
-                  "initial": "{data.detail.user.staffRole|'support'}",
-                  "options": [
-                    {
-                      "value": "support",
-                      "label": "Support"
-                    },
-                    {
-                      "value": "super",
-                      "label": "Super"
-                    }
-                  ]
-                }
-              ],
-              "body": {
-                "action": "setRole",
-                "uid": "{params.uid}",
-                "role": "{form.role}"
-              },
-              "success": "Role set"
-            },
-            {
-              "id": "revokeStaff",
-              "label": "Remove staff role",
-              "icon": "person.badge.minus|person_remove",
-              "destructive": true,
-              "when": "data.detail.user.staff",
-              "confirm": "Remove the staff role?",
-              "url": "/api/admin/users/manage",
-              "body": {
-                "action": "revokeStaff",
-                "uid": "{params.uid}"
-              },
-              "success": "Removed"
-            },
-            {
-              "id": "disable",
-              "label": "Disable the account",
-              "icon": "nosign|block",
-              "destructive": true,
-              "when": "!data.detail.user.disabled",
-              "confirm": "They can no longer sign in.",
-              "url": "/api/admin/users/manage",
-              "body": {
-                "action": "disable",
-                "uid": "{params.uid}"
-              },
-              "success": "Disabled"
-            },
-            {
-              "id": "enable",
-              "label": "Enable the account",
-              "icon": "checkmark.circle|check_circle",
-              "when": "data.detail.user.disabled",
-              "url": "/api/admin/users/manage",
-              "body": {
-                "action": "enable",
-                "uid": "{params.uid}"
-              },
-              "success": "Enabled"
-            },
-            {
-              "id": "erase",
-              "label": "Erase the account",
-              "icon": "trash|delete_forever",
-              "destructive": true,
-              "url": "/api/admin/users/manage",
-              "prompt": [
-                {
-                  "key": "typed",
-                  "label": "Type the email to confirm",
-                  "kind": "text",
-                  "required": true,
-                  "mustMatch": "{data.detail.user.email}"
-                }
-              ],
-              "reason": true,
-              "body": {
-                "action": "erase",
-                "uid": "{params.uid}",
-                "reason": "{form.reason}"
-              },
-              "success": "Erased",
-              "back": true
-            },
             {
               "id": "followUp",
               "label": "Write a follow-up email",
@@ -3684,8 +3888,187 @@
               "success": "Sent. It shows under Email delivery once the provider reports it."
             }
           ]
+        },
+        {
+          "type": "actions",
+          "title": "Staff actions",
+          "when": "staff.super",
+          "items": [
+            {
+              "id": "profile",
+              "label": "Edit profile",
+              "icon": "square.and.pencil|edit",
+              "url": "/api/admin/users/manage",
+              "prompt": [
+                {
+                  "key": "displayName",
+                  "label": "Name",
+                  "kind": "text",
+                  "initial": "{data.detail.user.displayName}"
+                },
+                {
+                  "key": "email",
+                  "label": "Email",
+                  "kind": "email",
+                  "initial": "{data.detail.user.email}",
+                  "help": "Changing the email marks it unverified."
+                },
+                {
+                  "key": "photoUrl",
+                  "label": "Photo URL",
+                  "kind": "url",
+                  "initial": "{data.detail.user.photoUrl}",
+                  "help": "An https:// URL or an image from a media library."
+                }
+              ],
+              "body": {
+                "action": "updateProfile",
+                "uid": "{params.uid}",
+                "displayName": "{form.displayName}",
+                "email": "{form.email}",
+                "photoUrl": "{form.photoUrl}"
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "grantStaff",
+              "label": "Make staff",
+              "icon": "person.badge.shield.checkmark|admin_panel_settings",
+              "when": "!data.detail.user.staff",
+              "confirm": "Give this person the staff role?",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "grantStaff",
+                "uid": "{params.uid}"
+              },
+              "success": "Staff now"
+            },
+            {
+              "id": "setRole",
+              "label": "Set staff role",
+              "icon": "person.badge.key|manage_accounts",
+              "when": "data.detail.user.staff",
+              "url": "/api/admin/users/manage",
+              "prompt": [
+                {
+                  "key": "role",
+                  "label": "Role",
+                  "kind": "select",
+                  "initial": "{data.detail.user.staffRole|'support'}",
+                  "options": [
+                    {
+                      "value": "support",
+                      "label": "Support"
+                    },
+                    {
+                      "value": "super",
+                      "label": "Super"
+                    }
+                  ]
+                }
+              ],
+              "body": {
+                "action": "setRole",
+                "uid": "{params.uid}",
+                "role": "{form.role}"
+              },
+              "success": "Role set"
+            },
+            {
+              "id": "revokeStaff",
+              "label": "Remove staff role",
+              "icon": "person.badge.minus|person_remove",
+              "destructive": true,
+              "when": "data.detail.user.staff",
+              "confirm": "Remove the staff role?",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "revokeStaff",
+                "uid": "{params.uid}"
+              },
+              "success": "Removed"
+            },
+            {
+              "id": "disable",
+              "label": "Disable the account",
+              "icon": "nosign|block",
+              "destructive": true,
+              "when": "!data.detail.user.disabled",
+              "confirm": "They can no longer sign in.",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "disable",
+                "uid": "{params.uid}"
+              },
+              "success": "Disabled"
+            },
+            {
+              "id": "enable",
+              "label": "Enable the account",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.detail.user.disabled",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "enable",
+                "uid": "{params.uid}"
+              },
+              "success": "Enabled"
+            },
+            {
+              "id": "erase",
+              "label": "Erase the account",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "url": "/api/admin/users/manage",
+              "prompt": [
+                {
+                  "key": "typed",
+                  "label": "Type DELETE to confirm",
+                  "kind": "text",
+                  "required": true,
+                  "mustMatch": "DELETE"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "action": "erase",
+                "uid": "{params.uid}",
+                "reason": "{form.reason}"
+              },
+              "success": "Erased",
+              "back": true,
+              "failure": [
+                {
+                  "each": "response.blockers",
+                  "text": "Still needs an owner: {item.orgName} (active subscription: {item.hasLiveSubscription:yesno}, {item.otherMembers} other member(s))"
+                },
+                {
+                  "each": "response.sharedAddresses",
+                  "text": "Another account holds one of their addresses ({item.sources}). Decide whether the accounts are the same person, then merge them or remove the address from this one, and run this again."
+                }
+              ],
+              "confirm": "Erase {data.detail.user.displayName|data.detail.user.email|data.detail.user.uid}? This permanently deletes their profile, avatar, sign-in and every org membership. It runs now: there is no hold, nothing can undo it, there is no copy, and support cannot restore it. Offer the account holder’s own Close account first; use this only when they cannot sign in (a lost account, a departed SSO user, or a request by email from someone who will never sign in again). Workspaces they solely own are not deleted, and block the erasure until they are handed over."
+            }
+          ]
         }
-      ]
+      ],
+      "constants": {
+        "identitySources": {
+          "auth": "auth record",
+          "profile": "profile",
+          "provider": "sign-in provider",
+          "idp": "SSO directory"
+        },
+        "userTypes": {
+          "manager": "Team manager",
+          "collaborator": "Site collaborator"
+        },
+        "password": {
+          "minLength": 12,
+          "alphabet": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789",
+          "length": 20
+        }
+      }
     },
     {
       "id": "core.staff.support",
