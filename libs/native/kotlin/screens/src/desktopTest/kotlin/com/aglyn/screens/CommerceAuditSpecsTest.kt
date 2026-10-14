@@ -178,24 +178,6 @@ class CommerceAuditSpecsTest : SpecTestBase() {
 
   // ---- catalog organization ----------------------------------------------------------------------------------------
 
-  /** Records the writes a spec makes, as the console's client writes would land. */
-  private class RecordingWriter : com.aglyn.core.FirestoreWriter {
-    val calls = mutableListOf<String>()
-    override suspend fun merge(path: String, data: Map<String, Any?>) { calls += "merge $path ${render(data)}" }
-    override suspend fun delete(path: String) { calls += "delete $path" }
-    override suspend fun add(collectionPath: String, data: Map<String, Any?>): String { calls += "add $collectionPath ${render(data)}"; return "new1" }
-    private fun render(data: Map<String, Any?>) = data.entries.sortedBy { it.key }.joinToString(",", "{", "}") { (key, value) ->
-      "$key=" + (if (value === com.aglyn.core.ServerTimestamp) "now" else value.toString())
-    }
-  }
-
-  private fun withWriter(spec: ScreenSpec, params: Map<String, String>, data: String, writer: RecordingWriter): ScreenModel {
-    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
-    val model = ScreenModel(spec, session.context(Site(), params), null, null, writer)
-    model.seed(kotlinx.serialization.json.Json.parseToJsonElement(data))
-    return model
-  }
-
   private val categories = """{"categories":{"items":[
     {"$id":"c1","name":"Brakes","slug":"brakes"},{"$id":"c2","name":"Pads","slug":"pads","parentId":"c1"},{"$id":"c3","name":"Rotors","slug":"rotors","parentId":"c1"}]}}"""
 

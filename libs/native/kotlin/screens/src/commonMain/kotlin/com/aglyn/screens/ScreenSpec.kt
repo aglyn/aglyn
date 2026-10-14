@@ -72,6 +72,8 @@ class LoadSpec(val key: String, json: JsonElement) {
   val query: JsonElement? = json.obj("query")
   /** `org` or `site`: the plugin switchboard's rows ([SwitchboardRows]). */
   val switchboard: String? = json.str("switchboard")
+  /** A plan feature whose gate the screen reads: `{ carried, label }`, where `label` names the plan that includes it. */
+  val entitlement: String? = json.str("entitlement")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {

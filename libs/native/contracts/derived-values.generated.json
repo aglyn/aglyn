@@ -15,50 +15,64 @@
       "marketingOverlays": false,
       "abTesting": false,
       "screenAnalytics": false,
-      "outreach": false
+      "outreach": false,
+      "giftCards": false
     },
     "starter": {
       "marketingOverlays": true,
       "abTesting": false,
       "screenAnalytics": false,
-      "outreach": false
+      "outreach": false,
+      "giftCards": false
     },
     "pro": {
       "marketingOverlays": true,
       "abTesting": false,
       "screenAnalytics": true,
-      "outreach": false
+      "outreach": false,
+      "giftCards": false
     },
     "business": {
       "marketingOverlays": true,
       "abTesting": true,
       "screenAnalytics": true,
-      "outreach": false
+      "outreach": false,
+      "giftCards": true
     },
     "scale": {
       "marketingOverlays": true,
       "abTesting": true,
       "screenAnalytics": true,
-      "outreach": false
+      "outreach": false,
+      "giftCards": true
     },
     "advanced": {
       "marketingOverlays": true,
       "abTesting": true,
       "screenAnalytics": true,
-      "outreach": false
+      "outreach": false,
+      "giftCards": true
     },
     "agency": {
       "marketingOverlays": true,
       "abTesting": true,
       "screenAnalytics": true,
-      "outreach": false
+      "outreach": false,
+      "giftCards": true
     },
     "enterprise": {
       "marketingOverlays": true,
       "abTesting": true,
       "screenAnalytics": true,
-      "outreach": false
+      "outreach": false,
+      "giftCards": true
     }
+  },
+  "grantedFrom": {
+    "marketingOverlays": "Starter",
+    "abTesting": "Business",
+    "screenAnalytics": "Pro",
+    "giftCards": "Business"
   },
   "cases": [
     {
@@ -91,6 +105,13 @@
     },
     {
       "org": {
+        "plan": "free"
+      },
+      "feature": "giftCards",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "starter"
       },
       "feature": "marketingOverlays",
@@ -115,6 +136,13 @@
         "plan": "starter"
       },
       "feature": "outreach",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
+      "feature": "giftCards",
       "result": false
     },
     {
@@ -147,6 +175,13 @@
     },
     {
       "org": {
+        "plan": "pro"
+      },
+      "feature": "giftCards",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "business"
       },
       "feature": "marketingOverlays",
@@ -175,6 +210,13 @@
     },
     {
       "org": {
+        "plan": "business"
+      },
+      "feature": "giftCards",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "enterprise"
       },
       "feature": "marketingOverlays",
@@ -203,6 +245,13 @@
     },
     {
       "org": {
+        "plan": "enterprise"
+      },
+      "feature": "giftCards",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "nonsense"
       },
       "feature": "marketingOverlays",
@@ -227,6 +276,13 @@
         "plan": "nonsense"
       },
       "feature": "outreach",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
+      "feature": "giftCards",
       "result": false
     },
     {
@@ -264,6 +320,14 @@
     {
       "org": {
         "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "giftCards",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
         "billingStatus": "past_due"
       },
       "feature": "marketingOverlays",
@@ -292,6 +356,14 @@
       },
       "feature": "outreach",
       "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "giftCards",
+      "result": true
     },
     {
       "org": {
@@ -331,6 +403,16 @@
         }
       },
       "feature": "outreach",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "giftCards",
       "result": false
     },
     {
@@ -380,6 +462,18 @@
       },
       "feature": "outreach",
       "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "giftCards",
+      "result": true
     },
     {
       "org": {
@@ -436,6 +530,19 @@
     {
       "org": {
         "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "giftCards",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
         "billingStatus": "canceled",
         "entitlements": {
           "planComp": {
@@ -487,6 +594,19 @@
     },
     {
       "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "giftCards",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "free",
         "entitlements": {
           "features": {
@@ -539,6 +659,19 @@
     },
     {
       "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "giftCards",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "enterprise",
         "entitlements": {
           "features": {
@@ -584,6 +717,18 @@
       },
       "feature": "outreach",
       "result": false
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "giftCards",
+      "result": true
     }
   ],
   "goalEvents": [

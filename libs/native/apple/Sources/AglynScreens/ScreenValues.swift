@@ -19,9 +19,15 @@ public enum ScreenValues {
     let parts = segments(trimmed)
     for (position, raw) in parts.enumerated() {
       if raw == "*" {
-        // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+        // `rows.*.field`: that field of every row, as a list (rows without it are left out). Over an object (a map of
+        // holds by key) the rows are its values, in key order.
         let rest = parts.dropFirst(position + 1).joined(separator: ".")
-        guard case .array(let items)? = current else { return nil }
+        let items: [JSONValue]
+        switch current {
+        case .array(let list)?: items = list
+        case .object(let record)?: items = record.sorted { $0.key < $1.key }.map(\.value)
+        default: return nil
+        }
         return .array(items.compactMap { row in
           if rest.isEmpty { return row }
           guard let found = lookup(rest, in: row), found != .null else { return nil }
@@ -243,6 +249,22 @@ public enum ScreenValues {
     case .object(let record) where record.count == 1 && record["$timestamp"] != nil:
       // `{"$timestamp": true}`: the server's time, written as a Firestore timestamp (a write's `updatedAt`).
       return ["$timestamp": true]
+    case .object(let record) where record.count == 1 && record["$dateMs"] != nil:
+      // `{"$dateMs": {"value": "{form.starts}", "time": "23:59:59"}}`: a date and a UTC time of day as epoch milliseconds; null when it is not a date.
+      let spec = record["$dateMs"] ?? .null
+      let date = Self.text(resolveBody(spec["value"] ?? .null, in: context)).trimmingCharacters(in: .whitespaces)
+      let time = spec["time"]?.stringValue ?? "00:00:00"
+      guard date.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil,
+        let millis = epochMillis(.string("\(date)T\(time)Z"))
+      else { return .null }
+      // With `"local": true` the time of day is the device's own (a browser's `Date.parse` of a zone-less time): the
+      // offset is looked up at the guess and again at the corrected instant, so a daylight-saving change lands right.
+      if spec["local"]?.boolValue == true {
+        func offset(at instant: Int64) -> Int64 { Int64(TimeZone.current.secondsFromGMT(for: Date(timeIntervalSince1970: Double(instant) / 1000))) * 1000 }
+        let guess = millis - offset(at: millis)
+        return .number(Double(millis - offset(at: guess)))
+      }
+      return .number(Double(millis))
     case .object(let record) where record.count == 1 && record["$slug"] != nil:
       // `{"$slug": "{form.name}"}`: the console's slug of a name (lower case, letters and digits joined by hyphens).
       return .string(commerceSlug(Self.text(resolveBody(record["$slug"] ?? .null, in: context))))
@@ -382,14 +404,18 @@ public enum ScreenValues {
     // `path < @now.ms+7d`: numbers and times compared; the right side is a number or `@path` with an optional offset.
     for op in ["<=", ">=", "<", ">"] {
       guard let range = clause.range(of: op) else { continue }
-      guard let left = comparable(lookup(String(clause[..<range.lowerBound]), in: context)),
-        let right = operand(clause[range.upperBound...].trimmingCharacters(in: .whitespaces), in: context)
-      else { return false }
-      switch op {
-      case "<=": return left <= right
-      case ">=": return left >= right
-      case "<": return left < right
-      default: return left > right
+      let found = lookup(String(clause[..<range.lowerBound]), in: context)
+      guard let right = operand(clause[range.upperBound...].trimmingCharacters(in: .whitespaces), in: context) else { return false }
+      // A projected list (`holds.*.expiresAtMs > @now.ms`) holds when any of its values does.
+      let lefts: [Double]
+      if case .array(let list)? = found { lefts = list.compactMap { comparable($0) } } else { lefts = comparable(found).map { [$0] } ?? [] }
+      return lefts.contains { left in
+        switch op {
+        case "<=": return left <= right
+        case ">=": return left >= right
+        case "<": return left < right
+        default: return left > right
+        }
       }
     }
     if clause.hasPrefix("!") { return !truthy(lookup(String(clause.dropFirst()), in: context)) }
@@ -545,6 +571,21 @@ public enum ScreenValues {
     case "dollars":
       guard let amount = number(value) else { return text(value) }
       return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
+    case "code":
+      // A code the way coupons store it: trimmed, upper case, only letters, digits, hyphens and underscores.
+      // `code/40` keeps at most that many characters.
+      let code = text(value).trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        .replacingOccurrences(of: "[^A-Z0-9_-]", with: "", options: .regularExpression)
+      if parts.count > 1, let limit = Int(parts[1]) { return String(code.prefix(limit)) }
+      return code
+    case "token":
+      // The search token of typed words: lower case, the first word, at most twelve characters.
+      let word = text(value).trimmingCharacters(in: .whitespacesAndNewlines).lowercased().split(whereSeparator: \.isWhitespace).first
+      return String(word.map(String.init) ?? "").prefix(12).description
+    case "sum", "sumcents":
+      var total = 0.0
+      if case .array(let items)? = value { total = items.reduce(0) { $0 + (number($1) ?? 0) } }
+      return name == "sum" ? numberText(total) : formatOrderMoney(Int(total.rounded()), currency: "USD")
     case "amount":
       // Whole cents as a plain amount a money field starts with: 1250 -> 12.50 (nothing for no amount).
       guard let cents = number(value) else { return "" }
@@ -562,6 +603,11 @@ public enum ScreenValues {
       case .object(let record)?: return String(record.count)
       default: return number(value).map { grouped($0) } ?? "0"
       }
+    case "ahead":
+      // How many of a list of times are still ahead (the holds on a promotion that have not lapsed).
+      guard case .array(let items)? = value else { return "0" }
+      let now = Int64(Date().timeIntervalSince1970 * 1000)
+      return String(items.filter { (epochMillis($0) ?? 0) > now }.count)
     case "yesno":
       return truthy(value) ? "Yes" : "No"
     case "title":

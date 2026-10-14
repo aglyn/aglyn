@@ -178,6 +178,10 @@ class ScreenModel(
     load.query?.let { query ->
       return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
     }
+    load.entitlement?.let { feature ->
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      return Triple(load.key, FirestoreLoads.entitlement(reader, feature, ScreenValues.render("{org.id}", context)), null)
+    }
     load.switchboard?.let { scope ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
       val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", context))

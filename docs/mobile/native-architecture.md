@@ -879,7 +879,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
-| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
@@ -928,6 +928,39 @@ unless set, 409 for "this needs one more answer"), and an action's `then` that h
 `prompt` is asked of the person next, with the earlier answer as `response` and the
 earlier form as `previous` (print on demand lists the stores a token reaches, then
 connects the one picked).
+
+Cards that write the store's own documents, as the console's client does, use the rest of
+the grammar. A `write` is `{ doc, fields }` (merge a document), `{ add, fields }` (a new
+document in a collection, with an id of its own), `{ delete }`, `{ steps: [...] }` (several
+in order) or `{ each: { items, filter }, doc, fields }` (one per row of the data that passes
+the filter, with `item` set to the row); `siteWide: true` also drops the site's cached
+pages, as the console's `writeSiteWideChange` does. A field value is resolved like a
+body, and these operations shape it: `{"$timestamp": true}` (the server's time),
+`{"$orNull": v}` (null when empty, which a merge write turns into a cleared field; a
+template that found nothing is otherwise left out), `{"$cents": "{form.amount}"}` (typed
+dollars as whole cents), `{"$dateMs": {value, time, local}}` (a date and a time of day as
+epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": v}`,
+`{"$split": v}` (lines or commas to a list) and `{"$gather": {from, prefix, key, value}}`
+(the entries of `{form}` whose names start with `prefix`, as `{ key, value }` rows).
+
+More formats: `amount` (whole cents as `12.50`, what a money field starts with), `code`
+(a coupon code as stored; `code/40` cuts it at 40), `token` (the search token of typed
+words), `sum` and `sumcents` (a list of numbers added up), `ahead` (how many of a list of
+times are still to come). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
+first value that is present at all (`false` and `0` count). A path `rows.*.field` also
+reads an object's values in key order, and a comparison against a list holds when any of
+its values does (`item.holds.*.expiresAtMs > @now.ms`). A number field takes `min` and
+`max`, and a field a screen hid by its `when` is not sent.
+
+A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with
+`op` any of `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `not-in`, `array-contains` and
+`array-contains-any`, a number or flag in the spec compared as itself. With
+`aggregate: { count: true, sum: "field" }` the server counts and adds every matching document
+and no row is read: the answer is `data.<key>.count` and `.sum`, left out where the reader
+cannot ask (show "Unavailable", never a zero). `{ "entitlement": "giftCards" }` reads the
+workspace document and answers `data.<key>.carried` and `.label`, the plan that includes the
+feature, so a card the console locks behind a plan shows its notice instead of failing
+(the features are the generated `NATIVE_PLAN_FEATURES`).
 
 ### The plugin switchboard
 

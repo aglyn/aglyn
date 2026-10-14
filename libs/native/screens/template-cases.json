@@ -53,7 +53,15 @@
         "h1": "editor",
         "h2": "viewer"
       },
-      "hostKey": "h2"
+      "hostKey": "h2",
+      "holds": {
+        "b": {
+          "expiresAtMs": 4102444800000
+        },
+        "a": {
+          "expiresAtMs": 1000
+        }
+      }
     }
   },
   "render": [
@@ -176,6 +184,38 @@
     {
       "template": "{?data.perms.missing || org.role == viewer}",
       "expect": "false"
+    },
+    {
+      "template": "{data.hostKey:code}",
+      "expect": "H2"
+    },
+    {
+      "template": "{data.members.0.displayName:token}",
+      "expect": "ada"
+    },
+    {
+      "template": "{data.big:sum}",
+      "expect": "0"
+    },
+    {
+      "template": "{data.holds.*.expiresAtMs:ahead}",
+      "expect": "1"
+    },
+    {
+      "template": "{data.access.*:count}",
+      "expect": "2"
+    },
+    {
+      "template": "{data.holds.*.expiresAtMs:count}",
+      "expect": "2"
+    },
+    {
+      "template": "{data.hostKey:code/1}",
+      "expect": "H"
+    },
+    {
+      "template": "{data.hostKey:code/9}",
+      "expect": "H2"
     }
   ],
   "url": [
@@ -512,6 +552,33 @@
           "z"
         ]
       }
+    },
+    {
+      "body": {
+        "s": {
+          "$dateMs": {
+            "value": "2026-10-09",
+            "time": "23:59:59"
+          }
+        },
+        "e": {
+          "$dateMs": {
+            "value": "",
+            "time": "00:00:00"
+          }
+        },
+        "n": {
+          "$orNull": {
+            "$dateMs": {
+              "value": "nope"
+            }
+          }
+        }
+      },
+      "expect": {
+        "s": 1791590399000,
+        "n": null
+      }
     }
   ],
   "condition": [
@@ -610,6 +677,22 @@
     {
       "when": "data.money > 100 && data.money < 200000",
       "expect": true
+    },
+    {
+      "when": "data.holds.*.expiresAtMs > 4000000000000",
+      "expect": true
+    },
+    {
+      "when": "data.holds.*.expiresAtMs > 5000000000000",
+      "expect": false
+    },
+    {
+      "when": "data.holds.*.expiresAtMs < 5000",
+      "expect": true
+    },
+    {
+      "when": "data.nothing.*.expiresAtMs > 5",
+      "expect": false
     }
   ]
 }

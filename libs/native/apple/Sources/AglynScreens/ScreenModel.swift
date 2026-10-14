@@ -211,6 +211,10 @@ public final class ScreenModel {
       let value = try await FirestoreLoads.document(reader, ScreenValues.render(doc, in: context))
       return (load.key, value, nil)
     }
+    if let feature = load.entitlement {
+      guard let reader else { return (load.key, .null, nil) }
+      return (load.key, try await FirestoreLoads.entitlement(reader, feature: feature, orgID: ScreenValues.render("{org.id}", in: context)), nil)
+    }
     if let scope = load.switchboard {
       guard let reader else { return (load.key, .null, nil) }
       let org = try await FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", in: context))

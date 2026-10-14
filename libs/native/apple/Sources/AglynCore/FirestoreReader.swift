@@ -148,10 +148,17 @@ public protocol FirestoreReader: AnyObject, Sendable {
   /// `getCountFromServer`), or nil where the reader cannot ask for one; a
   /// caller then falls back to the rows it holds.
   func count(_ query: FirestoreQuery) async throws -> Int?
+
+  /// The server's total of a numeric field over every document a query
+  /// matches (the web SDK's `getAggregateFromServer` with `sum`): the figure a
+  /// balance or a liability reads, never the total of a capped list. Nil where
+  /// the reader cannot ask for one.
+  func sum(_ query: FirestoreQuery, field: String) async throws -> Double?
 }
 
 extension FirestoreReader {
   public func count(_ query: FirestoreQuery) async throws -> Int? { nil }
+  public func sum(_ query: FirestoreQuery, field: String) async throws -> Double? { nil }
 }
 
 /// A listener that does nothing, for a query that cannot run yet.

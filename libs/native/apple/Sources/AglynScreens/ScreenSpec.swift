@@ -81,6 +81,8 @@ public struct LoadSpec: Sendable, Hashable {
   public let query: JSONValue?
   /// `org` or `site`: the plugin switchboard's rows (SwitchboardRows).
   public let switchboard: String?
+  /// A plan feature whose gate the screen reads: `{ carried, label }`, where `label` names the plan that includes it.
+  public let entitlement: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -94,6 +96,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.doc = nil
       self.query = nil
       self.switchboard = nil
+      self.entitlement = nil
       self.method = .get
       self.body = nil
       self.optional = false
@@ -107,6 +110,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.doc = json["doc"]?.stringValue
       self.query = json["query"]
       self.switchboard = json["switchboard"]?.stringValue
+      self.entitlement = json["entitlement"]?.stringValue
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)

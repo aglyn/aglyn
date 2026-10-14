@@ -28,9 +28,14 @@ object ScreenValues {
     val parts = segments(trimmed)
     for ((position, raw) in parts.withIndex()) {
       if (raw == "*") {
-        // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+        // `rows.*.field`: that field of every row, as a list (rows without it are left out). Over an object (a map of
+        // holds by key) the rows are its values, in key order.
         val rest = parts.drop(position + 1).joinToString(".")
-        val items = current as? JsonArray ?: return null
+        val items = when (val source = current) {
+          is JsonArray -> source
+          is JsonObject -> source.entries.sortedBy { it.key }.map { it.value }
+          else -> return null
+        }
         return JsonArray(items.mapNotNull { row -> if (rest.isEmpty()) row else lookup(rest, row)?.takeIf { it != JsonNull } })
       }
       val open = raw.indexOf('[')
@@ -220,6 +225,16 @@ object ScreenValues {
     } else if (body.size == 1 && body["\$timestamp"] != null) {
       // `{"$timestamp": true}`: the server's time, written as a Firestore timestamp (a write's `updatedAt`).
       JsonObject(mapOf("\$timestamp" to JsonPrimitive(true)))
+    } else if (body.size == 1 && body["\$dateMs"] is JsonObject) {
+      // `{"$dateMs": {"value": "{form.starts}", "time": "23:59:59"}}`: a date and a UTC time of day as epoch milliseconds; null when it is not a date.
+      // With `"local": true` the time of day is the device's own (a browser's `Date.parse` of a zone-less time).
+      val spec = body["\$dateMs"] as JsonObject
+      val date = text(spec["value"]?.let { resolveBody(it, context) }).trim()
+      val time = (spec["time"] as? JsonPrimitive)?.content ?: "00:00:00"
+      val local = (spec["local"] as? JsonPrimitive)?.content == "true"
+      (if (Regex("""\d{4}-\d{2}-\d{2}""").matches(date)) parseIsoMillis("${date}T${time}Z") else null)
+        ?.let { utc -> if (local) deviceWallClockToMillis(utc) else utc }
+        ?.let { JsonPrimitive(it) } ?: JsonNull
     } else if (body.size == 1 && body["\$slug"] != null) {
       // `{"$slug": "{form.name}"}`: the console's slug of a name (lower case, letters and digits joined by hyphens).
       JsonPrimitive(com.aglyn.contracts.commerceSlug(text(resolveBody(body.getValue("\$slug"), context))))
@@ -346,13 +361,17 @@ object ScreenValues {
     for (op in listOf("<=", ">=", "<", ">")) {
       val at = clause.indexOf(op)
       if (at < 0) continue
-      val left = comparable(lookup(clause.substring(0, at), context)) ?: return false
+      val found = lookup(clause.substring(0, at), context)
       val right = operand(clause.substring(at + op.length).trim(), context) ?: return false
-      return when (op) {
-        "<=" -> left <= right
-        ">=" -> left >= right
-        "<" -> left < right
-        else -> left > right
+      // A projected list (`holds.*.expiresAtMs > @now.ms`) holds when any of its values does.
+      val lefts = if (found is JsonArray) found.mapNotNull { comparable(it) } else listOfNotNull(comparable(found))
+      return lefts.any { left ->
+        when (op) {
+          "<=" -> left <= right
+          ">=" -> left >= right
+          "<" -> left < right
+          else -> left > right
+        }
       }
     }
     if (clause.startsWith("!")) return !truthy(lookup(clause.substring(1), context))
@@ -477,6 +496,14 @@ object ScreenValues {
       } ?: text(value)
       "dollars" -> number(value)?.let { formatOrderMoney(round(it * 100), "USD") } ?: text(value)
       // Whole cents as a plain amount a money field starts with: 1250 -> 12.50 (nothing for no amount).
+      // A code the way coupons store it: trimmed, upper case, only letters, digits, hyphens and underscores.
+      // `code/40` keeps at most that many characters.
+      "code" -> text(value).trim().uppercase().replace(Regex("[^A-Z0-9_-]"), "").let { code -> parts.getOrNull(1)?.toIntOrNull()?.let { code.take(it) } ?: code }
+      // The search token of typed words: lower case, the first word, at most twelve characters.
+      "token" -> text(value).trim().lowercase().split(Regex("\\s+")).firstOrNull().orEmpty().take(12)
+      // A list of numbers added up (cents are cents), and the same as money.
+      "sum" -> (value as? JsonArray)?.sumOf { number(it) ?: 0.0 }?.let { numberText(it) } ?: "0"
+      "sumcents" -> (value as? JsonArray)?.sumOf { number(it) ?: 0.0 }?.let { formatOrderMoney(round(it), "USD") } ?: formatOrderMoney(0.0, "USD")
       "amount" -> number(value)?.let { cents -> val whole = round(cents).toLong(); "${whole / 100}.${(abs(whole) % 100).toString().padStart(2, '0')}" } ?: ""
       "bytes" -> number(value)?.let { bytesText(it) } ?: text(value)
       "number" -> number(value)?.let { grouped(it, 2) } ?: text(value)
@@ -486,6 +513,8 @@ object ScreenValues {
         is JsonObject -> value.size.toString()
         else -> number(value)?.let { grouped(it) } ?: "0"
       }
+      // How many of a list of times are still ahead (the holds on a promotion that have not lapsed).
+      "ahead" -> ((value as? JsonArray)?.count { (epochMillis(it) ?: 0L) > nowMillis() } ?: 0).toString()
       "yesno" -> if (truthy(value)) "Yes" else "No"
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
       "upper" -> text(value).uppercase()
@@ -497,6 +526,23 @@ object ScreenValues {
 
 /** An ISO-8601 instant or date as epoch milliseconds; null when it is not one. */
 internal expect fun parseIsoMillis(text: String): Long?
+
+/**
+ * A wall-clock time read as UTC (`wallAsUtc`) re-read as the device's own wall-clock time: the instant the device's clock
+ * shows that time at. The offset is looked up at the guess and again at the corrected instant, so a daylight-saving
+ * change near the time still lands on the right side of it.
+ */
+internal fun deviceWallClockToMillis(wallAsUtc: Long): Long {
+  fun offsetAt(instant: Long): Long {
+    val minute = instant.floorDiv(60_000L) * 60_000L
+    val (y, mo, d, h, mi) = localParts(instant, null)
+    fun two(n: Int) = n.toString().padStart(2, '0')
+    val shown = parseIsoMillis("${y.toString().padStart(4, '0')}-${two(mo)}-${two(d)}T${two(h)}:${two(mi)}:00Z") ?: minute
+    return shown - minute
+  }
+  val first = wallAsUtc - offsetAt(wallAsUtc)
+  return wallAsUtc - offsetAt(first)
+}
 
 /** Year, month (1–12), day, hour and minute of an instant in a zone (the device's when null). */
 internal expect fun localParts(millis: Long, zone: String?): List<Int>

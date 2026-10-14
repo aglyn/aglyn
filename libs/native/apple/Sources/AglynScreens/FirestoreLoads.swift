@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import Foundation
 
@@ -54,6 +55,22 @@ enum FirestoreLoads {
   /// One document, read once.
   @MainActor
   static func document(_ reader: FirestoreReader, _ path: String) async throws -> JSONValue {
+    try await rawDocument(reader, path).map(json) ?? .null
+  }
+
+  /// Whether the workspace carries a plan feature, as the console's `checkEntitlement` answers from the workspace's own
+  /// document, with the name of the cheapest plan that includes it (what an upsell says): `{ carried, label }`.
+  @MainActor
+  static func entitlement(_ reader: FirestoreReader, feature: String, orgID: String) async throws -> JSONValue {
+    let org = try await rawDocument(reader, "orgs/\(orgID)")
+    return .object([
+      "carried": .bool(planFeatureCarried(org?.data, feature)),
+      "label": PlanFeatureDefaults.grantedFrom[feature].map(JSONValue.string) ?? .null,
+    ])
+  }
+
+  @MainActor
+  private static func rawDocument(_ reader: FirestoreReader, _ path: String) async throws -> FirestoreDocument? {
     let doc: FirestoreDocument? = try await withCheckedThrowingContinuation { continuation in
       var listener: FirestoreListening?
       var finished = false
@@ -65,7 +82,7 @@ enum FirestoreLoads {
       }
       if finished { listener?.remove() }
     }
-    return doc.map(json) ?? .null
+    return doc
   }
 
   /// A collection query, read once: `{ "items": [...] }`.
@@ -73,14 +90,27 @@ enum FirestoreLoads {
   @MainActor
   static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue) async throws -> JSONValue {
     let collection = ScreenValues.render(spec["collection"]?.stringValue ?? "", in: context)
-    let equals: [(field: String, value: Any)] = spec["where"].array.compactMap { clause in
-      guard case .array(let parts) = clause, parts.count == 3, let field = parts[0].stringValue else { return nil }
-      let value = ScreenValues.resolve(parts[2].stringValue ?? ScreenValues.text(parts[2]), in: context)
-      switch value {
-      case .bool(let flag): return (field, flag)
-      case .number(let number): return (field, number)
-      default: return (field, ScreenValues.text(value))
+    var equals: [(field: String, value: Any)] = []
+    var filters: [ListQueryConstraint] = []
+    func plainValue(_ raw: JSONValue) -> Any {
+      // A number or flag written into the spec is compared as itself, not as its text.
+      if case .number(let number) = raw { return number }
+      if case .bool(let flag) = raw { return flag }
+      switch ScreenValues.resolve(raw.stringValue ?? ScreenValues.text(raw), in: context) {
+      case .bool(let flag): return flag
+      case .number(let number): return number
+      case let other: return ScreenValues.text(other)
       }
+    }
+    for clause in spec["where"].array {
+      guard case .array(let parts) = clause, parts.count == 3, let field = parts[0].stringValue,
+        let name = parts[1].stringValue, let op = ListQueryOp(rawValue: name), op != .unknown
+      else { continue }
+      // `in` and `array-contains-any` take a list; the others one value.
+      let listOp = op == .in || op == .arrayContainsAny
+      let value: Any
+      if listOp, case .array(let items) = parts[2] { value = items.map(plainValue) } else { value = plainValue(parts[2]) }
+      if op == .equal { equals.append((field, value)) } else { filters.append(ListQueryConstraint(path: field, op: op, value: value)) }
     }
     var order: [FirestoreQuery.Order] = []
     if let raw = spec["orderBy"]?.stringValue {
@@ -88,7 +118,18 @@ enum FirestoreLoads {
       order = [FirestoreQuery.Order(String(parts[0]), descending: parts.count > 1 && parts[1] == "desc")]
     }
     let limit = ScreenValues.number(spec["limit"]).map { Int($0) } ?? 50
-    let query = FirestoreQuery(segments(collection), equals: equals, order: order, limit: limit)
+    let query = FirestoreQuery(segments(collection), equals: equals, filters: filters, order: order, limit: limit)
+    // `aggregate`: { count: true, sum: "balanceCents" } asks the server for the figures over every matching document
+    // and reads no rows: `count` and `sum` are missing from the result where the reader cannot answer, so a screen
+    // shows "Unavailable" instead of a zero.
+    if let aggregate = spec["aggregate"] {
+      var whole = query
+      whole.limit = nil
+      var result: [String: JSONValue] = ["items": .array([])]
+      if aggregate["count"]?.boolValue == true, let count = try await reader.count(whole) { result["count"] = .number(Double(count)) }
+      if let field = aggregate["sum"]?.stringValue, let total = try await reader.sum(whole, field: field) { result["sum"] = .number(total) }
+      return .object(result)
+    }
     let docs: [FirestoreDocument] = try await withCheckedThrowingContinuation { continuation in
       var listener: FirestoreListening?
       var finished = false

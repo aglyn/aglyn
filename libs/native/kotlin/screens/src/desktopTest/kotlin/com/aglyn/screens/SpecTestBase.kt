@@ -72,6 +72,24 @@ abstract class SpecTestBase {
     return model
   }
 
+  /** Records the writes a spec makes, as the console's client writes would land. */
+  protected class RecordingWriter : com.aglyn.core.FirestoreWriter {
+    val calls = mutableListOf<String>()
+    override suspend fun merge(path: String, data: Map<String, Any?>) { calls += "merge $path ${render(data)}" }
+    override suspend fun delete(path: String) { calls += "delete $path" }
+    override suspend fun add(collectionPath: String, data: Map<String, Any?>): String { calls += "add $collectionPath ${render(data)}"; return "new1" }
+    private fun render(data: Map<String, Any?>) = data.entries.sortedBy { it.key }.joinToString(",", "{", "}") { (key, value) ->
+      "$key=" + (if (value === com.aglyn.core.ServerTimestamp) "now" else value.toString())
+    }
+  }
+
+  protected fun withWriter(spec: ScreenSpec, params: Map<String, String>, data: String, writer: RecordingWriter): ScreenModel {
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
+    val model = ScreenModel(spec, session.context(Site(), params), null, null, writer)
+    model.seed(kotlinx.serialization.json.Json.parseToJsonElement(data))
+    return model
+  }
+
   protected fun ScreenModel.shown(): List<String> = spec.blocks.filter { ScreenValues.condition(it.whenCondition, context) }.map { it.id }
 
   protected fun ScreenModel.block(id: String): BlockSpec = spec.blocks.first { it.id == id }
