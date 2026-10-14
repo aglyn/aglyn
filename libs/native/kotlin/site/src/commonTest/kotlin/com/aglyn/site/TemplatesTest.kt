@@ -7,10 +7,13 @@ import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.Live
+import com.aglyn.site.artifacts.ArtifactKind
+import com.aglyn.site.artifacts.ArtifactsApi
 import com.aglyn.site.artifacts.TemplateContent
 import com.aglyn.site.artifacts.TemplatePlaceholder
 import com.aglyn.site.artifacts.TemplateSource
 import com.aglyn.site.artifacts.TemplatesApi
+import com.aglyn.site.artifacts.emailBlockStarter
 import com.aglyn.site.artifacts.pageAddressProblem
 import com.aglyn.site.pages.PagesApi
 import io.ktor.client.HttpClient
@@ -203,5 +206,35 @@ class TemplatesTest {
     assertNull(pageAddressProblem("", "Pricing"))
     assertTrue(pageAddressProblem("a/b", "x")!!.startsWith("A slug is one path segment"))
     assertTrue(pageAddressProblem("search", "x")!!.contains("reserved"))
+  }
+
+  @Test
+  fun anEmailBlockStartsAsTheHeaderOrFooterBandWithFreshIds() = runTest {
+    var next = 0
+    val (rootId, nodes) = assertNotNull(emailBlockStarter("header") { "n${++next}" })
+    assertEquals("n1", rootId)
+    assertEquals(setOf("n1", "n2", "n3"), nodes.keys)
+    val root = nodes.getValue("n1") as Map<*, *>
+    assertEquals("emailSection", root["componentId"])
+    assertNull(root["parentId"])
+    assertEquals(listOf("n2", "n3"), root["nodes"])
+    assertEquals("n1", (nodes.getValue("n2") as Map<*, *>)["parentId"])
+    assertEquals("n3", (nodes.getValue("n3") as Map<*, *>)["\$id"])
+    assertEquals(4, assertNotNull(emailBlockStarter("footer")).second.size)
+    // Blank, and a name nobody knows, start from nothing.
+    assertNull(emailBlockStarter("blank"))
+    assertNull(emailBlockStarter(null))
+    // Creating an email component with a starter sends that tree; without one it sends the blank canvas.
+    val calls = Calls()
+    val components = ArtifactsApi(calls.client, RecordingWriter(), "h", ArtifactKind.COMPONENT)
+    components.create("Top band", "", "email", "footer")
+    components.create("Plain", "", "email", "blank")
+    components.create("Page block", "", "site", "header")
+    val sent = calls.seen.map { it.second.getValue("data").jsonObject }
+    assertEquals("email", sent[0]["kind"]?.jsonPrimitive?.content)
+    assertEquals(4, sent[0].getValue("nodes").jsonObject.size)
+    assertEquals(1, sent[1].getValue("nodes").jsonObject.size)
+    assertNull(sent[2]["kind"])
+    assertEquals(1, sent[2].getValue("nodes").jsonObject.size)
   }
 }

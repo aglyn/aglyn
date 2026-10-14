@@ -378,13 +378,19 @@ public struct ArtifactsAPI: Sendable {
   /// carries its blank design and no version (the first opens it); a layout
   /// gets its first version with the slot; a template is born through the
   /// route, never a client create.
-  public func create(name: String, description: String, subKind: String?) async throws -> String {
+  public func create(name: String, description: String, subKind: String?, starter: String? = nil) async throws -> String {
     let id = newDocumentID()
     var data: [String: Any?] = ["displayName": name.trimmed, "description": description.trimmed]
     switch kind {
     case .component:
-      data["rootId"] = canvasRoot
-      data["nodes"] = blankCanvas()
+      // An email block can start as the Header or Footer band the email plugin drops into an email, one tree wherever it starts.
+      if subKind == "email", let started = emailBlockStarter(starter) {
+        data["rootId"] = started.rootID
+        data["nodes"] = started.nodes
+      } else {
+        data["rootId"] = canvasRoot
+        data["nodes"] = blankCanvas()
+      }
       if subKind == "email" { data["kind"] = "email" }
       try await resources(["resource": kind.createResource, "id": id, "data": data])
     case .layout:

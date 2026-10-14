@@ -675,6 +675,11 @@
       "values": [
         "COMPONENT_PROP_TOKEN_PREFIX"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/email-block-starters.ts": {
+      "values": [
+        "EMAIL_BLOCK_STARTER_TREES_JSON"
+      ]
     }
   },
   "ints": [

@@ -190,4 +190,34 @@ final class TemplatesTests: XCTestCase {
     XCTAssertTrue(pageAddressProblem(slug: "a/b", name: "x")!.hasPrefix("A slug is one path segment"))
     XCTAssertTrue(pageAddressProblem(slug: "search", name: "x")!.contains("reserved"))
   }
+
+  func testAnEmailBlockStartsAsTheHeaderOrFooterBandWithFreshIds() async throws {
+    var next = 0
+    let started = try XCTUnwrap(emailBlockStarter("header") { next += 1; return "n\(next)" })
+    XCTAssertEqual(started.rootID, "n1")
+    XCTAssertEqual(Set(started.nodes.keys), ["n1", "n2", "n3"])
+    let root = try XCTUnwrap(started.nodes["n1"] as? [String: Any])
+    XCTAssertEqual(root["componentId"] as? String, "emailSection")
+    XCTAssertTrue(root["parentId"] is NSNull)
+    XCTAssertEqual(root["nodes"] as? [String], ["n2", "n3"])
+    XCTAssertEqual((started.nodes["n2"] as? [String: Any])?["parentId"] as? String, "n1")
+    XCTAssertEqual((started.nodes["n3"] as? [String: Any])?["$id"] as? String, "n3")
+    XCTAssertEqual(emailBlockStarter("footer")?.nodes.count, 4)
+    // Blank, and a name nobody knows, start from nothing.
+    XCTAssertNil(emailBlockStarter("blank"))
+    XCTAssertNil(emailBlockStarter(nil))
+    // Creating an email component with a starter sends that tree; without one it sends the blank canvas.
+    let transport = TemplatesTransport()
+    let client = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in }, maxAttempts: 1)
+    let components = ArtifactsAPI(api: client, writer: RecordingWriter(), hostID: "h", kind: .component)
+    _ = try await components.create(name: "Top band", description: "", subKind: "email", starter: "footer")
+    _ = try await components.create(name: "Plain", description: "", subKind: "email", starter: "blank")
+    _ = try await components.create(name: "Page block", description: "", subKind: "site", starter: "header")
+    let sent = transport.sent.map { ($0.body["data"] as? [String: Any]) ?? [:] }
+    XCTAssertEqual(sent[0]["kind"] as? String, "email")
+    XCTAssertEqual((sent[0]["nodes"] as? [String: Any])?.count, 4)
+    XCTAssertEqual((sent[1]["nodes"] as? [String: Any])?.count, 1)
+    XCTAssertNil(sent[2]["kind"])
+    XCTAssertEqual((sent[2]["nodes"] as? [String: Any])?.count, 1)
+  }
 }

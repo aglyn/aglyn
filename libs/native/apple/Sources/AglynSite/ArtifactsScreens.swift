@@ -557,10 +557,11 @@ private struct CreateArtifactSheet: View {
   @State private var name = ""
   @State private var description = ""
   @State private var subKind = ""
+  @State private var starter = "header"
 
   private var message: String {
     switch kind {
-    case .component: "It starts blank; design it in the Besigner."
+    case .component: "Design it in the Besigner. A block for emails can start as a Header or a Footer."
     case .layout: "It starts with the slot pages appear in; design the rest in the Besigner."
     case .template: "It starts blank; design it in the Besigner, then start new pages from it."
     }
@@ -573,7 +574,7 @@ private struct CreateArtifactSheet: View {
       onConfirm: {
         let (name, description, sub) = (name, description, subKind.isEmpty ? defaultSubKind : subKind)
         runner.run("\(name.trimmed) was created.", onDone: close) {
-          onCreated(try await api.create(name: name, description: description, subKind: sub))
+          onCreated(try await api.create(name: name, description: description, subKind: sub, starter: starter))
         }
       }
     ) {
@@ -590,6 +591,14 @@ private struct CreateArtifactSheet: View {
         Picker("Used in", selection: Binding(get: { subKind.isEmpty ? defaultSubKind : subKind }, set: { subKind = $0 })) {
           Text("Pages").tag("site")
           Text("Emails").tag("email")
+        }
+        if (subKind.isEmpty ? defaultSubKind : subKind) == "email" {
+          Picker("Start with", selection: $starter) {
+            Text("Header — your logo and company name").tag("header")
+            Text("Footer — your address, and why people get your emails").tag("footer")
+            Text("Blank — start with nothing").tag("blank")
+          }
+          Text("Change anything you like after.").font(AglynFont.caption).foregroundStyle(.secondary)
         }
       case .template:
         Picker("Kind", selection: Binding(get: { subKind.isEmpty ? defaultSubKind : subKind }, set: { subKind = $0 })) {

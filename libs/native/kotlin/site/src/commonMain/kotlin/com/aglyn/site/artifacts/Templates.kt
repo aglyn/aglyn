@@ -24,8 +24,11 @@ import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.FilterOp
 import com.aglyn.core.field
 import com.aglyn.core.jsonValue
+import com.aglyn.core.plainJson
 import com.aglyn.core.newDocumentId
 import com.aglyn.site.pages.PagesApi
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 /*
  * Starting a page, component or layout from a template, and saving one as a
@@ -300,6 +303,35 @@ class TemplatesApi(
     val slug = (reader.get("hosts/$hostId")?.data?.get("screens") as? Map<*, *>)?.get(screenId) as? String
     return TemplateSource("page", nodes, slug = slug, seo = (screen?.data?.get("seo") as? Map<*, *>)?.takeIf { it.isNotEmpty() } as? Map<String, Any?>)
   }
+}
+
+/**
+ * A nested tree (an element preset's data) as a definition: a node map keyed
+ * by fresh ids with each node's `parentId`, and the root's id (`nestedToDefinition`).
+ */
+@Suppress("UNCHECKED_CAST")
+fun nestedToDefinition(nested: Map<String, Any?>, createId: () -> String): Pair<String, Map<String, Any?>> {
+  val nodes = LinkedHashMap<String, Any?>()
+  fun visit(node: Map<String, Any?>, parentId: String?): String {
+    val id = createId()
+    val entry = LinkedHashMap<String, Any?>()
+    for ((key, value) in node) if (key != "\$id" && key != "nodes") entry[key] = value
+    entry["\$id"] = id
+    entry["parentId"] = parentId
+    nodes[id] = entry
+    val children = node["nodes"] as? List<*>
+    if (!children.isNullOrEmpty()) entry["nodes"] = children.map { visit(it as Map<String, Any?>, id) }
+    return id
+  }
+  return visit(nested, null) to nodes
+}
+
+/** The Header or Footer an email block can start from, as a definition with fresh ids; null for Blank or a name it does not know. */
+@Suppress("UNCHECKED_CAST")
+fun emailBlockStarter(starter: String?, createId: () -> String = ::newDocumentId): Pair<String, Map<String, Any?>>? {
+  if (starter != "header" && starter != "footer") return null
+  val tree = plainJson(Json.parseToJsonElement(Contracts.emailBlockStarterTreesJson).jsonObject[starter]) as? Map<String, Any?> ?: return null
+  return nestedToDefinition(tree, createId)
 }
 
 /** What a page address field says about its value: the refusal, or the address it would get. */

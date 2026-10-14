@@ -319,20 +319,25 @@ class ArtifactsApi(private val api: ConsoleApiClient, private val writer: Firest
    * first version with the slot; a template is born through the route, never
    * a client create.
    */
-  suspend fun create(name: String, description: String, subKind: String?): String {
+  suspend fun create(name: String, description: String, subKind: String?, starter: String? = null): String {
     val id = newDocumentId()
     val base = buildMap<String, Any?> {
       put("displayName", name.trim())
       put("description", description.trim())
     }
     when (kind) {
-      ArtifactKind.COMPONENT -> resources(
-        mapOf(
-          "resource" to kind.createResource,
-          "id" to id,
-          "data" to base + mapOf("rootId" to CANVAS_ROOT, "nodes" to blankCanvas()) + (if (subKind == "email") mapOf("kind" to "email") else emptyMap()),
-        ),
-      )
+      ArtifactKind.COMPONENT -> {
+        // An email block can start as the Header or Footer band the email plugin drops into an email, one tree wherever it starts.
+        val started = if (subKind == "email") emailBlockStarter(starter) else null
+        resources(
+          mapOf(
+            "resource" to kind.createResource,
+            "id" to id,
+            "data" to base + (if (started != null) mapOf("rootId" to started.first, "nodes" to started.second) else mapOf("rootId" to CANVAS_ROOT, "nodes" to blankCanvas())) +
+              (if (subKind == "email") mapOf("kind" to "email") else emptyMap()),
+          ),
+        )
+      }
       ArtifactKind.LAYOUT -> {
         val versionId = newDocumentId()
         resources(mapOf("resource" to kind.createResource, "id" to id, "data" to base + mapOf("versionId" to versionId)))

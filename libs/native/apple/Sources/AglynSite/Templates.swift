@@ -293,6 +293,33 @@ public struct TemplatesAPI: @unchecked Sendable {
   }
 }
 
+/// A nested tree (an element preset's data) as a definition: a node map keyed
+/// by fresh ids with each node's `parentId`, and the root's id (`nestedToDefinition`).
+public func nestedToDefinition(_ nested: [String: Any], createID: () -> String) -> (rootID: String, nodes: [String: Any]) {
+  var nodes: [String: Any] = [:]
+  func visit(_ node: [String: Any], parentID: String?) -> String {
+    let id = createID()
+    var entry = node.filter { $0.key != "$id" && $0.key != "nodes" }
+    entry["$id"] = id
+    entry["parentId"] = parentID ?? NSNull()
+    if let children = node["nodes"] as? [[String: Any]], !children.isEmpty {
+      entry["nodes"] = children.map { visit($0, parentID: id) }
+    }
+    nodes[id] = entry
+    return id
+  }
+  return (visit(nested, parentID: nil), nodes)
+}
+
+/// The Header or Footer an email block can start from, as a definition with fresh ids; nil for Blank or a name it does not know.
+public func emailBlockStarter(_ starter: String?, createID: () -> String = newDocumentID) -> (rootID: String, nodes: [String: Any])? {
+  guard let starter, starter == "header" || starter == "footer",
+    let trees = try? JSONSerialization.jsonObject(with: Data(ContractValues.shared.emailBlockStarterTreesJson.utf8)) as? [String: Any],
+    let tree = trees[starter] as? [String: Any]
+  else { return nil }
+  return nestedToDefinition(tree, createID: createID)
+}
+
 /// What a page address field says about its value: the refusal, or nil when it can have the address.
 public func pageAddressProblem(slug: String, name: String) -> String? {
   if screenSlugHasPathSeparator(slug) { return ContractValues.shared.screenSlugPathSeparatorMessage }

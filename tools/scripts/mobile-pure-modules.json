@@ -38,6 +38,10 @@
       "why": "Reached by reusable-component-keys: animation prop names."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/email-block-starters.ts",
+      "why": "The Header and Footer bands an email block starts from, as plain data: the email plugin registers them as presets and the native apps start a component from the same trees (AGL-3668). No imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts",
       "why": "A collection's entry list declaration, filter fields and statuses; the native content screens plan the same Firestore query (AGL-3668)."
     },

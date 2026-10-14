@@ -458,10 +458,11 @@ private fun ArtifactDialogs(
       var name by remember { mutableStateOf("") }
       var description by remember { mutableStateOf("") }
       var subKind by remember { mutableStateOf<String?>(if (kind == ArtifactKind.COMPONENT) "site" else if (kind == ArtifactKind.TEMPLATE) "page" else null) }
+      var starter by remember { mutableStateOf("header") }
       ActionDialog(
         title = "New ${kind.singular}",
         body = when (kind) {
-          ArtifactKind.COMPONENT -> "It starts blank; design it in the Besigner."
+          ArtifactKind.COMPONENT -> "Design it in the Besigner. A block for emails can start as a Header or a Footer."
           ArtifactKind.LAYOUT -> "It starts with the slot pages appear in; design the rest in the Besigner."
           ArtifactKind.TEMPLATE -> "It starts blank; design it in the Besigner, then start new pages from it."
         },
@@ -472,13 +473,24 @@ private fun ArtifactDialogs(
         error = runner.error,
         onDismiss = close,
         onConfirm = {
-          runner.run("${name.trim()} was created.", onDone = close) { onCreated(api.create(name, description, subKind)) }
+          runner.run("${name.trim()} was created.", onDone = close) { onCreated(api.create(name, description, subKind, starter)) }
         },
       ) {
         OutlinedTextField(name, { name = it.take(ARTIFACT_NAME_MAX) }, label = { Text("Name") }, singleLine = true, supportingText = { Text("${name.length}/$ARTIFACT_NAME_MAX") }, modifier = Modifier.fillMaxWidth().testTag("artifact-name"))
         OutlinedTextField(description, { description = it.take(ARTIFACT_DESCRIPTION_MAX) }, label = { Text("Description (optional)") }, supportingText = { Text("${description.length}/$ARTIFACT_DESCRIPTION_MAX") }, modifier = Modifier.fillMaxWidth())
         when (kind) {
-          ArtifactKind.COMPONENT -> SelectField("Used in", listOf(SelectOption("site", "Pages"), SelectOption("email", "Emails")), subKind, { subKind = it ?: "site" })
+          ArtifactKind.COMPONENT -> {
+            SelectField("Used in", listOf(SelectOption("site", "Pages"), SelectOption("email", "Emails")), subKind, { subKind = it ?: "site" })
+            if (subKind == "email") {
+              SelectField(
+                "Start with",
+                listOf(SelectOption("header", "Header — your logo and company name"), SelectOption("footer", "Footer — your address, and why people get your emails"), SelectOption("blank", "Blank — start with nothing")),
+                starter,
+                { starter = it ?: "header" },
+                supporting = "Change anything you like after.",
+              )
+            }
+          }
           ArtifactKind.TEMPLATE -> SelectField("Kind", com.aglyn.contracts.Contracts.templateKindOptions.map { SelectOption(it.value, it.label) }, subKind, { subKind = it ?: "page" })
           ArtifactKind.LAYOUT -> Unit
         }
