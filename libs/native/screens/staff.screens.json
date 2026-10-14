@@ -2615,42 +2615,6 @@
               },
               "success": "Withdrawn",
               "reload": true
-            },
-            {
-              "id": "reviewMove",
-              "label": "Review moving this site",
-              "icon": "doc.text.magnifyingglass|fact_check",
-              "when": "staff.super",
-              "method": "GET",
-              "url": "/api/admin/site-transfer?hostId={params.hostId}&toOrgId={form.toOrgId}&overrideSiteLimit={form.override}",
-              "prompt": [
-                {
-                  "key": "toOrgId",
-                  "label": "Destination workspace ID",
-                  "kind": "text",
-                  "required": true
-                },
-                {
-                  "key": "override",
-                  "label": "Place it past the destination's site limit",
-                  "kind": "toggle"
-                }
-              ],
-              "success": "{response.plan.siteName|params.hostId} moves from {response.plan.fromOrgName|response.plan.fromOrgId|'no workspace'} to {response.plan.toOrgName|response.plan.toOrgId}. Its pages, forms, members and orders go with it; its access list becomes the new workspace's roster.",
-              "report": [
-                {
-                  "each": "response.plan.holds",
-                  "text": "Held: {item.message}"
-                },
-                {
-                  "each": "response.plan.warnings",
-                  "text": "Note: {item}"
-                },
-                {
-                  "text": "Nothing holds it. Move it with \"Move to another workspace\".",
-                  "when": "!response.plan.holds.0"
-                }
-              ]
             }
           ]
         },
@@ -2947,31 +2911,14 @@
               "id": "transfer",
               "label": "Move to another workspace",
               "icon": "arrow.left.arrow.right|swap_horiz",
-              "destructive": true,
               "when": "staff.super",
-              "url": "/api/admin/site-transfer",
-              "prompt": [
-                {
-                  "key": "toOrgId",
-                  "label": "Destination workspace ID",
-                  "kind": "text",
-                  "required": true
-                },
-                {
-                  "key": "override",
-                  "label": "Allow over the destination's site limit",
-                  "kind": "toggle"
+              "navigate": {
+                "screen": "core.staff.siteMove",
+                "params": {
+                  "hostId": "{params.hostId}",
+                  "orgId": "{data.site.sites.0.orgId}"
                 }
-              ],
-              "reason": true,
-              "confirm": "The site, its pages, media and entries move with it.",
-              "body": {
-                "hostId": "{params.hostId}",
-                "toOrgId": "{form.toOrgId}",
-                "overrideSiteLimit": "{form.override}",
-                "reason": "{form.reason}"
-              },
-              "success": "Moved"
+              }
             },
             {
               "id": "lock",
@@ -3120,6 +3067,156 @@
           ]
         }
       }
+    },
+    {
+      "id": "core.staff.siteMove",
+      "title": "Move this site",
+      "label": "Move this site",
+      "icon": "arrow.left.arrow.right|swap_horiz",
+      "scope": "staff",
+      "requires": "staff.super",
+      "load": {
+        "orgs": {
+          "url": "/api/admin/orgs?pageSize=50&sort=createdAt:desc",
+          "cursor": "nextCursor",
+          "items": "orgs"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Move this site to workspace",
+          "load": "orgs",
+          "search": true,
+          "items": "data.orgs.orgs",
+          "footer": "Search a workspace by name or address, or use a workspace ID from the toolbar. Review first: it shows what moves, what stays with the old workspace and what refuses. The site’s workspace is {params.orgId|'unknown'}.",
+          "primary": "{item.name|item.$id}",
+          "secondary": "{item.slug} · {item.readsAs:title}",
+          "tertiary": "{item.$id}",
+          "icon": "building.2|business",
+          "actions": [
+            {
+              "id": "review",
+              "label": "Review moving the site here",
+              "icon": "doc.text.magnifyingglass|fact_check",
+              "method": "GET",
+              "url": "/api/admin/site-transfer?hostId={params.hostId}&toOrgId={item.$id}&overrideSiteLimit={form.override}",
+              "prompt": [
+                {
+                  "key": "override",
+                  "label": "Place it past the destination's site limit",
+                  "kind": "toggle"
+                }
+              ],
+              "success": "{response.plan.siteName|params.hostId} moves from {response.plan.fromOrgName|response.plan.fromOrgId|'no workspace'} to {response.plan.toOrgName|response.plan.toOrgId}. Its pages, forms, members and orders go with it; its access list becomes the new workspace's roster.",
+              "report": [
+                {
+                  "each": "response.plan.holds",
+                  "text": "Held: {item.message}"
+                },
+                {
+                  "each": "response.plan.warnings",
+                  "text": "Note: {item}"
+                },
+                {
+                  "text": "Nothing holds it. Move it with \"Move to another workspace\".",
+                  "when": "!response.plan.holds.0"
+                }
+              ]
+            },
+            {
+              "id": "move",
+              "label": "Move the site here",
+              "icon": "arrow.left.arrow.right|swap_horiz",
+              "destructive": true,
+              "url": "/api/admin/site-transfer",
+              "prompt": [
+                {
+                  "key": "override",
+                  "label": "Allow over the destination's site limit",
+                  "kind": "toggle"
+                }
+              ],
+              "reason": true,
+              "confirm": "The site, its pages, media and entries move with it.",
+              "body": {
+                "hostId": "{params.hostId}",
+                "toOrgId": "{item.$id}",
+                "overrideSiteLimit": "{form.override}",
+                "reason": "{form.reason}"
+              },
+              "success": "Moved"
+            }
+          ],
+          "empty": "No workspaces match."
+        }
+      ],
+      "actions": [
+        {
+          "id": "reviewById",
+          "label": "Review moving to a workspace ID",
+          "icon": "doc.text.magnifyingglass|fact_check",
+          "method": "GET",
+          "url": "/api/admin/site-transfer?hostId={params.hostId}&toOrgId={form.toOrgId}&overrideSiteLimit={form.override}",
+          "prompt": [
+            {
+              "key": "toOrgId",
+              "label": "Destination workspace ID",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "override",
+              "label": "Place it past the destination's site limit",
+              "kind": "toggle"
+            }
+          ],
+          "success": "{response.plan.siteName|params.hostId} moves from {response.plan.fromOrgName|response.plan.fromOrgId|'no workspace'} to {response.plan.toOrgName|response.plan.toOrgId}. Its pages, forms, members and orders go with it; its access list becomes the new workspace's roster.",
+          "report": [
+            {
+              "each": "response.plan.holds",
+              "text": "Held: {item.message}"
+            },
+            {
+              "each": "response.plan.warnings",
+              "text": "Note: {item}"
+            },
+            {
+              "text": "Nothing holds it. Move it with \"Move to another workspace\".",
+              "when": "!response.plan.holds.0"
+            }
+          ]
+        },
+        {
+          "id": "moveById",
+          "label": "Move to a workspace ID",
+          "icon": "arrow.left.arrow.right|swap_horiz",
+          "destructive": true,
+          "url": "/api/admin/site-transfer",
+          "prompt": [
+            {
+              "key": "toOrgId",
+              "label": "Destination workspace ID",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "override",
+              "label": "Allow over the destination's site limit",
+              "kind": "toggle"
+            }
+          ],
+          "reason": true,
+          "confirm": "The site, its pages, media and entries move with it.",
+          "body": {
+            "hostId": "{params.hostId}",
+            "toOrgId": "{form.toOrgId}",
+            "overrideSiteLimit": "{form.override}",
+            "reason": "{form.reason}"
+          },
+          "success": "Moved"
+        }
+      ]
     },
     {
       "id": "core.staff.users",
