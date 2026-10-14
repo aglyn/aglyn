@@ -600,8 +600,9 @@ private fun ListBlock(
 ) {
   val scope = rememberCoroutineScope()
   val found = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
-  val rows = (block.string("flatten")?.let { ScreenValues.flatten(found, it) } ?: found)
+  val unsorted = (block.string("flatten")?.let { ScreenValues.flatten(found, it) } ?: found)
     .filter { ScreenValues.condition(block.string("filter"), ScreenContext.withItem(context, it)) }
+  val rows = block.string("sort")?.let { ScreenValues.sorted(unsorted, it) } ?: unsorted
   val loadKey = block.string("load")
   SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {
     Column(Modifier.fillMaxWidth()) {

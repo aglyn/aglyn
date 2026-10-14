@@ -317,6 +317,17 @@ class ScreenSpecTest {
     assertNull(FieldSpec.parse(Json.parseToJsonElement("""{"key":"name"}"""))!!.generatedValue(JsonObject(emptyMap())))
   }
 
+  /** A list can be ordered by a field of its rows: numbers as numbers, anything else as text, rows without it last. */
+  @Test
+  fun sortOrdersByAFieldWithNumbersAsNumbersAndKeepsTiesInOrder() {
+    val rows = (Json.parseToJsonElement("""[{"key":"a","value":9},{"key":"b","value":10},{"key":"c"},{"key":"d","value":10},{"key":"E","value":2}]""") as JsonArray).toList()
+    fun keys(sort: String) = ScreenValues.sorted(rows, sort).map { ScreenValues.text(it.obj("key")) }
+    assertEquals(listOf("b", "d", "a", "E", "c"), keys("value desc"))
+    assertEquals(listOf("E", "a", "b", "d", "c"), keys("value"))
+    assertEquals(listOf("a", "b", "c", "d", "E"), keys("key"))
+    assertEquals(listOf("a", "b", "c", "d", "E"), keys(""))
+  }
+
   /** A list can walk down into the lists inside its rows; each row found knows the row it came from. */
   @Test
   fun flattenWalksDownAndKeepsTheParent() {

@@ -122,8 +122,9 @@ struct ListBlock: View {
 
   var body: some View {
     let found = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
-    let rows = (block["flatten"]?.stringValue.map { ScreenValues.flatten(found, through: $0) } ?? found)
+    let unsorted = (block["flatten"]?.stringValue.map { ScreenValues.flatten(found, through: $0) } ?? found)
       .filter { ScreenValues.condition(block["filter"]?.stringValue, in: ScreenContext.with(context, item: $0)) }
+    let rows = block["sort"]?.stringValue.map { ScreenValues.sorted(unsorted, by: $0) } ?? unsorted
     let loadKey = block["load"]?.stringValue
     Section {
       if rows.isEmpty {

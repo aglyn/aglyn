@@ -283,6 +283,16 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertNil(FieldSpec(["key": "name"])?.generatedValue(in: [:]))
   }
 
+  /// A list can be ordered by a field of its rows: numbers as numbers, anything else as text, rows without it last.
+  func testSortOrdersByAFieldWithNumbersAsNumbersAndKeepsTiesInOrder() {
+    let rows: [JSONValue] = [["key": "a", "value": 9], ["key": "b", "value": 10], ["key": "c"], ["key": "d", "value": 10], ["key": "E", "value": 2]]
+    func keys(_ sort: String) -> [String] { ScreenValues.sorted(rows, by: sort).map { ScreenValues.text($0["key"]) } }
+    XCTAssertEqual(keys("value desc"), ["b", "d", "a", "E", "c"])
+    XCTAssertEqual(keys("value"), ["E", "a", "b", "d", "c"])
+    XCTAssertEqual(keys("key"), ["a", "b", "c", "d", "E"])
+    XCTAssertEqual(keys(""), ["a", "b", "c", "d", "E"])
+  }
+
   /// A list can walk down into the lists inside its rows; each row found knows the row it came from.
   func testFlattenWalksDownAndKeepsTheParent() {
     let sources: [JSONValue] = [

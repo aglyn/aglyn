@@ -115,6 +115,7 @@ import {
   DENY_FILTER_OPTIONS,
   type DenyListRow,
   LISTED_KIND_LABEL,
+  QUARANTINE_KEY_REACH as KEY_REACH,
   ROW_STATE_LABEL,
 } from '../../../../utils/media-quarantine-list-query'
 
@@ -172,13 +173,6 @@ const DENY_LIST_PARAMS = { view: 'list' } as const
 const DENY_HIDDEN_COLUMNS = { state: false, kind: false }
 
 /** What a key of each kind actually reaches, in the operator's words. */
-const KEY_REACH: Record<AssetKey['kind'], string> = {
-  sha256:
-    'the full sha256 of the bytes — covers EVERY copy of this file, in every workspace',
-  legacy:
-    'the legacy 64-bit digest — same reach, weaker key, and the only one some files have',
-  asset: 'this one document in this one workspace',
-}
 
 function AdminMediaQuarantine() {
   const { data: user } = useUser()

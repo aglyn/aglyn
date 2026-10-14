@@ -206,6 +206,10 @@
       "expect": "h1: editor, h2: viewer|x, y"
     },
     {
+      "template": "{data.msA:shareOf/data.msB}|{data.msB:shareOf/data.msA}|{data.msA:shareOf/data.nothing}",
+      "expect": "4%|2400%|0%"
+    },
+    {
       "template": "{data.jur:before/-}|{data.jur:after/-}|{data.plain:before/-}|{data.plain:after/-}",
       "expect": "US|TX|US|"
     },

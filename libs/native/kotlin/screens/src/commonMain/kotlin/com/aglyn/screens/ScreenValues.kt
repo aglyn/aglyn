@@ -57,6 +57,34 @@ object ScreenValues {
   }
 
   /**
+   * Rows in the order a list's `sort` asks for: `"value desc"` or `"name"` (ascending), a field of each row (`item.` is not
+   * written). Numbers compare as numbers and anything else as text; a row without the field goes last.
+   */
+  fun sorted(rows: List<JsonElement>, sort: String): List<JsonElement> {
+    val words = sort.split(' ').filter { it.isNotEmpty() }
+    val field = words.firstOrNull() ?: return rows
+    val descending = words.getOrNull(1) == "desc"
+    fun present(row: JsonElement) = lookup(field, row).let { it != null && it != JsonNull }
+    val comparator = Comparator<JsonElement> { a, b ->
+      when {
+        !present(a) && !present(b) -> 0
+        !present(a) -> 1
+        !present(b) -> -1
+        else -> {
+          val left = lookup(field, a)
+          val right = lookup(field, b)
+          val x = number(left)
+          val y = number(right)
+          val order = if (x != null && y != null) x.compareTo(y) else text(left).compareTo(text(right), ignoreCase = true)
+          if (descending) -order else order
+        }
+      }
+    }
+    // `sortedWith` is stable: equal rows keep the order they came in.
+    return rows.sortedWith(comparator)
+  }
+
+  /**
    * The rows one or more levels down: each segment of [path] names the list (or map) inside every row so far,
    * and each row found carries `$parent`, the row it came out of (and so on up: `item.$parent.$parent`).
    */
@@ -501,6 +529,12 @@ object ScreenValues {
       "facts" -> facts(value)
       "pairs" -> pairs(value)
       // `before/-` and `after/-`: the text either side of the first separator (a jurisdiction key `US-TX`); no separator, no tail.
+      // `shareOf/<path>`: the value as a whole percent of the number at <path> ("40%"; "0%" when there is nothing to share).
+      "shareOf" -> {
+        val total = parts.getOrNull(1)?.let { number(lookup(it, context)) } ?: 0.0
+        val part = number(value)
+        if (total > 0 && part != null) "${floor(part / total * 100 + 0.5).toLong()}%" else "0%"
+      }
       "before", "after" -> {
         val whole = text(value)
         val separator = parts.getOrNull(1) ?: "-"

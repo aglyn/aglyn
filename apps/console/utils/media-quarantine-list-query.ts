@@ -105,6 +105,15 @@ export const LISTED_KIND_LABEL: Record<ListedKeyKind, string> = {
 }
 
 /** How each row state reads, on its chip and in the filter. */
+/** What each kind of key reaches, as the disabled-files page words it (the apps print the same). */
+export const QUARANTINE_KEY_REACH: Record<'sha256' | 'legacy' | 'asset', string> = {
+  sha256:
+    'the full sha256 of the bytes — covers EVERY copy of this file, in every workspace',
+  legacy:
+    'the legacy 64-bit digest — same reach, weaker key, and the only one some files have',
+  asset: 'this one document in this one workspace',
+}
+
 export const ROW_STATE_LABEL: Record<DenyRowState, string> = {
   active: 'enforcing',
   expired: 'EXPIRED',

@@ -68,6 +68,9 @@ export async function staffSources() {
   const passwordPolicy = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/password-policy.ts'))
   const passwordGenerator = await jiti.import(join(ROOT, 'apps/console/utils/password-generator.ts'))
   const taxFiling = await jiti.import(join(ROOT, 'apps/console/utils/tax-filing-config.ts'))
+  const quarantine = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-quarantine.ts'))
+  const takedown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-takedown-reach.ts'))
+  const denyList = await jiti.import(join(ROOT, 'apps/console/utils/media-quarantine-list-query.ts'))
   const organizations = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/organizations.ts'))
   const overrideReasons = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/org-override-reason.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
@@ -77,6 +80,17 @@ export async function staffSources() {
   const statuses = await model('plugin-review-status')
   const attestation = await model('publisher-attestation')
   return {
+    quarantine: {
+      reasons: quarantine.MEDIA_QUARANTINE_REASONS.map((value) => ({ value, label: quarantine.MEDIA_QUARANTINE_REASON_LABELS[value] })),
+      reasonLabels: quarantine.MEDIA_QUARANTINE_REASON_LABELS,
+      messageMax: quarantine.MEDIA_QUARANTINE_MESSAGE_MAX,
+      noteMax: quarantine.MEDIA_QUARANTINE_NOTE_MAX,
+      // What disabling a file will and will not do, as the page words it from the headers the CDN actually sends.
+      reach: { lines: takedown.mediaTakedownReachLines(), unreachable: takedown.mediaTakedownUnreachableLine() },
+      keyReach: denyList.QUARANTINE_KEY_REACH,
+      kinds: denyList.LISTED_KIND_LABEL,
+      states: denyList.ROW_STATE_LABEL,
+    },
     settings: { taxSources: taxFiling.TAX_FILING_SOURCE_LABEL },
     user: {
       identitySources: identity.IDENTITY_SOURCE_LABEL,
@@ -483,6 +497,7 @@ replace('core.staff.site', (screen) => ({
       : {}),
   })),
 }))
+replace('core.staff.quarantine', (screen) => ({ ...screen, constants: sources.quarantine }))
 replace('core.staff.user', (screen) => ({ ...screen, constants: sources.user }))
 replace('core.staff.settings', (screen) => ({ ...screen, constants: sources.settings }))
 replace('core.staff.maintenance', () => maintenanceScreen(sources.jobs, sources.reasonMin))

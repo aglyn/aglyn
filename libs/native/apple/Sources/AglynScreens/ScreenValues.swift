@@ -55,6 +55,30 @@ public enum ScreenValues {
     }
   }
 
+  /// Rows in the order a list's `sort` asks for: `"value desc"` or `"name"` (ascending), a field of each row (`item.` is
+  /// not written). Numbers compare as numbers and anything else as text; a row without the field goes last.
+  public static func sorted(_ rows: [JSONValue], by sort: String) -> [JSONValue] {
+    let words = sort.split(separator: " ").map(String.init)
+    guard let field = words.first else { return rows }
+    let descending = words.dropFirst().first == "desc"
+    func ordered(_ a: JSONValue, _ b: JSONValue) -> Bool {
+      let left = lookup(field, in: a)
+      let right = lookup(field, in: b)
+      if left == nil || left == .null { return false }
+      if right == nil || right == .null { return true }
+      if let x = number(left), let y = number(right) { return descending ? x > y : x < y }
+      let x = text(left)
+      let y = text(right)
+      return descending ? x.localizedCaseInsensitiveCompare(y) == .orderedDescending : x.localizedCaseInsensitiveCompare(y) == .orderedAscending
+    }
+    // Stable: equal rows keep the order they came in.
+    return rows.enumerated().sorted { a, b in
+      if ordered(a.element, b.element) { return true }
+      if ordered(b.element, a.element) { return false }
+      return a.offset < b.offset
+    }.map(\.element)
+  }
+
   /// The rows one or more levels down: each segment of `path` names the list (or map) inside every row so far,
   /// and each row found carries `$parent`, the row it came out of (and so on up: `item.$parent.$parent`).
   public static func flatten(_ rows: [JSONValue], through path: String) -> [JSONValue] {
@@ -559,6 +583,11 @@ public enum ScreenValues {
       return facts(value)
     case "pairs":
       return pairs(value)
+    case "shareOf":
+      // `shareOf/<path>`: the value as a whole percent of the number at <path> ("40%"; "0%" when there is nothing to share).
+      let total = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
+      guard total > 0, let part = number(value) else { return "0%" }
+      return "\(Int((part / total * 100).rounded()))%"
     case "before", "after":
       // `before/-` and `after/-`: the text either side of the first separator (a jurisdiction key `US-TX`); no separator, no tail.
       let whole = text(value)
