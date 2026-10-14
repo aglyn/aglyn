@@ -4895,7 +4895,9 @@ export const AI_FREE_PAGE_WORST_CASE_CREDITS: Readonly<AiFreePageWorstCase> = {
   layout: 64,
   firstSection: 44,
   laterSection: 20,
-  listing: 3,
+  // A page's listing, on the fast tier at the platform's markup since
+  // AGL-3781 (3 credits at Claude Haiku 4.5's cost before).
+  listing: 1,
 }
 
 /**

@@ -12,7 +12,7 @@ final class PostPurchasePluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["post-purchase.service"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["post-purchase.order", "post-purchase.service"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "post-purchase", contributes: declared, register: registerPostPurchaseNative)], into: registry)
     XCTAssertEqual(result.failed, [])

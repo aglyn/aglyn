@@ -198,6 +198,23 @@ export const FLAG_DOC_PAGES: Partial<
   // AGL-1601 was found. `ai-allotments.md` is deliberately NOT here: an
   // allotment is a share of the AI credit pool, and that pool is spent by the
   // released assistant whether or not generation is open.
+  // AGL-3780. The operator's own marketing, so no customer page is about it;
+  // the one page that names it is the self-host environment reference, an
+  // aggregate page, which discloses beside the job that it sends nothing
+  // until the flag is on. What a customer is owed is the Privacy Policy,
+  // which is why the flag stays off until that is published.
+  release_ad_audience_sync: [
+    {
+      path: 'docs/developers/self-hosting-environment.md',
+      disclosure: [
+        /### Account-holder ad audiences[\s\S]{0,1600}\*\*It sends nothing until the `release_ad_audience_sync` release flag is on\*\*,\s+and it is off by default\./,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The self-host environment reference documents every variable the product reads, priced features among them, so a whole-file price check there would fail forever.',
+    },
+  ],
+
   release_ai_generative: [
     {
       path: 'docs/ai/overview.md',

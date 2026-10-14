@@ -69,15 +69,33 @@ describe('decideLeaseClaim', () => {
   const self = client('self', false)
   const holder = client('holder', false)
 
-  it('claims a lease a hidden multi-tab holder renewed moments ago', () => {
+  it('never takes a lease a hidden holder renewed moments ago — two tabs would run as primary (AGL-3788)', () => {
     expect(
       decideLeaseClaim({
         owner: lease('holder'),
         holder,
         self,
         pendingWrites: 0,
+        now: NOW,
       }),
-    ).toEqual({ claim: true })
+    ).toEqual({ claim: false, reason: 'holder-live' })
+  })
+
+  it('treats the lease as live up to the SDK lifetime, and a future timestamp as live', () => {
+    const decide = (ageMs: number) =>
+      decideLeaseClaim({
+        owner: lease('holder', ageMs),
+        holder,
+        self,
+        pendingWrites: 0,
+        now: NOW,
+      })
+    expect(decide(PRIMARY_LEASE_MAX_AGE_MS - 1)).toEqual({
+      claim: false,
+      reason: 'holder-live',
+    })
+    expect(decide(-2_000)).toEqual({ claim: false, reason: 'holder-live' })
+    expect(decide(PRIMARY_LEASE_MAX_AGE_MS)).toEqual({ claim: true })
   })
 
   it('claims from a hidden holder whose lease has lapsed, as the SDK would on its next tick', () => {
@@ -87,6 +105,7 @@ describe('decideLeaseClaim', () => {
         holder,
         self,
         pendingWrites: 0,
+        now: NOW,
       }),
     ).toEqual({ claim: true })
   })
@@ -106,6 +125,7 @@ describe('decideLeaseClaim', () => {
         holder,
         self,
         pendingWrites: 0,
+        now: NOW,
         ...override,
       }),
     ).toEqual({ claim: false, reason })
@@ -347,7 +367,7 @@ describe('claimPrimaryLease', () => {
 
   it('writes this tab as foreground and the lease in its name, in the SDK shapes', async () => {
     const idb = fakeIndexedDb({
-      owner: lease('holder', 1_200),
+      owner: lease('holder', PRIMARY_LEASE_MAX_AGE_MS + 1_200),
       clients: [client('holder', false), client('self', false)],
     })
     await expect(
@@ -355,7 +375,7 @@ describe('claimPrimaryLease', () => {
     ).resolves.toEqual({
       state: 'claimed',
       fromOwnerId: 'holder',
-      leaseAgeMs: 1_200,
+      leaseAgeMs: PRIMARY_LEASE_MAX_AGE_MS + 1_200,
     })
     expect(idb.stores.owner.get('owner')).toEqual({
       ownerId: 'self',
@@ -373,6 +393,23 @@ describe('claimPrimaryLease', () => {
       client('holder', false),
     )
     expect(idb.database.close).toHaveBeenCalled()
+  })
+
+  it('writes nothing for a hidden holder whose lease is live', async () => {
+    const idb = fakeIndexedDb({
+      owner: lease('holder', 311),
+      clients: [client('holder', false), client('self', false)],
+    })
+    await expect(
+      claimPrimaryLease(idb.factory, 'db', 'self', { now }),
+    ).resolves.toEqual({
+      state: 'skipped',
+      reason: 'holder-live',
+    })
+    expect(idb.stores.owner.get('owner')).toEqual(lease('holder', 311))
+    expect(idb.stores.clientMetadata.get('self')).toEqual(
+      client('self', false),
+    )
   })
 
   it('writes nothing for a visible holder', async () => {

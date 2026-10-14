@@ -210,7 +210,7 @@ describe('BookingsConsolePage (AGL-1358)', () => {
  *
  * What IS unambiguous is that the merchant was never told. A service business
  * is one of the three named ICPs; a merchant who configured a rate in
- * Commerce → Settings → Taxes has every reason to assume it covers the
+ * Products → Taxes has every reason to assume it covers the
  * appointments they sell on the same site, and nothing on this screen said
  * otherwise. The decision was recorded in the source and in the tax ledger —
  * both places the merchant cannot see — while the surface where they type the

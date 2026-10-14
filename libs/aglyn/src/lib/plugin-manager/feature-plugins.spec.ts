@@ -543,6 +543,57 @@ describe('resolveConsolePluginPage sections', () => {
     expect(resolveConsolePluginPage('/products/settings')).toBeUndefined()
   })
 
+  /*
+   * A retired section id (AGL-3713) answers as the section that replaced it,
+   * flagged legacy so the shell replaces the address — a kept link to a
+   * split page opens its successor rather than the shell's 404.
+   */
+  describe('retiredSections', () => {
+    function registerRetired(retiredSections: Readonly<Record<string, string>>) {
+      registerConsoleExtension({
+        pluginId: 'commerce',
+        displayName: 'Commerce',
+        navItems: [
+          {
+            label: 'Products',
+            href: '/products',
+            Component: Products,
+            sections: [
+              { id: 'catalog', label: 'Catalog' },
+              { id: 'payments', label: 'Payments', group: 'Settings' },
+            ],
+            retiredSections,
+          },
+        ],
+      })
+    }
+
+    it('resolves a retired id as its successor, legacy, deeper segments kept', () => {
+      registerRetired({ settings: 'payments' })
+      const resolved = resolveConsolePluginPage('/products/settings')
+      expect(resolved?.navItem.Component).toBe(Products)
+      expect(resolved?.section?.id).toBe('payments')
+      expect(resolved?.legacy).toBe(true)
+      expect(resolved?.segments).toEqual(['payments'])
+      expect(resolveConsolePluginPage('/products/settings/x')?.segments).toEqual([
+        'payments',
+        'x',
+      ])
+    })
+
+    it('a declared id is served as itself, not as legacy', () => {
+      registerRetired({ settings: 'payments' })
+      const resolved = resolveConsolePluginPage('/products/payments')
+      expect(resolved?.section?.id).toBe('payments')
+      expect(resolved?.legacy).toBeFalsy()
+    })
+
+    it('a mapping to an undeclared section matches nothing', () => {
+      registerRetired({ settings: 'nowhere' })
+      expect(resolveConsolePluginPage('/products/settings')).toBeUndefined()
+    })
+  })
+
   /** A section may own deeper routes; the first segment still names it. */
   it('keeps the segments beneath a section', () => {
     registerSectioned()

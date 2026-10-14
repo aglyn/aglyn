@@ -5,24 +5,45 @@ name: Native tests
 # native tests broke three times without a red: ListQueryCasesTest's maps, the
 # 255-slot ContractValues class (AGL-3703) and duplicate kit types.
 #
-# TWO JOBS, TWO REQUIRED CHECKS
-#   `native kotlin`  ubuntu: every module's `desktopTest`, plus the Android
-#                    sources of both apps compiled (`compileDebugKotlin`).
-#   `native swift`   macOS: `swift test` for AglynKit and every plugin's
-#                    src/ios package that has Tests (found, not listed, so a
-#                    new one is picked up), `swift build` of the plugin
-#                    manifest, and `xcodebuild build` of Aglyn and AglynPOS for
-#                    macOS.
+# TWO REQUIRED CHECKS, AND A JOB THAT DECIDES FOR THEM
+#   `native changes`  ubuntu: asks `tools/scripts/native-ci-changed.mjs`
+#                     whether anything Kotlin-relevant and anything
+#                     Swift-relevant changed: a PR's own change (its test
+#                     merge against the base it was merged onto), a push's
+#                     `before`, or a dispatch's `base`. An unknown base answers
+#                     "both".
+#   `native kotlin`   ubuntu: every module's `desktopTest`, plus the Android
+#                     sources of both apps compiled (`compileDebugKotlin`).
+#   `native swift`    every Swift test target in the repository built ONCE and
+#                     run (tools/scripts/native-swift-tests.mjs, which also
+#                     compiles the generated plugin manifest in the same
+#                     graph), then `xcodebuild build` of Aglyn and AglynPOS for
+#                     macOS.
 #
-# THEY ALWAYS RUN, AND MOSTLY PASS IN SECONDS
-#   Both names are required checks on `main` and `production`, and a required
+# THEY ALWAYS REPORT, AND MOSTLY PASS IN SECONDS (AGL-3783)
+#   Both check names are required on `main` and `production`, and a required
 #   check that never reports blocks the PR forever, so there is no `paths:`
-#   filter here. Instead each job's first step asks
-#   `tools/scripts/native-ci-changed.mjs` whether anything native-relevant
-#   changed since the base (the PR's base, or `before` on a push) and the
-#   heavy steps run only when it did. A skipped step still ends the job
-#   SUCCESS, which is what auto-merge-green.yml and branch protection read.
-#   An unknown base runs everything.
+#   filter and neither job is ever skipped. When its side did not change, a job
+#   runs one echo and ends SUCCESS, which is what branch protection and
+#   auto-merge-green.yml read. `native swift` picks its runner from the answer:
+#   macOS only when something Swift changed. macOS runners are the scarce pool
+#   (five at a time on this plan), and a PR that changes nothing Swift must
+#   never wait for one. If `native changes` itself fails, both jobs still run,
+#   and run everything: its outputs are empty, and empty is not "false".
+#
+# THE SWIFT BUILD IS CACHED, FROM MAIN (AGL-3783)
+#   One cache entry holds the SwiftPM scratch path, the xcodebuild DerivedData
+#   and the compiled package manifests (1.7 GB compressed), keyed by Xcode and
+#   the runner image. A run on `main` saves it under its own sha: a push, or
+#   the dispatch auto-merge-green.yml sends after it merges (a merge made with
+#   GITHUB_TOKEN starts no push run). A PR restores main's newest, so it
+#   recompiles only what differs from that commit. A PR saves its own entry
+#   only when nothing was restored, because a PR's entry is readable by that PR
+#   alone and per-PR entries would evict main's (the repository has 10 GB of
+#   cache). For a restored build to be reusable, every tracked file is first
+#   stamped with a modification time derived from its content
+#   (`native-swift-tests.mjs mtimes`): a fresh checkout otherwise dates every
+#   file "now", and both build systems would recompile everything.
 
 on:
   pull_request:
@@ -30,19 +51,32 @@ on:
   push:
     branches: [main, production]
   workflow_dispatch:
+    inputs:
+      base:
+        description: 'Run only what changed since this commit. Empty runs everything.'
+        required: false
+        default: ''
 
 concurrency:
+  # A PR's re-push supersedes its running check. A push is never cancelled
+  # mid-run: main's run is the one that saves the warm Swift build every PR
+  # restores, and a run cancelled by the next merge (every run, at main's pace)
+  # saves nothing. GitHub keeps one pending run per group, so a burst of
+  # merges runs the newest, not each one.
   group: native-tests-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  kotlin:
-    name: native kotlin
+  changes:
+    name: native changes
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
+    outputs:
+      kotlin: ${{ steps.changed.outputs.kotlin }}
+      swift: ${{ steps.changed.outputs.swift }}
     steps:
       # Full history so the base is reachable, without blobs: the diff reads
       # trees only, and the working tree's blobs come with the checkout.
@@ -51,14 +85,40 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # A PR is checked out as GitHub's test merge, so its own change is the
+      # merge against its first parent: the base it was merged onto.
+      # `pull_request.base.sha` is not that commit. It can lag the base the
+      # merge was made on, and then the diff also carries everything merged
+      # to main in between, which sent web-only PRs to macOS whenever main had
+      # just taken a native change.
       - name: Did anything native change?
         id: changed
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node tools/scripts/native-ci-changed.mjs --base "$BASE" --head HEAD
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.before || inputs.base }}
+        run: |
+          base=$BASE
+          if [ "$EVENT" = pull_request ]; then base=$(git rev-parse --verify --quiet 'HEAD^1' || true); fi
+          node tools/scripts/native-ci-changed.mjs --base "$base" --head HEAD
+
+  kotlin:
+    name: native kotlin
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RUN: ${{ needs.changes.outputs.kotlin != 'false' }}
+    steps:
+      - name: Nothing Kotlin changed
+        if: env.RUN != 'true'
+        run: echo "No Kotlin-relevant change since the base; nothing to build."
+
+      - uses: actions/checkout@v7
+        if: env.RUN == 'true'
 
       - uses: actions/setup-java@v6
-        if: steps.changed.outputs.run == 'true'
+        if: env.RUN == 'true'
         with:
           distribution: temurin
           java-version: '21'
@@ -69,12 +129,12 @@ jobs:
       # compileDebugKotlin is the cheapest task that compiles them: no dexing,
       # no packaging. Gradle installs the SDK platform it needs.
       - name: Gradle desktopTest + Android compile
-        if: steps.changed.outputs.run == 'true'
+        if: env.RUN == 'true'
         working-directory: apps/android
         run: ./gradlew --no-daemon --continue desktopTest :app:compileDebugKotlin :pos:compileDebugKotlin
 
       - name: Test reports
-        if: failure() && steps.changed.outputs.run == 'true'
+        if: failure() && env.RUN == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: native-kotlin-test-reports
@@ -87,35 +147,32 @@ jobs:
 
   swift:
     name: native swift
-    runs-on: macos-latest
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.changes.outputs.swift != 'false' && 'macos-latest' || 'ubuntu-latest' }}
     timeout-minutes: 90
     env:
-      # One scratch path for every package: each plugin package depends on
-      # AglynKit and through it the Firebase SDK, and a shared build
-      # directory compiles that once instead of once per package.
-      SPM_SCRATCH: ${{ github.workspace }}/../spm-scratch
+      RUN: ${{ needs.changes.outputs.swift != 'false' }}
       # The Swift Build engine, which Xcode 27's SwiftPM uses by default and
       # older images' SwiftPM does not. The native engine copies a symlinked
       # resource (contracts.generated.json links to libs/native/contracts) as
       # the link itself, which dangles inside the bundle, so every test that
-      # reads the contracts traps.
+      # reads the contracts traps. It also gives each test target its own
+      # bundle and process.
       SPM_BUILD_SYSTEM: swiftbuild
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
+      - name: Nothing Swift changed
+        if: env.RUN != 'true'
+        run: echo "No Swift-relevant change since the base; nothing to build, and no macOS runner taken."
 
-      - name: Did anything native change?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node tools/scripts/native-ci-changed.mjs --base "$BASE" --head HEAD
+      - uses: actions/checkout@v7
+        if: env.RUN == 'true'
 
       # The newest Xcode on the image: the apps are developed on the current
       # release, and an older one may lack an SDK the sources use.
       - name: Select Xcode
-        if: steps.changed.outputs.run == 'true'
+        id: xcode
+        if: env.RUN == 'true'
         run: |
           set -euo pipefail
           best='' best_version=''
@@ -131,41 +188,48 @@ jobs:
           sudo xcode-select -s "$best"
           xcodebuild -version
           swift --version
+          # A build from another compiler is useless, so the cache key names it,
+          # and the runner image: a new image's SDK and toolchain files are new
+          # files, so a build from another image recompiles much of itself.
+          echo "version=$best_version-$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
 
-      - name: Swift package cache
-        if: steps.changed.outputs.run == 'true'
-        uses: actions/cache@v6
-        with:
-          path: ~/Library/Caches/org.swift.swiftpm
-          key: swiftpm-${{ runner.os }}-${{ hashFiles('libs/native/apple/Package.swift', 'apps/ios/Aglyn.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: swiftpm-${{ runner.os }}-
-
-      - name: swift test (AglynKit and every plugin package with Tests)
-        if: steps.changed.outputs.run == 'true'
+      # Content-derived modification times (see the header), and XCBuild told
+      # to compare files by them rather than by inode, which a restore changes.
+      - name: Stamp the checkout for an incremental build
+        if: env.RUN == 'true'
         run: |
-          set -euo pipefail
-          packages=$( { echo libs/native/apple; find libs/plugins -path '*/src/ios/Package.swift' -not -path '*/.build/*' | xargs -n1 dirname | sort; } )
-          failed=''
-          for pkg in $packages; do
-            [ -d "$pkg/Tests" ] || { echo "::notice::$pkg has no Tests; skipped"; continue; }
-            echo "::group::swift test $pkg"
-            if ! swift test --package-path "$pkg" --scratch-path "$SPM_SCRATCH" --build-system "$SPM_BUILD_SYSTEM"; then
-              failed="$failed $pkg"
-              echo "::error::swift test failed in $pkg"
-            fi
-            echo "::endgroup::"
-          done
-          if [ -n "$failed" ]; then
-            echo "failed:$failed"
-            exit 1
-          fi
+          defaults write com.apple.dt.XCBuild IgnoreFileSystemDeviceInodeChanges -bool YES
+          node tools/scripts/native-swift-tests.mjs mtimes
 
-      - name: swift build apps/ios/PluginManifest
-        if: steps.changed.outputs.run == 'true'
-        run: swift build --package-path apps/ios/PluginManifest --scratch-path "$SPM_SCRATCH" --build-system "$SPM_BUILD_SYSTEM"
+      # Same Xcode and image first; failing that, same Xcode on another image
+      # (during an image rollout), which still saves resolving the packages.
+      # The compiled Package.swift manifests are cached too: compiling the
+      # nineteen of them took a minute on every run without it.
+      - name: Restore the Swift build
+        id: swift-cache
+        if: env.RUN == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ runner.temp }}/spm-scratch
+            ${{ runner.temp }}/DerivedData
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ steps.xcode.outputs.image }}-${{ github.sha }}
+          restore-keys: |
+            native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ steps.xcode.outputs.image }}-
+            native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+
+      - name: swift test (every package's test targets, built once) + the plugin manifest
+        if: env.RUN == 'true'
+        run: >-
+          node tools/scripts/native-swift-tests.mjs run
+          --umbrella "$RUNNER_TEMP/swift-tests-umbrella"
+          --scratch "$RUNNER_TEMP/spm-scratch"
+          --build-system "$SPM_BUILD_SYSTEM"
 
       - name: xcodebuild Aglyn and AglynPOS (macOS)
-        if: steps.changed.outputs.run == 'true'
+        if: env.RUN == 'true'
         run: |
           set -euo pipefail
           for scheme in Aglyn AglynPOS; do
@@ -177,6 +241,30 @@ jobs:
               -derivedDataPath "$RUNNER_TEMP/DerivedData" \
               -skipPackagePluginValidation \
               CODE_SIGNING_ALLOWED=NO \
+              COMPILER_INDEX_STORE_ENABLE=NO \
               -quiet
             echo "::endgroup::"
           done
+
+      # A run on a branch saves (each under its own sha; the oldest are
+      # evicted first). A PR saves only when it restored nothing at all. The
+      # git mirrors are left out: the checkouts beside them are what a build
+      # reads.
+      - name: Trim the Swift build for the cache
+        id: save
+        if: >-
+          ${{ !cancelled() && env.RUN == 'true' && steps.swift-cache.outcome == 'success'
+          && (github.event_name != 'pull_request' || steps.swift-cache.outputs.cache-matched-key == '') }}
+        run: |
+          rm -rf "$RUNNER_TEMP/spm-scratch/repositories" "$RUNNER_TEMP/DerivedData/SourcePackages/repositories" "$RUNNER_TEMP/DerivedData/Logs"
+          du -sh "$RUNNER_TEMP/spm-scratch" "$RUNNER_TEMP/DerivedData" || true
+
+      - name: Save the Swift build
+        if: ${{ !cancelled() && steps.save.outcome == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ runner.temp }}/spm-scratch
+            ${{ runner.temp }}/DerivedData
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}

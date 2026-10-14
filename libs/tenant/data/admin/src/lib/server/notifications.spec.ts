@@ -513,6 +513,39 @@ describe('the notification email is a system email (AGL-3367)', () => {
     expect(sends[0]['text']).toContain('https://app.example.com/manage/notifications/settings')
   })
 
+  it('lists the details the caller hands it, in the email and nowhere else', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('hosts/host-1', {
+      orgId: 'org-1',
+      memberRoles: { 'uid-a': 'admin' },
+    })
+    await notifyHostManagers(
+      'host-1',
+      {
+        type: 'content.formSubmission',
+        title: 'New form submission',
+        body: 'Someone filled in Contact us.',
+      },
+      {
+        emailDetails: [
+          { label: 'Name', value: 'Jane <Doe>' },
+          { label: 'Phone', value: '   ' },
+          { label: 'Message', value: 'Two lines\nof question' },
+        ],
+      },
+    )
+    expect(sends).toHaveLength(1)
+    const html = String(sends[0]['html'])
+    // Escaped, line by line, and a blank answer is left out.
+    expect(html).toContain('Name: Jane &lt;Doe&gt;<br />Message: Two lines<br />of question')
+    expect(html).not.toContain('Phone')
+    expect(sends[0]['text']).toContain('Name: Jane <Doe>\nMessage: Two lines\nof question')
+    // The feed entry keeps to the notification itself.
+    expect(written).toHaveLength(1)
+    expect(JSON.stringify(written[0].data)).not.toContain('Jane')
+  })
+
   it('opens a stored host link on the page it names today, not the dead legacy path', async () => {
     userDocs.set('uid-a', ON)
     directory.set('uid-a', 'a@example.com')
@@ -527,6 +560,28 @@ describe('the notification email is a system email (AGL-3367)', () => {
     })
     expect(sends[0]['text']).toContain('https://app.example.com/acme/hosts/shop/inbox')
     expect(String(sends[0]['text'])).not.toContain('/host-1/inbox')
+  })
+
+  it('still links the button and the settings line where no console URL is configured', async () => {
+    // The site app, which sends every form-submission alert, sets none.
+    delete process.env.NEXT_PUBLIC_CONSOLE_URL
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('orgs/org-1', { slug: 'acme' })
+    hostDocs.set('hosts/host-1', { subdomain: 'shop' })
+    await notifyUsers(['uid-a'], {
+      type: 'content.formSubmission',
+      title: 'New form submission',
+      link: '/host-1/inbox',
+      orgId: 'org-1',
+      hostId: 'host-1',
+    })
+    const html = String(sends[0]['html'])
+    expect(html).toContain('href="https://app.aglyn.com/acme/hosts/shop/inbox"')
+    expect(html).toContain('https://app.aglyn.com/manage/notifications/settings')
+    expect(sends[0]['headers']).toEqual({
+      'List-Unsubscribe': '<https://app.aglyn.com/manage/notifications/settings>',
+    })
   })
 
   it('speaks in a white-label org’s own name to that org’s people', async () => {

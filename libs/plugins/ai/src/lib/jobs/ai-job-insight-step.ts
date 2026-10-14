@@ -34,6 +34,7 @@ import { aiHostPublishContext, aiSiteStatusTable } from '../model/ai-host-publis
 import { aiInstructionsWithSiteContext } from '../model/ai-site-context'
 import { readAiSiteContext } from '../runtime/site-context'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
   runAiRequest,
@@ -267,6 +268,8 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
       siteContext ? { ...siteContext, publish: null, contact: false } : null,
     ),
   ]
+  // A development run's effort A/B arm (AGL-3781), else the row's.
+  const effort = aiDevEffortFor('job.insight') ?? AI_ROUTING_TABLE['job.insight'].effort
   const ask = (messages: AiMessage[], tool: 'read' | 'answer', ceiling: number) =>
     runAiRequest({
       model,
@@ -275,6 +278,7 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
       tools: [tool === 'read' ? aiInsightReadTool() : aiInsightAnswerTool()],
       maxTokens: Math.max(1, Math.min(ceiling, left())),
       ...(AI_ROUTING_TABLE['job.insight'].thinking ? { thinking: AI_ROUTING_TABLE['job.insight'].thinking } : {}),
+      ...(effort ? { effort } : {}),
       stream: false,
       ...(signal ? { signal } : {}),
     })

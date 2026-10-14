@@ -252,7 +252,8 @@ describe('the retained refusals a stored-basis reader merges in are carried', ()
   it('finds the readers it is about', () => {
     expect(readers).toEqual(
       expect.arrayContaining([
-        'libs/plugins/email/src/lib/server-list-gate.ts',
+        // The list gate and the campaign send read it through this module.
+        'libs/tenant/data/admin/src/lib/server/consent-by-address.ts',
         'libs/plugins/inbox/src/lib/server.ts',
       ]),
     )

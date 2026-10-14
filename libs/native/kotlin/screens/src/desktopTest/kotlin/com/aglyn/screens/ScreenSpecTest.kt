@@ -88,10 +88,12 @@ class ScreenSpecTest {
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
     val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone")
+    // Screens a plugin draws by hand rather than from a spec, which a spec may still open.
+    val handWritten = setOf("commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.sales")
     for (spec in specs) {
       assertTrue(spec.scope in setOf("org", "site", "account", "staff"), "${spec.id}: scope ${spec.scope}")
       for (block in spec.blocks) assertTrue(block.type in known, "${spec.id}: block ${block.type}")
-      for (target in targets(spec.raw)) assertTrue(target in ids, "${spec.id} opens $target, which no spec declares")
+      for (target in targets(spec.raw)) assertTrue(target in ids || target in handWritten, "${spec.id} opens $target, which no spec declares")
       for (icon in icons(spec.raw)) assertTrue(AglynIcons.has(icon), "${spec.id}: Material icon \"$icon\" is not in AglynIcons")
     }
   }
@@ -191,6 +193,46 @@ class ScreenSpecTest {
     assertEquals("yes", sent[0].headers["X-Staff"])
     model.run(action, first)
     assertEquals(keys[0], sent.last().headers["Idempotency-Key"])
+  }
+
+  /** `{press}` is one key per tap: its own retry shares it, and a second tap of the very same request gets another. */
+  @Test
+  fun aPressKeyIsNewForEachTapAndSharedByItsRetries() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(503 to "{}", 200 to "{}", 200 to "{}", sent = sent)
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!
+    val form = Json.parseToJsonElement("""{"form":{"points":"50"}}""")
+    val model = ScreenModel(spec, form, api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Adjust","url":"/api/loyalty/member","body":{"points":"{form.points}"},
+           "headers":{"Idempotency-Key":"{press}"}}""",
+      ),
+    )!!
+    model.run(action, form)
+    model.run(action, form)
+    val keys = sent.map { it.headers["Idempotency-Key"] }
+    assertEquals(3, keys.size)
+    assertNotNull(keys[0])
+    assertEquals(keys[0], keys[1])
+    assertNotEquals(keys[1], keys[2])
+  }
+
+  /** An `export` action asks nothing of a route: it names the transfer resource, and its title, file name and filter are templates. */
+  @Test
+  fun anExportActionNamesTheResourceAndMakesNoRequestOfItsOwn() {
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Export","export":{"resource":"forms.submissions","title":"Export {item.name}","fileStem":"{item.slug}","filter":{"formId":"{item.id}"}}}""",
+      ),
+    )!!
+    val export = assertNotNull(action.export)
+    assertEquals("forms.submissions", export.str("resource"))
+    assertEquals(null, action.url)
+    assertTrue(!action.reload, "an export has nothing to reload")
+    val scope = Json.parseToJsonElement("""{"item":{"id":"f1","name":"Contact","slug":"contact"}}""")
+    assertEquals("Export Contact", ScreenValues.render(export.str("title")!!, scope))
+    assertEquals(mapOf("formId" to "f1"), ScreenModel.plain(ScreenValues.resolveBody(export.obj("filter")!!, scope)))
   }
 
   @Test

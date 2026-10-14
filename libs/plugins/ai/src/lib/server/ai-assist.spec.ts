@@ -636,11 +636,11 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     const rollup = mockDocs.get(MONTH_DOC(month)) as Record<string, number>
     expect(rollup['inputTokens']).toBe(100)
     expect(rollup['outputTokens']).toBe(40)
-    // HAIKU list rates: 100 in @ $1/MTok + 40 out @ $5/MTok (AGL-2486).
-    // Element mode is a short bounded rewrite with the source text supplied,
-    // so it is served by the cheap tier; the figure is a third of the $0.0009
-    // this asserted while every mode ran on Sonnet.
-    expect(rollup['estCostUsd']).toBeCloseTo(0.0003, 6)
+    // The fast tier's billed rate: 100 in @ $0.15/MTok + 40 out @ $0.75/MTok,
+    // Claude Haiku 5.5 at the platform's markup (AGL-3781; $0.0003 at Haiku
+    // 4.5's cost before). Element mode is a short bounded rewrite with the
+    // source text supplied, so it is served by the cheap tier.
+    expect(rollup['estCostUsd']).toBeCloseTo(0.000045, 6)
 
     const signals = [...mockDocs.entries()].filter(([path]) =>
       path.startsWith(`orgs/${ORG}/assistSignals/`),
@@ -648,7 +648,7 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     expect(signals).toHaveLength(1)
     expect(signals[0][1]).toMatchObject({
       route: '/api/ai/assist/element',
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       tier: 'entitled',
       stopReason: 'end_turn',
       inputTokens: 100,
@@ -669,10 +669,10 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     //  - and the model actually sent upstream is the only one that bills.
     //
     // So the cost is asserted as a NUMBER per mode. All three distinct:
-    // Haiku $0.0003, Sonnet $0.0009, the dear fallback $0.0030 — for the
+    // Haiku $0.000045, Sonnet $0.0009, the dear fallback $0.0030 — for the
     // same 100 in / 40 out — so no pair of them can pass for another.
     const cases: Array<[string, string, number]> = [
-      ['element', 'claude-haiku-4-5', 0.0003],
+      ['element', 'claude-haiku-5-5', 0.000045],
       ['blog', 'claude-sonnet-5-5', 0.0009],
     ]
     for (const [mode, expected, cost] of cases) {
@@ -685,6 +685,10 @@ describe('every answered call is metered per org (AGL-2073)', () => {
       expect(result.status).toBe(200)
       const sent = JSON.parse(String(mockFetch.mock.calls[0][1].body))
       expect(sent.model).toBe(expected)
+      // An element's ceiling holds the copy alone, so it is asked with no
+      // thinking; a post's row names none and leaves the model's default
+      // (AGL-3781).
+      expect(sent.thinking).toEqual(mode === 'element' ? { type: 'disabled' } : undefined)
       const signal = [...mockDocs.entries()].find(([path]) =>
         path.startsWith(`orgs/${ORG}/assistSignals/`),
       )

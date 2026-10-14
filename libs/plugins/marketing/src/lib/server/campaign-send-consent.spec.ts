@@ -204,6 +204,10 @@ function mockFirestore(): any {
       store[path] = { ...(store[path] ?? {}), ...value }
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
+    // The retained-refusal read batches its lookups through `getAll`.
+    get firestore() {
+      return { getAll: async (...refs: any[]) => refs.map((ref) => snapshot(ref.path)) }
+    },
   })
   /** The ids directly under `path`, in `__name__` order. */
   const childIds = (path: string) =>
@@ -233,15 +237,25 @@ function mockFirestore(): any {
   const collectionRef = (path: string): any => ({
     doc: (id: string) => docRef(`${path}/${id}`),
     ...queryRef(path),
-    /** One equality, honored: the address lookup's fallback query. */
-    where: (field: string, _op: string, value: unknown) => ({
-      limit: (max: number) => ({
-        get: async () => {
-          const ids = childIds(path).filter((id) => store[`${path}/${id}`]?.[field] === value)
-          return { docs: ids.slice(0, max).map((id) => snapshot(`${path}/${id}`)) }
-        },
-      }),
-    }),
+    /**
+     * One equality or one `in`, honored: the address lookup's fallback query,
+     * and the contact read a rule-enrolled member's basis comes from.
+     */
+    where: (field: string, op: string, value: unknown) => {
+      const matching = () =>
+        childIds(path).filter((id) => {
+          const stored = store[`${path}/${id}`]?.[field]
+          return op === 'in' ? (value as unknown[]).includes(stored) : stored === value
+        })
+      return {
+        get: async () => ({ docs: matching().map((id) => snapshot(`${path}/${id}`)) }),
+        limit: (max: number) => ({
+          get: async () => ({
+            docs: matching().slice(0, max).map((id) => snapshot(`${path}/${id}`)),
+          }),
+        }),
+      }
+    },
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },
@@ -742,5 +756,102 @@ describe('a basis given to one brand does not reach another', () => {
     // the door and not the cutoff moving.
     expect(delivered()).toContain('grandfathered@example.com')
     expect(delivered()).not.toContain('othersite@example.com')
+  })
+})
+
+/*
+ * A LIVE LIST'S MEMBERS ARE MAILED ON THEIR CONTACT'S BASIS.
+ *
+ * The dynamic-list materializer writes no basis onto the rows it enrolls —
+ * matching a rule is not an opt-in — so a list fed by a sign-up form held
+ * rows that were all `unrecorded`, and under the strict policy a campaign to
+ * it mailed nobody, opt-ins and all. The person's basis is on their contact,
+ * and that is where the send reads it for those rows.
+ */
+describe('a rule-enrolled list member is mailed on their contact’s basis', () => {
+  const LIST = 'orgs/org-1/lists/list-1'
+  const seedList = () => {
+    mockState.store[LIST] = { name: 'Product updates', kind: 'dynamic' }
+    const member = (email: string, extra: Record<string, unknown> = {}) => {
+      mockState.store[`${LIST}/members/${email}`] = { email, via: 'rule', ...extra }
+    }
+    // Signed up through the form: the opt-in is on the contact.
+    member('signedup@example.com')
+    mockState.store['orgs/org-1/contacts/c1'] = {
+      email: 'signedup@example.com',
+      marketingConsentByHost: {
+        'host-1': { marketingConsent: true, marketingConsentAtMs: AFTER_CUTOFF },
+      },
+    }
+    // Matched the rule, never opted in anywhere.
+    member('matched@example.com')
+    mockState.store['orgs/org-1/contacts/c2'] = { email: 'matched@example.com' }
+    // Opted in once, then said no on the contact.
+    member('changedmind@example.com')
+    mockState.store['orgs/org-1/contacts/c3'] = {
+      email: 'changedmind@example.com',
+      marketingConsentByHost: {
+        'host-1': { marketingConsent: false, marketingConsentAtMs: AFTER_CUTOFF },
+      },
+    }
+    // A refusal stored ON THE ROW stays the answer, whatever the contact says.
+    member('rowdeclined@example.com', {
+      marketingConsentByHost: {
+        'host-1': { marketingConsent: false, marketingConsentAtMs: AFTER_CUTOFF },
+      },
+    })
+    mockState.store['orgs/org-1/contacts/c4'] = {
+      email: 'rowdeclined@example.com',
+      marketingConsentByHost: {
+        'host-1': { marketingConsent: true, marketingConsentAtMs: AFTER_CUTOFF },
+      },
+    }
+    // Added BY HAND with no basis: not a rule row, so the contact is not read.
+    mockState.store[`${LIST}/members/byhand@example.com`] = {
+      email: 'byhand@example.com',
+      via: 'manual',
+    }
+    mockState.store['orgs/org-1/contacts/c5'] = {
+      email: 'byhand@example.com',
+      marketingConsentByHost: {
+        'host-1': { marketingConsent: true, marketingConsentAtMs: AFTER_CUTOFF },
+      },
+    }
+  }
+  const sendToList = () => send({ audience: 'list', listId: 'list-1' })
+
+  it('mails a rule member whose contact opted in, under strict', async () => {
+    configurePolicy('strict')
+    seedList()
+    await sendToList()
+    expect(delivered()).toContain('signedup@example.com')
+  })
+
+  it('withholds a rule member whose contact holds no basis', async () => {
+    configurePolicy('strict')
+    seedList()
+    await sendToList()
+    expect(delivered()).not.toContain('matched@example.com')
+  })
+
+  it('withholds a rule member whose contact records a refusal', async () => {
+    configurePolicy('strict')
+    seedList()
+    await sendToList()
+    expect(delivered()).not.toContain('changedmind@example.com')
+  })
+
+  it('keeps a refusal stored on the membership over a contact opt-in', async () => {
+    configurePolicy('strict')
+    seedList()
+    await sendToList()
+    expect(delivered()).not.toContain('rowdeclined@example.com')
+  })
+
+  it('does not read the contact for a member added by hand', async () => {
+    configurePolicy('strict')
+    seedList()
+    await sendToList()
+    expect(delivered()).not.toContain('byhand@example.com')
   })
 })

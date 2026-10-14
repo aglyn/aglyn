@@ -35,7 +35,7 @@ export function registerReviewPlatformsConsole(): void {
     featureFlag: REVIEW_PLATFORMS_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commercePromotions',
         widgetId: 'review-platforms-services',
         title: 'Review platforms',
         Component: ReviewPlatformsSettingsCards,

@@ -42,9 +42,13 @@ import type { AiJob } from '../model/ai-jobs.types'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { createAiJobEditStep } from './ai-job-edit-step'
+import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
-const NOW = new Date()
+// A fixed day (AGL-3781): a build's or an events plan's prompt states today's
+// date, and a date that moved every run gave each run new request bytes, so
+// the replay cache answered none of them.
+const NOW = new Date('2026-10-14T12:00:00Z')
 const ROOT = CANVAS_ROOT_ELEMENT_ID
 const HEADLINE = 'Brightside Plumbing: friendly, fast, fairly priced plumbing repairs for every home in the valley'
 const FOOTER = '© 2026 Brightside Plumbing. All rights reserved.'
@@ -125,7 +129,7 @@ function editJob(entry: (typeof CASES)[number]): AiJob {
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive("an edit job's change from the real model", () => {
-  jest.setTimeout(15 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(15 * 60_000))
 
   it('lands each change in a new version beside the live one, doing what was asked', async () => {
     const { firestore, docs } = aiEvalMemoryFirestore(SEED)

@@ -213,25 +213,25 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   catalog: {
     '#categories-and-tags': 'The Categories & collections card, in the products hub\'s catalog, organizes your products into categories and collections that storefront pages and filters use.',
     '#review-moderation': 'The Review moderation card, in the products hub\'s Promotions section, lists your reviews so you can publish, hide and reply to them.',
-    '#review-settings': 'The Reviews card in Settings decides who can review your products and when customers are asked for a review.',
+    '#review-settings': 'The Reviews card on Products → Promotions decides who can review your products and when customers are asked for a review.',
   },
   commerce: {
     '#commerce-analytics': 'The Commerce analytics card, in the Analytics section of the products hub, shows the last 30 days of revenue, orders and average order value, a 14-day revenue trend and your top products.',
     '#commerce-glance': 'The Commerce card on your site\'s overview and Analytics pages shows the last 30 days of sales at a glance: revenue, orders, average order value, and how many products are low on stock.',
     '#gift-cards': 'Gift cards lists every card your store has issued, what is left on each one, and what that adds up to.',
-    '#inventory-locations': 'The Inventory locations card, in the store\'s settings, splits your stock across warehouses or storefronts: add a location for each place you keep stock, then set each variant\'s count per location.',
+    '#inventory-locations': 'The Inventory locations card, on Products → Shipping & delivery, splits your stock across warehouses or storefronts: add a location for each place you keep stock, then set each variant\'s count per location.',
     '#orders-screen': 'Open your site\'s Products hub and choose the Orders tab. Before your first sale the tab is an invitation rather than a table: it explains where orders come from and offers Draft order, so you can invoice a customer…',
-    '#payment-methods': 'The Payment methods card, in the store\'s settings, chooses what shoppers may pay with besides a card, once your Stripe account is connected on the Payments card.',
+    '#payment-methods': 'The Payment methods card, on Products → Payments, chooses what shoppers may pay with besides a card, once your Stripe account is connected on the Payments card.',
     '#pickup-and-local-delivery': 'Buyers can choose to pick up an order at one of your locations, or have your own driver deliver it, instead of shipping.',
     '#products-hub': 'The Products page is the catalog manager: Products with up to 3 options and 100 variants each — per-variant SKU, barcode, price, compare-at (sale badge), weight, and stock.',
     '#recovery-and-alerts': 'The Recovery & alerts card, in the Orders section of the products hub, shows the abandoned-checkout reminders and back-in-stock alerts Aglyn sends for you.',
     '#stock-movements': 'Inventory → Stock movements is the history behind every tracked count — the answer to "the shelf says four and the console says six, what happened?"',
-    '#store-settings': 'The Store settings card, in the store\'s settings, sets the pages product and collection links open, the currency prices show in, guest checkout, your terms link and the receipt footer.',
+    '#store-settings': 'The Store settings card, on Products → Checkout, sets the pages product and collection links open, the currency prices show in, guest checkout, your terms link and the receipt footer.',
     '#storefront-sales-tax': 'Analytics → Storefront sales tax shows what your storefront collected in a period.',
-    '#tax-settings': 'The Taxes card, in the store\'s settings, decides how your store charges sales tax: rates you enter, Stripe Tax, or none at all.',
+    '#tax-settings': 'The Taxes card, on Products → Taxes, decides how your store charges sales tax: rates you enter, Stripe Tax, or none at all.',
   },
   commerceEndToEnd: {
-    '#1-connect-payments': 'The Payments card, in the store\'s settings, connects your own Stripe account so buyers pay you directly; checkout stays off until Stripe reports charges enabled.',
+    '#1-connect-payments': 'The Payments card, on Products → Payments, connects your own Stripe account so buyers pay you directly; checkout stays off until Stripe reports charges enabled.',
     '#member-updates': 'The Member updates card, in the products hub\'s catalog, posts updates only your subscribers can see, and can email each one to them.',
   },
   companies: {
@@ -355,7 +355,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#coupons': 'The Coupons card makes simple percent-off codes for online checkout: select Add coupon, enter the code and the percent off, and select Create.',
   },
   dropshipSuppliers: {
-    '#add-a-supplier': 'The Dropship suppliers card, in the store\'s settings, lists the partners that ship orders for you: select Add supplier, enter its name and how it hears about orders, and select Save.',
+    '#add-a-supplier': 'The Dropship suppliers card, on Products → Shipping & delivery, lists the partners that ship orders for you: select Add supplier, enter its name and how it hears about orders, and select Save.',
   },
   emailCampaigns: {
     '#a-domain-we-set-up-is-a-request': 'This is the part worth reading before you plan around it. Nothing is provisioned automatically.',
@@ -376,7 +376,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#experiments-across-sites': 'Your organization\'s own Marketing → A/B testing lists every site\'s tests, grouped by site, with what each one tests, how many variants it has and its status.',
     '#last-campaign-card': 'The Last campaign card on a site\'s dashboard shows how many emails your most recent sent campaign sent, and how many opens and clicks it has had; Campaigns in its header opens the full history.',
     '#list-members': 'Press Members on any list row to open it. You get the membership a page at a time — address, name, when they joined, how they got there, and what their consent record says — plus the controls to change it.',
-    '#lists-built-from-a-rule': 'A dynamic list holds everyone matching a rule, re-checked about every fifteen minutes.',
+    '#lists-built-from-a-rule': 'A dynamic list holds everyone matching a rule, re-checked about once an hour, and sooner after you edit the rule.',
     '#manual-lists': 'A manual list holds the people you put in it. Grow it with the "Enroll in a list" automation step (e.g.',
     '#messages-list': 'Emails → Messages lists every email this site has sent, scheduled or is still writing, newest first, a page at a time, and each row opens that email\'s own page.',
     '#monthly-send-cap': 'From Pro up, a plan includes a number of campaign emails per calendar month.',
@@ -483,7 +483,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#what-an-org-automation-is': 'An org automation has a trigger, optional conditions and an ordered list of steps, exactly like an action — and a placement: the sites it runs on.',
   },
   pickupAndDelivery: {
-    '#set-up-local-delivery': 'The Local delivery card, in the store\'s settings, lets your own driver deliver orders: buyers enter their postal code at the cart, pay your fee and book a delivery time.',
+    '#set-up-local-delivery': 'The Local delivery card, on Products → Shipping & delivery, lets your own driver deliver orders: buyers enter their postal code at the cart, pay your fee and book a delivery time.',
   },
   plugins: {
     '#a-dependency-that-is-off-for-one-site': 'A site can switch off a plugin that another plugin on that same site depends on — by disabling it directly, or simply by never opting in.',
@@ -496,7 +496,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   pos: {
     '#card-readers': 'A card reader takes card payments at the counter: the customer taps, inserts or swipes, and the reader can ask for a tip.',
-    '#registers': 'Create your registers under Products → Settings → POS registers — one per till or device that takes in-person payments.',
+    '#registers': 'Create your registers under Products → Point of sale → POS registers — one per till or device that takes in-person payments.',
     '#reservations': 'For stays (cabins, rooms, rentals): Add resources on the Products page — nightly rate, weekend multiplier, minimum nights, deposit percent, and free-cancellation window.',
   },
   posHardware: {
@@ -507,7 +507,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#staff-pins': 'A shared tablet stays signed in; each person switches in with their own PIN instead of signing out.',
   },
   postPurchase: {
-    '#connect-a-service': 'Open the store\'s settings and find the card for the service: AfterShip, Route or Narvar.',
+    '#connect-a-service': 'Open Products → Shipping & delivery and find the card for the service: AfterShip, Route or Narvar.',
     '#on-the-order': 'Open an order to see its Tracking and protection section: the protection status and what the buyer paid for it, each parcel a service is following, and when the order was last sent to Narvar.',
   },
   publishAPlugin: {
@@ -553,7 +553,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   salesChannels: {
     '#brand-barcode-and-category': 'Channels match your listings to products they know by brand, barcode and category: set them for each product in the product editor, and store-wide on Defaults for every feed.',
     '#how-fresh-the-feed-is': 'A product you edit and save reaches the next fetch at once. Stock that a sale takes reaches it within 30 minutes.',
-    '#set-up-sales-channels': 'The Sales channels card, in the store\'s settings, lists your products on shopping channels: set the feed defaults, check your products, then turn on each channel and paste its feed address there.',
+    '#set-up-sales-channels': 'The Sales channels card, on Products → Sales channels, lists your products on shopping channels: set the feed defaults, check your products, then turn on each channel and paste its feed address there.',
     '#turn-on-a-channel': 'Each channel has its own card: switch its feed on, copy the feed\'s address and paste it into the channel\'s own setup, which then fetches your products on a schedule.',
   },
   sandboxSecurity: {
@@ -577,13 +577,13 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   shipping: {
     '#where-parcels-ship-from': 'Each inventory location (the Inventory locations card in the store\'s settings) can carry a postal address: choose Add address on its row, or Edit address once it has one.',
-    '#zones-and-rates': 'The Shipping card, in the store\'s settings, prices every parcel: group the countries you ship to into zones, then give each zone one or more rates.',
+    '#zones-and-rates': 'The Shipping card, on Products → Shipping & delivery, prices every parcel: group the countries you ship to into zones, then give each zone one or more rates.',
   },
   shippingEasy: {
-    '#connect': 'The ShippingEasy card, in the store\'s settings, sends each paid order to your ShippingEasy account and takes each label back, using the API keys from Before you start.',
+    '#connect': 'The ShippingEasy card, on Products → Shipping & delivery, sends each paid order to your ShippingEasy account and takes each label back, using the API keys from Before you start.',
   },
   shipStation: {
-    '#connect': 'The ShipStation card, in the store\'s settings, connects your store to ShipStation as a Custom Store, so ShipStation imports your paid orders and sends each shipment back.',
+    '#connect': 'The ShipStation card, on Products → Shipping & delivery, connects your store to ShipStation as a Custom Store, so ShipStation imports your paid orders and sends each shipment back.',
   },
   staffConsole: {
     '#access': 'Access is gated on a staff claim, enforced per handler and by scoped Firestore rules.',
@@ -661,7 +661,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#users-admin': 'Staff-claim management and disabling users, with gated listing; a whole email address typed in the search box looks the account up directly.',
   },
   taxServices: {
-    '#connect': 'Open the store\'s settings and find the Tax service card. Only an admin of the site can connect, test or disconnect a service and change its address.',
+    '#connect': 'Open Products → Taxes and find the Tax service card. Only an admin of the site can connect, test or disconnect a service and change its address.',
     '#how-sales-are-taxed': 'A product you marked tax-exempt is sent as non-taxable and charged no tax.',
   },
   webhooks: {

@@ -83,6 +83,8 @@ public enum FirestoreSentinel: Sendable {
 /// writes a timestamp and `FirestoreSentinel.delete` removes its field.
 public protocol FirestoreWriter: Sendable {
   func merge(_ path: [String], _ data: [String: Any]) async throws
+  /// Deletes a document (the web SDK's `deleteDoc`); a writer that cannot, throws.
+  func delete(_ path: [String]) async throws
   /// The web SDK's `updateDoc(ref, data)`: each top-level key replaces that
   /// field whole (a map value is not merged into the stored map), and the
   /// document must already exist.
@@ -90,9 +92,15 @@ public protocol FirestoreWriter: Sendable {
 }
 
 extension FirestoreWriter {
+  public func delete(_ path: [String]) async throws { throw FirestoreWriteUnavailable() }
+
   public func update(_ path: [String], _ data: [String: Any]) async throws {
     throw ConsoleAPIError(status: 0, message: "Saving is not available here.")
   }
+}
+
+struct FirestoreWriteUnavailable: LocalizedError {
+  var errorDescription: String? { "Deleting is not available here." }
 }
 
 /// The writer over a reader's own merge write.
@@ -101,6 +109,9 @@ public struct ReaderMergeWriter: FirestoreWriter {
   public init(_ reader: FirestoreReader) { self.reader = reader }
   public func merge(_ path: [String], _ data: [String: Any]) async throws {
     try await reader.setDocument(path, data, merge: true)
+  }
+  public func delete(_ path: [String]) async throws {
+    try await reader.deleteDocument(path)
   }
   public func update(_ path: [String], _ data: [String: Any]) async throws {
     try await reader.updateDocument(path, data)
@@ -151,10 +162,17 @@ public protocol FirestoreReader: AnyObject, Sendable {
   /// `getCountFromServer`), or nil where the reader cannot ask for one; a
   /// caller then falls back to the rows it holds.
   func count(_ query: FirestoreQuery) async throws -> Int?
+
+  /// The server's total of a numeric field over every document a query
+  /// matches (the web SDK's `getAggregateFromServer` with `sum`): the figure a
+  /// balance or a liability reads, never the total of a capped list. Nil where
+  /// the reader cannot ask for one.
+  func sum(_ query: FirestoreQuery, field: String) async throws -> Double?
 }
 
 extension FirestoreReader {
   public func count(_ query: FirestoreQuery) async throws -> Int? { nil }
+  public func sum(_ query: FirestoreQuery, field: String) async throws -> Double? { nil }
 
   public func updateDocument(_ path: [String], _ fields: [String: Any]) async throws {
     throw ConsoleAPIError(status: 0, message: "Saving is not available here.")

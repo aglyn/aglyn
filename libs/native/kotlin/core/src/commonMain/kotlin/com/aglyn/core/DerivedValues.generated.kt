@@ -5,15 +5,18 @@ package com.aglyn.core
 /** Each plan's default for the plan features native screens gate on. */
 object PlanFeatureDefaults {
   val byPlan: Map<String, Map<String, Boolean>> = mapOf(
-    "free" to mapOf("marketingOverlays" to false, "abTesting" to false, "screenAnalytics" to false, "outreach" to false),
-    "starter" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to false, "outreach" to false),
-    "pro" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to true, "outreach" to false),
-    "business" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false),
-    "scale" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false),
-    "advanced" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false),
-    "agency" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false),
-    "enterprise" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false),
+    "free" to mapOf("marketingOverlays" to false, "abTesting" to false, "screenAnalytics" to false, "outreach" to false, "giftCards" to false, "storefrontSubscriptions" to false, "commerceAnalytics" to false, "abandonedCart" to false, "productReviews" to false, "dropshipRouting" to false, "contentGating" to false),
+    "starter" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to false, "outreach" to false, "giftCards" to false, "storefrontSubscriptions" to false, "commerceAnalytics" to false, "abandonedCart" to false, "productReviews" to false, "dropshipRouting" to false, "contentGating" to false),
+    "pro" to mapOf("marketingOverlays" to true, "abTesting" to false, "screenAnalytics" to true, "outreach" to false, "giftCards" to false, "storefrontSubscriptions" to false, "commerceAnalytics" to true, "abandonedCart" to true, "productReviews" to true, "dropshipRouting" to true, "contentGating" to false),
+    "business" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "storefrontSubscriptions" to true, "commerceAnalytics" to true, "abandonedCart" to true, "productReviews" to true, "dropshipRouting" to true, "contentGating" to true),
+    "scale" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "storefrontSubscriptions" to true, "commerceAnalytics" to true, "abandonedCart" to true, "productReviews" to true, "dropshipRouting" to true, "contentGating" to true),
+    "advanced" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "storefrontSubscriptions" to true, "commerceAnalytics" to true, "abandonedCart" to true, "productReviews" to true, "dropshipRouting" to true, "contentGating" to true),
+    "agency" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "storefrontSubscriptions" to true, "commerceAnalytics" to true, "abandonedCart" to true, "productReviews" to true, "dropshipRouting" to true, "contentGating" to true),
+    "enterprise" to mapOf("marketingOverlays" to true, "abTesting" to true, "screenAnalytics" to true, "outreach" to false, "giftCards" to true, "storefrontSubscriptions" to true, "commerceAnalytics" to true, "abandonedCart" to true, "productReviews" to true, "dropshipRouting" to true, "contentGating" to true),
   )
+
+  /** The plan an upsell names for a feature: the cheapest one that carries it. */
+  val grantedFrom: Map<String, String> = mapOf("marketingOverlays" to "Starter", "abTesting" to "Business", "screenAnalytics" to "Pro", "giftCards" to "Business", "storefrontSubscriptions" to "Business", "commerceAnalytics" to "Pro", "abandonedCart" to "Pro", "productReviews" to "Pro", "dropshipRouting" to "Pro", "contentGating" to "Business")
 }
 
 /** The events an A/B test can count as its goal, in the console's picker order. */
@@ -48,5 +51,6 @@ object ReleaseFlagDefaults {
     "release_video_delivery" to ReleaseFlagValue(false, 0, listOf()),
     "release_ai_generative" to ReleaseFlagValue(true, 0, listOf()),
     "release_crm_assist_whole_record" to ReleaseFlagValue(true, 0, listOf()),
+    "release_ad_audience_sync" to ReleaseFlagValue(false, 0, listOf()),
   )
 }

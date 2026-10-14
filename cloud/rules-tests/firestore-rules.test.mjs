@@ -6451,6 +6451,47 @@ describe('acquisition is the platform\'s to write, never a client\'s (AGL-3289)'
 })
 
 /**
+ * The ad audience opt-out (AGL-3780). `users/{uid}.adAudienceOptOut` keeps an
+ * account out of the operator's own ad audiences, and is written only by the
+ * audited staff manage route through the Admin SDK. A client that could clear
+ * it — the owner, or staff from the browser — would put an opted-out account
+ * back into the audiences with no audit row. The rest of the document stays
+ * owner-writable.
+ */
+describe('the ad audience opt-out is the staff route\'s to write (AGL-3780)', () => {
+  const OPT_OUT = { atMs: 1, by: STAFF }
+
+  it('no client creates the document with it', async () => {
+    await mustDeny(
+      'the owner creating their user doc WITH the field',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { firstName: 'Z', adAudienceOptOut: OPT_OUT }),
+    )
+  })
+
+  it('once written, neither the owner nor staff clears or rewrites it from a client', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', OWNER), { firstName: 'Z', adAudienceOptOut: OPT_OUT })
+    })
+    await mustDeny(
+      'the owner clearing it',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { adAudienceOptOut: null }, { merge: true }),
+    )
+    await mustDeny(
+      'staff rewriting it',
+      setDoc(
+        doc(authed(STAFF, { staff: true }), 'users', OWNER),
+        { adAudienceOptOut: { atMs: 2, by: STAFF } },
+        { merge: true },
+      ),
+    )
+    await mustAllow(
+      'the owner editing another field beside it',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { firstName: 'Zach' }, { merge: true }),
+    )
+  })
+})
+
+/**
  * When any member last used the workspace (`orgs/{orgId}.lastActivityAt`).
  * Stamped only by /api/orgs/last-activity through the Admin SDK, on the
  * server's clock, and sorted by on the staff Organizations list — so no

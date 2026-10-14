@@ -28,7 +28,17 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — dropship suppliers get cart orders (newest)
+## October 2026 — store settings, a page each (newest)
+
+- **[Store settings](commerce-and-bookings/commerce/overview.md#products-hub)** — the
+  store's settings are no longer one long page. Under **Settings** in the Products
+  rail, **Payments**, **Checkout**, **Taxes**, **Shipping & delivery**,
+  **Notifications** and **Point of sale** each have a page of their own, and
+  **Sales channels** and **Integrations** appear once something is connected there.
+  Workspace settings and your account group their sections the same way, with
+  **Data & compliance** and **Danger zone** set apart.
+
+## October 2026 — dropship suppliers get cart orders
 
 - **[Dropship suppliers](commerce-and-bookings/commerce/dropship-suppliers.md)** —
   orders placed through the cart now reach your suppliers too, not only Buy-button
@@ -96,7 +106,7 @@ for the how-to.
   to the counter wait on the register under **Kiosk orders**. An idle kiosk clears the
   customer's order and details, and staff unlock it with their register PIN.
 - **[Pair from POS devices](commerce-and-bookings/commerce/pos-and-reservations.md#customer-display)** —
-  each register on **Products → Settings → POS devices** now has its own **Pair display**
+  each register on **Products → Point of sale → POS devices** now has its own **Pair display**
   button for a customer display or a kiosk, and a site with no register yet gets an
   **Add a register** button there and on the register page.
 
@@ -184,7 +194,7 @@ for the how-to.
 - **[Sales channels](commerce-and-bookings/commerce/sales-channels.md)** — a product
   feed for each of Google (Shopping, free listings and YouTube), Meta (Facebook and
   Instagram), TikTok, Pinterest, Snapchat and Microsoft Shopping, in the format each
-  channel asks for, under **Products → Settings → Sales channels**. Every variant is
+  channel asks for, under **Products → Sales channels**. Every variant is
   listed with its own photo, price in your store's currency, sale price, stock,
   brand, barcode, part number, condition, Google category and shipping, with no limit
   on catalog size. Each card has its channel's setup steps and a private address you
@@ -317,7 +327,7 @@ for the how-to.
   hands back everything taken on it.
 - **[Card readers](commerce-and-bookings/commerce/pos-and-reservations.md#card-readers)** —
   where card readers are available for your store, register a Stripe Reader S700 or
-  BBPOS WisePOS E under **Commerce → Settings → POS devices** with the code it shows,
+  BBPOS WisePOS E under **Products → Point of sale → POS devices** with the code it shows,
   and the customer taps, inserts or swipes there. A declined card can be retried on
   the same charge.
 - **[Tips](commerce-and-bookings/commerce/pos-and-reservations.md#tips)** — turn on
@@ -379,13 +389,13 @@ for the how-to.
 
 - **[Use ShipStation with Aglyn](commerce-and-bookings/commerce/use-shipstation.md)** —
   connect your store to ShipStation as a Custom Store from the new **ShipStation** card
-  under your store's **Settings**. ShipStation imports the orders you still have to ship,
+  under **Products → Shipping & delivery**. ShipStation imports the orders you still have to ship,
   with weights, SKUs and options, and each label you buy there marks the order shipped
   in Aglyn and emails your customer the tracking link, once. Canceled and refunded
   orders follow to ShipStation on its next import.
 - **[Use ShippingEasy with Aglyn](commerce-and-bookings/commerce/use-shippingeasy.md)** —
-  connect your own ShippingEasy account from the new **ShippingEasy** card under your
-  store's **Settings**. Each order goes to ShippingEasy as soon as it is paid, with
+  connect your own ShippingEasy account from the new **ShippingEasy** card under
+  **Products → Shipping & delivery**. Each order goes to ShippingEasy as soon as it is paid, with
   weights, SKUs and options; each label you buy there marks the order shipped in Aglyn
   and emails your customer the tracking link, once; and canceled or refunded orders are
   canceled there.

@@ -905,14 +905,14 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
-| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
-reason, success, instead, check, open, navigate, back, reload, when, link, copy,
-reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+reason, success, instead, check, open, navigate, back, reload, when, link, copy, export,
+overlay, reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
 (Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
@@ -929,11 +929,21 @@ that matches wins) shown in place of `success` when the route's answer meets
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
 
+`overlay` names a Firestore document (a template) that is read when the action runs and put in the body as `overlay`, without
+its timestamps, for a route that replaces the whole document: `{"$overlay": {"base": "{overlay}", "set": {...}}}` is the base
+with each key of `set` put on top and any whose value is null taken off (a product's details are saved this way).
+
+`export` is `{ resource, title, fileStem, scope, filter }`: it makes no request of its own but opens the export
+sheet (`TransferExportSheet`, `TransferExportDialog`) on a transfer resource such as `commerce.products`, which asks for
+the columns and the file type and hands the file to the device. `scope` is `{ "kind": "all" }` unless it names a
+filter; `title`, `fileStem` and `filter` are templates. The site's roles and plan are the server's to enforce.
+
 `headers` names request headers, each a template. `{attempt}` there is one key per
 (action, route, resolved body): sending the same request again, a retry or a second tap,
 reuses it, and a changed body gets a new one. A route that provisions something
 (enterprise billing) takes it as `Idempotency-Key`, and a write that carries one is retried
-like a read.
+like a read. `{press}` is a key for one press alone: its retries share it, and the next tap gets
+its own, for a route that must see two deliberate, identical changes (a rewards adjustment) as two.
 
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
@@ -944,6 +954,75 @@ whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
 in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
+
+Three small forms serve the cards that list data they cannot shape: a path
+`rows.*.field` reads that field of every row as a list (so `{item.issues.*.message}`
+prints them joined); a select's `optionsFrom` takes `where`, a condition on the
+row (`item.classification == bank`); and a comparison's right side may be another
+path (`a != @b.c`). A load names the query parameter its route searches by with
+`searchParam` (the catalog route reads `q`, the default is `search`).
+
+A field of kind `hours` is a week of opening hours chosen by touch, as the console's weekly hours picker is: a switch
+for each day and, for an open day, a From and a To time from a menu, with another interval on request. It reads and
+writes the stored text lines (`Mo-Fr 09:00-17:00`), so nobody types them; its `hours` option is `{ noun, sameDay, start,
+end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets, in minutes).
+`libs/native/screens/weekly-hours-cases.json` holds the Swift and Kotlin conversions to the console's own.
+
+A form or prompt can list fields from the data: an entry
+`{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
+field per row (a carrier that names its own credential fields), `kinds` mapping a
+row flag to a kind (`password`, or `yesno` for a No/Yes pick that sends "" or
+"true"). Body operations grow `{"$replace": {list, key, match, value}}` (the row
+whose key matches, replaced) and `{"$uuid": "box_"}` (a fresh id with that prefix), and
+`{form}` reads the whole form as an object. `{"$map": {list, where, fields}}` is one object of `fields` for each row of the
+list that meets `where` (all of them with none), each read with `item` set to the row: the items a batch purchase sends, from
+the rows a rate request answered.
+
+A condition may compare numbers and times: `path < @now.ms+7d` (also `<=`, `>`, `>=`), the
+right side a number or `@path` with an optional offset in ms, s, m, h or d; a missing
+left side is false. An action's `else` runs on the status named by `elseStatus` (404
+unless set, 409 for "this needs one more answer"), and an action's `then` that has a
+`prompt` is asked of the person next, with the earlier answer as `response` and the
+earlier form as `previous` (print on demand lists the stores a token reaches, then
+connects the one picked).
+
+Cards that write the store's own documents, as the console's client does, use the rest of
+the grammar. A `write` is `{ doc, fields }` (merge a document), `{ add, fields }` (a new
+document in a collection, with an id of its own), `{ delete }`, `{ steps: [...] }` (several
+in order) or `{ each: { items, filter }, doc, fields }` (one per row of the data that passes
+the filter, with `item` set to the row); `siteWide: true` also drops the site's cached
+pages, as the console's `writeSiteWideChange` does. `{ stay: { resource, checkIn, checkOut, guestName } }` is the front desk's walk-in: it prices the
+stay and checks the dates against the resource's live reservations and blocks (ports of the console's reservation functions,
+replayed from `stays-cases.json`), then adds a confirmed reservation, or says in words why it cannot. A field value is resolved like a
+body, and these operations shape it: `{"$timestamp": true}` (the server's time),
+`{"$orNull": v}` (null when empty, which a merge write turns into a cleared field; a
+template that found nothing is otherwise left out), `{"$cents": "{form.amount}"}` (typed
+dollars as whole cents, and `-5.50` as -550 where a change may take money away), `{"$dateMs": {value, time, local}}` (a date and a time of day as
+epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": v}`,
+`{"$split": v}` (lines or commas to a list) and `{"$gather": {from, prefix, key, value}}`
+(the entries of `{form}` whose names start with `prefix`, as `{ key, value }` rows).
+
+More formats: `amount` (whole cents as `12.50`, what a money field starts with), `code`
+(a coupon code as stored; `code/40` cuts it at 40), `token` (the search token of typed
+words), `sum` and `sumcents` (a list of numbers added up), `ahead` (how many of a list of
+times are still to come). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
+first value that is present at all (`false` and `0` count). A path `rows.*.field` also
+reads an object's values in key order, and a comparison against a list holds when any of
+its values does (`item.holds.*.expiresAtMs > @now.ms`). A number field takes `min` and
+`max`, and a field a screen hid by its `when` is not sent.
+
+A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with
+`op` any of `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `not-in`, `array-contains` and
+`array-contains-any`, a number or flag in the spec compared as itself. A list block that names its query load (`"load": "key"`) offers "Load more" whenever the window came
+back full: a query has no cursor to continue from, so it reads a window one page size bigger (the spec's `limit`
+again) and replaces its rows, and a reload after an action keeps the window the person grew.
+With
+`aggregate: { count: true, sum: "field" }` the server counts and adds every matching document
+and no row is read: the answer is `data.<key>.count` and `.sum`, left out where the reader
+cannot ask (show "Unavailable", never a zero). `{ "entitlement": "giftCards" }` reads the
+workspace document and answers `data.<key>.carried` and `.label`, the plan that includes the
+feature, so a card the console locks behind a plan shows its notice instead of failing
+(the features are the generated `NATIVE_PLAN_FEATURES`).
 
 ### The plugin switchboard
 

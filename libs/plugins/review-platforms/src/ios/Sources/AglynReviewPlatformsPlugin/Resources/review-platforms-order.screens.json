@@ -1,0 +1,176 @@
+{
+  "$comment": "Whether Trustpilot or Yotpo was asked to invite one order's customer to review, or why not, in the order's services. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "review-platforms.order",
+      "title": "Review invitations",
+      "label": "Review invitations",
+      "icon": "star|star",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "skips": [
+          {
+            "id": "test_mode",
+            "label": "A test-mode order"
+          },
+          {
+            "id": "refunded",
+            "label": "The order was refunded"
+          },
+          {
+            "id": "cancelled",
+            "label": "The order was canceled"
+          },
+          {
+            "id": "no_email",
+            "label": "The order has no email address"
+          },
+          {
+            "id": "no_consent",
+            "label": "The customer has not agreed to marketing email from this store"
+          }
+        ]
+      },
+      "load": {
+        "view": {
+          "url": "/api/review-platforms/order?hostId={site.id}&recordId={params.orderId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.view.order.trustpilot && !data.view.order.yotpo",
+          "text": "No review platform was asked to invite this order’s customer."
+        },
+        {
+          "type": "fields",
+          "id": "trustpilot",
+          "when": "data.view.order.trustpilot",
+          "title": "Trustpilot",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Invited",
+              "chip": true,
+              "tone": "success",
+              "when": "data.view.order.trustpilot.status == sent"
+            },
+            {
+              "label": "Status",
+              "value": "Inviting",
+              "chip": true,
+              "tone": "info",
+              "when": "data.view.order.trustpilot.status == sending"
+            },
+            {
+              "label": "Status",
+              "value": "Not invited",
+              "chip": true,
+              "tone": "neutral",
+              "when": "data.view.order.trustpilot.status == skipped"
+            },
+            {
+              "label": "Status",
+              "value": "Needs attention",
+              "chip": true,
+              "tone": "error",
+              "when": "data.view.order.trustpilot.status == failed"
+            },
+            {
+              "label": "Why not",
+              "value": "{const.skips[id=data.view.order.trustpilot.reason].label}",
+              "when": "data.view.order.trustpilot.status == skipped && data.view.order.trustpilot.reason"
+            },
+            {
+              "label": "Error",
+              "value": "{data.view.order.trustpilot.error}",
+              "when": "data.view.order.trustpilot.status == failed"
+            },
+            {
+              "label": "How",
+              "value": "By a copy of the order email",
+              "when": "data.view.order.trustpilot.status == sent,sending && data.view.order.trustpilot.via == bcc"
+            },
+            {
+              "label": "How",
+              "value": "Through the API",
+              "when": "data.view.order.trustpilot.status == sent,sending && data.view.order.trustpilot.via != bcc"
+            },
+            {
+              "label": "When",
+              "value": "{data.view.order.trustpilot.atMs:datetime}",
+              "when": "data.view.order.trustpilot.status == sent,sending && data.view.order.trustpilot.atMs"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "yotpo",
+          "when": "data.view.order.yotpo",
+          "title": "Yotpo Reviews",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Invited",
+              "chip": true,
+              "tone": "success",
+              "when": "data.view.order.yotpo.status == sent"
+            },
+            {
+              "label": "Status",
+              "value": "Inviting",
+              "chip": true,
+              "tone": "info",
+              "when": "data.view.order.yotpo.status == sending"
+            },
+            {
+              "label": "Status",
+              "value": "Not invited",
+              "chip": true,
+              "tone": "neutral",
+              "when": "data.view.order.yotpo.status == skipped"
+            },
+            {
+              "label": "Status",
+              "value": "Needs attention",
+              "chip": true,
+              "tone": "error",
+              "when": "data.view.order.yotpo.status == failed"
+            },
+            {
+              "label": "Why not",
+              "value": "{const.skips[id=data.view.order.yotpo.reason].label}",
+              "when": "data.view.order.yotpo.status == skipped && data.view.order.yotpo.reason"
+            },
+            {
+              "label": "Error",
+              "value": "{data.view.order.yotpo.error}",
+              "when": "data.view.order.yotpo.status == failed"
+            },
+            {
+              "label": "How",
+              "value": "By a copy of the order email",
+              "when": "data.view.order.yotpo.status == sent,sending && data.view.order.yotpo.via == bcc"
+            },
+            {
+              "label": "How",
+              "value": "Through the API",
+              "when": "data.view.order.yotpo.status == sent,sending && data.view.order.yotpo.via != bcc"
+            },
+            {
+              "label": "When",
+              "value": "{data.view.order.yotpo.atMs:datetime}",
+              "when": "data.view.order.yotpo.status == sent,sending && data.view.order.yotpo.atMs"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

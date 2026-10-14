@@ -66,6 +66,8 @@ public struct LoadSpec: Sendable, Hashable {
   public let cursor: String?
   /// The query parameter the cursor goes back in.
   public let cursorParam: String
+  /// The query parameter the route reads search words from (`search` unless the route names it otherwise).
+  public let searchParam: String
   /// The response field holding the rows to append page after page.
   public let items: String?
   /// `POST` for a route that answers reads by POST (with `body`); GET otherwise.
@@ -79,6 +81,10 @@ public struct LoadSpec: Sendable, Hashable {
   public let query: JSONValue?
   /// `org` or `site`: the plugin switchboard's rows (SwitchboardRows).
   public let switchboard: String?
+  /// A plan feature whose gate the screen reads: `{ carried, label }`, where `label` names the plan that includes it.
+  public let entitlement: String?
+  /// An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship.
+  public let orderZone: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -87,10 +93,13 @@ public struct LoadSpec: Sendable, Hashable {
       self.when = nil
       self.cursor = nil
       self.cursorParam = "cursor"
+      self.searchParam = "search"
       self.items = nil
       self.doc = nil
       self.query = nil
       self.switchboard = nil
+      self.entitlement = nil
+      self.orderZone = nil
       self.method = .get
       self.body = nil
       self.optional = false
@@ -99,10 +108,13 @@ public struct LoadSpec: Sendable, Hashable {
       self.when = json["when"]?.stringValue
       self.cursor = json["cursor"]?.stringValue
       self.cursorParam = json["cursorParam"]?.stringValue ?? "cursor"
+      self.searchParam = json["searchParam"]?.stringValue ?? "search"
       self.items = json["items"]?.stringValue
       self.doc = json["doc"]?.stringValue
       self.query = json["query"]
       self.switchboard = json["switchboard"]?.stringValue
+      self.entitlement = json["entitlement"]?.stringValue
+      self.orderZone = json["orderZone"]?.stringValue
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
@@ -153,6 +165,7 @@ public struct ActionSpec: Sendable, Identifiable {
   public let destructive: Bool
   public let reason: Bool
   public let prompt: [FieldSpec]
+  let promptRaw: [JSONValue]
   public let success: String?
   /// A response field holding a URL to open in the secure in-app browser (Stripe's pages).
   public let openURL: String?
@@ -166,6 +179,13 @@ public struct ActionSpec: Sendable, Identifiable {
   public let besigner: String?
   /// `copy`: the rendered template goes to the clipboard.
   public let copy: String?
+  /// `{ resource, title, fileStem, scope, filter }`: opens the export sheet on a transfer resource (`commerce.products`),
+  /// which asks for the columns and the format and hands the file to the device. `scope` is `{ "kind": "all" }` unless it
+  /// names a filter; `title`, `fileStem` and `filter` are templates.
+  public let export: JSONValue?
+  /// A Firestore document path (a template): the stored document is read when the action runs and is `overlay` in the body,
+  /// without its timestamps, for a route that replaces the document with the person's edits on top (`$overlay`).
+  public let overlay: String?
   /// A response field shown once, to be copied (a new API key's secret).
   public let reveal: String?
   /// A Firestore merge the signed-in person makes themselves, where the
@@ -177,6 +197,8 @@ public struct ActionSpec: Sendable, Identifiable {
   public let account: String?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
+  /// The status of the answer that runs `else` (404 unless the spec names another, such as 409).
+  public let elseStatus: Int
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
   /// `{ when, title, text }` (or a list of them, the first that matches wins): when the route's
@@ -203,17 +225,24 @@ public struct ActionSpec: Sendable, Identifiable {
     self.destructive = json["destructive"] == .bool(true)
     self.reason = json["reason"] == .bool(true)
     self.prompt = json["prompt"].array.compactMap(FieldSpec.init)
+    self.promptRaw = json["prompt"].array
     self.success = json["success"]?.stringValue
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
     self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil || json["account"] != nil)
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
+    self.elseStatus = json["elseStatus"].flatMap { value -> Int? in
+      if case .number(let number) = value { return Int(number) }
+      return value.stringValue.flatMap(Int.init)
+    } ?? 404
     self.then = json["then"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.when = json["when"]?.stringValue
     self.link = json["link"]?.stringValue
     self.besigner = json["besigner"]?.stringValue
     self.copy = json["copy"]?.stringValue
+    self.export = json["export"]
+    self.overlay = json["overlay"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
     self.account = json["account"]?.stringValue
@@ -248,6 +277,17 @@ public struct ActionSpec: Sendable, Identifiable {
           help: "Recorded in the audit log.")]
       : prompt
   }
+
+  /// Whether the action asks for anything before it runs (a prompt, even one the data fills in, or a reason).
+  public var asksInputs: Bool { !promptRaw.isEmpty || reason }
+
+  /// The fields to ask for, with any `fieldsFrom` entry expanded from the data in `context`.
+  public func inputs(in context: JSONValue) -> [FieldSpec] {
+    let asked = FieldSpec.parseAll(promptRaw, in: context)
+    return reason
+      ? asked + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true, help: "Recorded in the audit log.")]
+      : asked
+  }
 }
 
 /// A screen to open, with its params as templates.
@@ -267,7 +307,7 @@ public struct FieldSpec: Sendable, Identifiable {
   public var id: String { key }
   public let key: String
   public let label: String
-  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `date`.
+  /// `text`, `email`, `url`, `number`, `multiline`, `password`, `toggle`, `select`, `date`, `hours`.
   public let kind: String
   public let initial: String?
   public let placeholder: String?
@@ -278,11 +318,99 @@ public struct FieldSpec: Sendable, Identifiable {
   public let when: String?
   /// A template the typed value must equal (type the workspace name to delete it).
   public let mustMatch: String?
+  /// The bounds of a number field; one outside them leaves the field unfinished.
+  public let min: Double?
+  public let max: Double?
+  /// A number field that takes whole numbers: what is typed is rounded to one.
+  public let integer: Bool
+  /// A regular expression a typed value must contain a match of (an https address); an empty value is left to `required`.
+  public let pattern: String?
+  /// An `hours` field's options: `{ noun, sameDay, start, end }` (what an interval is called, whether it must end the day it
+  /// starts, and the times a newly opened day gets).
+  public let hours: JSONValue?
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
     if let mustMatch, ScreenValues.text(value) != ScreenValues.render(mustMatch, in: context) { return true }
-    return required && kind != "toggle" && !ScreenValues.truthy(value)
+    if let pattern {
+      let typed = ScreenValues.text(value)
+      if !typed.isEmpty, typed.range(of: pattern, options: .regularExpression) == nil { return true }
+    }
+    if kind == "number", let number = ScreenValues.number(value) {
+      if let min, number < min { return true }
+      if let max, number > max { return true }
+    }
+    // A number field is finished by any number, zero too.
+    let finished = ScreenValues.truthy(value) || (kind == "number" && ScreenValues.number(value) != nil)
+    return required && kind != "toggle" && !finished
+  }
+
+  init(
+    key: String, label: String, kind: String, initial: String?, help: String?, required: Bool,
+    options: [(value: String, label: String)]
+  ) {
+    self.key = key
+    self.label = label
+    self.kind = kind
+    self.initial = initial
+    self.placeholder = nil
+    self.help = help
+    self.required = required
+    self.options = options
+    self.optionsFrom = nil
+    self.when = nil
+    self.mustMatch = nil
+    self.min = nil
+    self.max = nil
+    self.integer = false
+    self.pattern = nil
+    self.hours = nil
+  }
+
+  /// Fields from a spec's array, with each `{ "fieldsFrom": {...} }` entry expanded into one field per row of data
+  /// (a service that names its own credential fields): `items` is the path to the rows; `key`, `label` and `help`
+  /// are templates over `item`; `kinds` maps a row flag to a field kind (first set flag wins, else text), `yesno`
+  /// being a No/Yes pick that sends "" or "true"; `options` names the row field holding `{value,label}` choices,
+  /// which make a select; `required` names the row flag.
+  static func parseAll(_ items: [JSONValue], in context: JSONValue) -> [FieldSpec] {
+    items.flatMap { entry -> [FieldSpec] in
+      guard let from = entry["fieldsFrom"] else { return FieldSpec(entry).map { [$0] } ?? [] }
+      let rows = ScreenValues.rows(ScreenValues.lookup(from["items"]?.stringValue ?? "", in: context))
+      let perRow = from["each"].array
+      if !perRow.isEmpty {
+        // `each`: a field template per entry, drawn for every row, so one row's fields sit together.
+        return rows.enumerated().flatMap { position, row -> [FieldSpec] in
+          let scope = ScreenContext.with(ScreenContext.with(context, item: row), "index", .number(Double(position)))
+          return perRow.compactMap { template -> FieldSpec? in
+            guard case .object(let record) = template else { return nil }
+            let rendered = record.mapValues { value -> JSONValue in
+              if case .string(let text) = value { return .string(ScreenValues.render(text, in: scope)) }
+              return value
+            }
+            return FieldSpec(.object(rendered))
+          }
+        }
+      }
+      return rows.enumerated().compactMap { position, row -> FieldSpec? in
+        // `{index}` is the row's place in the list, for a key that names the row by position.
+        let scope = ScreenContext.with(ScreenContext.with(context, item: row), "index", .number(Double(position)))
+        let key = ScreenValues.render(from["key"]?.stringValue ?? "{item.key}", in: scope)
+        if key.isEmpty { return nil }
+        let choices = row[from["options"]?.stringValue ?? "options"].array.map {
+          (ScreenValues.text($0["value"]), ScreenValues.text($0["label"] ?? $0["value"]))
+        }
+        let kind = from["kinds"].objectEntries.first { ScreenValues.truthy(ScreenValues.lookup($0.key, in: row)) }?
+          .value.stringValue
+        let yesno = kind == "yesno"
+        let help = from["help"]?.stringValue.map { ScreenValues.render($0, in: scope) }
+        return FieldSpec(
+          key: key, label: ScreenValues.render(from["label"]?.stringValue ?? "{item.label}", in: scope),
+          kind: yesno || !choices.isEmpty ? "select" : (kind ?? from["kind"]?.stringValue ?? "text"),
+          initial: yesno ? nil : (choices.first?.0 ?? from["initial"]?.stringValue), help: (help?.isEmpty ?? true) ? nil : help,
+          required: from["required"]?.stringValue.map { ScreenValues.truthy(ScreenValues.lookup($0, in: row)) } ?? false,
+          options: yesno ? [("", "No"), ("true", "Yes")] : choices)
+      }
+    }
   }
 
   init(key: String, label: String, kind: String, required: Bool, help: String?) {
@@ -297,6 +425,11 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = nil
     self.when = nil
     self.mustMatch = nil
+    self.min = nil
+    self.max = nil
+    self.integer = false
+    self.pattern = nil
+    self.hours = nil
   }
 
   init?(_ json: JSONValue) {
@@ -315,6 +448,11 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = json["optionsFrom"]
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
+    self.min = ScreenValues.number(json["min"])
+    self.max = ScreenValues.number(json["max"])
+    self.integer = json["integer"] == .bool(true)
+    self.pattern = json["pattern"]?.stringValue
+    self.hours = json["hours"]
   }
 
   /// The choices for a `select`: the static options, then any read from data.
@@ -322,10 +460,21 @@ public struct FieldSpec: Sendable, Identifiable {
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
-    let rows = ScreenValues.lookup(path, in: context).array
-    return options + rows.map { row in
-      let scope = ScreenContext.with(context, item: row)
-      return (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))
+    // A map (the site's screens by id) offers one choice per entry: `{ $id: key, $value: value }`, by value.
+    let rows: [JSONValue]
+    if case .object(let record)? = ScreenValues.lookup(path, in: context) {
+      rows = record.map { JSONValue.object(["$id": .string($0.key), "$value": $0.value]) }
+        .sorted { ScreenValues.text($0["$value"]).lowercased() < ScreenValues.text($1["$value"]).lowercased() }
+    } else {
+      rows = ScreenValues.lookup(path, in: context).array
+    }
+    // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
+    let keep = from["where"]?.stringValue
+    return options + rows.map { ScreenContext.with(context, item: $0) }.filter { ScreenValues.condition(keep, in: $0) }.map { scope in
+      // A label built from parts that may be empty reads clean: runs of spaces become one, and the ends are trimmed.
+      let label = ScreenValues.render(labelTemplate, in: scope).replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespaces)
+      return (ScreenValues.render(valueTemplate, in: scope), label)
     }
   }
 }

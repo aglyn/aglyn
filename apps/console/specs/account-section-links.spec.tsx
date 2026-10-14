@@ -178,6 +178,17 @@ describe('the account sections and the links that name them (AGL-2501)', () => {
     })
   })
 
+  it('sets Close account apart, under Danger zone, and nothing else (AGL-3713)', () => {
+    expect(
+      ACCOUNT_SECTIONS.filter((section) => section.group).map((section) => [
+        section.id,
+        section.group,
+      ]),
+    ).toEqual([['close', 'Danger zone']])
+    // Last, so the rail draws one divider above it.
+    expect(ACCOUNT_SECTIONS.at(-1)?.id).toBe('close')
+  })
+
   /**
    * The index is a SERVER component, so it is CALLED rather than rendered
    * (AGL-2501).

@@ -4,15 +4,18 @@
 /// Each plan's default for the plan features native screens gate on.
 public enum PlanFeatureDefaults {
   public static let byPlan: [String: [String: Bool]] = [
-    "free": ["marketingOverlays": false, "abTesting": false, "screenAnalytics": false, "outreach": false],
-    "starter": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": false, "outreach": false],
-    "pro": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": true, "outreach": false],
-    "business": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false],
-    "scale": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false],
-    "advanced": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false],
-    "agency": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false],
-    "enterprise": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false],
+    "free": ["marketingOverlays": false, "abTesting": false, "screenAnalytics": false, "outreach": false, "giftCards": false, "storefrontSubscriptions": false, "commerceAnalytics": false, "abandonedCart": false, "productReviews": false, "dropshipRouting": false, "contentGating": false],
+    "starter": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": false, "outreach": false, "giftCards": false, "storefrontSubscriptions": false, "commerceAnalytics": false, "abandonedCart": false, "productReviews": false, "dropshipRouting": false, "contentGating": false],
+    "pro": ["marketingOverlays": true, "abTesting": false, "screenAnalytics": true, "outreach": false, "giftCards": false, "storefrontSubscriptions": false, "commerceAnalytics": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": false],
+    "business": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "storefrontSubscriptions": true, "commerceAnalytics": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "scale": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "storefrontSubscriptions": true, "commerceAnalytics": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "advanced": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "storefrontSubscriptions": true, "commerceAnalytics": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "agency": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "storefrontSubscriptions": true, "commerceAnalytics": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
+    "enterprise": ["marketingOverlays": true, "abTesting": true, "screenAnalytics": true, "outreach": false, "giftCards": true, "storefrontSubscriptions": true, "commerceAnalytics": true, "abandonedCart": true, "productReviews": true, "dropshipRouting": true, "contentGating": true],
   ]
+
+  /// The plan an upsell names for a feature: the cheapest one that carries it.
+  public static let grantedFrom: [String: String] = ["marketingOverlays": "Starter", "abTesting": "Business", "screenAnalytics": "Pro", "giftCards": "Business", "storefrontSubscriptions": "Business", "commerceAnalytics": "Pro", "abandonedCart": "Pro", "productReviews": "Pro", "dropshipRouting": "Pro", "contentGating": "Business"]
 }
 
 /// The events an A/B test can count as its goal, in the console's picker order.
@@ -47,5 +50,6 @@ public enum ReleaseFlagDefaults {
     "release_video_delivery": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_ai_generative": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_crm_assist_whole_record": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
+    "release_ad_audience_sync": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
   ]
 }

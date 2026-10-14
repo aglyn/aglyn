@@ -277,6 +277,22 @@ describe('the Sites page keeps its CARDS, filtered and searched by the query (AG
     expect(screen.getByTestId('header-right').textContent).toContain('15')
   })
 
+  it('draws each card as tall as its row, its addresses whole and never split mid-word', () => {
+    render(<HostsPage />)
+    const name = screen.getByText('Site 01')
+    const card = name.closest('.MuiCard-root') as HTMLElement
+    // Equal heights in a row: the card fills its grid cell.
+    expect(getComputedStyle(card).height).toBe('100%')
+    const address = within(card).getByText('site-1.aglyn.app', { selector: 'p' })
+    const style = getComputedStyle(address)
+    expect(style.display).toBe('inline-block')
+    expect(style.whiteSpace).toBe('nowrap')
+    expect(style.textOverflow).toBe('ellipsis')
+    expect(style.maxWidth).toBe('100%')
+    // The whole address on hover, where an ellipsis shortens it.
+    expect(address.getAttribute('title')).toBe('site-1.aglyn.app')
+  })
+
   it('says the page could not be read rather than that nothing matched', () => {
     mockAnswer.mockReturnValue({ ids: [], status: 'error' })
     render(<HostsPage />)

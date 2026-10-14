@@ -119,7 +119,24 @@ extension ScreenSession {
       "month": .string(String(format: "%04d-%02d", year, month)),
       "quarter": .string("\(year)-Q\((month - 1) / 3 + 1)"),
       "ms": .number((date.timeIntervalSince1970 * 1000).rounded()),
+      // The last twelve months, newest first, as a report picks them: `{ from, to, label }` with ISO instants in UTC.
+      "months": .array(recentMonths(year: year, month: month)),
     ]
+  }
+
+  static let monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+  static func recentMonths(year: Int, month: Int, count: Int = 12) -> [JSONValue] {
+    (0..<count).map { back in
+      let total = year * 12 + (month - 1) - back
+      let next = total + 1
+      func iso(_ y: Int, _ m: Int) -> String { String(format: "%04d-%02d-01T00:00:00.000Z", y, m) }
+      return [
+        "from": .string(iso(total / 12, total % 12 + 1)),
+        "to": .string(iso(next / 12, next % 12 + 1)),
+        "label": .string("\(monthNames[total % 12]) \(total / 12)"),
+      ]
+    }
   }
 }
 
@@ -151,6 +168,8 @@ public final class ScreenModel {
   public private(set) var context: JSONValue
   /// The cursor of each paged load's next page, by load key.
   public private(set) var cursors: [String: String] = [:]
+  /// How many rows each grown Firestore query load reads now: a list that was asked for more asks for its page size again.
+  @ObservationIgnored private var queryLimits: [String: Int] = [:]
   public private(set) var loadingMore: Set<String> = []
   /// Per-block search words for loads whose route searches (`search` param).
   public var search: [String: String] = [:]
@@ -186,7 +205,7 @@ public final class ScreenModel {
   func url(for load: LoadSpec, cursor: String? = nil) -> String {
     var url = ScreenValues.renderURL(load.url, in: context)
     if let words = search[load.key], !words.trimmingCharacters(in: .whitespaces).isEmpty {
-      url += (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(words)
+      url += (url.contains("?") ? "&" : "?") + load.searchParam + "=" + ScreenValues.encodeComponent(words)
     }
     if let cursor {
       url += (url.contains("?") ? "&" : "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
@@ -209,11 +228,12 @@ public final class ScreenModel {
       try await withThrowingTaskGroup(of: (String, JSONValue, String?).self) { group in
         let reader = reader
         let context = context
+        let limits = queryLimits
         for load in loads {
           let path = url(for: load)
           group.addTask {
             do {
-              return try await Self.fetch(load, path: path, api: api, reader: reader, context: context)
+              return try await Self.fetch(load, path: path, api: api, reader: reader, context: context, limit: limits[load.key])
             } catch where load.optional && !(error is CancellationError) {
               return (load.key, .null, nil)
             }
@@ -237,12 +257,21 @@ public final class ScreenModel {
 
   /// One load: a Firestore document or query, or a route.
   nonisolated static func fetch(
-    _ load: LoadSpec, path: String, api: ConsoleAPIClient, reader: FirestoreReader?, context: JSONValue
+    _ load: LoadSpec, path: String, api: ConsoleAPIClient, reader: FirestoreReader?, context: JSONValue, limit: Int? = nil
   ) async throws -> (String, JSONValue, String?) {
     if let doc = load.doc {
       guard let reader else { return (load.key, .null, nil) }
       let value = try await FirestoreLoads.document(reader, ScreenValues.render(doc, in: context))
       return (load.key, value, nil)
+    }
+    if let id = load.orderZone {
+      guard let reader else { return (load.key, .null, nil) }
+      let hostID = ScreenValues.render("{site.id}", in: context)
+      return (load.key, try await FirestoreLoads.orderZone(reader, hostID: hostID, orderID: ScreenValues.render(id, in: context)), nil)
+    }
+    if let feature = load.entitlement {
+      guard let reader else { return (load.key, .null, nil) }
+      return (load.key, try await FirestoreLoads.entitlement(reader, feature: feature, orgID: ScreenValues.render("{org.id}", in: context)), nil)
     }
     if let scope = load.switchboard {
       guard let reader else { return (load.key, .null, nil) }
@@ -253,7 +282,11 @@ public final class ScreenModel {
     }
     if let query = load.query {
       guard let reader else { return (load.key, .null, nil) }
-      return (load.key, try await FirestoreLoads.query(reader, query, in: context), nil)
+      let rows = limit ?? FirestoreLoads.queryLimit(query)
+      let answer = try await FirestoreLoads.query(reader, query, in: context, limit: rows)
+      // A window that came back full may have more behind it; the list offers "Load more" with this as its cursor.
+      let full = query["aggregate"] == nil && ScreenValues.lookup("items", in: answer).array.count >= rows
+      return (load.key, answer, full ? String(rows) : nil)
     }
     let body = load.body.map { ScreenValues.resolveBody($0, in: context) }
     let value = try await api.request(path, method: load.method, body: body) ?? .null
@@ -263,6 +296,23 @@ public final class ScreenModel {
 
   /// The next page of a paged load, appended to its rows.
   public func loadMore(_ key: String) async {
+    // A Firestore query has no cursor to continue from here: it reads a bigger window (the page size again) and replaces its rows.
+    if let api, let load = spec.loads.first(where: { $0.key == key }), let query = load.query, let cursor = cursors[key],
+      !loadingMore.contains(key)
+    {
+      loadingMore.insert(key)
+      defer { loadingMore.remove(key) }
+      let step = FirestoreLoads.queryLimit(query)
+      queryLimits[key] = (Int(cursor) ?? step) + step
+      guard let (_, grown, next) = try? await Self.fetch(
+        load, path: "", api: api, reader: reader, context: context, limit: queryLimits[key])
+      else { return }
+      guard case .object(var record) = data else { return }
+      record[key] = grown
+      context = ScreenContext.with(context, "data", .object(record))
+      cursors[key] = next?.isEmpty == false ? next : nil
+      return
+    }
     guard let api, let load = spec.loads.first(where: { $0.key == key }), let cursor = cursors[key],
       let itemsPath = load.items, !loadingMore.contains(key)
     else { return }
@@ -295,11 +345,106 @@ public final class ScreenModel {
   /// Runs an action against `scope` (the screen's context, maybe with an
   /// item and the filled inputs under `form`).
   public func run(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
+    performed = nil
     let outcome = await perform(action, in: scope)
-    if case .done(_, let response) = outcome, let then = action.then?.action {
-      _ = await perform(then, in: ScreenContext.with(scope, "response", response ?? .null))
+    if case .done(_, let response) = outcome, let then = (performed ?? action).then?.action {
+      let next = ScreenContext.with(
+        ScreenContext.with(scope, "response", response ?? .null), "previous", scope["form"] ?? .null)
+      if then.asksInputs { followUp = FollowUp(action: then, scope: next) } else { _ = await perform(then, in: next) }
     }
     return outcome
+  }
+
+  /// A step the person is asked to finish next: the previous step's answer is its `response`, its form its `previous`.
+  public struct FollowUp {
+    public let action: ActionSpec
+    public let scope: JSONValue
+  }
+
+  /// Set by `run` when the action that ran has a `then` that asks for inputs (a chained prompt); the screen takes it.
+  public var followUp: FollowUp?
+
+  /// The action that actually made the request last, which may be the `else` of the one that was pressed.
+  private var performed: ActionSpec?
+
+  /// A write the person makes themselves, as the console does: `{ doc, fields }` merges a document, `{ add, fields }`
+  /// adds one to a collection, `{ delete }` removes one, and `{ steps: [...] }` does several in order. Any step may
+  /// carry `each: { items, filter }` to repeat for every row of a list (`item` is the row, `parent` the outer item).
+  private func runWrite(_ write: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+    let steps = write["steps"].array
+    if !steps.isEmpty {
+      for step in steps { try await runWrite(step, scope, writer) }
+      return
+    }
+    if let each = write["each"] {
+      let rows = ScreenValues.rows(ScreenValues.lookup(each["items"]?.stringValue ?? "", in: scope)).filter {
+        ScreenValues.condition(each["filter"]?.stringValue, in: ScreenContext.with(scope, item: $0))
+      }
+      for row in rows { try await writeOne(write, ScreenContext.with(scope, item: row), writer) }
+      return
+    }
+    try await writeOne(write, scope, writer)
+  }
+
+  /// A walk-in at the front desk, as the console's reservations card books one: `{ stay: { resource, checkIn, checkOut,
+  /// guestName } }` prices the stay, checks the dates against every live stay of that resource and its blocks, and only then
+  /// adds the confirmed reservation. Anything it cannot book is said in words, and nothing is written.
+  private func bookStay(_ stay: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+    func text(_ key: String) -> String {
+      ScreenValues.render(stay[key]?.stringValue ?? "", in: scope).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    guard let reader else { throw ConsoleAPIError(status: 0, message: "Those dates could not be checked. Try again.") }
+    let hostID = ScreenValues.render("{site.id}", in: scope)
+    let resourceID = text("resource")
+    guard !resourceID.isEmpty, let checkIn = Stays.day(text("checkIn")), let checkOut = Stays.day(text("checkOut")) else {
+      throw ConsoleAPIError(status: 0, message: "Choose a resource and both dates.")
+    }
+    let stored = try await FirestoreLoads.rawDocument(reader, "hosts/\(hostID)/resources/\(resourceID)")
+    guard let resource = Stays.resource(stored?.data) else { throw ConsoleAPIError(status: 0, message: "That resource is gone.") }
+    let quote = Stays.quote(resource, checkIn: checkIn, checkOut: checkOut)
+    if let problem = quote.problem { throw ConsoleAPIError(status: 0, message: problem) }
+    // The same query the booking door checks against: every stay of this resource that ends after the walk-in arrives.
+    let query = FirestoreQuery(
+      ["hosts", hostID, "reservations"], equals: [("resourceId", resourceID)],
+      filters: [ListQueryConstraint(path: "checkOutDayMs", op: .greaterThan, value: Double(checkIn))],
+      order: [.init("checkOutDayMs")], limit: 500)
+    let overlapping: [FirestoreDocument]
+    do { overlapping = try await FirestoreLoads.documents(reader, query) } catch {
+      throw ConsoleAPIError(status: 0, message: "Could not check those dates. Try again.")
+    }
+    let now = Int64((Date().timeIntervalSince1970 * 1000).rounded())
+    guard Stays.isRangeAvailable(resource, booked: overlapping.compactMap { Stays.booked($0.data) }, checkIn: checkIn, checkOut: checkOut, now: now) else {
+      throw ConsoleAPIError(status: 0, message: "Those dates are taken")
+    }
+    let guest = text("guestName")
+    try await writer.merge(
+      ["hosts", hostID, "reservations", newResourceID()],
+      [
+        "resourceId": resourceID, "status": "confirmed", "checkInDayMs": Double(checkIn), "checkOutDayMs": Double(checkOut),
+        "guestName": guest.isEmpty ? NSNull() : guest, "guestEmail": NSNull(), "nights": quote.nights,
+        "totalCents": Double(quote.totalCents), "depositCents": 0, "paidCents": 0, "createdAtMs": Double(now),
+      ])
+  }
+
+  private func writeOne(_ write: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+    if let stay = write["stay"] {
+      try await bookStay(stay, scope, writer)
+      return
+    }
+    if let path = write["delete"]?.stringValue {
+      try await writer.delete(FirestoreLoads.segments(ScreenValues.render(path, in: scope)))
+      return
+    }
+    let fields = ScreenValues.resolveBody(write["fields"] ?? [:], in: scope)
+    let data = FirestoreLoads.plain(fields) as? [String: Any] ?? [:]
+    if let collection = write["add"]?.stringValue {
+      let path = FirestoreLoads.segments(ScreenValues.render(collection, in: scope)) + [newResourceID()]
+      try await writer.merge(path, data)
+      return
+    }
+    if let doc = write["doc"]?.stringValue {
+      try await writer.merge(FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), data)
+    }
   }
 
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
@@ -327,11 +472,16 @@ public final class ScreenModel {
       }
     }
     if let write = action.write {
-      guard let writer, let doc = write["doc"]?.stringValue else { return .failed("Saving is not available here.") }
+      guard let writer else { return .failed("Saving is not available here.") }
+      guard write["doc"] != nil || write["add"] != nil || write["delete"] != nil || write["stay"] != nil || !write["steps"].array.isEmpty else {
+        return .failed("Saving is not available here.")
+      }
       do {
-        let fields = ScreenValues.resolveBody(write["fields"] ?? [:], in: scope)
-        try await writer.merge(
-          FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(fields) as? [String: Any] ?? [:])
+        try await runWrite(write, scope, writer)
+        // `siteWide`: the write changes every page of the site, so its cached pages are dropped as the console does.
+        if write["siteWide"] == .bool(true), let api {
+          await publishSiteWide(api: api, writer: writer, hostID: ScreenValues.render("{site.id}", in: scope))
+        }
         return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
       } catch {
         return .failed(error.localizedDescription)
@@ -339,6 +489,12 @@ public final class ScreenModel {
     }
     guard let urlTemplate = action.url else { return .done(message: nil, response: nil) }
     guard let api else { return .failed("Sign in to continue.") }
+    var scope = scope
+    if let doc = action.overlay {
+      let stored = reader == nil ? nil : (try? await FirestoreLoads.rawDocument(reader!, ScreenValues.render(doc, in: scope))) ?? nil
+      guard let stored, let overlay = FirestoreLoads.stored(stored.data) else { return .failed("That could not be read. Try again.") }
+      scope = ScreenContext.with(scope, "overlay", overlay)
+    }
     let path = ScreenValues.renderURL(urlTemplate, in: scope)
     let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: scope) }
     do {
@@ -346,10 +502,11 @@ public final class ScreenModel {
       let headers = headers(for: action, path: path, body: sentBody, in: scope)
       let response = try await api.request(path, method: action.method, body: sentBody, headers: headers)
       let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", response ?? .null)) }
+      performed = action
       return .done(message: message, response: response)
     } catch let error as ConsoleAPIError {
       if Self.wantsReauth(error) { return .needsReauth(error.message) }
-      if error.status == 404, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
+      if error.status == action.elseStatus, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
       return .failed(error.message)
     } catch {
       return .failed(error.localizedDescription)
@@ -362,7 +519,8 @@ public final class ScreenModel {
     let signature = "\(action.id)|\(path)|\(String(data: (try? body?.encoded()) ?? Data(), encoding: .utf8) ?? "")"
     let key = attempts[signature] ?? UUID().uuidString.lowercased()
     attempts[signature] = key
-    let withAttempt = ScreenContext.with(scope, "attempt", .string(key))
+    // `{press}`: a key for this one press alone (its own retries share it); a second tap of the same request gets a new one.
+    let withAttempt = ScreenContext.with(ScreenContext.with(scope, "attempt", .string(key)), "press", .string(UUID().uuidString.lowercased()))
     return action.headers.mapValues { ScreenValues.render($0, in: withAttempt) }
   }
 
@@ -371,4 +529,20 @@ public final class ScreenModel {
     let words = [error.body?["error"], error.body?["code"], error.body?["reason"]].compactMap { $0?.stringValue }
     return words.contains { ["reauth-required", "recent-login-required", "requires-recent-login"].contains($0) }
   }
+}
+
+/// The console's `writeSiteWideChange` after a write: a `publishOutbox` entry so the drain re-renders the site if
+/// this run cannot, a revalidate request to do it now, and the entry retired when that worked. Like the console, a
+/// refused entry is not an error: the revalidate still runs.
+func publishSiteWide(api: ConsoleAPIClient, writer: FirestoreWriter, hostID: String) async {
+  let path = ["publishOutbox", newResourceID()]
+  var staged = false
+  do {
+    try await writer.merge(
+      path, ["hostId": hostID, "paths": ["/"], "createdAt": FirestoreSentinel.serverTimestamp, "attempts": 0, "entireHost": true])
+    staged = true
+  } catch {}
+  let answer = try? await api.request(
+    "/api/screens/revalidate", method: .post, body: ["hostId": .string(hostID), "entireHost": .bool(true)])
+  if staged, answer?["reason"]?.stringValue == "ok" { try? await writer.delete(path) }
 }

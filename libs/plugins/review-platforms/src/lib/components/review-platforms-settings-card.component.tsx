@@ -33,7 +33,7 @@ import type {
 } from '../model/review-platforms-settings'
 import { useReviewPlatformsFetch } from './review-platforms-api'
 
-/** What `commerceSettings` hands a widget: the site, and its workspace when known. */
+/** What `commercePromotions` hands a widget: the site, and its workspace when known. */
 export interface ReviewPlatformsSettingsWidgetProps {
   hostId: string
   orgId?: string
@@ -60,7 +60,8 @@ const MOMENT_LABELS: Record<InvitationMoment, string> = {
 }
 
 /**
- * REVIEW PLATFORMS, on the store's Settings (AGL-3699): Trustpilot — by the
+ * REVIEW PLATFORMS, on the store's Promotions page beside its own reviews
+ * (AGL-3699, AGL-3713): Trustpilot — by the
  * store's own invitation address, or by its own API key where the
  * deployment can keep one — and Yotpo Reviews with the store's app key and
  * secret. Credentials go in and never come back out; a card shows only

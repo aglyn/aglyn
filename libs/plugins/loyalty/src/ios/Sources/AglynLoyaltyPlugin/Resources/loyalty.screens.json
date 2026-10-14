@@ -1,0 +1,870 @@
+{
+  "$comment": "The Loyalty plugin's Rewards natively: the program (rates, referral offer, emails, what members hold), the store's own Smile.io or Yotpo Loyalty account, members and their history, and a balance adjusted by hand with one Idempotency-Key per press. The program, account and members open from Commerce promotions' commercePromotions zone. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "loyalty.rewards",
+      "title": "Rewards",
+      "label": "Rewards",
+      "subtitle": "Points, referrals and store credit",
+      "icon": "star|star",
+      "scope": "site",
+      "zones": [
+        "commercePromotions"
+      ],
+      "order": 70,
+      "constants": {
+        "connectors": [
+          {
+            "id": "smile",
+            "label": "Smile.io"
+          },
+          {
+            "id": "yotpo",
+            "label": "Yotpo Loyalty"
+          }
+        ]
+      },
+      "load": {
+        "program": {
+          "url": "/api/loyalty/program?hostId={site.id}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.program.program",
+          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+        },
+        {
+          "type": "notice",
+          "id": "connected",
+          "tone": "info",
+          "when": "data.program.program.connected",
+          "text": "The points are kept in your {const.connectors[id=data.program.program.connected].label} account; these rates decide what each order earns and what points are worth here."
+        },
+        {
+          "type": "fields",
+          "id": "totals",
+          "when": "data.program.program",
+          "title": "Where the program stands",
+          "rows": [
+            {
+              "label": "Rewards",
+              "value": "On",
+              "chip": true,
+              "tone": "success",
+              "when": "data.program.program.enabled"
+            },
+            {
+              "label": "Rewards",
+              "value": "Off",
+              "chip": true,
+              "tone": "neutral",
+              "when": "!data.program.program.enabled"
+            },
+            {
+              "label": "Members",
+              "value": "{data.program.totals.members ?? 'Unavailable':number}"
+            },
+            {
+              "label": "Points held",
+              "value": "{data.program.totals.outstandingPoints ?? 'Unavailable':number}",
+              "when": "!data.program.program.connected"
+            },
+            {
+              "label": "Points (last read from {const.connectors[id=data.program.program.connected].label})",
+              "value": "{data.program.totals.outstandingPoints ?? 'Unavailable':number}",
+              "when": "data.program.program.connected"
+            },
+            {
+              "label": "Worth",
+              "value": "{data.program.totals.outstandingPointsCents ?? 'Unavailable':cents}"
+            },
+            {
+              "label": "Store credit held",
+              "value": "{data.program.totals.outstandingCreditCents ?? 'Unavailable':cents}"
+            }
+          ],
+          "footer": "What members hold is a liability you owe them. Customers earn points on every order, online and at the register, and spend them like store credit."
+        },
+        {
+          "type": "form",
+          "id": "program",
+          "title": "The program",
+          "when": "data.program.program",
+          "fields": [
+            {
+              "key": "enabled",
+              "label": "Customers earn and spend rewards",
+              "kind": "toggle",
+              "initial": "{?data.program.program.enabled == true}"
+            },
+            {
+              "key": "earnPointsPerDollar",
+              "label": "Points per dollar spent",
+              "kind": "number",
+              "integer": true,
+              "required": true,
+              "min": 1,
+              "max": 100,
+              "initial": "{data.program.program.earnPointsPerDollar}",
+              "help": "On goods, after discounts. Never on shipping, tax or tips."
+            },
+            {
+              "key": "pointsPerDollar",
+              "label": "Points for $1 off",
+              "kind": "number",
+              "integer": true,
+              "required": true,
+              "min": 10,
+              "max": 10000,
+              "initial": "{data.program.program.pointsPerDollar}",
+              "help": "What points are worth when a customer spends them."
+            },
+            {
+              "key": "minRedeemPoints",
+              "label": "Points needed to redeem",
+              "kind": "number",
+              "integer": true,
+              "required": true,
+              "min": 0,
+              "max": 100000,
+              "initial": "{data.program.program.minRedeemPoints}",
+              "help": "A customer spends points once they hold at least this many."
+            },
+            {
+              "key": "welcomePoints",
+              "label": "Welcome points",
+              "kind": "number",
+              "integer": true,
+              "required": true,
+              "min": 0,
+              "max": 100000,
+              "initial": "{data.program.program.welcomePoints}",
+              "help": "Given with a customer’s first order. 0 for none.",
+              "when": "!data.program.program.connected"
+            },
+            {
+              "key": "referralsEnabled",
+              "label": "Members can refer friends",
+              "kind": "toggle",
+              "when": "!data.program.program.connected",
+              "initial": "{?data.program.program.referralsEnabled == true}"
+            },
+            {
+              "key": "refereeRewardCents",
+              "label": "Friend’s first-order credit ($)",
+              "kind": "number",
+              "required": true,
+              "min": 0,
+              "max": 1000,
+              "initial": "{data.program.program.refereeRewardCents:amount}",
+              "help": "Taken off the friend’s first order.",
+              "when": "form.referralsEnabled && !data.program.program.connected"
+            },
+            {
+              "key": "refereeMinimumCents",
+              "label": "Friend’s minimum order ($)",
+              "kind": "number",
+              "required": true,
+              "min": 0,
+              "max": 100000,
+              "initial": "{data.program.program.refereeMinimumCents:amount}",
+              "help": "0 for any order.",
+              "when": "form.referralsEnabled && !data.program.program.connected"
+            },
+            {
+              "key": "referrerRewardCents",
+              "label": "Member’s reward ($)",
+              "kind": "number",
+              "required": true,
+              "min": 0,
+              "max": 1000,
+              "initial": "{data.program.program.referrerRewardCents:amount}",
+              "help": "Store credit once the friend’s order is paid.",
+              "when": "form.referralsEnabled && !data.program.program.connected"
+            },
+            {
+              "key": "emails",
+              "label": "Email members what they earn and are given",
+              "kind": "toggle",
+              "initial": "{?data.program.program.emails != false}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/loyalty/program",
+            "body": {
+              "hostId": "{site.id}",
+              "program": {
+                "enabled": "{form.enabled}",
+                "earnPointsPerDollar": "{form.earnPointsPerDollar}",
+                "pointsPerDollar": "{form.pointsPerDollar}",
+                "minRedeemPoints": "{form.minRedeemPoints}",
+                "welcomePoints": "{form.welcomePoints}",
+                "referralsEnabled": "{form.referralsEnabled}",
+                "refereeRewardCents": {
+                  "$cents": "{form.refereeRewardCents}"
+                },
+                "refereeMinimumCents": {
+                  "$cents": "{form.refereeMinimumCents}"
+                },
+                "referrerRewardCents": {
+                  "$cents": "{form.referrerRewardCents}"
+                },
+                "emails": "{form.emails}"
+              }
+            },
+            "success": "Rewards program saved"
+          }
+        },
+        {
+          "type": "links",
+          "id": "more",
+          "when": "data.program.program",
+          "items": [
+            {
+              "title": "Rewards members",
+              "subtitle": "Find a member, see their history, give store credit",
+              "icon": "person.2|group",
+              "screen": "loyalty.members"
+            },
+            {
+              "title": "Rewards account",
+              "subtitle": "Keep points in your own Smile.io or Yotpo Loyalty account",
+              "icon": "link|link",
+              "screen": "loyalty.connection"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "loyalty.connection",
+      "title": "Rewards account",
+      "label": "Rewards account",
+      "subtitle": "Your own Smile.io or Yotpo Loyalty account",
+      "icon": "link|link",
+      "scope": "site",
+      "zones": [
+        "commercePromotions"
+      ],
+      "order": 71,
+      "constants": {
+        "syncStatus": [
+          {
+            "id": "pending",
+            "label": "Waiting to send"
+          },
+          {
+            "id": "sending",
+            "label": "Sending"
+          },
+          {
+            "id": "synced",
+            "label": "Sent"
+          },
+          {
+            "id": "retry",
+            "label": "Not sent yet"
+          },
+          {
+            "id": "unmatched",
+            "label": "Not a member there"
+          },
+          {
+            "id": "skipped",
+            "label": "Not sent"
+          }
+        ]
+      },
+      "load": {
+        "conn": {
+          "url": "/api/loyalty/connection?hostId={site.id}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.conn",
+          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+        },
+        {
+          "type": "notice",
+          "id": "notConfigured",
+          "tone": "info",
+          "when": "data.conn && !data.conn.configured",
+          "text": "Connecting a rewards account is not available on this deployment."
+        },
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "when": "data.conn.configured && !data.conn.connection",
+          "text": "Already run Smile.io or Yotpo Loyalty? Connect your own account and your members’ points are kept there instead of in the built-in program."
+        },
+        {
+          "type": "notice",
+          "id": "smileNote",
+          "tone": "info",
+          "when": "data.conn.configured && !data.conn.connection",
+          "text": "Smile.io offers API keys on its Plus and Enterprise plans. A buyer who is not yet in your Smile.io program earns once they join it."
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "title": "Connect an account",
+          "when": "data.conn.configured && !data.conn.connection",
+          "items": [
+            {
+              "id": "connectSmile",
+              "label": "Connect Smile.io",
+              "icon": "link|link",
+              "url": "/api/loyalty/connection",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "Smile.io API key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "In Smile Admin, open Settings → Developer and create a key with the customer read, points transaction read and points transaction write scopes."
+                },
+                {
+                  "key": "replace",
+                  "kind": "toggle",
+                  "when": "data.conn.builtInPoints > 0",
+                  "label": "Use Smile.io balances while connected. The {data.conn.builtInPoints:number} built-in points members hold are set aside and come back exactly if you disconnect."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "action": "connect",
+                "provider": "smile",
+                "credentials": {
+                  "apiKey": "{form.apiKey}"
+                },
+                "replaceBalances": "{form.replace}"
+              },
+              "success": "Smile.io connected"
+            },
+            {
+              "id": "connectYotpo",
+              "label": "Connect Yotpo Loyalty",
+              "icon": "link|link",
+              "url": "/api/loyalty/connection",
+              "prompt": [
+                {
+                  "key": "guid",
+                  "label": "GUID",
+                  "kind": "text",
+                  "required": true,
+                  "help": "In the Yotpo Loyalty admin, under Settings → General."
+                },
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "On the same Settings page, beside the GUID."
+                },
+                {
+                  "key": "replace",
+                  "kind": "toggle",
+                  "when": "data.conn.builtInPoints > 0",
+                  "label": "Use Yotpo Loyalty balances while connected. The {data.conn.builtInPoints:number} built-in points members hold are set aside and come back exactly if you disconnect."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "action": "connect",
+                "provider": "yotpo",
+                "credentials": {
+                  "guid": "{form.guid}",
+                  "apiKey": "{form.apiKey}"
+                },
+                "replaceBalances": "{form.replace}"
+              },
+              "success": "Yotpo Loyalty connected"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Rewards account: {data.conn.connection.label}",
+          "when": "data.conn.connection",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tone": "success",
+              "when": "!data.conn.connection.lastError"
+            },
+            {
+              "label": "Status",
+              "value": "Needs attention",
+              "chip": true,
+              "tone": "warning",
+              "when": "data.conn.connection.lastError"
+            },
+            {
+              "label": "Account",
+              "value": "{data.conn.connection.accountLabel}",
+              "when": "data.conn.connection.accountLabel"
+            },
+            {
+              "label": "API key",
+              "value": "ending {data.conn.connection.keyLast4|'····'}"
+            },
+            {
+              "label": "Last sent",
+              "value": "{data.conn.connection.lastSyncedAtMs:datetime}",
+              "when": "data.conn.connection.lastSyncedAtMs"
+            }
+          ],
+          "footer": "Points are kept in your {data.conn.connection.label} account. Every order’s points, refunds, redemptions and your own changes are sent there; the built-in points, welcome points and referral rewards are off."
+        },
+        {
+          "type": "notice",
+          "id": "lastError",
+          "tone": "warning",
+          "when": "data.conn.connection.lastError",
+          "text": "{data.conn.connection.lastError}"
+        },
+        {
+          "type": "list",
+          "id": "attention",
+          "title": "Waiting to reach {data.conn.connection.label}",
+          "when": "data.conn.connection && data.conn.attention.0",
+          "items": "data.conn.attention",
+          "icon": "arrow.triangle.2.circlepath|sync",
+          "primary": "{item.points:number} points for {item.email}",
+          "secondary": "{const.syncStatus[id=item.status].label}",
+          "tertiary": "{item.error}"
+        },
+        {
+          "type": "notice",
+          "id": "allSent",
+          "tone": "success",
+          "when": "data.conn.connection && !data.conn.attention.0",
+          "text": "Everything has been sent."
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "when": "data.conn.connection",
+          "items": [
+            {
+              "id": "retry",
+              "label": "Send again",
+              "icon": "arrow.clockwise|refresh",
+              "when": "data.conn.attention.0",
+              "url": "/api/loyalty/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "retry"
+              },
+              "success": "Sent again"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect {data.conn.connection.label}? Disconnecting turns Rewards off. Points members earned in your connected account stay there. Each member’s built-in points go back to exactly what they were when you connected, and store credit is unchanged.",
+              "url": "/api/loyalty/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "disconnect",
+                "confirm": true
+              },
+              "success": "{data.conn.connection.label} disconnected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "loyalty.members",
+      "title": "Rewards members",
+      "label": "Rewards members",
+      "subtitle": "Find a member, see their history, give store credit",
+      "icon": "person.2|group",
+      "scope": "site",
+      "zones": [
+        "commercePromotions"
+      ],
+      "order": 72,
+      "load": {
+        "members": {
+          "url": "/api/loyalty/members?hostId={site.id}&limit=25&sort={params.sort|'recent'}&q={params.q}",
+          "cursor": "next",
+          "cursorParam": "after",
+          "items": "members",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.members",
+          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+        },
+        {
+          "type": "actions",
+          "id": "tools",
+          "items": [
+            {
+              "id": "give",
+              "label": "Give store credit",
+              "icon": "gift|card_giftcard",
+              "url": "/api/loyalty/member",
+              "headers": {
+                "Idempotency-Key": "{press}"
+              },
+              "prompt": [
+                {
+                  "key": "email",
+                  "label": "Customer email",
+                  "kind": "email",
+                  "required": true,
+                  "help": "A customer who is not a member yet joins."
+                },
+                {
+                  "key": "credit",
+                  "label": "Store credit ($)",
+                  "kind": "number",
+                  "help": "A minus sign takes credit away."
+                },
+                {
+                  "key": "points",
+                  "label": "Points",
+                  "kind": "number",
+                  "integer": true,
+                  "help": "A minus sign takes points away."
+                },
+                {
+                  "key": "note",
+                  "label": "Note",
+                  "kind": "text",
+                  "help": "Kept in the member’s history, and shown in their email."
+                },
+                {
+                  "key": "notify",
+                  "label": "Email the customer when credit is added",
+                  "kind": "toggle",
+                  "initial": "true"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "email": "{form.email}",
+                "points": "{form.points}",
+                "creditCents": {
+                  "$cents": "{form.credit}"
+                },
+                "note": "{form.note}",
+                "notify": "{form.notify}"
+              },
+              "success": "Saved",
+              "instead": [
+                {
+                  "when": "response.emailed",
+                  "title": "Saved",
+                  "text": "Saved, and the customer was emailed."
+                }
+              ]
+            },
+            {
+              "id": "search",
+              "label": "Find by email",
+              "icon": "magnifyingglass|search",
+              "prompt": [
+                {
+                  "key": "q",
+                  "label": "Find by email",
+                  "kind": "text",
+                  "required": true,
+                  "help": "The start of the member’s email."
+                }
+              ],
+              "navigate": {
+                "screen": "loyalty.members",
+                "params": {
+                  "q": "{form.q}"
+                }
+              }
+            },
+            {
+              "id": "sort",
+              "label": "Sort: {const.sorts[id=params.sort].label|'Newest'}",
+              "icon": "arrow.up.arrow.down|filter_list",
+              "when": "!params.q",
+              "prompt": [
+                {
+                  "key": "sort",
+                  "label": "Sort",
+                  "kind": "select",
+                  "initial": "{params.sort|'recent'}",
+                  "options": [
+                    {
+                      "value": "recent",
+                      "label": "Newest"
+                    },
+                    {
+                      "value": "points",
+                      "label": "Most points"
+                    },
+                    {
+                      "value": "email",
+                      "label": "Email"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "loyalty.members",
+                "params": {
+                  "sort": "{form.sort}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "members",
+          "title": "{params.q|'Members'}",
+          "when": "data.members",
+          "items": "data.members.members",
+          "load": "members",
+          "primary": "{item.email}",
+          "secondary": "{item.points:number} points · {item.creditCents:cents} store credit · {item.ordersCount:plural/order}",
+          "tertiary": "{item.name}",
+          "icon": "person|person",
+          "empty": "No members yet. A customer joins with their first order once rewards are on, or when you give them store credit.",
+          "open": {
+            "screen": "loyalty.member",
+            "params": {
+              "memberId": "{item.id}"
+            }
+          }
+        }
+      ],
+      "constants": {
+        "sorts": [
+          {
+            "id": "recent",
+            "label": "Newest"
+          },
+          {
+            "id": "points",
+            "label": "Most points"
+          },
+          {
+            "id": "email",
+            "label": "Email"
+          }
+        ]
+      }
+    },
+    {
+      "id": "loyalty.member",
+      "title": "{data.detail.member.name|data.detail.member.email|'Rewards member'}",
+      "label": "Rewards member",
+      "icon": "person|person",
+      "scope": "site",
+      "constants": {
+        "kinds": [
+          {
+            "id": "earn",
+            "label": "Earned"
+          },
+          {
+            "id": "welcome",
+            "label": "Welcome points"
+          },
+          {
+            "id": "reverse",
+            "label": "Refund"
+          },
+          {
+            "id": "redeem",
+            "label": "Spent"
+          },
+          {
+            "id": "restore",
+            "label": "Given back"
+          },
+          {
+            "id": "void",
+            "label": "Voided"
+          },
+          {
+            "id": "adjust",
+            "label": "Adjusted"
+          },
+          {
+            "id": "referral",
+            "label": "Referral reward"
+          },
+          {
+            "id": "referee",
+            "label": "Referral credit"
+          }
+        ]
+      },
+      "load": {
+        "detail": {
+          "url": "/api/loyalty/member?hostId={site.id}&memberId={params.memberId}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "missing",
+          "tone": "info",
+          "when": "!data.detail.member",
+          "text": "That member could not be found."
+        },
+        {
+          "type": "fields",
+          "id": "member",
+          "when": "data.detail.member",
+          "rows": [
+            {
+              "label": "Email",
+              "value": "{data.detail.member.email}"
+            },
+            {
+              "label": "Points",
+              "value": "{data.detail.member.points:number}"
+            },
+            {
+              "label": "Store credit",
+              "value": "{data.detail.member.creditCents:cents}"
+            },
+            {
+              "label": "Orders",
+              "value": "{data.detail.member.ordersCount:number}"
+            },
+            {
+              "label": "Rewards code",
+              "value": "{data.detail.member.rewardsCode}"
+            },
+            {
+              "label": "Referral code",
+              "value": "{data.detail.member.referralCode}",
+              "when": "data.detail.member.referralCode"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "adjust",
+          "when": "data.detail.member",
+          "items": [
+            {
+              "id": "adjust",
+              "label": "Adjust",
+              "icon": "plusminus|tune",
+              "url": "/api/loyalty/member",
+              "headers": {
+                "Idempotency-Key": "{press}"
+              },
+              "prompt": [
+                {
+                  "key": "credit",
+                  "label": "Store credit ($)",
+                  "kind": "number",
+                  "help": "A minus sign takes credit away."
+                },
+                {
+                  "key": "points",
+                  "label": "Points",
+                  "kind": "number",
+                  "integer": true,
+                  "help": "A minus sign takes points away."
+                },
+                {
+                  "key": "note",
+                  "label": "Note",
+                  "kind": "text",
+                  "help": "Kept in the member’s history, and shown in their email."
+                },
+                {
+                  "key": "notify",
+                  "label": "Email the customer when credit is added",
+                  "kind": "toggle",
+                  "initial": "true"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{params.memberId}",
+                "points": "{form.points}",
+                "creditCents": {
+                  "$cents": "{form.credit}"
+                },
+                "note": "{form.note}",
+                "notify": "{form.notify}"
+              },
+              "success": "Saved",
+              "instead": [
+                {
+                  "when": "response.emailed",
+                  "title": "Saved",
+                  "text": "Saved, and the customer was emailed."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "history",
+          "title": "History",
+          "when": "data.detail.member",
+          "items": "data.detail.ledger",
+          "primary": "{const.kinds[id=item.kind].label|'Change'}",
+          "secondary": "{item.atMs:datetime}",
+          "tertiary": "{item.note}",
+          "icon": "clock|history",
+          "badges": [
+            {
+              "text": "+{item.points:number} points",
+              "tone": "success",
+              "when": "item.points > 0"
+            },
+            {
+              "text": "{item.points:number} points",
+              "tone": "warning",
+              "when": "item.points < 0"
+            },
+            {
+              "text": "+{item.creditCents:cents} credit",
+              "tone": "success",
+              "when": "item.creditCents > 0"
+            },
+            {
+              "text": "{item.creditCents:cents} credit",
+              "tone": "warning",
+              "when": "item.creditCents < 0"
+            }
+          ],
+          "empty": "Nothing yet."
+        }
+      ]
+    }
+  ]
+}

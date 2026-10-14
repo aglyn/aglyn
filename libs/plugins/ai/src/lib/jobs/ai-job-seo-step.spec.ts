@@ -274,7 +274,10 @@ describe('a page’s listing', () => {
     expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
     const request = mockRunAiRequest.mock.calls[0][0]
     expect(request).toMatchObject({ model: aiModelForStep('job.seo'), maxTokens: AI_SEO_FIELDS_MAX_TOKENS, stream: false })
-    expect(request.thinking).toBeUndefined()
+    // The fast tier's model thinks unless told not to; a listing's ceiling
+    // holds the answer alone, at the low effort a bounded answer needs (AGL-3781).
+    expect(request.thinking).toBe('off')
+    expect(request.effort).toBe('low')
     expect(request.tools.map((tool: { name: string; strict: boolean }) => [tool.name, tool.strict])).toEqual([
       [AI_SEO_FIELDS_TOOL_NAME, true],
     ])

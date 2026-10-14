@@ -85,7 +85,17 @@ class RestFirestoreReader(
   }
 
   /** `runAggregationQuery` with one `count`, as the SDKs' server count asks it. */
-  override suspend fun count(query: FirestoreQuery): Long? {
+  override suspend fun count(query: FirestoreQuery): Long? =
+    aggregate(query, buildJsonObject { put("alias", "result"); put("count", buildJsonObject {}) })
+      ?.get("integerValue")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() }
+
+  /** `runAggregationQuery` with one `sum` of [field]: the whole sum over the documents the query matches. */
+  override suspend fun sum(query: FirestoreQuery, field: String): Double? =
+    aggregate(query, buildJsonObject { put("alias", "result"); put("sum", buildJsonObject { put("field", buildJsonObject { put("fieldPath", field) }) }) })
+      ?.let { result -> ((result["integerValue"] ?: result["doubleValue"]) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() }
+
+  /** One aggregation (aliased `result`) over [query] with its limit and cursor dropped; its typed value, or null. */
+  private suspend fun aggregate(query: FirestoreQuery, aggregation: JsonObject): JsonObject? {
     val bare = query.copy(limit = null, startAfter = null)
     val parent = bare.collectionPath.substringBeforeLast('/', "")
     val collectionId = bare.collectionPath.substringAfterLast('/')
@@ -99,7 +109,7 @@ class RestFirestoreReader(
             "structuredAggregationQuery",
             buildJsonObject {
               put("structuredQuery", structuredQuery(collectionId, bare))
-              put("aggregations", kotlinx.serialization.json.JsonArray(listOf(buildJsonObject { put("alias", "count"); put("count", buildJsonObject {}) })))
+              put("aggregations", kotlinx.serialization.json.JsonArray(listOf(aggregation)))
             },
           )
         }.toString(),
@@ -108,7 +118,7 @@ class RestFirestoreReader(
     val body = Json.parseToJsonElement(response.bodyAsText())
     if (response.status.value !in 200..299) throw IllegalStateException(errorOf(body))
     val fields = body.jsonArray.firstNotNullOfOrNull { ((it.jsonObject["result"] as? JsonObject)?.get("aggregateFields") as? JsonObject) }
-    return ((fields?.get("count") as? JsonObject)?.get("integerValue") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
+    return fields?.get("result") as? JsonObject
   }
 
   /** A PATCH whose update mask names every leaf [data] holds: Firestore's own form of a merge. */

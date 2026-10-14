@@ -47,9 +47,14 @@ beforeEach(() => {
 
 const providerId = (): string => resolveAiRoute('copy.section')?.provider.id ?? ''
 
+/** A current model of a tier: a retired row is served by its successor, so it is never a pick. */
 function ofTier(tier: AiCatalogEntry['tier'], except?: string): AiCatalogEntry {
   const entry = AI_MODEL_CATALOG.find(
-    (candidate) => candidate.provider === providerId() && candidate.tier === tier && candidate.id !== except,
+    (candidate) =>
+      candidate.provider === providerId() &&
+      candidate.tier === tier &&
+      candidate.id !== except &&
+      !candidate.successor,
   )
   if (!entry) throw new Error(`the default provider has no ${tier} model`)
   return entry

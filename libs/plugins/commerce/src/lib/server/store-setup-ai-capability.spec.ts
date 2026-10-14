@@ -107,4 +107,17 @@ describe('the store-setup capabilities', () => {
     )
     expect(content).toEqual({ section: 'tax', mode: 'none' })
   })
+
+  // The settings page each change is on, a page each since AGL-3713.
+  it('names the settings page a person finds each change on', () => {
+    const where = Object.fromEntries(
+      STORE_SETUP_AI_CAPABILITIES.map((capability) => [capability.op, capability.where]),
+    )
+    expect(where).toEqual({
+      [STORE_SHIPPING_AI_OP]: 'Products → Shipping & delivery',
+      [STORE_PICKUP_AI_OP]: 'Products → Shipping & delivery',
+      [STORE_DELIVERY_AI_OP]: 'Products → Shipping & delivery',
+      [STORE_TAX_AI_OP]: 'Products → Taxes',
+    })
+  })
 })

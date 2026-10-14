@@ -590,6 +590,18 @@ describe('POST /api/admin/org-refund (AGL-2486)', () => {
       expect(call.body).not.toContain('refund_application_fee')
     })
 
+    it('tells Stripe a fraud refund is fraudulent, so Radar blocks the card (AGL-3786)', async () => {
+      await postRefund(good({ reason: 'fraud' }))
+      expect(refundCalls()[0].body).toContain('reason=fraudulent')
+    })
+
+    it('gives every refund a Stripe reason derived from ours', async () => {
+      await postRefund(good({ reason: 'duplicate', idempotencyKey: 'a-dup' }))
+      expect(refundCalls()[0].body).toContain('reason=duplicate')
+      await postRefund(good({ reason: 'goodwill', idempotencyKey: 'a-good' }))
+      expect(refundCalls()[1].body).toContain('reason=requested_by_customer')
+    })
+
     it('sends the attempt key as Stripe’s idempotency header', async () => {
       await postRefund(good({ idempotencyKey: 'attempt-xyz' }))
       expect(refundCalls()[0].idempotencyKey).toBe('attempt-xyz')
