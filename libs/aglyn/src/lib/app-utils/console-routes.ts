@@ -208,6 +208,9 @@ export enum Route {
   // workspace packages, and the history of its imports with undo.
   ORG_SETTINGS_DATA = '/[orgSlug]/settings/data',
   ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
+  // The `orgSettings` plugin zone's own section (AGL-3711): offered only
+  // while a plugin has a card for it.
+  ORG_SETTINGS_INTEGRATIONS = '/[orgSlug]/settings/integrations',
   /**
    * Billing, section by section (AGL-2501).
    *
@@ -397,6 +400,9 @@ export enum Route {
   HOST_SETUP_THEME = '/[orgSlug]/hosts/[host]/setup/theme',
   HOST_SETUP_BUSINESS = '/[orgSlug]/hosts/[host]/setup/business',
   HOST_SETUP_EMAILS = '/[orgSlug]/hosts/[host]/setup/emails',
+  // The `hostSettings` plugin zone's own section (AGL-3711): offered only
+  // while a plugin has a card for it.
+  HOST_SETUP_INTEGRATIONS = '/[orgSlug]/hosts/[host]/setup/integrations',
   // Host Admin area (AGL-1014): owner/admin-only controls — per-site plugin
   // enablement and the Danger zone — out of the Setup page collaborators
   // legitimately visit.
@@ -612,6 +618,7 @@ export interface RoutePayload {
   [Route.ORG_SETTINGS_HOLDS]: { orgSlug: string }
   [Route.ORG_SETTINGS_DATA]: { orgSlug: string }
   [Route.ORG_SETTINGS_DELETE]: { orgSlug: string }
+  [Route.ORG_SETTINGS_INTEGRATIONS]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }
   [Route.HOST_CONTENT_COLLECTION]: {
@@ -658,6 +665,7 @@ export interface RoutePayload {
   [Route.HOST_SETUP_THEME]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_BUSINESS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_EMAILS]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_INTEGRATIONS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_GENERAL]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGINS]: { orgSlug: string; host: string }

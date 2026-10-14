@@ -58,7 +58,7 @@ export interface SuppliersCardProps {
  * that looks configured and never hears about an order.
  */
 
-const suppliersHelp = pluginDocsHelp('commerce', { anchor: '#dropshipping' })
+const suppliersHelp = pluginDocsHelp('dropshipSuppliers', { anchor: '#add-a-supplier' })
 
 export function SuppliersCard(props: SuppliersCardProps) {
   const { hostId } = props

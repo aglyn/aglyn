@@ -44,8 +44,9 @@ import {
   parseAiTemplateJobInputs,
   type AiTemplateSubject,
 } from '../model/ai-template-subjects'
+import { AI_SITE_BUILD_IN_FLIGHT_COPY, aiSiteBuildInFlight } from '../model/ai-job-activity'
 import { AiJobFollow } from './ai-job-follow.component'
-import { publishAiJob } from './ai-jobs-store'
+import { publishAiJob, useAiJobsInFlightKnown } from './ai-jobs-store'
 import { AiTemplateCollectionField } from './ai-template-collection-field.component'
 
 /**
@@ -375,6 +376,13 @@ export function AiBriefDialog({
       ? started.kind
       : aiBriefJobKind(kind, choice)
   const copy = AI_BRIEF_COPY[shownKind]
+  // Another page already being built on this site (AGL-3765), from the list
+  // the top-bar indicator already holds, read again by nothing here: two at
+  // once each plan against the site as it was, and race for what its plan
+  // holds one of. A warning, not a stop.
+  const asking = open && kind === 'page' && !started
+  const inFlight = useAiJobsInFlightKnown(user, orgId, asking)
+  const building = asking ? aiSiteBuildInFlight(inFlight, { hostId }) : null
 
   useEffect(() => {
     if (!open) return
@@ -531,6 +539,7 @@ export function AiBriefDialog({
             <Typography variant="body2" color="text.secondary">
               {copy.next}
             </Typography>
+            {building ? <Alert severity="info">{AI_SITE_BUILD_IN_FLIGHT_COPY}</Alert> : null}
             {notice ? <Alert severity="warning">{notice}</Alert> : null}
           </Stack>
         )}
