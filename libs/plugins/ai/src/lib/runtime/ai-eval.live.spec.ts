@@ -24,8 +24,16 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
-import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
-import { AI_EFFORT_ARM_ENV, aiLiveTimeoutMs } from './ai-dev-env'
+import {
+  aiEvalCasesNamed,
+  aiEvalEffortArm,
+  aiEvalLiveAllowed,
+  aiEvalRecordingBody,
+  aiEvalRecordingFileName,
+  aiEvalScoreLine,
+  recordAiEvalLive,
+} from './ai-eval-live'
+import { aiLiveTimeoutMs } from './ai-dev-env'
 import { aiLiveRunLedger } from './ai-dev-replay'
 import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 
@@ -77,6 +85,12 @@ const live = aiEvalLiveAllowed(process.env)
 
 
 ;(live ? describe : describe.skip)('the live eval run', () => {
+  // The run's ledger prints however the run ended (AGL-3781): a run that
+  // threw before its table still spent what the ledger counts.
+  afterAll(() => {
+    console.log(`run: ${JSON.stringify(aiLiveRunLedger())}`)
+  })
+
   it(
     'records and grades an answer for every brief a recorder covers',
     async () => {
@@ -94,30 +108,33 @@ const live = aiEvalLiveAllowed(process.env)
         files(CASES_DIR).map((file) => readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), file)),
         process.env,
       )
-      const report = await recordAiEvalLive(cases, { env: process.env, readFixture })
       // An effort A/B arm (AGL-3781) records beside the defaults' answers, not
-      // over them, and says per brief what it scored, so two runs compare.
-      const arm = String(process.env[AI_EFFORT_ARM_ENV] ?? '').trim()
-      const suffix = arm ? `.effort-${arm.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}` : ''
-      for (const { caseId, kind, candidate } of report.recorded) {
-        const dir = join(RECORDINGS_DIR, kind)
-        mkdirSync(dir, { recursive: true })
-        writeFileSync(
-          join(dir, `${caseId}.${candidate.model ?? 'unknown'}${suffix}.json`),
-          `${JSON.stringify({ caseId, candidate }, null, 2)}\n`,
-        )
-        const evalCase = cases.find((entry) => entry.id === caseId)
+      // over them, under a short tag — the recording holds the arm's efforts —
+      // and its score lines pair with the defaults' by brief, so two runs compare.
+      const arm = aiEvalEffortArm(process.env)
+      if (arm) console.log(`arm ${arm.tag}: ${JSON.stringify(arm.efforts)}`)
+      const report = await recordAiEvalLive(cases, { env: process.env, readFixture })
+      // One recording that cannot be written does not take the others with it.
+      const unwritten: string[] = []
+      for (const entry of report.recorded) {
+        const { caseId, kind, candidate } = entry
+        try {
+          const dir = join(RECORDINGS_DIR, kind)
+          mkdirSync(dir, { recursive: true })
+          writeFileSync(
+            join(dir, aiEvalRecordingFileName(caseId, candidate.model, arm)),
+            aiEvalRecordingBody(caseId, candidate, arm),
+          )
+        } catch (error) {
+          unwritten.push(`${caseId} (${kind}): ${error instanceof Error ? error.message : String(error)}`)
+        }
+        const evalCase = cases.find((brief) => brief.id === caseId)
         const score = evalCase ? scoreAiEvalCandidate(evalCase, candidate) : null
-        const rubric = candidate.rubric
-        console.log(
-          `score ${caseId} (${kind}) ${candidate.model}${arm ? ` effort ${arm}` : ''}: ${score?.pass ? 'pass' : 'fail'}` +
-            `, structure ${rubric?.structure ?? '-'}, copy ${rubric?.copy ?? '-'}, reuse ${rubric?.reuse ?? '-'}` +
-            `, output ${candidate.usage?.outputTokens ?? '-'} tokens`,
-        )
+        console.log(aiEvalScoreLine(entry, score?.pass ?? null, arm))
       }
       // Live against replayed (AGL-3660): a recording whose request was
       // replayed is the answer an earlier run already got, not a new sample.
-      console.log(`run: ${JSON.stringify(aiLiveRunLedger())}`)
+      // The ledger itself prints after the run, in `afterAll`.
       console.log(
         `recorded ${report.recorded.length}; skipped ${report.skipped.length}: ${report.skipped
           .map((entry) => `${entry.caseId} (${entry.why})`)
@@ -139,8 +156,10 @@ const live = aiEvalLiveAllowed(process.env)
             .join('\n')}`,
         )
       }
+      if (unwritten.length) console.error(`unwritten ${unwritten.length}:\n  ${unwritten.join('\n  ')}`)
       expect(report.recorded.length).toBeGreaterThan(0)
       expect(report.failed).toEqual([])
+      expect(unwritten).toEqual([])
     },
     aiLiveTimeoutMs(30 * 60_000),
   )

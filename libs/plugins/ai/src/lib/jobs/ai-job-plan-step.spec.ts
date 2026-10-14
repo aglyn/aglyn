@@ -264,6 +264,9 @@ describe('the plan step', () => {
       stream: false,
       messages: [{ role: 'user', content: aiJobPlanPrompt(job()) }],
     })
+    // Only a paid site's plan asks medium (AGL-3781); every other plan asks the row's effort, the model's own.
+    expect(AI_ROUTING_TABLE['job.plan'].effort).toBeNull()
+    expect(request).not.toHaveProperty('effort')
     expect(request.system).toEqual([
       AI_DOCTRINE_SYSTEM_BLOCK,
       { ...AI_JOB_PLAN_INSTRUCTIONS[0], cacheBreakpoint: true },

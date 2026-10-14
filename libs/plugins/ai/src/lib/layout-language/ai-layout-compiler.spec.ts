@@ -584,6 +584,103 @@ describe('copy', () => {
     expect(texts[1]).toBe('Call [phone number] or 512-555-0199 to book.')
   })
 
+  it('keeps every word of a Spanish, Portuguese or French page whole, ending in an accented letter or not (AGL-3791)', () => {
+    // A live Spanish guided start (job 4v-nRPeKDH) stored "Galería de la
+    // panaderí", "Conchas del dí" and "3. Mediodí", and named its sections
+    // "Menú completo por categorí" to a screen reader, from a plan that had
+    // every one of them whole.
+    const plan: AiLayoutPagePlan = {
+      title: 'Inicio',
+      sections: [
+        { name: 'Galería de la panadería', uses: [], items: 0 },
+        { name: 'Menú completo por categoría', uses: [], items: 3 },
+        { name: 'Cómo pedir tu pastel', uses: [], items: 3 },
+      ],
+    }
+    const { compiled } = build(
+      [
+        {
+          blocks: [
+            { kind: 'heading', text: 'Galería de la panadería' },
+            { kind: 'text', text: 'Pan dulce, conchas y pasteles de la pâtisserie' },
+            { kind: 'image', text: 'Manos amasando masa de pan dulce en la cocina de la panadería' },
+          ],
+        },
+        {
+          blocks: [
+            { kind: 'heading', text: 'Menú completo por categoría' },
+            {
+              kind: 'cards',
+              items: [
+                { title: 'Conchas del día', text: 'Recién salidas del horno cada mañana' },
+                { title: 'Pão fresco da padaria', text: 'A melhor confeitaria' },
+                { title: 'Le café', text: 'Une pâtisserie' },
+              ],
+            },
+          ],
+        },
+        {
+          blocks: [
+            { kind: 'heading', text: 'Cómo pedir tu pastel' },
+            {
+              kind: 'steps',
+              items: [
+                { title: 'Mañana', text: 'Cuéntanos tu celebración' },
+                { title: 'Tarde', text: 'Elige el sabor de la confitería' },
+                { title: 'Mediodía', text: 'Recoge tu pastel en la panadería' },
+              ],
+            },
+          ],
+        },
+      ],
+      plan,
+      false,
+    )
+    const nodes = Object.values(compiled.tree.nodes)
+    const words = nodes.flatMap((node) =>
+      ['children', 'primary', 'secondary', 'alt', 'ariaLabel']
+        .map((name) => node.props?.[name])
+        .filter((value): value is string => typeof value === 'string'),
+    )
+    for (const whole of [
+      'Galería de la panadería',
+      'Menú completo por categoría',
+      'Pan dulce, conchas y pasteles de la pâtisserie',
+      'Manos amasando masa de pan dulce en la cocina de la panadería',
+      'Conchas del día',
+      'Pão fresco da padaria',
+      'A melhor confeitaria',
+      'Le café',
+      'Une pâtisserie',
+      'Mediodía',
+      'Recoge tu pastel en la panadería',
+      'Elige el sabor de la confitería',
+    ]) {
+      expect(words).toContain(whole)
+    }
+    // The cut's signature: a line that ends on the letter its "a" was taken from.
+    expect(words.filter((text) => /[íñ]$/.test(text))).toEqual([])
+  })
+
+  it('still takes a dangling English word off the end of a line, accents before it or not (AGL-3791)', () => {
+    const { compiled } = build(
+      [
+        {
+          blocks: [
+            { kind: 'heading', text: 'Café pastries baked for you and' },
+            { kind: 'text', text: 'Crème brûlée, éclairs and the' },
+          ],
+        },
+      ],
+      pagePlan,
+      false,
+    )
+    const texts = Object.values(compiled.tree.nodes)
+      .filter((node) => node.componentId === 'muiTypography')
+      .map((node) => node.props?.['children'])
+    expect(texts).toEqual(['Café pastries baked for you', 'Crème brûlée, éclairs'])
+  })
+
   it('writes a unicode escape the model spelled out as the character it names', () => {
     const { compiled } = build([{ blocks: [{ kind: 'heading', text: 'Drop in \\u2014 no experience needed' }] }], pagePlan, false)
     const [title] = Object.values(compiled.tree.nodes)
@@ -1001,6 +1098,20 @@ describe('reading the recorded Juniper Clay portfolio answer (AGL-3660)', () => 
     expect(aiReadLayoutPage(AI_JUNIPER_PORTFOLIO_PAGE_ANSWER, 2, contact).sections[1]?.blocks.some((block) => block.kind === 'form')).toBe(true)
     const bound = [AI_JUNIPER_PORTFOLIO_PLANNED_SECTIONS[0], { name: 'Studio visits', uses: ['new:Gallery Inquiry Form'], items: 0 }]
     expect(aiReadLayoutPage(AI_JUNIPER_PORTFOLIO_PAGE_ANSWER, 2, bound).sections[1]?.blocks.some((block) => block.kind === 'form')).toBe(true)
+  })
+})
+
+describe('reading an answer in a language other than English (AGL-3791)', () => {
+  it('fills a planned section with the section its heading names, matching whole words with their accents', () => {
+    // As ASCII, "Menú" was "men", and "Mensajes de nuestras familias" shared it.
+    const answer = {
+      sections: [
+        { blocks: [{ kind: 'heading', text: 'Mensajes de nuestras familias' }] },
+        { blocks: [{ kind: 'heading', text: 'Nuestro menú' }] },
+      ],
+    }
+    const reading = aiReadLayoutPage(answer, 1, [{ name: 'Menú', uses: [], items: 0 }])
+    expect(reading.sections.map((section) => section?.blocks[0]?.text)).toEqual(['Nuestro menú'])
   })
 })
 

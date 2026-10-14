@@ -110,8 +110,10 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
     [hosts, sitePins, orgPin],
   )
   // The listing doc the actions need. The pin carries the denormalised copy
-  // the actions actually read (`$id`, `displayName`), so this page does not
-  // pay for a second read of the listing itself.
+  // the actions actually read (`$id`, `displayName`, `pluginId`), so this page
+  // does not pay for a second read of the listing itself. `pluginId` is what
+  // the uninstall dialog scans published pages by; without it the impact is
+  // unknown and every uninstall asks for the typed acknowledgement.
   const anyPin = orgPin ?? Object.values(sitePins).find(Boolean) ?? null
   const actionListing = useMemo(
     () => ({
@@ -119,8 +121,17 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
       displayName: listing?.displayName ?? anyPin?.displayName ?? listingId,
       artifactType: 'plugin',
       latestVersion: listing?.latestVersion ?? anyPin?.version,
+      pluginId: listing?.pluginId ?? anyPin?.pluginId,
     }),
-    [listingId, listing?.displayName, listing?.latestVersion, anyPin?.displayName, anyPin?.version],
+    [
+      listingId,
+      listing?.displayName,
+      listing?.latestVersion,
+      listing?.pluginId,
+      anyPin?.displayName,
+      anyPin?.version,
+      anyPin?.pluginId,
+    ],
   )
 
   if (!orgInstall.installedAnywhere) {

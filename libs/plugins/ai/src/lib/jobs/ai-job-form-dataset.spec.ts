@@ -93,6 +93,15 @@ describe('matching a form’s fields to a dataset’s', () => {
     expect(aiFormFieldKey('email')).not.toBe(aiFormFieldKey('Email address'))
   })
 
+  it('reads a name in any language, its accents and all (AGL-3791)', () => {
+    expect(aiFormFieldKey('telefono')).toBe(aiFormFieldKey('Teléfono'))
+    expect(aiFormFieldKey('correoElectronico')).toBe(aiFormFieldKey('Correo electrónico'))
+    expect(aiFormFieldKey('Número de personas')).toBe('numerodepersonas')
+    // A name in another script is its own letters, not an empty key every such name shares.
+    expect(aiFormFieldKey('Имя')).toBe('имя')
+    expect(aiFormFieldKey('Имя')).not.toBe(aiFormFieldKey('Телефон'))
+  })
+
   it('stores any answer in text and only a rating in a number', () => {
     expect(aiFormFieldFitsDataset('checkbox', 'text')).toBe(true)
     expect(aiFormFieldFitsDataset('rating', 'int32')).toBe(true)
