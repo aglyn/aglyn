@@ -83,6 +83,10 @@ public struct LoadSpec: Sendable, Hashable {
   /// A path to rows an earlier load brought (`data.sites.sites`): this load then runs once per row,
   /// with the row as `item`, and its key holds the list of answers (a failed one is null).
   public let each: String?
+  /// A pure function to call over data already loaded (`packageJsonDiff`, `packageMergeKeys`), its answer under
+  /// this key; `args` are the paths (or numbers) it is given.
+  public let compute: String?
+  public let args: [String]
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -96,6 +100,8 @@ public struct LoadSpec: Sendable, Hashable {
       self.query = nil
       self.switchboard = nil
       self.each = nil
+      self.compute = nil
+      self.args = []
       self.method = .get
       self.body = nil
       self.optional = false
@@ -109,6 +115,8 @@ public struct LoadSpec: Sendable, Hashable {
       self.query = json["query"]
       self.switchboard = json["switchboard"]?.stringValue
       self.each = json["each"]?.stringValue
+      self.compute = json["compute"]?.stringValue
+      self.args = json["args"].arrayOfStrings
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)

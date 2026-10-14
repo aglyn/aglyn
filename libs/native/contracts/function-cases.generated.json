@@ -11679,6 +11679,972 @@
         }
       ]
     },
+    "packageItemChanges": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "title": "Old",
+              "seo": {
+                "x": 1
+              }
+            },
+            {
+              "title": "New",
+              "seo": {
+                "x": 1
+              }
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": "New",
+                "before": "Old",
+                "key": "title",
+                "label": "title"
+              }
+            ],
+            "more": 0,
+            "recordField": null,
+            "records": null
+          }
+        },
+        {
+          "args": [
+            null,
+            {
+              "title": "Home",
+              "nodes": [
+                1,
+                2
+              ]
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": [
+                  1,
+                  2
+                ],
+                "key": "nodes",
+                "label": "nodes"
+              },
+              {
+                "after": "Home",
+                "key": "title",
+                "label": "title"
+              }
+            ],
+            "more": 0,
+            "recordField": null,
+            "records": null
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Leads",
+              "schema": [
+                "name"
+              ],
+              "records": [
+                {
+                  "$id": "1",
+                  "name": "A",
+                  "email": "a@x.test"
+                },
+                {
+                  "$id": "2",
+                  "name": "B"
+                },
+                {
+                  "$id": "4",
+                  "name": "D"
+                }
+              ]
+            },
+            {
+              "name": "Leads 2",
+              "schema": [
+                "name",
+                "email"
+              ],
+              "records": [
+                {
+                  "$id": "1",
+                  "name": "A2",
+                  "email": "a@x.test"
+                },
+                {
+                  "$id": "3",
+                  "name": "C"
+                },
+                {
+                  "$id": "4",
+                  "name": "D"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": "Leads 2",
+                "before": "Leads",
+                "key": "name",
+                "label": "name"
+              },
+              {
+                "after": [
+                  "name",
+                  "email"
+                ],
+                "before": [
+                  "name"
+                ],
+                "key": "schema",
+                "label": "schema"
+              }
+            ],
+            "more": 0,
+            "recordField": "records",
+            "records": {
+              "changes": [
+                {
+                  "after": "A2",
+                  "before": "A",
+                  "key": "1/name",
+                  "label": "1 › name",
+                  "status": "changed"
+                },
+                {
+                  "after": {
+                    "$id": "3",
+                    "name": "C"
+                  },
+                  "key": "3",
+                  "label": "3",
+                  "status": "added"
+                },
+                {
+                  "before": {
+                    "$id": "2",
+                    "name": "B"
+                  },
+                  "key": "2",
+                  "label": "2",
+                  "status": "removed"
+                }
+              ],
+              "more": 0,
+              "summary": "1 new record · 1 changed record · 1 record not in the file · 1 unchanged"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Leads",
+              "schema": [
+                "name"
+              ],
+              "records": [
+                {
+                  "$id": "1",
+                  "name": "A",
+                  "email": "a@x.test"
+                },
+                {
+                  "$id": "2",
+                  "name": "B"
+                },
+                {
+                  "$id": "4",
+                  "name": "D"
+                }
+              ]
+            },
+            {
+              "name": "Leads 2",
+              "schema": [
+                "name",
+                "email"
+              ],
+              "records": [
+                {
+                  "$id": "1",
+                  "name": "A2",
+                  "email": "a@x.test"
+                },
+                {
+                  "$id": "3",
+                  "name": "C"
+                },
+                {
+                  "$id": "4",
+                  "name": "D"
+                }
+              ]
+            },
+            2
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": "Leads 2",
+                "before": "Leads",
+                "key": "name",
+                "label": "name"
+              },
+              {
+                "after": [
+                  "name",
+                  "email"
+                ],
+                "before": [
+                  "name"
+                ],
+                "key": "schema",
+                "label": "schema"
+              }
+            ],
+            "more": 0,
+            "recordField": "records",
+            "records": {
+              "changes": [
+                {
+                  "after": "A2",
+                  "before": "A",
+                  "key": "1/name",
+                  "label": "1 › name",
+                  "status": "changed"
+                },
+                {
+                  "after": {
+                    "$id": "3",
+                    "name": "C"
+                  },
+                  "key": "3",
+                  "label": "3",
+                  "status": "added"
+                }
+              ],
+              "more": 1,
+              "summary": "1 new record · 1 changed record · 1 record not in the file · 1 unchanged"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "records": [
+                {
+                  "$id": "1",
+                  "n": 1
+                }
+              ]
+            },
+            {
+              "records": [
+                {
+                  "$id": "1",
+                  "n": 1
+                }
+              ]
+            }
+          ],
+          "result": {
+            "changes": [],
+            "more": 0,
+            "recordField": "records",
+            "records": {
+              "changes": [],
+              "more": 0,
+              "summary": "0 new records · 0 changed records · 0 records not in the file · 1 unchanged"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "records": [
+                {
+                  "$id": "1",
+                  "n": 1
+                }
+              ]
+            },
+            {
+              "name": "No records"
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": "No records",
+                "key": "name",
+                "label": "name"
+              }
+            ],
+            "more": 0,
+            "recordField": "records",
+            "records": {
+              "changes": [
+                {
+                  "before": {
+                    "$id": "1",
+                    "n": 1
+                  },
+                  "key": "1",
+                  "label": "1",
+                  "status": "removed"
+                }
+              ],
+              "more": 0,
+              "summary": "0 new records · 0 changed records · 1 record not in the file · 0 unchanged"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "a": [
+                {
+                  "$id": "1"
+                }
+              ],
+              "b": [
+                {
+                  "$id": "2"
+                }
+              ]
+            },
+            {
+              "a": [
+                {
+                  "$id": "1"
+                }
+              ],
+              "b": [
+                {
+                  "$id": "3"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": [
+                  {
+                    "$id": "3"
+                  }
+                ],
+                "before": [
+                  {
+                    "$id": "2"
+                  }
+                ],
+                "key": "b",
+                "label": "b"
+              }
+            ],
+            "more": 0,
+            "recordField": null,
+            "records": null
+          }
+        },
+        {
+          "args": [
+            {
+              "entries": [
+                {
+                  "$id": "x",
+                  "v": 1
+                }
+              ]
+            },
+            {
+              "entries": [
+                {
+                  "$id": "x",
+                  "v": 1
+                },
+                {
+                  "$id": "y",
+                  "v": 2
+                }
+              ]
+            }
+          ],
+          "result": {
+            "changes": [],
+            "more": 0,
+            "recordField": "entries",
+            "records": {
+              "changes": [
+                {
+                  "after": {
+                    "$id": "y",
+                    "v": 2
+                  },
+                  "key": "y",
+                  "label": "y",
+                  "status": "added"
+                }
+              ],
+              "more": 0,
+              "summary": "1 new record · 0 changed records · 0 records not in the file · 1 unchanged"
+            }
+          }
+        },
+        {
+          "args": [
+            null,
+            {
+              "entries": [
+                {
+                  "$id": "x",
+                  "v": 1
+                }
+              ]
+            }
+          ],
+          "result": {
+            "changes": [],
+            "more": 0,
+            "recordField": "entries",
+            "records": {
+              "changes": [
+                {
+                  "after": {
+                    "$id": "x",
+                    "v": 1
+                  },
+                  "key": "x",
+                  "label": "x",
+                  "status": "added"
+                }
+              ],
+              "more": 0,
+              "summary": "1 new record · 0 changed records · 0 records not in the file · 0 unchanged"
+            }
+          }
+        },
+        {
+          "args": [
+            "plain",
+            "other"
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": "other",
+                "before": "plain",
+                "key": "$",
+                "label": "Whole item"
+              }
+            ],
+            "more": 0,
+            "recordField": null,
+            "records": null
+          }
+        }
+      ]
+    },
+    "packageJsonDiff": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "a": 1
+            },
+            {
+              "a": 1
+            }
+          ],
+          "result": {
+            "changes": [],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "a": 1,
+              "b": {
+                "c": 2
+              }
+            },
+            {
+              "a": 1,
+              "b": {
+                "c": 3
+              },
+              "d": 4
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": 3,
+                "before": 2,
+                "key": "b/c",
+                "label": "b › c"
+              },
+              {
+                "after": 4,
+                "key": "d",
+                "label": "d"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "title": "Home",
+              "seo": {
+                "description": "Old",
+                "image": null
+              }
+            },
+            {
+              "title": "Home",
+              "seo": {
+                "description": "New",
+                "image": "/a.png"
+              }
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": "New",
+                "before": "Old",
+                "key": "seo/description",
+                "label": "seo › description"
+              },
+              {
+                "after": "/a.png",
+                "before": null,
+                "key": "seo/image",
+                "label": "seo › image"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "list": [
+                1,
+                2,
+                3
+              ]
+            },
+            {
+              "list": [
+                1,
+                2,
+                4
+              ]
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": [
+                  1,
+                  2,
+                  4
+                ],
+                "before": [
+                  1,
+                  2,
+                  3
+                ],
+                "key": "list",
+                "label": "list"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "items": [
+                {
+                  "x": 1
+                }
+              ]
+            },
+            {
+              "items": [
+                {
+                  "x": 1
+                },
+                {
+                  "x": 2
+                }
+              ]
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": [
+                  {
+                    "x": 1
+                  },
+                  {
+                    "x": 2
+                  }
+                ],
+                "before": [
+                  {
+                    "x": 1
+                  }
+                ],
+                "key": "items",
+                "label": "items"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            "plain",
+            "other"
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": "other",
+                "before": "plain",
+                "key": "$",
+                "label": "Whole item"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            null,
+            {
+              "a": 1
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": {
+                  "a": 1
+                },
+                "before": null,
+                "key": "$",
+                "label": "Whole item"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "a": {
+                "b": {
+                  "c": {
+                    "d": 1
+                  }
+                }
+              }
+            },
+            {
+              "a": {
+                "b": {
+                  "c": {
+                    "d": 2
+                  }
+                }
+              }
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": 2,
+                "before": 1,
+                "key": "a/b/c/d",
+                "label": "a › b › c › d"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "a": 1,
+              "b": 2,
+              "c": 3
+            },
+            {
+              "a": 2,
+              "b": 3,
+              "c": 4
+            },
+            2
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": 2,
+                "before": 1,
+                "key": "a",
+                "label": "a"
+              },
+              {
+                "after": 3,
+                "before": 2,
+                "key": "b",
+                "label": "b"
+              }
+            ],
+            "more": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "z": 1,
+              "a": 1
+            },
+            {
+              "z": 2,
+              "a": 2
+            }
+          ],
+          "result": {
+            "changes": [
+              {
+                "after": 2,
+                "before": 1,
+                "key": "a",
+                "label": "a"
+              },
+              {
+                "after": 2,
+                "before": 1,
+                "key": "z",
+                "label": "z"
+              }
+            ],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {},
+            {}
+          ],
+          "result": {
+            "changes": [],
+            "more": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "a": null
+            },
+            {}
+          ],
+          "result": {
+            "changes": [
+              {
+                "before": null,
+                "key": "a",
+                "label": "a"
+              }
+            ],
+            "more": 0
+          }
+        }
+      ]
+    },
+    "packageMergeKeys": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "Site",
+              "tagline": ""
+            },
+            {
+              "name": "File",
+              "tagline": "Hello",
+              "extra": 1
+            }
+          ],
+          "result": [
+            {
+              "file": 1,
+              "key": "extra",
+              "merged": "package"
+            },
+            {
+              "file": "File",
+              "key": "name",
+              "merged": "site",
+              "site": "Site"
+            },
+            {
+              "file": "Hello",
+              "key": "tagline",
+              "merged": "package",
+              "site": ""
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "a": 1
+            },
+            {
+              "a": 1
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            null,
+            {
+              "b": 2,
+              "a": 1
+            }
+          ],
+          "result": [
+            {
+              "file": 1,
+              "key": "a",
+              "merged": "package"
+            },
+            {
+              "file": 2,
+              "key": "b",
+              "merged": "package"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "x": [
+                1,
+                2
+              ]
+            },
+            {
+              "x": [
+                1,
+                2,
+                3
+              ]
+            }
+          ],
+          "result": [
+            {
+              "file": [
+                1,
+                2,
+                3
+              ],
+              "key": "x",
+              "merged": "site",
+              "site": [
+                1,
+                2
+              ]
+            }
+          ]
+        },
+        {
+          "args": [
+            "notAnObject",
+            {
+              "a": 1
+            }
+          ],
+          "result": [
+            {
+              "file": 1,
+              "key": "a",
+              "merged": "package"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "a": 1
+            },
+            "notAnObject"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "color": "#fff",
+              "font": null
+            },
+            {
+              "color": "#000",
+              "font": "Inter",
+              "zeta": 0,
+              "alpha": false
+            }
+          ],
+          "result": [
+            {
+              "file": false,
+              "key": "alpha",
+              "merged": "package"
+            },
+            {
+              "file": "#000",
+              "key": "color",
+              "merged": "site",
+              "site": "#fff"
+            },
+            {
+              "file": "Inter",
+              "key": "font",
+              "merged": "package",
+              "site": null
+            },
+            {
+              "file": 0,
+              "key": "zeta",
+              "merged": "package"
+            }
+          ]
+        }
+      ]
+    },
     "parseBookingWindows": {
       "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
       "cases": [

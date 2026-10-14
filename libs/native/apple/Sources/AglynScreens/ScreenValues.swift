@@ -321,12 +321,14 @@ public enum ScreenValues {
       }
       return .object(map)
     case .object(let record) where record.count == 1 && record["$index"] != nil:
-      // `{"$index": {"rows": "data.picklists", "key": "{item.fieldId}", "value": "{item.proposals}"}}`: the
-      // rows as a map, each under its key (a row with no key is left out).
+      // `{"$index": {"rows": "data.picklists", "filter": "…", "key": "{item.fieldId}", "value": "{item.proposals}"}}`:
+      // the rows (those meeting `filter`) as a map, each under its key (a row with no key is left out).
       let spec = record["$index"] ?? .null
       var map: [String: JSONValue] = [:]
       for row in rows(lookup(spec["rows"]?.stringValue ?? "", in: context)) {
         let scope = ScreenContext.with(context, item: row)
+        // `filter`: only the rows that meet it; the row before (a clicked item) is `parent`.
+        if let filter = spec["filter"]?.stringValue, !condition(filter, in: scope) { continue }
         let key = Self.text(resolveBody(spec["key"] ?? .null, in: scope))
         if !key.isEmpty { map[key] = resolveBody(spec["value"] ?? .null, in: scope) }
       }
@@ -852,6 +854,12 @@ public enum ScreenValues {
       return raw.prefix(1).uppercased() + raw.dropFirst()
     case "upper":
       return text(value).uppercased()
+    // The two halves of a `kind/id` key.
+    case "head":
+      return text(value).split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+    case "tail":
+      let parts = text(value).split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+      return parts.count > 1 ? String(parts[1]) : ""
     case "json":
       return (try? value.map { String(data: try $0.encoded(), encoding: .utf8) ?? "" }) ?? ""
     default:

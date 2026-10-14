@@ -318,21 +318,25 @@ class ScreenSpecTest {
     assertEquals(JsonNull, fieldJson(file, FieldValue.Text("not json")))
     assertEquals(JsonNull, fieldJson(file, FieldValue.Text("")))
     val sent = mutableListOf<HttpRequestData>()
-    val api = client(200 to """{"plan":{"items":[{"key":"page/a","needsChoice":true,"choices":["replace","skip"]}]}}""", sent = sent)
-    val importSpec = ScreenSpec.parseFile(File(screensDir, "site.screens.json").readText()).first { it.id == "core.site.import" }
+    val api = client(200 to """{"plan":{"items":[{"key":"page/a","comparison":"differs","proposed":"skip","needsChoice":true,"choices":["replace","keepBoth","merge","skip"]}]}}""", sent = sent)
+    val importSpec = ScreenSpec.parseFile(File(screensDir, "site-import.screens.json").readText()).first { it.id == "core.site.import" }
     val plan = ActionSpec.parse(importSpec.blocks.first { it.id == "package" }["submit"])!!
     ScreenStash.clear()
     val model = ScreenModel(importSpec, JsonObject(emptyMap()), api)
     model.run(plan, Json.parseToJsonElement("""{"site":{"id":"h1"},"form":{"package":{"manifest":{"items":[]}}}}"""))
     assertEquals(Json.parseToJsonElement("""{"manifest":{"items":[]}}"""), ScreenStash.values["package"])
+    // A changed item waits for a choice: it is not decided, and it is the one thing left to decide.
     assertEquals(Json.parseToJsonElement("{}"), ScreenStash.values["decisions"])
-    val review = ScreenSpec.parseFile(File(screensDir, "site.screens.json").readText()).first { it.id == "core.site.import.review" }
-    val choose = ActionSpec.parse(review.blocks.first { it.type == "list" }.raw.arr("actions").first())!!
+    assertEquals(Json.parseToJsonElement("""{"page/a":"page/a"}"""), ScreenStash.values["undecided"])
+    val review = ScreenSpec.parseFile(File(screensDir, "site-import.screens.json").readText()).first { it.id == "core.site.import.review" }
+    val choose = ActionSpec.parse(review.blocks.last { it.type == "list" }.raw.arr("actions").first())!!
     val row = Json.parseToJsonElement("""{"key":"page/a","choices":["replace","keepBoth","merge","skip"]}""")
     val picking = ScreenContext.with(ScreenContext.withItem(ScreenContext.with(JsonObject(emptyMap()), "stash", ScreenStash.values), row), "form", Json.parseToJsonElement("""{"decision":"skip"}"""))
     ScreenModel(review, JsonObject(emptyMap()), api).run(choose, picking)
+    assertEquals(Json.parseToJsonElement("""{"page/a":"skip"}"""), ScreenStash.values["overrides"])
     assertEquals(Json.parseToJsonElement("""{"page/a":"skip"}"""), ScreenStash.values["decisions"])
-    assertEquals(listOf("replace", "keepBoth", "skip"), choose.prompt.first().choices(picking).map { it.first })
+    assertEquals(Json.parseToJsonElement("{}"), ScreenStash.values["undecided"])
+    assertEquals(listOf("replace", "keepBoth", "merge", "skip"), choose.prompt.first().choices(picking).map { it.first })  // merge is chosen key by key on the item
     ScreenStash.clear()
   }
 

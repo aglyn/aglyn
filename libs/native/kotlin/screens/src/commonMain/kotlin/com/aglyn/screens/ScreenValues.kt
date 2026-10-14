@@ -326,12 +326,14 @@ object ScreenValues {
       if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
       JsonObject(map)
     } else if (body.size == 1 && body["\$index"] is JsonObject) {
-      // `{"$index": {"rows": "data.picklists", "key": "{item.fieldId}", "value": "{item.proposals}"}}`: the rows as a
-      // map, each under its key (a row with no key is left out).
+      // `{"$index": {"rows": "data.picklists", "filter": "…", "key": "{item.fieldId}", "value": "{item.proposals}"}}`:
+      // the rows (those meeting `filter`) as a map, each under its key (a row with no key is left out).
       val spec = body["\$index"] as JsonObject
       val map = mutableMapOf<String, JsonElement>()
       for (row in rows(lookup(spec["rows"]?.let { (it as? JsonPrimitive)?.content }.orEmpty(), context))) {
         val scope = ScreenContext.withItem(context, row)
+        // `filter`: only the rows that meet it; the row before (a clicked item) is `parent`.
+        (spec["filter"] as? JsonPrimitive)?.takeIf { it.isString }?.let { if (!condition(it.content, scope)) continue }
         val key = text(spec["key"]?.let { resolveBody(it, scope) })
         if (key.isNotEmpty()) map[key] = spec["value"]?.let { resolveBody(it, scope) } ?: JsonNull
       }
@@ -790,6 +792,9 @@ object ScreenValues {
       "yesno" -> if (truthy(value)) "Yes" else "No"
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
       "upper" -> text(value).uppercase()
+      // The two halves of a `kind/id` key.
+      "head" -> text(value).substringBefore('/')
+      "tail" -> text(value).substringAfter('/', "")
       "json" -> value?.toString() ?: ""
       else -> text(value)
     }

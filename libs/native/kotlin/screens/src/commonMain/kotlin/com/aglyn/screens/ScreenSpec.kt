@@ -75,6 +75,9 @@ class LoadSpec(val key: String, json: JsonElement) {
    * as `item`, and its key holds the list of answers (a failed one is null).
    */
   val each: String? = json.str("each")
+  /** A pure function to call over data already loaded (`packageJsonDiff`, `packageMergeKeys`), its answer under this key; [args] are the paths (or numbers) it is given. */
+  val compute: String? = json.str("compute")
+  val args: List<String> = json.arr("args").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {

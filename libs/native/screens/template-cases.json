@@ -149,7 +149,9 @@
       "from": "2026-09",
       "monthKey": "2026-10",
       "badFrom": "true",
-      "hundred": 100
+      "hundred": 100,
+      "depKey": "layout/main-layout",
+      "noSlash": "plain"
     }
   },
   "render": [
@@ -380,6 +382,14 @@
     {
       "template": "{data.hundred * 0.00001:usd} {data.hundred * 0.5:usd}",
       "expect": "<$0.01 $50.00"
+    },
+    {
+      "template": "{data.depKey:head} | {data.depKey:tail}",
+      "expect": "layout | main-layout"
+    },
+    {
+      "template": "{data.noSlash:head}|{data.noSlash:tail}",
+      "expect": "plain|"
     }
   ],
   "url": [
@@ -614,6 +624,23 @@
           "y"
         ],
         "f": "Acme"
+      }
+    },
+    {
+      "body": {
+        "kept": {
+          "$index": {
+            "rows": "data.members",
+            "filter": "item.role != owner",
+            "key": "{item.$id}",
+            "value": "{item.email}"
+          }
+        }
+      },
+      "expect": {
+        "kept": {
+          "u2": "b@acme.test"
+        }
       }
     }
   ],

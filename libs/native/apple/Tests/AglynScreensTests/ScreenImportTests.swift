@@ -336,4 +336,19 @@ final class ScreenImportTests: XCTestCase {
     XCTAssertEqual(shown("applied"), ["results"])
     XCTAssertEqual(shown("undone"), ["results"])
   }
+
+  /// The console's own answers for the two comparisons a site item import shows, replayed.
+  func testTheItemDiffAndMergeKeysReplayTheConsolesCases() throws {
+    let url = ScreenSpecTests.screensDir.appendingPathComponent("../contracts/function-cases.generated.json").standardizedFileURL
+    let file = try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url)))
+    for name in ["packageJsonDiff", "packageMergeKeys", "packageItemChanges"] {
+      let cases = try XCTUnwrap(file["functions"]?[name]?["cases"]).array
+      XCTAssertGreaterThan(cases.count, 5, name)
+      for one in cases {
+        let args: [JSONValue?] = one["args"].array.map { Optional($0) }
+        XCTAssertEqual(ScreenFunctions.call(name, args), one["result"], "\(name) \(args)")
+      }
+    }
+    XCTAssertNil(ScreenFunctions.call("nothing", []))
+  }
 }

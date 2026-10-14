@@ -266,7 +266,7 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(fieldJSON(file, .text(#"{"manifest":{"items":[]}}"#)), ["manifest": ["items": []]])
     XCTAssertEqual(fieldJSON(file, .text("not json")), .null)
     XCTAssertEqual(fieldJSON(file, .text("")), .null)
-    let transport = RecordingTransport(responses: [(200, #"{"plan":{"items":[{"key":"page/a","needsChoice":true,"choices":["replace","skip"]}]}}"#)])
+    let transport = RecordingTransport(responses: [(200, #"{"plan":{"items":[{"key":"page/a","comparison":"differs","proposed":"skip","needsChoice":true,"choices":["replace","keepBoth","merge","skip"]}]}}"#)])
     let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.import" })
     let form = try XCTUnwrap(spec.blocks.first { $0.id == "package" })
@@ -277,17 +277,21 @@ final class ScreenSpecTests: XCTestCase {
     _ = await model.run(plan, in: scope)
     XCTAssertEqual(ScreenStash.values["package"], ["manifest": ["items": []]])
     XCTAssertEqual(ScreenValues.lookup("plan.plan.items.0.key", in: .object(ScreenStash.values)), "page/a")
+    // A changed item waits for a choice: it is not decided, and it is the one thing left to decide.
     XCTAssertEqual(ScreenStash.values["decisions"], [:])
+    XCTAssertEqual(ScreenStash.values["undecided"], ["page/a": "page/a"])
     // The review screen picks a decision for an item and keeps it for the apply.
     let review = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.import.review" })
-    let list = try XCTUnwrap(review.blocks.first { $0.type == "list" })
+    let list = try XCTUnwrap(review.blocks.last { $0.type == "list" })
     let choose = try XCTUnwrap(list["actions"].array.first.flatMap(ActionSpec.init))
     let row: JSONValue = ["key": "page/a", "choices": ["replace", "keepBoth", "merge", "skip"]]
     let picking = ScreenContext.with(ScreenContext.with(["stash": .object(ScreenStash.values)], item: row), "form", ["decision": "skip"])
     _ = await ScreenModel(spec: review, context: [:], api: api).run(choose, in: picking)
+    XCTAssertEqual(ScreenStash.values["overrides"], ["page/a": "skip"])
     XCTAssertEqual(ScreenStash.values["decisions"], ["page/a": "skip"])
+    XCTAssertEqual(ScreenStash.values["undecided"], [:])
     let options = try XCTUnwrap(choose.prompt.first).choices(in: picking).map(\.value)
-    XCTAssertEqual(options, ["replace", "keepBoth", "skip"])  // merge needs per-field choices and is not offered
+    XCTAssertEqual(options, ["replace", "keepBoth", "merge", "skip"])  // merge is chosen key by key on the item
     ScreenStash.clear()
   }
 

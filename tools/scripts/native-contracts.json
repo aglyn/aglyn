@@ -12196,6 +12196,432 @@
           "C"
         ]
       ]
+    },
+    "packageJsonDiff": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "args": [
+        [
+          {
+            "a": 1
+          },
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": 1,
+            "b": {
+              "c": 2
+            }
+          },
+          {
+            "a": 1,
+            "b": {
+              "c": 3
+            },
+            "d": 4
+          }
+        ],
+        [
+          {
+            "title": "Home",
+            "seo": {
+              "description": "Old",
+              "image": null
+            }
+          },
+          {
+            "title": "Home",
+            "seo": {
+              "description": "New",
+              "image": "/a.png"
+            }
+          }
+        ],
+        [
+          {
+            "list": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "list": [
+              1,
+              2,
+              4
+            ]
+          }
+        ],
+        [
+          {
+            "items": [
+              {
+                "x": 1
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "x": 1
+              },
+              {
+                "x": 2
+              }
+            ]
+          }
+        ],
+        [
+          "plain",
+          "other"
+        ],
+        [
+          null,
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": {
+              "b": {
+                "c": {
+                  "d": 1
+                }
+              }
+            }
+          },
+          {
+            "a": {
+              "b": {
+                "c": {
+                  "d": 2
+                }
+              }
+            }
+          }
+        ],
+        [
+          {
+            "a": 1,
+            "b": 2,
+            "c": 3
+          },
+          {
+            "a": 2,
+            "b": 3,
+            "c": 4
+          },
+          2
+        ],
+        [
+          {
+            "z": 1,
+            "a": 1
+          },
+          {
+            "z": 2,
+            "a": 2
+          }
+        ],
+        [
+          {},
+          {}
+        ],
+        [
+          {
+            "a": null
+          },
+          {}
+        ]
+      ]
+    },
+    "packageMergeKeys": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "args": [
+        [
+          {
+            "name": "Site",
+            "tagline": ""
+          },
+          {
+            "name": "File",
+            "tagline": "Hello",
+            "extra": 1
+          }
+        ],
+        [
+          {
+            "a": 1
+          },
+          {
+            "a": 1
+          }
+        ],
+        [
+          null,
+          {
+            "b": 2,
+            "a": 1
+          }
+        ],
+        [
+          {
+            "x": [
+              1,
+              2
+            ]
+          },
+          {
+            "x": [
+              1,
+              2,
+              3
+            ]
+          }
+        ],
+        [
+          "notAnObject",
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": 1
+          },
+          "notAnObject"
+        ],
+        [
+          {
+            "color": "#fff",
+            "font": null
+          },
+          {
+            "color": "#000",
+            "font": "Inter",
+            "zeta": 0,
+            "alpha": false
+          }
+        ]
+      ]
+    },
+    "packageItemChanges": {
+      "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
+      "args": [
+        [
+          {
+            "title": "Old",
+            "seo": {
+              "x": 1
+            }
+          },
+          {
+            "title": "New",
+            "seo": {
+              "x": 1
+            }
+          }
+        ],
+        [
+          null,
+          {
+            "title": "Home",
+            "nodes": [
+              1,
+              2
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Leads",
+            "schema": [
+              "name"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "2",
+                "name": "B"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          },
+          {
+            "name": "Leads 2",
+            "schema": [
+              "name",
+              "email"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A2",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "3",
+                "name": "C"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Leads",
+            "schema": [
+              "name"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "2",
+                "name": "B"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          },
+          {
+            "name": "Leads 2",
+            "schema": [
+              "name",
+              "email"
+            ],
+            "records": [
+              {
+                "$id": "1",
+                "name": "A2",
+                "email": "a@x.test"
+              },
+              {
+                "$id": "3",
+                "name": "C"
+              },
+              {
+                "$id": "4",
+                "name": "D"
+              }
+            ]
+          },
+          2
+        ],
+        [
+          {
+            "records": [
+              {
+                "$id": "1",
+                "n": 1
+              }
+            ]
+          },
+          {
+            "records": [
+              {
+                "$id": "1",
+                "n": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "records": [
+              {
+                "$id": "1",
+                "n": 1
+              }
+            ]
+          },
+          {
+            "name": "No records"
+          }
+        ],
+        [
+          {
+            "a": [
+              {
+                "$id": "1"
+              }
+            ],
+            "b": [
+              {
+                "$id": "2"
+              }
+            ]
+          },
+          {
+            "a": [
+              {
+                "$id": "1"
+              }
+            ],
+            "b": [
+              {
+                "$id": "3"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "entries": [
+              {
+                "$id": "x",
+                "v": 1
+              }
+            ]
+          },
+          {
+            "entries": [
+              {
+                "$id": "x",
+                "v": 1
+              },
+              {
+                "$id": "y",
+                "v": 2
+              }
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "entries": [
+              {
+                "$id": "x",
+                "v": 1
+              }
+            ]
+          }
+        ],
+        [
+          "plain",
+          "other"
+        ]
+      ]
     }
   }
 }

@@ -195,7 +195,7 @@ class ScreenModel(
     val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
     val results = try {
       val first = coroutineScope {
-        loads.filter { it.each == null }.map { load ->
+        loads.filter { it.each == null && it.compute == null }.map { load ->
           async {
             try {
               fetch(client, load)
@@ -227,7 +227,14 @@ class ScreenModel(
         }
         Triple(load.key, JsonArray(answers) as JsonElement, null as String?)
       }
-      first + walked
+      // Pure functions over what has loaded (a diff of two items), in the order they are declared.
+      val loaded = (first + walked).toMutableList()
+      for (load in loads.filter { it.compute != null }) {
+        val ready = ScreenContext.with(context, "data", JsonObject(loaded.associate { it.first to it.second }))
+        val args = load.args.map { arg -> arg.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: ScreenValues.lookup(arg, ready) }
+        loaded += Triple(load.key, ScreenFunctions.call(load.compute.orEmpty(), args) ?: JsonNull, null as String?)
+      }
+      loaded
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {

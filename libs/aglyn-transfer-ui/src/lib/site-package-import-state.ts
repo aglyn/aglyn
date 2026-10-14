@@ -43,7 +43,6 @@ import type {
 } from './site-package-client'
 import type { TransferAcknowledgementItem } from './transfer-acknowledgement-list.component'
 import type { TransferChoiceOption } from './transfer-choice-select.component'
-import type { TransferDiffChange } from './transfer-diff-table.component'
 import { countOf } from './transfer-words'
 
 type ChipColor = 'default' | 'success' | 'warning' | 'error' | 'info'
@@ -290,188 +289,21 @@ export function packageDependencyChoices(
  * DIFFS
  *=========================================*/
 
-const isPlain = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' &&
-  value !== null &&
-  !Array.isArray(value) &&
-  Object.getPrototypeOf(value) === Object.prototype
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-
-/** A path as a person reads it: `version › nodes › text › props`. */
-function pathLabel(path: readonly string[]): string {
-  return path.length ? path.join(' › ') : 'Whole item'
-}
-
-/**
- * Every leaf that differs between the site's item and the file's, as
- * before → after rows: objects are walked key by key, a list or a value is
- * compared whole. At most `limit` rows; `more` counts the rest.
- */
-export function packageJsonDiff(
-  before: unknown,
-  after: unknown,
-  limit = 200,
-): { changes: TransferDiffChange[]; more: number } {
-  const changes: TransferDiffChange[] = []
-  let more = 0
-  const walk = (left: unknown, right: unknown, path: string[]) => {
-    if (same(left, right)) return
-    if (isPlain(left) && isPlain(right)) {
-      const keys = [...new Set([...Object.keys(left), ...Object.keys(right)])].sort()
-      for (const key of keys) walk(left[key], right[key], [...path, key])
-      return
-    }
-    if (changes.length >= limit) {
-      more += 1
-      return
-    }
-    changes.push({
-      key: path.join('/') || '$',
-      label: pathLabel(path),
-      before: left,
-      after: right,
-    })
-  }
-  walk(before, after, [])
-  return { changes, more }
-}
-
-/** One top-level key of a merged item: both values and the default. */
-export interface PackageMergeKey {
-  key: string
-  site: unknown
-  file: unknown
-  /** What a merge does when the person does not say: the site's value wins when it has one. */
-  merged: SitePackageMergeChoice
-}
-
-const blank = (value: unknown) =>
-  value === undefined || value === null || value === ''
-
-/** The keys of a merged item that differ, each with what a merge would keep. */
-export function packageMergeKeys(site: unknown, file: unknown): PackageMergeKey[] {
-  const left = isPlain(site) ? site : {}
-  const right = isPlain(file) ? file : {}
-  return Object.keys(right)
-    .sort()
-    .filter((key) => right[key] !== undefined && !same(left[key], right[key]))
-    .map((key) => ({
-      key,
-      site: left[key],
-      file: right[key],
-      merged: blank(left[key]) ? 'package' : 'site',
-    }))
-}
+// The two comparisons live in the core, pure, so the native apps read the same definition.
+export { packageJsonDiff, packageMergeKeys } from '@aglyn/aglyn/data-transfer/site-package-diff'
+export type { PackageMergeKey } from '@aglyn/aglyn/data-transfer/site-package-diff'
 
 /*==========================================
- * RECORDS
+ * RECORDS — the comparison is the core's, pure, like the two above.
  *=========================================*/
 
-/** One record of an item's list: a document with its own `$id`. */
-export type PackageRecord = Record<string, unknown> & { $id: string }
-
-const isRecord = (value: unknown): value is PackageRecord =>
-  isPlain(value) && typeof value['$id'] === 'string' && value['$id'] !== ''
-
-/**
- * The key of an item that holds its records — a dataset's `records`, a
- * collection's `entries` — found by shape rather than by kind, so the kit
- * names no kind a plugin declares: the one list, on either side, whose
- * every element is a document with its own `$id`. The other side holds a
- * list there too, or nothing. `null` when no key qualifies, or when more
- * than one does and neither can be read as the item's records.
- */
-export function packageRecordField(...contents: readonly unknown[]): string | null {
-  const docs = contents.filter(isPlain)
-  const found = new Set<string>()
-  for (const doc of docs) {
-    for (const [key, value] of Object.entries(doc)) {
-      if (Array.isArray(value) && value.length > 0 && value.every(isRecord)) found.add(key)
-    }
-  }
-  const fields = [...found].filter((key) =>
-    docs.every((doc) => {
-      const value = doc[key]
-      return value === undefined || value === null || (Array.isArray(value) && value.every(isRecord))
-    }),
-  )
-  return fields.length === 1 ? (fields[0] as string) : null
-}
-
-export type PackageRecordStatus = 'added' | 'removed' | 'changed'
-
-/** One record that differs between the site and the file. */
-export interface PackageRecordRow {
-  id: string
-  status: PackageRecordStatus
-  /** The site's copy; `null` for a record only the file holds. */
-  site: PackageRecord | null
-  /** The file's copy; `null` for a record only the site holds. */
-  file: PackageRecord | null
-  /** The fields whose values differ, for a changed record. */
-  changed: readonly string[]
-}
-
-export interface PackageRecordDiff {
-  /** The file's added and changed records in its order, then the site's removed ones. */
-  rows: PackageRecordRow[]
-  /** Every field the rows hold, `$id` aside, in the order they first appear. */
-  fields: string[]
-  counts: Record<PackageRecordStatus | 'same', number>
-}
-
-const recordsOf = (value: unknown): PackageRecord[] =>
-  Array.isArray(value) ? value.filter(isRecord) : []
-
-/**
- * Two lists of records, matched by `$id`: what the file adds, what it no
- * longer holds, and, for a record on both sides, each field whose value
- * differs. A record the import would leave as it is counts as `same` and
- * has no row.
- */
-export function packageRecordDiff(site: unknown, file: unknown): PackageRecordDiff {
-  const theirs = new Map(recordsOf(site).map((record) => [record.$id, record]))
-  const ours = recordsOf(file)
-  const seen = new Set<string>()
-  const rows: PackageRecordRow[] = []
-  const counts = { added: 0, removed: 0, changed: 0, same: 0 }
-  for (const record of ours) {
-    if (seen.has(record.$id)) continue
-    seen.add(record.$id)
-    const existing = theirs.get(record.$id)
-    if (!existing) {
-      counts.added += 1
-      rows.push({ id: record.$id, status: 'added', site: null, file: record, changed: [] })
-      continue
-    }
-    const keys = [...new Set([...Object.keys(existing), ...Object.keys(record)])].filter((key) => key !== '$id')
-    const changed = keys.filter((key) => !same(existing[key], record[key]))
-    if (!changed.length) {
-      counts.same += 1
-      continue
-    }
-    counts.changed += 1
-    rows.push({ id: record.$id, status: 'changed', site: existing, file: record, changed })
-  }
-  for (const [id, record] of theirs) {
-    if (seen.has(id)) continue
-    counts.removed += 1
-    rows.push({ id, status: 'removed', site: record, file: null, changed: [] })
-  }
-  const fields: string[] = []
-  const listed = new Set<string>(['$id'])
-  for (const row of rows) {
-    for (const record of [row.file, row.site]) {
-      for (const key of Object.keys(record ?? {})) {
-        if (listed.has(key)) continue
-        listed.add(key)
-        fields.push(key)
-      }
-    }
-  }
-  return { rows, fields, counts }
-}
+export { packageRecordDiff, packageRecordField } from '@aglyn/aglyn/data-transfer/site-package-diff'
+export type {
+  PackageRecord,
+  PackageRecordDiff,
+  PackageRecordRow,
+  PackageRecordStatus,
+} from '@aglyn/aglyn/data-transfer/site-package-diff'
 
 /*==========================================
  * REVIEW

@@ -216,7 +216,7 @@ public final class ScreenModel {
       try await withThrowingTaskGroup(of: (String, JSONValue, String?).self) { group in
         let reader = reader
         let context = context
-        for load in loads where load.each == nil {
+        for load in loads where load.each == nil && load.compute == nil {
           let path = url(for: load)
           group.addTask {
             do {
@@ -254,6 +254,12 @@ public final class ScreenModel {
           }
           results[load.key] = .array(answers)
         }
+      }
+      // Pure functions over what has loaded (a diff of two items), in the order they are declared.
+      for load in loads where load.compute != nil {
+        let seen = ScreenContext.with(context, "data", .object(results))
+        let args = load.args.map { Double($0).map(JSONValue.number) ?? ScreenValues.lookup($0, in: seen) }
+        results[load.key] = ScreenFunctions.call(load.compute ?? "", args) ?? .null
       }
     } catch is CancellationError {
       return

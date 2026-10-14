@@ -29,6 +29,12 @@ const text = readFileSync(
   'utf8',
 )
 
+// The import wizard's screens live in their own file (`site-import.screens.json`).
+const importText = readFileSync(
+  join(__dirname, '../../../libs/native/screens/site-import.screens.json'),
+  'utf8',
+)
+
 describe('native site backup and restore', () => {
   it('gates on a feature the entitlements route returns', () => {
     const { features } = resolveOrgEntitlements({ plan: 'pro' } as never)
@@ -38,9 +44,9 @@ describe('native site backup and restore', () => {
 
   it('sends the import actions the package client sends', () => {
     for (const action of ['plan', 'apply', 'undoPlan', 'undo']) {
-      expect(text).toContain(`"action": "${action}"`)
+      expect(importText).toContain(`"action": "${action}"`)
     }
-    expect(text).toContain('"url": "/api/hosts/import"')
+    expect(importText).toContain('"url": "/api/hosts/import"')
     expect(text).toContain('"url": "/api/hosts/export"')
   })
 })
