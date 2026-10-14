@@ -33,6 +33,7 @@ import {
   renderSpellingNumber,
   resolveRenderMonitorPages,
   resolveRenderMonitorTargets,
+  renderMonitorProbesLayout,
   runRenderMonitor,
   type RenderMonitorStateDoc,
   type RenderMonitorStore,
@@ -473,5 +474,21 @@ describe('real pages, rendered fresh (AGL-3571)', () => {
     const report = await runRenderMonitor({ env, store, fetcher, raise: async () => undefined })
     expect(report.sites.flatMap((site) => site.probes).some((probe) => probe.kind === 'page')).toBe(false)
     expect(requested.some((r) => r.url.startsWith('https://tenant-x.vercel.app'))).toBe(false)
+  })
+})
+
+describe('renderMonitorProbesLayout', () => {
+  it('draws the first site every run and the rest one per run in turn', () => {
+    const drawn = (slot: number) =>
+      [0, 1, 2, 3].filter((index) => renderMonitorProbesLayout(index, 4, slot))
+    expect(drawn(0)).toEqual([0, 1])
+    expect(drawn(1)).toEqual([0, 2])
+    expect(drawn(2)).toEqual([0, 3])
+    expect(drawn(3)).toEqual([0, 1])
+  })
+
+  it('draws every site when there are two or fewer', () => {
+    expect(renderMonitorProbesLayout(1, 2, 7)).toBe(true)
+    expect(renderMonitorProbesLayout(0, 1, 7)).toBe(true)
   })
 })

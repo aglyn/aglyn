@@ -20,6 +20,7 @@ export * from './constants/site-paths'
 export * from './constants/firebase-config'
 export * from './constants/firebase-emulator-hosts'
 
+export * from './hooks/firebase/app-check-recaptcha-container'
 export * from './hooks/firebase/auth-persistence'
 export * from './hooks/firebase/firebase-services'
 export * from './hooks/firebase/firestore-cache'

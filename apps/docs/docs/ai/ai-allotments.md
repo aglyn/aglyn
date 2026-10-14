@@ -62,6 +62,21 @@ restrict the models everyone uses the same way.
 
 Every change is recorded in the organization's activity feed.
 
+### A member's allotment {#a-members-allotment}
+
+The **AI allotment** card on a member's page under **Team** is that person's share of the
+workspace's credits each month: one figure across every site for a team member, or one per
+site for a site collaborator. It shows what they have drawn this month and whether the
+allotment is hard or soft. Changing it needs **Manage billing**, or, for a collaborator, the
+site's **Admin** role.
+
+### A site's allotment {#a-sites-allotment}
+
+The **Site AI allotment** card on a site's **Users** page is what everyone on that site may
+draw together each month. Use it to keep one client site from spending what the others
+need: when a hard site allotment is used, AI stops on that site and keeps working on the
+rest.
+
 ## Your usage while you work {#usage-strip}
 
 The assistant panel and the AI dialogs in the Besigner show a compact usage line once you
@@ -92,6 +107,7 @@ Free workspaces always run on Auto.
 
 ## Related
 
+- [AI credits](ai-credits.md)
 - [AI Assist](overview.md)
 - [Billing & Plans: AI allotments](../workspace-and-billing/billing-and-plans/overview.md#ai-allotments)
 - [Invite teammates: AI usage per member](../workspace-and-billing/teams-and-roles/invite-teammates.md#ai-usage)

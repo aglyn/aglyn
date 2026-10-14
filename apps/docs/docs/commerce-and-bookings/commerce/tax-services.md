@@ -27,8 +27,8 @@ You need your own AvaTax or TaxJar account; Aglyn does not sell one.
 
 ## Before you start
 
-- Set your store's **Taxes** to **Manual rates** (Commerce → Settings →
-  Taxes), with a rate for where you sell, and leave **Prices include tax**
+- Set your store's **Taxes** to **Manual rates** (the **Taxes** card in
+  the store's settings), with a rate for where you sell, and leave **Prices include tax**
   off. A tax service is used only then — see
   [When the service is not used](#when-the-service-is-not-used). Your own rates
   stay as the **fallback**: when the service does not answer, the sale is taxed
@@ -44,7 +44,7 @@ sandbox first, place a test order, then connect your production account.
 
 ## Connect
 
-1. Go to **Commerce → Settings** and find the **Tax service** card.
+1. Open the store's settings and find the **Tax service** card.
 2. Choose **Avalara AvaTax** or **TaxJar**, and **Sandbox** or **Production**.
 3. Enter your credentials and select **Connect**. Aglyn tests them with the
    vendor first and stores nothing they refuse. The credentials are encrypted

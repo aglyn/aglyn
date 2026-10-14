@@ -27,7 +27,7 @@ import {
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
-import { mdiDeleteOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
+import { mdiDeleteOutline, mdiPageNextOutline } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
   CardDisplay,
@@ -898,7 +898,7 @@ export function HostCampaignsCard(props: {
               {
                 key: 'details',
                 label: 'Open campaign',
-                icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+                icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
                 href: campaignHref(row.id) ?? undefined,
                 disabled: !campaignHref(row.id),
                 disabledReason: campaignHref(row.id)

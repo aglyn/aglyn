@@ -57,31 +57,31 @@ const SURFACES: ReadonlyArray<{
   surface: string
   file: string
   topic: DocsHelpTopicKey
-  reference: string
+  reference: RegExp
 }> = [
   {
     surface: 'Screens',
     file: `${HOST}/screens/page.tsx`,
     topic: 'screens',
-    reference: 'help="screens"',
+    reference: /help=(?:"screens"|\{\{ topic: 'screens'[,} ])/,
   },
   {
     surface: 'Layouts',
     file: `${HOST}/layouts/page.tsx`,
     topic: 'layouts',
-    reference: 'help="layouts"',
+    reference: /help=(?:"layouts"|\{\{ topic: 'layouts'[,} ])/,
   },
   {
     surface: 'Reusable Components',
     file: `${HOST}/components/page.tsx`,
     topic: 'components',
-    reference: 'help="components"',
+    reference: /help=(?:"components"|\{\{ topic: 'components'[,} ])/,
   },
   {
     surface: 'Templates',
     file: `${HOST}/templates/page.tsx`,
     topic: 'templatesLibrary',
-    reference: 'help="templatesLibrary"',
+    reference: /help=(?:"templatesLibrary"|\{\{ topic: 'templatesLibrary'[,} ])/,
   },
 ]
 
@@ -90,7 +90,7 @@ describe('site-structure help tips are distinct (AGL-2486)', () => {
     'the $surface page asks for the $topic topic',
     ({ file, reference }) => {
       const source = readFileSync(join(REPO_ROOT, file), 'utf8')
-      expect(source).toContain(reference)
+      expect(source).toMatch(reference)
     },
   )
 

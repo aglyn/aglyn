@@ -25,7 +25,10 @@
 //        # ALSO: did a config change actually reach the running deployment?
 //
 // Exit codes: 0 = every secret is environment-isolated AND no non-production
-// environment is pointed at the live Stripe account; 1 = at least one secret
+// environment is pointed at the live Stripe account — apart from the Stripe
+// key family in console/tenant development and preview, which is live by
+// owner decision 2026-10-13 and reported as a NOTE (see
+// LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE); 1 = at least one secret
 // spans production and a non-production environment, or at least one
 // non-production environment reads LIVE or UNKNOWN; 2 = the check could not be
 // performed (no token, an API error, or the evidence failed its own negative
@@ -205,6 +208,55 @@ const ACCEPTED = {
   //   who: '<name>, YYYY-MM-DD',
   //   why: 'preview exercises the real payment path before release (AGL-2401)',
   // },
+}
+
+/**
+ * LIVE STRIPE OUTSIDE PRODUCTION — A DELIBERATE CHOICE, NOT A DEFECT.
+ *
+ * Owner decision 2026-10-13: the development and preview environments of
+ * aglyn-console and aglyn-tenant run against the LIVE Stripe account on
+ * purpose, so that pre-release builds exercise real production billing data.
+ * Until that decision is reversed, the Stripe key family sharing production's
+ * value with those environments (the sharing question) and pointing them at
+ * the live account (the mode question) is the intended state, and a check
+ * that is red forever for an intended state trains everyone to ignore it.
+ *
+ * Narrow on every axis, and each axis is checked rather than assumed:
+ *
+ *   * `keys` — the Stripe key family only. Every other credential in the tree
+ *     (CRON_SECRET, FIREBASE_PRIVATE_KEY, VERCEL_TOKEN, …) still fails.
+ *   * `projects` — only records that reach console and/or tenant. A Stripe
+ *     record linked to no project (inert) or to anything else still fails.
+ *   * `environments` — only development and preview. Any other non-production
+ *     target still fails.
+ *
+ * EXEMPTED IS NOT SILENCED: every record this covers is still printed on every
+ * run, in its own informational section with its mode, and carried in the
+ * `--json` output under `exempted`. The state stays visible; it just stops
+ * deciding the exit code. To go back to enforcing test-mode keys, empty `keys`.
+ */
+const LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE = {
+  decision: 'owner decision 2026-10-13',
+  why: 'development and preview deliberately run against live Stripe data',
+  keys: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY'],
+  projects: ['console', 'tenant'],
+  environments: ['development', 'preview'],
+}
+
+/**
+ * Whether a finding (sharing or mode) falls wholly inside the exemption above.
+ * Every listed environment and every reached project must be covered — one
+ * outside it and the whole finding stands.
+ */
+const isLiveStripeByChoice = ({ key, environments, projects }) => {
+  const rule = LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE
+  return (
+    rule.keys.includes(key) &&
+    environments.length > 0 &&
+    environments.every((env) => rule.environments.includes(env)) &&
+    projects.length > 0 &&
+    projects.every((project) => rule.projects.includes(project))
+  )
 }
 
 /**
@@ -391,10 +443,11 @@ const MODE_PREFIX = { live: 'pk_live_', test: 'pk_test_' }
 const stripeModeOf = (record) => {
   if (record?.key !== STRIPE_MODE_PROBE) return undefined
   const value = record?.value
-  // Stored `sensitive` or `encrypted`: the API returns no plaintext and this
+  // Stored `sensitive` or `encrypted` (only `plain` records come back with a
+  // value, measured 2026-10-12): the API returns no plaintext and this
   // script will not ask for one. That is UNKNOWN, and unknown is reported —
   // never rounded down to "fine". aglyn-tenant's development and preview
-  // records are in this state as of 2026-08-23.
+  // records are in this state (encrypted and sensitive) as of 2026-10-12.
   if (typeof value !== 'string' || !value) return 'unknown'
   for (const [mode, prefix] of Object.entries(MODE_PREFIX)) {
     if (value.startsWith(prefix)) return mode
@@ -563,6 +616,8 @@ function evaluateRecords({ shared, byProject }) {
   const findings = []
   const controls = []
   const modes = []
+  // Informational only: findings covered by LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE.
+  const exempted = []
 
   /**
    * The mode question, asked of every record in either scope. Separate list,
@@ -572,14 +627,24 @@ function evaluateRecords({ shared, byProject }) {
   const recordMode = (scope, record, projects) => {
     const live = liveModeOutsideProduction(record)
     if (!live) return
-    modes.push({
+    const entry = {
       scope,
       key: record.key,
       environments: live.envs,
       mode: live.mode,
       projects,
       issue: KNOWN_ISSUE[record.key] ?? null,
-    })
+    }
+    if (isLiveStripeByChoice(entry)) exempted.push({ kind: 'mode', ...entry })
+    else modes.push(entry)
+  }
+
+  const recordFinding = (finding) => {
+    if (isLiveStripeByChoice({ ...finding, environments: finding.sharedWith })) {
+      exempted.push({ kind: 'sharing', ...finding })
+    } else {
+      findings.push(finding)
+    }
   }
 
   for (const record of shared) {
@@ -587,7 +652,7 @@ function evaluateRecords({ shared, byProject }) {
     recordMode('team-shared', record, linked)
     const also = spansProduction(record)
     if (!also || isAllowed(record.key)) continue
-    findings.push({
+    recordFinding({
       scope: 'team-shared',
       key: record.key,
       sharedWith: also,
@@ -611,7 +676,7 @@ function evaluateRecords({ shared, byProject }) {
       recordMode(project.label, record, [project.label])
       const also = spansProduction(record)
       if (!also || isAllowed(record.key)) continue
-      findings.push({
+      recordFinding({
         scope: project.label,
         key: record.key,
         sharedWith: also,
@@ -623,7 +688,8 @@ function evaluateRecords({ shared, byProject }) {
 
   findings.sort((a, b) => a.key.localeCompare(b.key) || a.scope.localeCompare(b.scope))
   modes.sort((a, b) => a.scope.localeCompare(b.scope) || a.key.localeCompare(b.key))
-  return { findings, controls, modes }
+  exempted.sort((a, b) => a.kind.localeCompare(b.kind) || a.key.localeCompare(b.key) || a.scope.localeCompare(b.scope))
+  return { findings, controls, modes, exempted }
 }
 
 async function main() {
@@ -644,7 +710,7 @@ async function main() {
     byProject.push({ project, records: await projectRecords(token, project) })
   }
 
-  const { findings, controls, modes } = evaluateRecords({ shared, byProject })
+  const { findings, controls, modes, exempted } = evaluateRecords({ shared, byProject })
   for (const control of controls) {
     note(`  ${control.project}: ${control.records} records; negative control OK (${control.splitKeys.length} per-env split key(s))`)
   }
@@ -666,6 +732,7 @@ async function main() {
     findings,
     modes,
     accepted,
+    exempted,
     controls,
     deployments,
   }
@@ -674,7 +741,12 @@ async function main() {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   } else {
     process.stdout.write('\n')
-    if (!findings.length && !modes.length) {
+    if (!findings.length && !modes.length && exempted.length) {
+      process.stdout.write(
+        'OK — nothing outside the live-Stripe exemption (see the NOTE below) spans\n' +
+          'production and a non-production environment, or points one at live Stripe.\n',
+      )
+    } else if (!findings.length && !modes.length) {
       process.stdout.write(
         'OK — no secret spans production and a non-production environment, and no\n' +
           'non-production environment is pointed at the live Stripe account.\n',
@@ -712,7 +784,7 @@ async function main() {
           `  ${m.key}\n` +
             `    scope        ${m.scope}\n` +
             `    environments ${m.environments.join(', ')}\n` +
-            `    mode         ${m.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN — stored sensitive, not readable'}\n` +
+            `    mode         ${m.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN — stored encrypted or sensitive, not readable (store it plain)'}\n` +
             `    reaches      ${m.projects.join(', ') || '(linked to no project — inert)'}\n` +
             `  ${owner}\n\n`,
         )
@@ -723,6 +795,20 @@ async function main() {
           'whole reason this section exists. UNKNOWN is not a pass: a value this\n' +
           'script may not read cannot be reported safe.\n',
       )
+    }
+    if (exempted.length) {
+      const rule = LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE
+      process.stdout.write(
+        `\nNOTE — live Stripe outside production, exempted by ${rule.decision}\n` +
+          `(${rule.why}).\nInformational: still reported on every run, but they do not fail it.\n\n`,
+      )
+      for (const e of exempted) {
+        const detail =
+          e.kind === 'sharing'
+            ? `shares production's value with ${e.sharedWith.join(', ')}`
+            : `${e.environments.join(', ')} read ${e.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN (not stored plain)'}`
+        process.stdout.write(`  ${e.key}  [${e.scope}]  ${detail}  → ${e.projects.join(', ')}\n`)
+      }
     }
     if (accepted.length) {
       process.stdout.write('\naccepted by decision, not silenced:\n')
@@ -911,6 +997,12 @@ function selfTest() {
     withStripeMode([{ key: 'STRIPE_SECRET_KEY', target: ['production'], value: 'sk_live_x' }])[0].mode === undefined,
   )
 
+  // The mode MACHINERY is tested with the live-Stripe exemption suspended, so
+  // that the day the exemption is lifted the check still goes red for live
+  // and unknown. Case 12 tests the exemption itself.
+  const exemptKeys = LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE.keys
+  LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE.keys = []
+
   check('live mode in production ALONE is not a finding', modesOf(probe('pk_live_1', ['production'])).length === 0)
   check('test mode in development is not a finding', modesOf(probe('pk_test_1', ['development', 'preview'])).length === 0)
 
@@ -942,6 +1034,52 @@ function selfTest() {
   check('accepting both environments clears the finding', modesOf(probe('pk_live_1', ['development', 'preview'])).length === 0)
   if (savedAccepted === undefined) delete ACCEPTED[STRIPE_MODE_PROBE]
   else ACCEPTED[STRIPE_MODE_PROBE] = savedAccepted
+
+  LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE.keys = exemptKeys
+
+  // 12. THE LIVE-STRIPE EXEMPTION (owner decision 2026-10-13). It must clear
+  //     exactly today's intended state — the Stripe key family, live or
+  //     unreadable, in console/tenant development and preview — still REPORT
+  //     it, and leave every neighbouring state failing.
+  const stripeShared = (key, target, projectId = [CONSOLE.id, TENANT.id]) => record(key, target, { projectId })
+  const today = evaluate(
+    [
+      stripeShared('STRIPE_SECRET_KEY', ['development', 'preview', 'production']),
+      stripeShared('STRIPE_WEBHOOK_SECRET', ['development', 'preview', 'production']),
+      stripeShared('CRON_SECRET', ['development', 'preview', 'production']),
+    ],
+    probe('pk_live_1', ['development', 'preview', 'production']),
+    [...probe(undefined, ['development']), ...probe(undefined, ['preview'])],
+  )
+  check('live Stripe in console/tenant dev+preview is not a MODE finding', today.modes.length === 0)
+  check(
+    'shared Stripe secret + webhook secret are not SHARING findings',
+    !today.findings.some((f) => f.key.startsWith('STRIPE_')),
+  )
+  check('…but every exempted record is still REPORTED', today.exempted.length === 5)
+  check(
+    '…with its mode, so live vs unknown stays visible',
+    today.exempted.filter((e) => e.kind === 'mode').map((e) => e.mode).sort().join() === 'live,unknown,unknown',
+  )
+  check('a non-Stripe credential beside it STILL fails', today.findings.map((f) => f.key).join() === 'CRON_SECRET')
+
+  check(
+    'an inert (unlinked) Stripe record is NOT exempted',
+    evaluate([stripeShared('STRIPE_SECRET_KEY', ['development', 'production'], [])]).findings.length === 1,
+  )
+  check(
+    'a Stripe-looking key outside the family is NOT exempted',
+    evaluate([stripeShared('STRIPE_RESTRICTED_KEY', ['development', 'production'])]).findings.length === 1,
+  )
+  // A non-production environment the rule does not name — e.g. a Vercel
+  // custom environment added later — must not ride in on the exemption.
+  const savedNonProd = [...NON_PRODUCTION]
+  NON_PRODUCTION.push('staging')
+  check(
+    'a non-production environment outside dev/preview is NOT exempted',
+    evaluate([stripeShared('STRIPE_SECRET_KEY', ['staging', 'production'])]).findings.length === 1,
+  )
+  NON_PRODUCTION.splice(0, NON_PRODUCTION.length, ...savedNonProd)
 
   process.stdout.write(`\n${failures.length ? `${failures.length} FAILED` : 'all self-test cases pass'}\n`)
   process.exit(failures.length ? 1 : 0)

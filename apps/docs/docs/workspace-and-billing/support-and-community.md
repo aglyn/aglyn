@@ -66,6 +66,14 @@ the forum instead — it never offers a **New ticket** button the server would r
 Open a ticket from the list to read the thread and **reply**. Each message shows who
 sent it, so a staff reply is always distinguishable from your own.
 
+### Your tickets {#your-tickets}
+
+The **Your tickets** card lists every ticket your organization has opened, each marked
+**open** or **closed**, under the first-response target your plan carries. Choose
+**New ticket** to start one, or **Open** on a ticket to read the thread and reply. On
+Enterprise the card also names your success manager, who is copied on every ticket, once
+one is appointed. On Free and Starter it says where ticket support starts instead.
+
 ### Ticket status
 
 - **open** — with you or with Aglyn; new replies from either side keep it open.
@@ -102,9 +110,22 @@ Threads are organized into four categories:
 | **Showcase** | Show the site you built. |
 | **Feedback** | Product feedback and feature requests. |
 
-Filter the list by category, open a thread to read and reply, or start your own with
-a title and body (5,000 characters). Your display name and avatar are shown as the
-author.
+### Threads {#forum-threads}
+
+The **Threads** card lists the forum's threads, each with its category, author and number
+of replies. Pick a category chip to show only that category, choose **Read** to open a
+thread and reply, or **Start a thread** to post your own with a title, a category and a
+body (5,000 characters). Your display name and avatar are shown as the author.
+
+## Support links in emails {#support-link}
+
+A support link in an email from Aglyn, on a receipt or in a payment page opens Support
+for your workspace, asking you to sign in first if you need to. An account that belongs
+to one workspace goes straight there; an account in several is asked to **Choose a
+workspace** first, and then lands on the channel that workspace's plan makes primary.
+
+If the account you signed in with belongs to no workspace, the page says so — you may
+have signed in with a different address than the one you were invited with.
 
 ## Related
 

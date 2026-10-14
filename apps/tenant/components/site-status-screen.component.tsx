@@ -25,12 +25,14 @@ import { Container } from '@aglyn/shared-ui-jsx/components/container'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useHostBrand } from '../app/[host]/host-brand.context'
+import { siteStatusCopy, type SiteStatusCopy } from '../utils/site-status-copy'
 
 export interface SiteStatusScreenProps {
   /** Status code, rendered as the eyebrow — `'404'`, `'500'`. */
   code: string
-  title: string
-  message: string
+  /** The heading and the line under it; each in the site's language where absent (AGL-3771). */
+  title?: string
+  message?: string
   /** Extra actions rendered before the always-present "home" link. */
   action?: ReactNode
   /**
@@ -112,8 +114,12 @@ export interface SiteStatusScreenProps {
  * shows a visitor an empty container.
  */
 export function SiteStatusScreen(props: SiteStatusScreenProps) {
-  const { code, title, message, action, search } = props
+  const { code, action, search } = props
   const { brandName, brandLogoUrl, siteLinks } = useHostBrand()
+  // The page's own words, in the site's language (AGL-3771).
+  const copy = useSiteStatusCopy()
+  const title = props.title ?? (search ? copy.notFoundTitle : copy.errorTitle)
+  const message = props.message ?? (search ? copy.notFoundMessage : copy.errorMessage)
   const links = siteLinks ?? []
   const hasMark = Boolean(brandLogoUrl || brandName)
 
@@ -125,7 +131,7 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
       href="/"
       underline="none"
       color="text.primary"
-      aria-label={brandName ? `${brandName} home` : 'Home'}
+      aria-label={brandName ? copy.markHome.replace('{name}', brandName) : copy.home}
       sx={{ display: 'inline-flex', alignItems: 'center' }}
     >
       {brandLogoUrl ? (
@@ -186,7 +192,7 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
             {links.length > 0 ? (
               <Stack
                 component="nav"
-                aria-label="Site"
+                aria-label={copy.siteNav}
                 direction="row"
                 sx={{
                   flexWrap: 'wrap',
@@ -266,10 +272,10 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
               type="search"
               size="small"
               fullWidth
-              label="Search this site"
+              label={copy.searchLabel}
             />
             <Button type="submit" variant="outlined">
-              {'Search'}
+              {copy.search}
             </Button>
           </Stack>
         ) : null}
@@ -281,7 +287,7 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
         >
           {action}
           <AppLink componentVariant="button" variant="contained" href="/">
-            {'Go to the homepage'}
+            {copy.goHome}
           </AppLink>
         </Stack>
       </Container>
@@ -310,7 +316,7 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
             color="text.secondary"
             variant="body2"
           >
-            {'Home'}
+            {copy.home}
           </AppLink>
           {links.map((link) => (
             <AppLink
@@ -331,7 +337,7 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
             color="text.secondary"
             variant="body2"
           >
-            {'Search'}
+            {copy.search}
           </AppLink>
         </Container>
       </Box>
@@ -339,5 +345,16 @@ export function SiteStatusScreen(props: SiteStatusScreenProps) {
   )
 }
 SiteStatusScreen.displayName = 'SiteStatusScreen'
+
+/**
+ * The status pages' words in the site's language (AGL-3771): the language the
+ * host layout published, else the document's own `<html lang>`, which the same
+ * layout wrote — this screen renders on the client only.
+ */
+export function useSiteStatusCopy(): SiteStatusCopy {
+  const { language } = useHostBrand()
+  const documentLanguage = typeof document === 'undefined' ? '' : document.documentElement.lang
+  return siteStatusCopy(language || documentLanguage)
+}
 
 export default SiteStatusScreen

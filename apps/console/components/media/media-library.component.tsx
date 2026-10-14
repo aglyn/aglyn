@@ -118,7 +118,6 @@ import {
   doc,
   getCountFromServer,
   getDoc,
-  getDocs,
   limit,
   query,
   type QueryConstraint,
@@ -151,6 +150,8 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
+import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
+import { settleMediaPageRead } from './media-page-read'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { probeVideoFile } from '../../utils/video-probe'
@@ -165,6 +166,7 @@ import {
 import { useReleaseFlag } from '../../hooks/use-release-flags'
 import {
   isAllowedUploadType,
+  isAudioUploadType,
   isVideoUploadType,
   MEDIA_UPLOAD_KIND_LABELS,
   mediaPickerKindOf,
@@ -184,6 +186,8 @@ import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
 import { useMediaQuarantine } from './use-media-quarantine'
+import { MediaAudioRightsDialog } from './media-audio-rights-dialog.component'
+import { AUDIO_RIGHTS_FIELD } from '../../utils/media-audio-rights'
 import { confirmMediaDelete } from './media-delete-confirm.component'
 import {
   deletedMediaMessage,
@@ -291,6 +295,7 @@ const PICKER_KIND_COPY: Readonly<
   image: { plural: 'images', one: 'an image' },
   video: { plural: 'videos', one: 'a video' },
   pdf: { plural: 'PDFs', one: 'a PDF' },
+  audio: { plural: 'audio files', one: 'an audio file' },
 }
 
 /** Page size for cursor pagination (AGL-174). */
@@ -689,6 +694,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     : ((() => undefined) as typeof logHostActivity)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  /**
+   * The audio rights question in flight (AGL-3716): the files it names and
+   * the answer's resolver. One question per batch, and nothing audio leaves
+   * the browser until it is answered yes.
+   */
+  const [audioRightsAsk, setAudioRightsAsk] = useState<{
+    fileNames: string[]
+    resolve: (confirmed: boolean) => void
+  } | null>(null)
+  const askAudioRights = useCallback(
+    (fileNames: string[]) =>
+      new Promise<boolean>((resolve) => setAudioRightsAsk({ fileNames, resolve })),
+    [],
+  )
+  const answerAudioRights = useCallback(
+    (confirmed: boolean) => {
+      audioRightsAsk?.resolve(confirmed)
+      setAudioRightsAsk(null)
+    },
+    [audioRightsAsk],
+  )
 
   /**
    * One usage scan (AGL-176/AGL-845/AGL-1413).
@@ -901,12 +927,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const fetchPage = useCallback(
     async (cursor: QueryDocumentSnapshot | null) => {
-      const snapshot = await firestoreOneShotRetry(
+      // Bounded (AGL-3660): a bare `getDocs` never settles in a tab the
+      // multi-tab cache has stopped syncing, and the library sat on
+      // "Loading media…" for as long as the tab stayed open. See
+      // `settleMediaPageRead`.
+      const { snapshot } = await firestoreOneShotRetry(
         () =>
-          getDocs(
-            query(
-              collection(firestore, scopeCollection, scopeId, 'media'),
-              ...buildConstraints(cursor),
+          settleMediaPageRead(() =>
+            getDocsBounded(
+              query(
+                collection(firestore, scopeCollection, scopeId, 'media'),
+                ...buildConstraints(cursor),
+              ),
             ),
           ),
         // Named for the session-health verdict (AGL-1063).
@@ -2202,6 +2234,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           { variant: 'warning', persist: false, allowDuplicate: true },
         )
       }
+      // New audio under an existing link needs its rights confirmed too
+      // (AGL-3716), as the route requires.
+      if (kind === 'audio' && !(await askAudioRights([file.name]))) return
+      const rightsBody = kind === 'audio' ? { [AUDIO_RIGHTS_FIELD]: true } : {}
       const mediaId = media.$id ?? media.id
       setBusy(true)
       try {
@@ -2221,6 +2257,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           await replaceMediaBytes(media, await fileToBase64(file), contentType, {
             fileName: file.name,
             ...videoBody,
+            ...rightsBody,
           })
           return
         }
@@ -2234,6 +2271,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             fileName: file.name,
             sizeBytes: file.size,
             ...replacePrecondition(media),
+            ...rightsBody,
           }),
         })
         const minted = await mint.json().catch(() => ({}))
@@ -2264,6 +2302,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             fileName: file.name,
             ...replacePrecondition(media),
             ...videoBody,
+            ...rightsBody,
           }),
         })
         await finishReplace(media, finalize)
@@ -2285,6 +2324,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       enqueueSnackbar,
       videoUploadsOpen,
       uploadTypesCopy,
+      askAudioRights,
     ],
   )
   /**
@@ -3075,7 +3115,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // success (0 when skipped/failed) so a batch can keep a running quota
   // estimate — the counter doc only refreshes after the whole batch.
   const uploadOne = useCallback(
-    async (file: File, addedBytes: number): Promise<number> => {
+    async (
+      file: File,
+      addedBytes: number,
+      rightsConfirmed = false,
+    ): Promise<number> => {
       // Canonical type (AGL-1317): folds zip aliases and infers pdf/zip
       // from the name when the browser reports an empty type.
       const contentType = normalizeUploadContentType(file.type, file.name)
@@ -3099,6 +3143,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         )
         return 0
       }
+      // An audio file goes only with its rights confirmed (AGL-3716). The batch
+      // asked before this ran; a declined answer skips its audio here.
+      const audio = isAudioUploadType(contentType)
+      if (audio && !rightsConfirmed) {
+        enqueueSnackbar(
+          `"${file.name}" skipped — confirm you own it or have a license to use it`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+        return 0
+      }
+      const rightsBody = audio ? { [AUDIO_RIGHTS_FIELD]: true } : {}
       // The video flag (AGL-2830), refused before a byte leaves the browser.
       // The picker no longer offers a video, but a drag-and-drop never goes
       // through the picker, so this is the check that holds for both.
@@ -3222,6 +3277,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               sizeBytes: file.size,
               // The signed URL is bound to the folder's Storage path.
               folderId: uploadFolderId,
+              ...rightsBody,
             }),
           })
           const minted = await mint.json().catch(() => ({}))
@@ -3265,6 +3321,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 // the 4.5 MB body wall, which `MEDIA_POSTER_MAX_BYTES` sits
                 // an order of magnitude below.
                 ...videoBody,
+                ...rightsBody,
               }),
             },
           )
@@ -3296,6 +3353,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             // enough to take this branch is under 3 MB, so its poster is a
             // rounding error beside the file itself.
             ...videoBody,
+            ...rightsBody,
             data: await fileToBase64(file),
           }),
         })
@@ -3345,18 +3403,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const handleFiles = useCallback(
     async (files: File[]) => {
       if (!files.length) return
+      // One rights question for every audio file in the batch (AGL-3716).
+      const audioNames = files
+        .filter((file) =>
+          isAudioUploadType(normalizeUploadContentType(file.type, file.name)),
+        )
+        .map((file) => file.name)
+      const rightsConfirmed = audioNames.length
+        ? await askAudioRights(audioNames)
+        : false
       setBusy(true)
       let added = 0
       try {
         for (const file of files) {
-          added += await uploadOne(file, added)
+          added += await uploadOne(file, added, rightsConfirmed)
         }
       } finally {
         setBusy(false)
         refresh()
       }
     },
-    [uploadOne, refresh],
+    [uploadOne, refresh, askAudioRights],
   )
 
   const handleUpload = useCallback(
@@ -4045,6 +4112,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <MediaAudioRightsDialog
+        fileNames={audioRightsAsk?.fileNames ?? []}
+        onAnswer={answerAudioRights}
+      />
       <Box
         onDragEnter={handleFileDragEnter}
         onDragOver={handleFileDragOver}

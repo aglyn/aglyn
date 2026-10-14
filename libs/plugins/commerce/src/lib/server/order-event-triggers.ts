@@ -25,6 +25,8 @@ import {
   CHECKOUT_STARTED_EVENT_DECLARATION,
   COMMERCE_EVENT_DECLARATIONS,
   ORDER_CANCELLED_EVENT,
+  ORDER_DELIVERED_EVENT,
+  ORDER_FULFILLED_EVENT,
   ORDER_PAID_EVENT,
   ORDER_REFUNDED_EVENT,
 } from '../model/order-events'
@@ -110,6 +112,19 @@ export function registerCommerceEventTriggers(): void {
       { pluginId: BUNDLE_ID, name: 'webhooks' },
     )
   }
+  // The review-request email (AGL-3736): a fulfilled or delivered order —
+  // or a paid one with nothing to ship — is scheduled for its request. Its
+  // own subscriber name; scheduling is idempotent on the order.
+  for (const event of REVIEW_REQUEST_EVENTS) {
+    subscribePluginDomainEvent(
+      event,
+      async (envelope) => {
+        const { scheduleReviewRequestFromEvent } = await import('./review-requests')
+        await scheduleReviewRequestFromEvent(envelope)
+      },
+      { pluginId: BUNDLE_ID, name: 'review-requests' },
+    )
+  }
   // ShippingEasy (AGL-3633): a paid order is sent to the merchant's
   // ShippingEasy account, and a canceled or refunded one is canceled there.
   // Its own subscriber name, so a ShippingEasy outage is retried without
@@ -126,6 +141,9 @@ export function registerCommerceEventTriggers(): void {
     )
   }
 }
+
+/** The order events that schedule a review request (AGL-3736). */
+export const REVIEW_REQUEST_EVENTS = [ORDER_FULFILLED_EVENT, ORDER_DELIVERED_EVENT, ORDER_PAID_EVENT] as const
 
 /** The order events that change what ShippingEasy should hold. */
 export const SHIPPINGEASY_EVENTS = [ORDER_PAID_EVENT, ORDER_CANCELLED_EVENT, ORDER_REFUNDED_EVENT] as const

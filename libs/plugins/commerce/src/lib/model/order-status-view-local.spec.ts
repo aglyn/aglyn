@@ -115,3 +115,86 @@ describe('buildOrderStatusView for pickup and local delivery', () => {
     expect(view.statusLabel).toBe('Refunded')
   })
 })
+
+describe('buildOrderStatusView with an outside courier (AGL-3695)', () => {
+  const delivery = {
+    zoneId: 'z',
+    zoneName: 'Downtown',
+    feeCents: 500,
+    windowStartMs: 1,
+    windowEndMs: 2,
+    status: 'out_for_delivery' as const,
+  }
+
+  it('shows the courier, its tracking page and arrival while it is on the way', () => {
+    const view = buildOrderStatusView({
+      order: {
+        status: 'paid',
+        fulfillmentMethod: 'local_delivery',
+        lineItems: lines,
+        localDelivery: {
+          ...delivery,
+          courier: {
+            provider: 'doordash',
+            providerLabel: 'DoorDash',
+            deliveryRef: 'aglyn-o-1',
+            state: 'picked_up',
+            trackingUrl: 'https://doordash.com/drive/portal/track/abc',
+            etaMs: 5000,
+            testMode: true,
+            updatedAtMs: 3,
+          },
+        },
+      },
+      orderId: 'o',
+      storeName: 'Bakery',
+      number: '#3',
+    })
+    expect(view.localDelivery?.courier).toEqual({
+      providerLabel: 'DoorDash',
+      stateLabel: 'On its way',
+      trackingUrl: 'https://doordash.com/drive/portal/track/abc',
+      etaMs: 5000,
+    })
+  })
+
+  it('shows no courier once the run is over, and never a link that is not https', () => {
+    const over = buildOrderStatusView({
+      order: {
+        status: 'paid',
+        fulfillmentMethod: 'local_delivery',
+        lineItems: lines,
+        localDelivery: {
+          ...delivery,
+          courier: { provider: 'doordash', providerLabel: 'DoorDash', deliveryRef: 'r', state: 'cancelled', updatedAtMs: 1 },
+        },
+      },
+      orderId: 'o',
+      storeName: 'Bakery',
+      number: '#4',
+    })
+    expect(over.localDelivery?.courier).toBeUndefined()
+    const unsafe = buildOrderStatusView({
+      order: {
+        status: 'paid',
+        fulfillmentMethod: 'local_delivery',
+        lineItems: lines,
+        localDelivery: {
+          ...delivery,
+          courier: {
+            provider: 'doordash',
+            providerLabel: 'DoorDash',
+            deliveryRef: 'r',
+            state: 'assigned',
+            trackingUrl: 'javascript:alert(1)',
+            updatedAtMs: 1,
+          },
+        },
+      },
+      orderId: 'o',
+      storeName: 'Bakery',
+      number: '#5',
+    })
+    expect(unsafe.localDelivery?.courier?.trackingUrl).toBeNull()
+  })
+})

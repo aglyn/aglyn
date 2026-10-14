@@ -149,7 +149,7 @@ function SupportEntry() {
   return (
     <DashboardLayout
       disableDefaultBreadcrumb
-      help={{ topic: 'supportAndCommunity' }}
+      help={{ topic: 'supportAndCommunity', anchor: '#support-link' }}
       breadcrumbItems={[{ children: 'Support' }]}
       header={{
         children: 'Support',

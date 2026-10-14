@@ -110,6 +110,47 @@ wordmark, which comes out as a thin strip in a square tile. Leave it unset and
 installing your site uses the favicon, then the logo. Bring one square PNG or SVG at
 512×512 or larger.
 
+#### Site description {#site-description}
+
+The site **Description** is the meta description search results show under any page
+that has none of its own — write one or two sentences, up to 155 characters, saying what
+the site offers. A page's own search description replaces it on that page.
+
+#### Separator {#title-separator}
+
+The **Separator** is the character placed between a page's name and the site title when
+the page has no search title of its own — `–` by default, or anything up to three
+characters, such as `|` or `·`. It is the `{{site.separator}}` in the title pattern.
+
+#### Title pattern {#title-pattern}
+
+The **Title pattern** decides how a page with no search title of its own is titled, from
+the page's name, the separator and the site title. Leave it empty for the default,
+`{{page.name}} {{site.separator}} {{site.name}}`, or reorder the pieces — see
+[Variables](#variables-so-a-title-is-not-a-copy-of-your-site-name) for what each one
+stands for.
+
+#### Favicon {#favicon}
+
+The **Favicon** is the small icon browsers show in tabs and bookmarks. Press **Choose
+from media** and pick one square PNG, SVG or JPG of 512×512 or larger, and every size is
+[generated for you](#every-icon-size-is-generated-for-you). You can paste an icon URL
+instead, which is used as it is, at the one size the file has.
+
+#### App icon {#app-icon}
+
+The **App icon** is the square icon a phone or desktop shows when someone installs your
+site to its home screen. Press **Choose from media** and pick a square PNG or SVG of
+512×512 or larger — a mark rather than a wordmark; leave it unset and installing uses the
+favicon, then the site logo.
+
+#### Social image {#site-social-image}
+
+The **Social image** is the picture shown when any page of your site is shared, unless
+that page sets one of its own. Pick an image from your media library — 1200×630 crops
+well everywhere — so no page ever shares as a bare link; see
+[Social cards](#social-cards) for which image wins on each kind of page.
+
 ### Every icon size is generated for you
 
 You upload **one** file for the favicon and **one** for the app icon. Your site
@@ -220,26 +261,29 @@ It also checks the site as a whole: whether search engines are asked to stay awa
 whether your [structured data](#structured-data) names and describes who publishes the
 site, and whether your [`/llms.txt`](#llmstxt) carries guidance of your own.
 
+The result opens with the site's **Launch status**: **hidden** while
+**Discourage search engines** is on, otherwise **open to search engines** with the number
+of pages listed for them. A published page set to Unlisted is not checked, and the result
+names it, so a page left hidden after a launch shows up here — see
+[Launch a coming-soon page](../../guides/coming-soon-launch.md#6-verify-it-actually-worked).
+
 Each page gets a score out of 100 — a finding takes off more the more it matters — and
 the site's score is the average. Each page in the list links to its detail page, where
 you fix it.
 
 ### Target keywords
 
-The optional **Target keywords by page** box takes one line per page:
+**Target keywords by page** is optional. Select **Add a page**, pick the page from
+the **Page** list, then type each keyword in **Keywords** and press Enter, so it
+becomes a chip. Add another page the same way, and remove one with its **×**.
 
-```text
-/pricing: pricing, plans
-/lamps: brass desk lamps, dimmable
-```
-
-Each page is checked for at most five keywords. Two lines for the same page count as
-one list, and the card names any keyword past the first five that it did not check.
+Each page is checked for at most five keywords. A chip past the first five is shown
+outlined, and the check names it as not checked.
 
 The check reports where each page already says its keywords, and names a keyword a page
 never says. Text a component on the page shows counts. Use a keyword only where the page
-is about it. A line for an address the check did not cover is reported, not silently
-dropped.
+is about it. Keywords for a page the check did not cover, such as one
+set to Unlisted, are reported, not silently dropped.
 
 ### Check one page
 
@@ -475,6 +519,62 @@ Two fields are worth adding by hand, because nothing can guess them:
 - **Address**, published as a `PostalAddress`. Partial is fine — a city and a country
   are still a real answer.
 
+### The Entity card {#entity-card}
+
+The **Entity** card in Setup → SEO says who publishes your site — a company or a person —
+and is published as the top-level `Organization` or `Person` every page carries. Fill in
+the type and name at least; everything left blank falls back to your site's own name and
+description.
+
+#### Type {#entity-type}
+
+Choose **Organization** for a business, charity or any other group, and **Person** for
+a site published by one individual. The two publish different structured data, so pick
+the one that is true rather than the one that sounds bigger. A
+[business type](#local-businesses) only applies to an Organization.
+
+#### Name {#entity-name}
+
+The publisher's legal or trading name, as it should read in search results and AI
+answers — "Acme Widgets Ltd", not your site's tagline. It is also the second source of
+`og:site_name` when the site has no SEO **Title**.
+
+#### Description {#entity-description}
+
+One sentence about what the publisher **is** — "A family-run bakery in Austin since
+1998" — not what any one page is about. Up to 300 characters; left blank, the site
+description is used.
+
+#### Website {#entity-website}
+
+Fill this in only when the publisher's main address is somewhere else, such as a
+product site whose company lives at its own domain. Leave it blank and the entity
+points at this site.
+
+#### Contact email and phone {#entity-contact}
+
+A **Contact email** and **Contact phone** are published as the entity's
+`contactPoint`, and the email in `/llms.txt`, so an assistant asked how to reach you has
+a real answer. Write the phone in international form (`+1-512-555-0100`), and use
+**Contact is for** to say what the contact handles — customer support (the default),
+sales, press.
+
+### Entity logo {#entity-logo}
+
+The **Entity logo** card sets the mark search engines may show beside your results as
+the logo of whoever publishes the site — pick it from your media library, or paste an
+external image URL. When the entity **Type** is Person the card becomes **Entity photo**,
+for the publisher's own picture. It is separate from your site logo, which is what
+visitors see on the site itself.
+
+### The Address card {#address-card}
+
+The **Address** card holds the publisher's postal address — **Street**, **City**,
+**State or region**, **Postal code** and **Country** — published as a `PostalAddress` on
+the entity. Every field is optional and a partial address is fine; a business that
+travels to its customers can give just a region and a country, and list where it works
+under **Areas served**.
+
 ### Local businesses
 
 If customers visit you, or you go to them, pick a **Business type** on the
@@ -485,17 +585,10 @@ that type instead of `Organization`, and four more fields appear:
 - **Areas served** — one city or area per line, published as `areaServed`. This is
   how a business with no storefront says where it works; it does not need a street
   address, and a region and a country on the Address card are enough.
-- **Hours** — one line per set of days, in 24-hour time:
-
-  ```
-  Mo-Fr 08:00-17:00
-  Sa 09:00-13:00
-  ```
-
-  Days can be written `Mo`, `Mon` or `Monday`, joined with `-` for a range or `,`
-  for a list (`Mo,We,Fr 07:00-15:00`). For open all day, use `00:00-23:59`. Each line
-  becomes an `openingHoursSpecification`; a line that does not read is left out
-  rather than guessed at, and the card tells you which one before you save.
+- **Hours** — switch on each day you are open, then pick the **From** and **To**
+  times. For a split day, such as a lunch break, select **Add hours** on that day; to
+  stay open all day, pick 12:00 AM to 11:59 PM. Each day's hours are published as an
+  `openingHoursSpecification`.
 - **Price range** — free text such as `$$` or `$150–$400`, published as `priceRange`.
 - **Payment accepted** — free text such as `Cash, credit card, Zelle`, published as
   `paymentAccepted`.
@@ -544,7 +637,11 @@ A page you have hidden from search — unlisted, password-protected, members-onl
 never listed, so the guide agrees with your `robots` meta about which pages exist. A very
 large site lists its first two hundred in that order and leaves the rest to the sitemap.
 
-You can lead it with your own words. **Setup → SEO → AI agents** has two boxes:
+#### The AI agents card {#ai-agents-card}
+
+The **AI agents** card in Setup → SEO lets you open `/llms.txt` with your own words:
+which questions your site is the best source for, and what an agent should know before
+it fetches. It has two boxes, up to 1,000 characters each:
 
 - **When to use this site** — the questions you are the best source for. Be specific;
   an agent discounts a claim it cannot check, and generic marketing copy does not read

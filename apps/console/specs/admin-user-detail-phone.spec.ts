@@ -53,6 +53,7 @@ export {}
 
 let mockProfile: Record<string, unknown> | undefined
 let mockAuthPhone: string | undefined
+let mockEmailVerified: boolean | undefined
 /** Every Firestore write attempted, so "a GET writes nothing" is provable. */
 let mockWrites: string[] = []
 let mockSuppression: Record<string, unknown> | null = null
@@ -120,6 +121,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       photoURL: null,
       providerData: [],
       disabled: false,
+      emailVerified: mockEmailVerified,
       customClaims: {},
       metadata: { creationTime: null, lastSignInTime: null },
     },
@@ -171,6 +173,7 @@ async function detail(uid = 'member-uid'): Promise<any> {
 beforeEach(() => {
   mockProfile = { phoneNumber: '+15125550123' }
   mockAuthPhone = '+19995550000'
+  mockEmailVerified = true
   mockWrites = []
   mockSuppression = null
   mockSuppressionThrows = false
@@ -266,6 +269,20 @@ describe('AGL-1569 · the do-not-contact answer travels with the number', () => 
     // …and the number is still disclosed, so the failure reads as "cannot
     // check", not as "this account has no phone".
     expect(payload.user.phoneNumber).toBe('+15125550123')
+  })
+})
+
+describe('AGL-3706 · the identity card says whether the address is verified', () => {
+  it('reports a verified address', async () => {
+    const payload = await detail()
+    expect(payload.user.emailVerified).toBe(true)
+  })
+
+  it('reports an unverified one, and treats a missing flag as unverified', async () => {
+    mockEmailVerified = false
+    expect((await detail()).user.emailVerified).toBe(false)
+    mockEmailVerified = undefined
+    expect((await detail()).user.emailVerified).toBe(false)
   })
 })
 

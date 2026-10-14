@@ -296,12 +296,14 @@ function filesNamingTheKey(): string[] {
 describe('the Assist flag carries its own legal precondition (AGL-1909)', () => {
   const assist = RELEASE_FLAGS.find((flag) => flag.key === 'release_assist')
 
-  it('is still OFF by default', () => {
-    // Flipping the default in code — as opposed to per-org in the staff
-    // console, which is the reviewable path — must be a failing test rather
-    // than a quiet deploy.
+  it('defaults ON, matching the live production template', () => {
+    // Production Remote Config has carried `release_assist` ON since
+    // 2026-08-23, after both legal artifacts below were published. The code
+    // default is the fallback for an unreachable Remote Config and must agree
+    // with the deployed value; changing it again must be a failing test
+    // rather than a quiet deploy.
     expect(assist).toBeTruthy()
-    expect(assist?.defaultEnabled).toBe(false)
+    expect(assist?.defaultEnabled).toBe(true)
   })
 
   it('names BOTH published artifacts that gate it, and names Anthropic', () => {
@@ -316,12 +318,12 @@ describe('the Assist flag carries its own legal precondition (AGL-1909)', () => 
     expect(description).toContain('AGL-1909')
   })
 
-  it('is seeded OFF in the Remote Config template too', () => {
+  it('is seeded ON in the Remote Config template too, as production is', () => {
     // `defaultEnabled` above is only the fallback for an unreachable Remote
     // Config. THIS file is what gets deployed and what actually decides the
     // flag in production, so a guard that watched only the TypeScript
-    // constant would pass while the deployed template said `true` — and the
-    // constant's own doc comment requires the two to agree.
+    // constant would pass while the deployed template said otherwise — and
+    // the constant's own doc comment requires the two to agree.
     const template = JSON.parse(
       readFileSync(
         join(REPO_ROOT, 'cloud/firebase-remoteconfig.template.json'),
@@ -330,7 +332,7 @@ describe('the Assist flag carries its own legal precondition (AGL-1909)', () => 
     )
     const seeded = template.parameters?.release_assist
     expect(JSON.parse(seeded.defaultValue.value)).toMatchObject({
-      enabled: false,
+      enabled: true,
     })
     // And the precondition travels with it here as well: this description is
     // what a staff user sees in the Firebase console.

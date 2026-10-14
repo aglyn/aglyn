@@ -49,12 +49,17 @@ Create the page first; you'll point your domain at it in step 2.
 
 ### The notify-me form
 
-Add a **Form** from the element picker with a single **Form Field** of type **Email**,
-and set the Form's **Success message** to something that confirms the signup
-("Thanks — we'll email you when we open"). The
-[Forms & lead capture](../content-and-data/forms/overview.md) page covers the form
-elements and every field property in full; the only thing that matters here is that
-you give the field a **Field name** you'll recognize later, such as `email`.
+Add a **Form** from the element picker's **Forms** group, and drop a single **Email
+field** preset into it: a Form Label and an **Input** whose **Type** is Email. Set the
+Form's **Success message** to something that confirms the signup ("Thanks — we'll
+email you when we open"). The
+[Forms & lead capture](../content-and-data/forms/overview.md#field-types) page covers the
+form elements and every setting in full; the only thing that matters here is that the
+Input's **Field name** is one you'll recognize later. The preset names it `email`.
+
+To put the address box and the button on one line, select the Form and set **Styles →
+Flexbox & Grid → Flex direction** to **Row** — see
+[Style a field](../content-and-data/forms/overview.md#style-a-field).
 
 ## 2. Make it the home page
 
@@ -146,7 +151,7 @@ To get a list you can actually query, point the form at a dataset:
    `Launch signups`, with a field for the address — `email`.
 2. Back in the Besigner, select the **Form** container and set **Write to dataset** to
    `Launch signups` in the **Attributes** panel.
-3. Select the email **Form Field** and set **Maps to schema field** to `email`.
+3. Select the email field's **Input** and set **Maps to schema field** to `email`.
 
 That mapping is what makes the record land, and it's worth doing explicitly. The picker
 stores the dataset field's stable **Reference ID**, so renaming the field later never
@@ -154,7 +159,7 @@ breaks it.
 
 Left on **None (match by field name)**, the value falls back to matching a dataset field
 whose **Reference ID** — the snake_case key beside each field in the Schema dialog, not
-its Display name — is identical to the form field's **Field name**. So a form field
+its Display name — is identical to the Input's **Field name**. So an Input
 named `email` lands in a dataset field whose Reference ID is `email` with no mapping at
 all, while one named `Your email` silently doesn't.
 
@@ -196,58 +201,27 @@ indexing if you're in a hurry.
 
 ## 6. Verify it actually worked
 
-Three things a crawler reads, and how to read them yourself. Run these against your
-real domain.
+The **SEO check** card, at the top of **Setup → SEO**, reads your site the way a search
+engine does. Select **Run the check** (or **Check again**) and read the first lines of the
+result:
 
-**`robots.txt`** — visit `https://your-site/robots.txt`, or:
+- **Launch status** says whether the site is open to search engines. **Hidden** means the
+  site-wide switch is still on: search engines are asked to stay away and the sitemap lists
+  no pages. **Open to search engines** gives the number of pages listed for them.
+- **Search engines are discouraged**, in red under the score, is the same switch, still on.
+  Go back to step 5.1.
+- A note that **published pages are kept out of search** names each page still set to
+  Unlisted. Set its **Visibility** to **Public** (step 5.2) and check again.
+- The **Checked pages** table lists every page search engines can find. Your real home page
+  should be the one at `/`, not **Coming soon**.
 
-```bash
-curl -s https://your-site/robots.txt
-```
+When the status reads **open to search engines**, no page is named as kept out of search,
+and the table holds every page you expect, the launch is done.
 
-Hidden looks like this — note that no sitemap is named:
-
-```text
-User-agent: *
-Disallow: /
-```
-
-Visible looks like this:
-
-```text
-User-agent: *
-Allow: /
-Sitemap: https://your-site/sitemap.xml
-```
-
-**The page's robots meta** — open the page, **View source**, and search for `robots`.
-Or:
-
-```bash
-curl -s https://your-site/ | grep -i 'name="robots"'
-```
-
-A hidden page returns `<meta name="robots" content="noindex, follow"/>`. A visible page
-returns nothing at all — no robots meta means "index me", which is the default.
-
-**The sitemap** — visit `https://your-site/sitemap.xml`. While the site-wide switch is
-on it is an empty `<urlset>`; once you launch it becomes a **sitemap index** naming one
-child sitemap per section of your site. To count the URLs you are actually submitting,
-follow the index into its children:
-
-```bash
-curl -s https://your-site/sitemap.xml \
-  | grep -o 'https[^<]*' \
-  | xargs -I{} curl -s {} \
-  | grep -c '<loc>'
-```
-
-It should be `0` while the site-wide switch is on, and after launch it should match your
-public pages. Any page you expect to see and don't is a page still set to Unlisted.
-
-:::tip Give it a few minutes
-These three files are cached for about five minutes. If a change hasn't shown up, wait a
-beat and re-run rather than changing another setting.
+:::tip It answers at once; search engines take longer
+The check reads your settings as saved, so it reflects a change the moment you make it.
+What search engines are served catches up within about five minutes, and getting listed
+again takes days — see the caution above.
 :::
 
 ## Related

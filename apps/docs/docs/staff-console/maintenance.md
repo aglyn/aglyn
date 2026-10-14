@@ -11,6 +11,12 @@ This page lives at **Staff → Maintenance** and requires a staff claim. Two of 
 here permanently destroy data.
 :::
 
+## The maintenance page {#maintenance-page}
+
+**Staff → Maintenance** shows each scheduled platform job with whether it is still
+running on schedule and what a run would do, and lets you run one by hand when it
+cannot wait.
+
 Some platform work happens on a schedule rather than in response to anything: audit rows
 age out, orphaned plugin bundles accumulate, plugin verdicts go stale when the verifier
 moves on. Those jobs used to be reachable only from a shell holding the production cron

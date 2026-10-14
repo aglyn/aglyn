@@ -60,6 +60,8 @@ export interface StaffAiConversationPerson {
 
 export interface StaffAiAssistRow {
   id: string
+  /** The organization the exchange is filed under (AGL-3660). */
+  orgId: string | null
   at: string | null
   by: StaffAiConversationPerson
   hostId: string | null
@@ -81,6 +83,13 @@ export interface StaffAiJobOutputRow {
   hostSubdomain: string | null
 }
 
+/** One field a job's creator filled in, as staff read it. */
+export interface StaffAiJobInput {
+  key: string
+  label: string
+  value: string
+}
+
 /** A result kept beside the job rather than as a draft. */
 export type StaffAiJobResult =
   | { kind: 'insight'; insights: string[]; gap: string | null }
@@ -90,12 +99,19 @@ export type StaffAiJobResult =
 
 export interface StaffAiJobRow {
   id: string
+  /** The organization the job is filed under (AGL-3660). */
+  orgId: string | null
   at: string | null
   by: StaffAiConversationPerson
   hostId: string | null
   kind: string
   status: string
   brief: string
+  /**
+   * What the person filled in beside the brief (AGL-3660) — the guided
+   * start's form fields, a tone, a page to edit — as label and value.
+   */
+  inputs: StaffAiJobInput[]
   credits: number
   error: string | null
   outputs: StaffAiJobOutputRow[]
@@ -153,6 +169,7 @@ export function composeStaffAiAssistRow(
   const feedback = signal?.['feedback']
   return {
     id,
+    orgId: textOrNull(exchange['orgId']),
     at: staffAiConversationTime(exchange['createdAt']),
     by: staffAiConversationPerson(exchange['uid'], members),
     hostId: textOrNull(exchange['hostId']),
@@ -211,6 +228,60 @@ export function staffAiJobResultCollection(kind: unknown): 'aiInsights' | 'aiCrm
   return null
 }
 
+/** Fields read off one job's inputs, at most. */
+export const STAFF_AI_JOB_INPUTS_MAX = 40
+/** Characters of one field's value shown. */
+const INPUT_VALUE_MAX = 2000
+
+/** `businessName` → `Business name`. */
+function inputLabel(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_.-]+/g, ' ')
+    .trim()
+    .toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+function inputValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string') return value.trim() ? value : null
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) {
+    const parts = value.map(inputValue).filter((part): part is string => Boolean(part))
+    return parts.length ? parts.join(', ') : null
+  }
+  return null
+}
+
+/**
+ * What a job's creator filled in beside the brief (AGL-3660), as fields:
+ * scalars and lists as written, one level of a nested object flattened to
+ * `parent child`. A value is cut at {@link INPUT_VALUE_MAX} characters.
+ */
+export function staffAiJobInputs(inputs: unknown): StaffAiJobInput[] {
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) return []
+  const out: StaffAiJobInput[] = []
+  const push = (key: string, raw: unknown) => {
+    if (out.length >= STAFF_AI_JOB_INPUTS_MAX) return
+    const value = inputValue(raw)
+    if (value === null) return
+    out.push({
+      key,
+      label: inputLabel(key),
+      value: value.length > INPUT_VALUE_MAX ? `${value.slice(0, INPUT_VALUE_MAX)}…` : value,
+    })
+  }
+  for (const [key, raw] of Object.entries(inputs as Data)) {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      for (const [child, nested] of Object.entries(raw as Data)) push(`${key}.${child}`, nested)
+    } else {
+      push(key, raw)
+    }
+  }
+  return out
+}
+
 /** One job, with the result kept beside it when its kind keeps one. */
 export function composeStaffAiJobRow(
   id: string,
@@ -221,12 +292,14 @@ export function composeStaffAiJobRow(
   const outputs = Array.isArray(job['outputs']) ? (job['outputs'] as Data[]) : []
   return {
     id,
+    orgId: textOrNull(job['orgId']),
     at: staffAiConversationTime(job['createdAt']),
     by: staffAiConversationPerson(job['createdBy'], members),
     hostId: textOrNull(job['hostId']),
     kind: text(job['kind']) || 'unknown',
     status: text(job['status']) || 'unknown',
     brief: text(job['brief']),
+    inputs: staffAiJobInputs(job['inputs']),
     credits: finite(job['creditsSpent']) ?? 0,
     error: textOrNull(job['error']),
     outputs: outputs.map((output) => ({

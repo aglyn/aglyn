@@ -9,7 +9,7 @@ description: Shifts and the cash drawer with X and Z reports, staff PINs, custom
 Everything a till needs between the first sale of the day and the last: a
 counted cash drawer, a quick way to change who is ringing, the customer in
 front of you, returns, and a proper printed receipt. All of it runs from the
-register at **`/{site}/pos`**. Staff PINs are set under **Commerce → Settings**,
+register at **`/{site}/pos`**. Staff PINs are set in the store's settings,
 and the register's rules under the site's **Admin → Plugins → Commerce**.
 
 :::info Plan availability
@@ -83,7 +83,7 @@ whoever is signed in on the tablet.
 A shared tablet stays signed in; each person switches in with their own PIN
 instead of signing out.
 
-- Set your **4–6 digit PIN** under **Commerce → Settings → Staff PINs**. A PIN
+- Set your **4–6 digit PIN** on the **Staff PINs** card in the store's settings. A PIN
   that is one digit repeated or a straight run like 1234 is refused.
 - At the register, tap **Switch cashier**, pick your name and enter your PIN.
   Every sale, shift and return you ring is recorded under you until someone
@@ -161,7 +161,7 @@ Receipts print on any 80 mm receipt printer through your browser's print
 dialog. Each receipt has your logo and store name, the order number and its
 barcode, the date, cashier and register, the customer's name, every item,
 discounts, tax, the total, how it was paid (card with its last four digits),
-the tip and change, and your **receipt footer** from Commerce → Settings. Two
+the tip and change, and your **receipt footer** from the store's settings. Two
 more lines are set in **Admin → Plugins → Commerce**: **Address on printed
 receipts**, printed under your store name, and **Return policy on printed
 receipts**, printed at the foot.

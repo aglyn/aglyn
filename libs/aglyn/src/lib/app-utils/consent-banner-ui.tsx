@@ -413,6 +413,32 @@ const DEFAULT_COPY: Required<ConsentCopy> = {
   advertisingDetail: 'Personalized ads and measuring how they perform.',
 }
 
+/**
+ * The published-site wording, naming the vendors that load on the analytics
+ * grant besides Google Analytics (AGL-3698) — a live chat a merchant set to
+ * load with the page. The visitor is asked about what will actually load, so
+ * a site that adds one says so in the banner, the panel's analytics line and
+ * nowhere else. No vendors, no change: the default wording, untouched.
+ */
+export function consentCopyForAnalyticsVendors(
+  vendors: readonly string[] | null | undefined,
+): ConsentCopy | undefined {
+  const names = (vendors ?? []).filter(Boolean)
+  if (!names.length) return undefined
+  const list = ['Google Analytics', ...names]
+  const joined =
+    list.length === 2
+      ? `${list[0]} and ${list[1]}`
+      : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`
+  const named = (sentence: string) =>
+    sentence.replace('analytics (Google Analytics)', `analytics (${joined})`)
+  return {
+    bannerAnalyticsOnly: named(DEFAULT_COPY.bannerAnalyticsOnly),
+    bannerWithAdvertising: named(DEFAULT_COPY.bannerWithAdvertising),
+    analyticsDetail: `${DEFAULT_COPY.analyticsDetail} Also loads ${names.join(', ')} with the page.`,
+  }
+}
+
 export interface ConsentBannerUiProps {
   hostId: string
   /** The visitor's recorded state; null means undecided. */
@@ -429,6 +455,12 @@ export interface ConsentBannerUiProps {
   advertising?: boolean
   /** Per-surface wording; see {@link ConsentCopy}. */
   copy?: ConsentCopy
+  /**
+   * Vendors this page loads on the analytics grant besides Google Analytics
+   * (AGL-3698); the banner and the panel name them. See
+   * {@link consentCopyForAnalyticsVendors}. `copy` still wins.
+   */
+  analyticsVendors?: readonly string[]
   /**
    * Links to the policies behind the choice, rendered under the copy on both
    * the banner and the panel.
@@ -530,11 +562,16 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
     country,
     advertising,
     copy,
+    analyticsVendors,
     policyLinks,
     showPill = true,
     onDecision,
   } = props
-  const words = { ...DEFAULT_COPY, ...copy }
+  const words = {
+    ...DEFAULT_COPY,
+    ...consentCopyForAnalyticsVendors(analyticsVendors),
+    ...copy,
+  }
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [analyticsChecked, setAnalyticsChecked] = useState(
     stored?.analytics === true,

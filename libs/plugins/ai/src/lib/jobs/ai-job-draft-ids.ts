@@ -83,13 +83,18 @@ export function aiJobDraftId(job: Pick<AiJob, '$id' | 'steps'>, slot: AiJobDraft
   return aiRecordedJobDraftId(job, slot) ?? job.$id
 }
 
-/** The creations a job writes as documents: a theme change is a proposal, and no job writes a dataset. */
+/**
+ * The creations a job writes as documents: a theme change is a proposal. A
+ * dataset is written by the data plugin for a site start (AGL-3616), under
+ * the id minted here.
+ */
 const DRAFT_CREATION_KINDS: ReadonlySet<AiBuildPlanCreateKind> = new Set<AiBuildPlanCreateKind>([
   'component',
   'form',
   'layout',
   'template',
   'email',
+  'dataset',
 ])
 
 /** The kinds whose step builds what their plan names, one unit a draft, and whether that includes its screens. */

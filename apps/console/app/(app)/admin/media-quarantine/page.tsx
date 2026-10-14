@@ -847,7 +847,7 @@ function AdminMediaQuarantine() {
             {lookup ? (
               <CardDisplay
                 header={'Disable or release'}
-                help={docsHelp('lockdown', { anchor: '#disabled-files-page' })}
+                help={docsHelp('lockdown', { anchor: '#disable-or-release' })}
                 contentGutterX
                 contentGutterY
               >
@@ -1084,9 +1084,7 @@ function AdminMediaQuarantine() {
 
             <CardDisplay
               header={'Actions taken in this session'}
-              help={docsHelp('lockdown', {
-                anchor: '#never-take-a-lock-or-a-lift-on-trust',
-              })}
+              help={docsHelp('lockdown', { anchor: '#quarantine-session-log' })}
               contentGutterX
               contentGutterY
             >

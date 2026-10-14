@@ -7,9 +7,12 @@ import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.contracts.OrderChannel
 import com.aglyn.contracts.OrderLineFulfillmentState
 import com.aglyn.contracts.OrderRefundState
+import com.aglyn.contracts.OrderRestockCheck
 import com.aglyn.contracts.OrderStatus
+import com.aglyn.contracts.OrderTimelineEvent
 import com.aglyn.contracts.canTransitionOrder
 import com.aglyn.contracts.formatOrderNumber
+import com.aglyn.contracts.formatReceiptTime
 import com.aglyn.contracts.fulfillmentIsActive
 import com.aglyn.contracts.liftLegacyOrder
 import com.aglyn.contracts.orderIsTestMode
@@ -30,6 +33,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlin.math.max
 
@@ -51,6 +55,11 @@ const val FULFILL_ORDER_ROUTE = "/api/commerce/fulfill-order"
 const val REFUND_ORDER_ROUTE = "/api/commerce/refund"
 const val CANCEL_ORDER_ROUTE = "/api/commerce/cancel-order"
 const val ORDER_RECEIPT_ROUTE = "/api/commerce/order-receipt-send"
+const val ORDER_NOTE_ROUTE = "/api/commerce/order-note"
+const val ORDER_RESTOCK_ANSWER_ROUTE = "/api/commerce/order-restock-answer"
+
+/** The longest note the order timeline keeps (`ORDER_NOTE_MAX_LENGTH` in the console's model). */
+const val ORDER_NOTE_MAX_LENGTH = 500
 
 fun ordersPath(hostId: String) = "hosts/$hostId/orders"
 
@@ -159,6 +168,10 @@ data class OrderDetail(
   val refundState: OrderRefundState,
   val refundableCents: Double,
   val actions: OrderActions,
+  /** The timeline, newest first, as the console's dialog lists it. */
+  val timeline: List<OrderTimelineEvent>,
+  /** The restock question still waiting for an answer, if any. */
+  val restock: OrderRestockCheck?,
 )
 
 fun orderDetail(doc: FirestoreDoc): OrderDetail {
@@ -190,8 +203,17 @@ fun orderDetail(doc: FirestoreDoc): OrderDetail {
     refundState = orderRefundState(order),
     refundableCents = max(0.0, orderNetCents(order)),
     actions = orderActions(order),
+    timeline = order.timeline.orEmpty().reversed(),
+    restock = order.restockCheck?.takeIf { it.resolution == null },
   )
 }
+
+/** One timeline line as the console's dialog prints it: `time — event: detail`. */
+fun timelineLine(event: OrderTimelineEvent): String =
+  "${formatReceiptTime(event.atMs.toLong())} — ${event.event}" + (event.detail?.takeIf { it.isNotEmpty() }?.let { ": $it" } ?: "")
+
+/** Why a note cannot be sent, or null. The route checks again. */
+fun checkOrderNote(text: String): String? = if (text.isBlank()) "Write a note first" else null
 
 /** Why a refund amount cannot be sent, or null. The route checks again. */
 fun checkRefundAmount(amountCents: Long?, refundableCents: Double): String? = when {
@@ -230,6 +252,15 @@ interface OrderActionsApi {
   suspend fun cancel(orderId: String)
   suspend fun receiptChannels(): Set<ReceiptChannel>
   suspend fun sendReceipt(orderId: String, channel: ReceiptChannel, to: String)
+  suspend fun addNote(orderId: String, note: String)
+
+  /** Answers the open restock question; the route's verdict says whether it landed (`recorded`, `answered`, `changed`). */
+  suspend fun answerRestock(orderId: String, resolution: RestockAnswerChoice, flaggedAtMs: Double): String
+}
+
+enum class RestockAnswerChoice(val raw: String, val label: String, val recorded: String) {
+  RESTOCKED("restocked", "Restocked", "Recorded as restocked"),
+  DISMISSED("dismissed", "No restock", "Recorded — no restock"),
 }
 
 class ConsoleOrderActionsApi(private val api: ConsoleApiClient, private val hostId: String) : OrderActionsApi {
@@ -282,5 +313,18 @@ class ConsoleOrderActionsApi(private val api: ConsoleApiClient, private val host
 
   override suspend fun sendReceipt(orderId: String, channel: ReceiptChannel, to: String) {
     api.request(ORDER_RECEIPT_ROUTE, ApiMethod.POST, body("orderId" to orderId, "channel" to channel.raw, "to" to to.trim()))
+  }
+
+  override suspend fun addNote(orderId: String, note: String) {
+    api.request(ORDER_NOTE_ROUTE, ApiMethod.POST, body("orderId" to orderId, "note" to note.trim().take(ORDER_NOTE_MAX_LENGTH)))
+  }
+
+  override suspend fun answerRestock(orderId: String, resolution: RestockAnswerChoice, flaggedAtMs: Double): String {
+    val answer = api.request(
+      ORDER_RESTOCK_ANSWER_ROUTE,
+      ApiMethod.POST,
+      body("orderId" to orderId, "resolution" to resolution.raw, "flaggedAtMs" to flaggedAtMs.toLong()),
+    )?.jsonObject
+    return (answer?.get("verdict") as? JsonPrimitive)?.contentOrNull ?: "recorded"
   }
 }

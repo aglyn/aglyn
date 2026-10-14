@@ -21,10 +21,13 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import {
   AI_BUILD_PLAN_TOOL,
   aiBuildPlanToolFor,
+  aiPlanSlugKey,
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
-import type { AiJob, AiJobKind, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
+import type { AiJob, AiJobKind, AiJobPlan, AiJobReview, AiJobStatus } from '../model/ai-jobs.types'
+import { AI_BUILD_PRODUCT_OP, aiBuildStorePagesFor } from '../model/ai-build-store-pages'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
   AI_TEMPLATE_SUBJECT_DEFINITIONS,
   aiTemplateShownTokens,
@@ -42,6 +45,7 @@ import {
   type AiPlanJobScope,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiSitePlanDatasetCapability } from './ai-job-site-datasets'
 import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_SITE_CREATE_KINDS,
@@ -58,8 +62,12 @@ import {
   aiSiteThinHomeViolations,
   AI_SITE_GALLERY_SENTENCE,
   aiSiteEmptyGalleryViolations,
+  AI_SITE_DATASETS_MAX,
+  AI_SITE_GALLERY_MIN_ITEMS,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
+import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
+import { aiStorefrontPlanScreens } from '../layout-language/ai-layout-storefront'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
@@ -87,7 +95,15 @@ import {
   type AiBuildOps,
 } from '../model/ai-build-job'
 import { aiBuildOpLines, aiBuildOps } from './ai-build-capabilities'
+import { aiBuildUnlistedEventsCheck, aiSettleBuildEventPage } from '../model/ai-build-event-page'
+import {
+  aiSiteEventItemsCheck,
+  aiSiteEventPlanLines,
+  readAiSiteEventPlanning,
+  type AiSiteEventPlanning,
+} from './ai-job-site-events'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
+import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
 import { readAiPlanCapabilities } from './ai-job-drafts'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -183,6 +199,7 @@ export function aiJobPlanPrompt(
   capabilities: AiPlanCapabilities | null = null,
   inventory: AiSiteInventory | null = null,
   ops: AiBuildOps | null = null,
+  now: Date | null = null,
 ): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
@@ -198,7 +215,7 @@ export function aiJobPlanPrompt(
   }
   lines.push(...aiPlanTemplateTokenLines(job))
   lines.push(...aiPlanSiteLines(job, inventory, capabilities))
-  lines.push(...aiPlanBuildLines(job, capabilities, ops))
+  lines.push(...aiPlanBuildLines(job, capabilities, ops, now))
   return lines.join('\n')
 }
 
@@ -212,6 +229,7 @@ export function aiPlanBuildLines(
   job: Pick<AiJob, 'kind'>,
   capabilities: AiPlanCapabilities | null,
   ops: AiBuildOps | null,
+  now: Date | null = null,
 ): string[] {
   if (job.kind !== 'build') return []
   const pages = aiBuildPageLimit(capabilities?.freeTaste === true)
@@ -222,7 +240,14 @@ export function aiPlanBuildLines(
     // doctrine's "repeated items place a component" is not asked of a build.
     ...(capabilities?.repeatsCompiled ? [AI_PLAN_COMPILED_REPEATS_SENTENCE] : []),
     ...(ops ? aiBuildOpLines(ops, AI_BUILD_STRUCTURAL_OPS) : []),
+    // An item with a date (an event, AGL-3743) is dated after the build.
+    ...(now ? [aiPlanTodaySentence(now)] : []),
   ]
+}
+
+/** The build's date, so a dated item falls after it (AGL-3743). */
+export function aiPlanTodaySentence(now: Date): string {
+  return `Today is ${now.toISOString().slice(0, 10)} (UTC). Anything an item dates, such as an event, falls after today.`
 }
 
 /**
@@ -273,7 +298,9 @@ export function aiPlanSiteLines(
   // left to a ceiling the outline is free to stay far under.
   const plansHome = !pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))
   if (home.min > 0 && plansHome) {
-    lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${AI_SITE_HOME_BANDS}.`)
+    // A store's home is a storefront (AGL-3676): its own parts, in its own order.
+    const bands = aiSiteKindOfInputs(job.inputs)?.id === 'store' ? AI_SITE_STORE_HOME_BANDS : AI_SITE_HOME_BANDS
+    lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${bands}.`)
   }
   // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
   // read "at most 8" as leave to plan a home of two.
@@ -285,17 +312,65 @@ export function aiPlanSiteLines(
       "This site's blog is written for it with its first posts at /blog, and the header links it. Plan no page that stands in for it (no Blog, Articles, Journal, Posts or Stories page); feature the posts in a section of the home page instead.",
     )
   }
+  // A paid store's account, cart and policy pages are added by the platform,
+  // outside the plan's pages (AGL-3676), so the plan spends none of its pages on them.
+  if (aiSiteContentPart(job.inputs ?? null, capabilities?.freeTaste === true) === 'products') {
+    lines.push(AI_SITE_STORE_PAGES_SENTENCE)
+  }
   // A section that shows the work counts its pieces (AGL-3660): a planned
   // gallery of no items let a page about the work show none.
   lines.push(AI_SITE_GALLERY_SENTENCE)
+  // A section that asks for something places the form (AGL-3660): a live
+  // portfolio start planned a commissions inquiry beside the form it made
+  // for its Contact page, without placing it.
+  if (aiPlanCanPlaceForm(inventory, capabilities)) lines.push(AI_SITE_FORM_SENTENCE)
+  // Structured content is kept as a dataset where one may be made (AGL-3616).
+  if (capabilities?.create.dataset.allowed) {
+    lines.push(aiSiteDatasetSentence(Math.min(capabilities.datasetsMax ?? AI_SITE_DATASETS_MAX, capabilities.create.dataset.left ?? AI_SITE_DATASETS_MAX)))
+  }
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
+  // A store's Shop page IS its storefront (AGL-3676): the platform lists the
+  // real products there, so the plan names the section and draws no range.
+  if (kind?.id === 'store') lines.push(AI_SITE_STORE_SHOP_SENTENCE)
   lines.push(
     "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
   )
   return lines
 }
+
+/**
+ * The sentence a site plan's turn states about a section that collects
+ * answers (AGL-3660): it places the saved form by reference, and one form
+ * may be placed on more than one page.
+ */
+export const AI_SITE_FORM_SENTENCE =
+  "A section that asks visitors for something (contact, inquiry, commissions, booking, sign-up) places the form: put new:<the form's name> or the site's form id in its uses. One form may be placed on several pages."
+
+/**
+ * The sentence a site plan's turn states where it may create datasets, with
+ * how many it may (the live eval of 2026-10-10 planned four past a cap of
+ * three it was never told)
+ * (AGL-3616): a list of like things is kept as one, named in the sections
+ * that list it, and a page of its own per record is that dataset's record
+ * template. Only where datasets may be made, so a Free plan's turn, whose
+ * length its wall is proven at, is unchanged.
+ */
+export function aiSiteDatasetSentence(max: number): string {
+  return `Keep structured content as a dataset, at most ${max} ${max === 1 ? 'dataset' : 'datasets'}, and only for a list of 4 or more similar items: a menu, a team, services, portfolio pieces, events, questions and answers; never reviews or testimonials. Create the dataset, its fields the items' field names, and put new:<the dataset's name> in the uses of each section that lists them; the platform lists its records there. Where each item deserves a page of its own, plan one page as the dataset's record template. Anything else stays written on its page. ${AI_SITE_FORM_DATASET_SENTENCE}`
+}
+
+/**
+ * What a paid site plan is told about a form that writes to a dataset
+ * (AGL-3616, Zach 2026-10-10): only where the person would want each
+ * submission kept as a record, the dataset created with the form's own
+ * field names, and never listed, because its records are the people who
+ * sent the form.
+ */
+export const AI_SITE_FORM_DATASET_SENTENCE =
+  "Where each submission of the form should also be kept as a record (volunteer sign-ups, RSVPs, inquiries), the form writes to a dataset: create the dataset, its fields the form's field names, and set the form's writesTo to new:<the dataset's name>; that dataset counts toward the same limit and no section lists it. Otherwise writesTo is null."
+
 
 /**
  * What a site start's home page is held to (AGL-3660): its fewest sections,
@@ -334,10 +409,75 @@ export function aiSiteThinHomeCheck(
   }
 }
 
+/** What a store's plan is told about its Shop page (AGL-3676). */
+export const AI_SITE_STORE_SHOP_SENTENCE =
+  'Plan a Shop page at /shop: a short title section, then a section named "Product grid" second, where the platform lists the store\'s real products with sort, filters, photos, prices and cart, then at most one or two short sections (care, shipping, gifting help). Never open it with a hero, and never plan the products themselves as cards of your own.'
+
+/** What a paid store's plan is told about the pages the platform adds beside it (AGL-3676). */
+export const AI_SITE_STORE_PAGES_SENTENCE =
+  "The platform adds this store's account page (sign in, orders, saved items), its cart page, and its Shipping & returns, Privacy policy and Terms of sale pages, and links them in the header and footer; they do not count toward this plan's pages. Plan none of them: spend every page on what the brief is about."
+
+/** What a store's home is composed of (AGL-3676): a storefront's parts, in a storefront's order. */
+export const AI_SITE_STORE_HOME_BANDS =
+  'a hero that sells first, then "Bestsellers" (the platform lists the real products), "Shop by collection" with 3 or 4 items, the brand story, why buy here with 3 or 4 items, "Customer reviews" (the platform shows the store\'s real ones) and a "Newsletter sign-up" band last'
+
+/**
+ * A store plan held to a storefront (AGL-3676, `ai-layout-storefront.ts`):
+ * on a paid start its home gains the parts a shopper expects that the plan
+ * left out — bestsellers, collections, reviews, a newsletter sign-up —
+ * while the page has room; on any start its Shop page opens on its grid.
+ * Settled, never re-asked: each part has one answer, and the Free wall's
+ * home keeps the sections it planned.
+ */
+export function aiSiteStorefrontPlan<P extends Pick<AiBuildPlan, 'screens'>>(plan: P, options: { paid: boolean }): P {
+  const screens = aiStorefrontPlanScreens(plan.screens, {
+    paid: options.paid,
+    isShopPage: aiLayoutIsShopPage,
+    gridSection: aiLayoutShopGridSection,
+  })
+  return screens.every((screen, index) => screen === plan.screens[index]) ? plan : { ...plan, screens }
+}
+
+/** The code a store plan with no Shop page is re-asked under. */
+export const AI_SITE_STORE_SHOP_CODE = 'plan-store-shop-page'
+
+/**
+ * A store plan of two or more pages with no Shop page (AGL-3676): the page
+ * the platform lists the catalog on is the one a shopper looks for. A
+ * one-page Free taste lists its products on the home instead.
+ */
+export function aiSiteStoreShopPageViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  if (plan.screens.length < 2 || plan.screens.some((screen) => aiLayoutIsShopPage(screen))) return []
+  return [
+    {
+      rule: null,
+      code: AI_SITE_STORE_SHOP_CODE,
+      message:
+        'This store has no Shop page. Plan one at /shop, its second section named "Product grid": the platform lists the real products there.',
+      paths: ['screens'],
+    },
+  ]
+}
+
+/** A store plan's missing Shop page, asked about on the FIRST answer only, like a thin home. */
+export function aiSiteStoreShopCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  let answers = 0
+  return (plan) => {
+    answers += 1
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
+    return aiSiteStoreShopPageViolations(plan)
+  }
+}
+
 /**
  * A site plan's section that shows the work without its pieces (AGL-3660),
  * asked about on the FIRST answer only, like a thin home: the re-ask names
- * the section, and an answer that keeps it thin is kept.
+ * the section, and an answer that keeps it thin is kept. A site start's plan
+ * is given its fewest pieces in code first (`aiSettlePlanGalleries`,
+ * AGL-3754), so this is the backstop for a section that settle leaves: one
+ * item of a list split into sections.
  */
 export function aiSiteEmptyGalleryCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   let answers = 0
@@ -441,8 +581,10 @@ function planViolations(
   home: { min: number; across: number | null } | null = null,
   blog = false,
   site = false,
+  store = false,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   const thinHome = home && home.min > 0 ? aiSiteThinHomeCheck(home) : null
+  const storeShop = store ? aiSiteStoreShopCheck() : null
   const blogStandIn = blog ? aiSiteBlogStandInCheck() : null
   const emptyGallery = site ? aiSiteEmptyGalleryCheck() : null
   return (plan) => {
@@ -458,8 +600,32 @@ function planViolations(
       ...(thinHome ? thinHome(plan) : []),
       ...(blogStandIn ? blogStandIn(plan) : []),
       ...(emptyGallery ? emptyGallery(plan) : []),
+      ...(storeShop ? storeShop(plan) : []),
     ]
   }
+}
+
+/** The layout a site's pages render in (AGL-3755): its home page's, else its only layout, else none. */
+function aiSiteLayoutOf(inventory: AiSiteInventory | null): string | null {
+  const home = inventory?.screens.find((screen) => !screen.template && aiPlanSlugKey(screen.slug) === '/')
+  if (home?.layoutId) return home.layoutId
+  return inventory?.layouts.length === 1 ? (inventory.layouts[0]?.id ?? null) : null
+}
+
+/**
+ * A site plan's violations with its events' (AGL-3755): its items are only
+ * the events it may plan. Every other kind's are as they are.
+ */
+function aiSiteWithEventItemsCheck(
+  violations: (plan: AiBuildPlan) => AiDoctrineViolation[],
+  siteEvents: AiSiteEventPlanning | null | undefined,
+  ops: AiBuildOps | null = null,
+): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  // A build's events left on no page are re-asked once (AGL-3755).
+  const unlisted = ops ? aiBuildUnlistedEventsCheck(ops) : null
+  const events = siteEvents === undefined ? null : aiSiteEventItemsCheck(siteEvents)
+  if (!unlisted && !events) return violations
+  return (plan) => [...violations(plan), ...(events ? events(plan) : []), ...(unlisted ? unlisted(plan) : [])]
 }
 
 /**
@@ -653,8 +819,15 @@ export type AiPlanCapabilitiesReader = (input: {
 }) => Promise<AiPlanCapabilities | null>
 
 /** The reader the step uses in production: the draft bands' own arithmetic, for the job's site. */
-export const readAiJobPlanCapabilities: AiPlanCapabilitiesReader = async ({ job, org, firestore }) =>
-  job.hostId ? readAiPlanCapabilities(firestore, { hostId: job.hostId, org }) : null
+export const readAiJobPlanCapabilities: AiPlanCapabilitiesReader = async ({ job, org, firestore }) => {
+  if (!job.hostId) return null
+  const capabilities = await readAiPlanCapabilities(firestore, { hostId: job.hostId, org })
+  // A site start creates datasets only where the data plugin runs and its
+  // writer admits this member now (AGL-3616), and at most a start's few.
+  return job.kind === 'site'
+    ? aiSitePlanDatasetCapability(capabilities, { firestore, org, now: new Date(), job })
+    : capabilities
+}
 
 export interface AiJobPlanStepDeps {
   /** The inventory reader; specs hand in a fake. */
@@ -673,6 +846,16 @@ export interface AiJobPlanStepDeps {
    * turns it off.
    */
   readSiteContext?: AiSiteContextReader | null
+  /**
+   * What a Free workspace has left (AGL-3722), read when a build's plan is
+   * kept so its card can say whether it fits; `null` turns it off.
+   */
+  readFreeCredits?: typeof readFreeAiCreditsLeft | null
+  /**
+   * What an event-led site start may plan of events (AGL-3755); specs hand in
+   * their own, and `null` turns it off.
+   */
+  readSiteEvents?: typeof readAiSiteEventPlanning | null
 }
 
 /** What a job's site context is read with (AGL-3661). */
@@ -702,6 +885,32 @@ export const readAiBuildOps: AiBuildOpsReader = async ({ job, org, firestore, fr
 }
 
 /**
+ * A build plan with the store pages it adds (AGL-3676): where it turns the
+ * site into a store and the site can have one — its operations include the
+ * commerce plugin's products, which they do only on a plan with commerce and
+ * a site Commerce runs on — the account, cart and policy pages neither the
+ * plan nor the site already has. Worked out here by code, never by the
+ * model, so the plan card shows them before Confirm. Every other plan, and a
+ * build that adds none, carries none.
+ */
+export function aiPlanWithStorePages<T extends AiBuildPlan>(
+  kind: AiJob['kind'],
+  ops: AiBuildOps | null,
+  inventory: Pick<AiSiteInventory, 'screens'> | null,
+  plan: T,
+): T {
+  if (kind !== 'build') return plan
+  // A reused plan's store pages were the other job's site's; this one's are worked out again.
+  const rest: T = { ...plan }
+  delete rest.storePages
+  const storePages = aiBuildStorePagesFor(plan, {
+    store: Boolean(ops?.has(AI_BUILD_PRODUCT_OP)),
+    pages: (inventory?.screens ?? []).map((screen) => ({ id: screen.id, slug: screen.slug, title: screen.name, template: screen.template })),
+  })
+  return storePages ? { ...rest, storePages } : rest
+}
+
+/**
  * A build plan's items with what each can cost (AGL-3616), from its
  * capability, recorded as the plan is kept so the console's estimate and the
  * confirm door read one figure without the registry.
@@ -725,6 +934,8 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const admissionRefusal = deps.admissionRefusal ?? aiJobAdmissionRefusal
   const readOps = deps.readOps ?? readAiBuildOps
   const readContext = deps.readSiteContext === undefined ? readAiJobSiteContext : deps.readSiteContext
+  const readFreeCredits = deps.readFreeCredits === undefined ? readFreeAiCreditsLeft : deps.readFreeCredits
+  const readSiteEvents = deps.readSiteEvents === undefined ? readAiSiteEventPlanning : deps.readSiteEvents
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
     const [inventory, workspace, siteContext] = await Promise.all([
@@ -745,6 +956,25 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // A build's operations, as this site has them (AGL-3616).
     const ops = job.kind === 'build' ? await readOps({ job, org, firestore, freeTaste }) : null
     const site = job.kind === 'site'
+    // An event-led start's first events (AGL-3755), only where the build's
+    // gate admits the events plugin's operation here and its writer this member.
+    const siteEvents =
+      site && readSiteEvents
+        ? await readSiteEvents({ job, org, firestore, now, readOps: () => readOps({ job, org, firestore, freeTaste }) })
+        : null
+    const itemOps = ops ?? siteEvents?.ops ?? null
+    // A kept plan waits for its confirmation; a Free build's card is told what
+    // is left, so it says before Confirm whether the build fits (AGL-3722).
+    // Net of what THIS plan just spent: the machine meters the step after it
+    // returns, so the meters read here do not hold it yet, and a card told
+    // the figure from before the plan (101) offered Confirm to a person with
+    // 48 left, who met the prompt only after pressing it (2026-10-10).
+    const planReview = async (spentUsd = 0): Promise<AiJobReview> => {
+      const review: AiJobReview = { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] }
+      if (job.kind !== 'build' || !freeTaste || !readFreeCredits) return review
+      const credits = await readFreeCredits(firestore, { orgId: job.orgId, org, now, pendingUsd: spentUsd })
+      return credits ? { ...review, freeCredits: credits } : review
+    }
     // The model switch's answer for this job (AGL-2942): the creator's pick
     // where the plan, the org restriction and the allotment allowlists allow
     // it, and Auto held to those same lists otherwise. Without a resolver the
@@ -752,7 +982,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // provider's fast tier (AGL-3594), unless the creator picked a model.
     const model = aiSitePlanModel(job, modelFor?.('job.plan'), freeTaste)
     const route = AI_ROUTING_TABLE['job.plan']
-    const prompt = aiJobPlanPrompt(job, capabilities, inventory, ops)
+    const prompt = [aiJobPlanPrompt(job, capabilities, inventory, ops, now), ...(siteEvents ? aiSiteEventPlanLines(siteEvents, now) : [])].join('\n')
 
     /**
      * The confirm door's answer for this plan, asked before the plan is kept
@@ -760,6 +990,16 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
      * door hands it. A refusal fails the job with the door's sentence; a door
      * that could not answer keeps the plan, since the resume door asks again
      * before anything is built.
+     *
+     * Two answers are about the month's Free credits, not the plan (AGL-3722):
+     * - the 409 credits prompt KEEPS the plan. The card is told what is left
+     *   (`planReview`) and offers Build what fits / the home page first /
+     *   Upgrade, and the confirm door asks with the person's choice. Failing
+     *   here instead failed every Free build past its p90 before the card
+     *   could offer them — and paged staff with `ai.jobFailed`, as at
+     *   2026-10-09 16:38Z (600 credits estimated, 164 left).
+     * - the 429 "nothing left" still fails the job with its sentence, but as
+     *   the customer's limit, which raises no staff alert.
      */
     const refusalOnKeep = async (plan: AiJobPlan, outcome: AiJobStepOutcome): Promise<AiJobStepOutcome | null> => {
       let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>> = null
@@ -776,7 +1016,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       } catch (error) {
         console.error('ai plan admission failed', { orgId: job.orgId, jobId: job.$id, error })
       }
-      return refusal ? { ...outcome, failure: refusal.error } : null
+      if (!refusal || refusal.code === AI_CREDITS_CONFIRM_CODE) return null
+      return {
+        ...outcome,
+        failure: refusal.error,
+        ...(refusal.status === 429 ? { customerLimit: true } : {}),
+      }
     }
 
     // Reuse before asking (AGL-2937). The key covers the whole request, so a
@@ -789,10 +1034,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     const resolved = model ?? aiModelForStep('job.plan')
     // A brief that asks for a video is offered the plan's list of players
     // (AGL-3433), and a job that may bind a dataset a record template on
-    // each screen (AGL-3475).
+    // each screen (AGL-3475). A site's plan says the language its brief is
+    // written in, which its guided start sets the site's language from (AGL-3750).
     const tool = aiBuildPlanToolFor(job.brief, {
       records: Boolean(inventory?.datasets.length) || capabilities?.create.dataset.allowed === true,
-      items: job.kind === 'build',
+      items: job.kind === 'build' || Boolean(siteEvents),
+      language: site,
     })
     const key = aiJobPlanKey({
       job,
@@ -809,7 +1056,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       : null
     if (reused) {
       // The reused plan's draft ids name the other job's drafts; this job's are its own.
-      const plan: AiJobPlan = aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
+      const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
         ...reused.plan,
         status: 'proposed',
         labels: aiPlanLabels(reused.plan, inventory),
@@ -818,13 +1065,13 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         confirmedBy: null,
         key,
         reusedFrom: reused.jobId,
-      }))
+      })))
       const unspent = aiUnspentOutcome(resolved)
       return (
         (await refusalOnKeep(plan, unspent)) ?? {
           ...unspent,
           plan,
-          review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+          review: await planReview(),
         }
       )
     }
@@ -846,14 +1093,32 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
       capabilities,
-      extend: planViolations(
-        scope,
-        job.brief,
-        freeTaste,
+      // A build's events are listed on a page (AGL-3755): on the one it makes
+      // about them, else on an Events page of its own where there is room.
+      ...(ops
+        ? {
+            settle: (answered: AiBuildPlan) =>
+              aiSettleBuildEventPage(answered, {
+                ops,
+                siteSlugs: (inventory?.screens ?? []).map((screen) => screen.slug),
+                pageLimit: aiBuildPageLimit(freeTaste),
+                siteLayout: aiSiteLayoutOf(inventory),
+              }),
+          }
+        : {}),
+      extend: aiSiteWithEventItemsCheck(
+        planViolations(
+          scope,
+          job.brief,
+          freeTaste,
+          ops,
+          site ? aiSitePlanHomeRule(inventory, capabilities) : null,
+          site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
+          site,
+          site && aiSiteKindOfInputs(job.inputs)?.id === 'store',
+        ),
+        site ? siteEvents : undefined,
         ops,
-        site ? aiSitePlanHomeRule(inventory, capabilities) : null,
-        site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
-        site,
       ),
     })
     const spent: AiJobStepOutcome = {
@@ -890,22 +1155,24 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         },
       }
     }
+    // A store's plan is a storefront's (AGL-3676): settled before it is kept and priced.
+    const answered = site && aiSiteKindOfInputs(job.inputs)?.id === 'store' ? aiSiteStorefrontPlan(result.value, { paid: !freeTaste }) : result.value
     // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
-    const plan: AiJobPlan = aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
-      ...result.value,
+    const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
+      ...answered,
       status: 'proposed',
-      labels: aiPlanLabels(result.value, inventory),
+      labels: aiPlanLabels(answered, inventory),
       // A Date the Admin SDK stores as a timestamp, like every instant the machine writes.
       proposedAt: now as unknown as AiJobPlan['proposedAt'],
       confirmedAt: null,
       confirmedBy: null,
       key,
-    }))
+    })))
     return (
       (await refusalOnKeep(plan, spent)) ?? {
         ...spent,
         plan,
-        review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+        review: await planReview(result.estCostUsd),
       }
     )
   }
@@ -947,7 +1214,15 @@ export function aiSitePlanCapabilities(
       reason: 'a site start draws its repeated items in their sections',
     },
   }
-  const site = { ...capabilities, reusableComponents: false, create }
+  // At most a start's few datasets, settled in code where a plan names more
+  // (AGL-3616); a section that shows the work with its fewest pieces (AGL-3754).
+  const site = {
+    ...capabilities,
+    reusableComponents: false,
+    create,
+    datasetsMax: AI_SITE_DATASETS_MAX,
+    galleryMinItems: AI_SITE_GALLERY_MIN_ITEMS,
+  }
   if (!capabilities.freeTaste) return site
   const asked = Number((job.inputs ?? {})['pages'])
   const pages =

@@ -325,33 +325,6 @@
       "fails": ["rules"]
     },
     {
-      "why": "A Grid container spaced by an sx gap its items' widths do not count, so the third column wraps onto a row of its own (AGL-3055).",
-      "answer": {
-        "tree": {
-          "rootId": "_@_",
-          "nodes": {
-            "_@_": { "componentId": "div", "nodes": ["intro", "areas"] },
-            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
-            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
-            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
-            "areas": { "componentId": "section", "props": { "element": "section" }, "nodes": ["areas-title", "areas-grid"] },
-            "areas-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we help with" } },
-            "areas-grid": { "componentId": "muiGrid", "props": { "container": true }, "sx": { "gap": 3 }, "nodes": ["cell-1", "cell-2", "cell-3"] },
-            "cell-1": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-1"] },
-            "cell-2": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-2"] },
-            "cell-3": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-3"] },
-            "card-1": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-1-title"] },
-            "card-1-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Estate planning" } },
-            "card-2": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-2-title"] },
-            "card-2-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Real estate" } },
-            "card-3": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-3-title"] },
-            "card-3-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Business formation" } }
-          }
-        }
-      },
-      "fails": ["rules"]
-    },
-    {
       "why": "The practice areas' heading and its lead grouped in a Grid that is not a container and only stacks them, which a Stack or a Box holds (AGL-3078).",
       "answer": {
         "tree": {
@@ -677,7 +650,7 @@
       "fails": ["plan"]
     },
     {
-      "why": "A plan that asks for eight sections beside the layout its job creates, where the Free wall's worst case pays for six (AGL-3070).",
+      "why": "A plan that asks for nine sections beside the layout its job creates, where the Free wall's worst case pays for six (AGL-3070): three past it, more than the wall's trim settles (AGL-3737).",
       "plan": {
         "reuse": [],
         "create": [
@@ -700,6 +673,7 @@
               { "name": "how we work", "uses": [], "items": 0 },
               { "name": "our values", "uses": [], "items": 0 },
               { "name": "fees", "uses": [], "items": 0 },
+              { "name": "who we serve", "uses": [], "items": 0 },
               { "name": "our office", "uses": [], "items": 0 },
               { "name": "consultation request form", "uses": [], "items": 0 }
             ]

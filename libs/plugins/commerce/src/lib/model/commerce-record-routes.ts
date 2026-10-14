@@ -69,6 +69,16 @@ function orders(context: PluginRecordRouteContext, key?: string, value?: string)
 }
 
 /**
+ * The store's settings — payments (Stripe), shipping, tax and returns — under
+ * `store-settings` (AGL-3676): where an AI-built store's "Finish your store"
+ * list sends its owner, without spelling this plugin's console path.
+ */
+function settings(context: PluginRecordRouteContext): string | null {
+  const list = catalog(context)
+  return list ? `${list}/settings` : null
+}
+
+/**
  * Called from the console registrar. The owner is named rather than read off
  * the loader's marker, so the route registers the same way under a spec that
  * calls the registrar directly.
@@ -79,6 +89,7 @@ export function registerCommerceRecordRoutes(): void {
     { list: catalog, record: catalog },
     { pluginId: BUNDLE_ID },
   )
+  registerPluginRecordRoute('store-settings', { list: settings, record: settings }, { pluginId: BUNDLE_ID })
   registerPluginRecordRoute(
     'order',
     {

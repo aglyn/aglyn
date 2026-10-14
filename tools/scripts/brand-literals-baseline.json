@@ -1,7 +1,7 @@
 {
   "apps/console/app/(app)/[orgSlug]/billing/(sections)/settings/page.tsx": 1,
   "apps/console/app/(app)/admin/emails/page.tsx": 2,
-  "apps/console/app/(app)/admin/orgs/[orgId]/page.tsx": 2,
+  "apps/console/app/(app)/admin/orgs/[orgId]/page.tsx": 1,
   "apps/console/app/(app)/admin/support/page.tsx": 2,
   "apps/console/app/(app)/admin/tax-return/page.tsx": 5,
   "apps/console/app/(app)/admin/users/page.tsx": 1,

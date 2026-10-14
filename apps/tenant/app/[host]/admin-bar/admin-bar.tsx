@@ -71,7 +71,11 @@ import {
  * `scroll-padding-top` so anchor jumps stay visible) and nudges the site's
  * own viewport-anchored fixed/sticky headers down the same amount — a
  * besigner site header is usually a MUI AppBar at `top: 0`, which the bar
- * would otherwise cover. Everything is restored on unmount. Only editors
+ * would otherwise cover — and an absolutely positioned header anchored to
+ * the initial containing block (the AI site's header over a photo hero,
+ * AGL-3660), which the `<html>` margin does not move. The live height is
+ * also published as `--aglyn-admin-bar-height` on `<html>` for chrome that
+ * places itself. Everything is restored on unmount. Only editors
  * ever mount it, so the shift is theirs alone; anonymous visitors' layout
  * is untouched by construction.
  *
@@ -381,6 +385,38 @@ const pillStyle: React.CSSProperties = {
 const HEADER_CANDIDATE_SELECTOR =
   'header, nav, [role="banner"], .MuiAppBar-positionFixed, .MuiAppBar-positionSticky'
 
+/**
+ * The bar's live height, published on `<html>` while it is up (AGL-3660).
+ * The page-offset contract, for chrome that places itself: a site header
+ * writes `top: var(--aglyn-admin-bar-height, 0px)` and sits below the bar
+ * whenever there is one, and at the top when there is none (anonymous
+ * visitors, a dismissed bar) — the fallback is the whole "nothing shifts"
+ * guarantee. `muiAppBar`'s `overHero` header uses it.
+ */
+export const ADMIN_BAR_HEIGHT_VAR = '--aglyn-admin-bar-height'
+
+/**
+ * Whether an absolutely positioned element is anchored to the initial
+ * containing block — the viewport-sized box at the canvas origin, which the
+ * margin on `<html>` does NOT move. Such a header (the AI site's header
+ * lying over a photo hero is one, AGL-3660) stays at y=0 while the page
+ * below it is pushed down, so the bar covers it exactly as it would a fixed
+ * one. An ancestor that establishes a containing block (any non-static
+ * position, a transform) moves with the page and carries the header along.
+ */
+function anchoredToInitialContainingBlock(element: HTMLElement): boolean {
+  for (
+    let parent = element.parentElement;
+    parent && parent !== document.documentElement;
+    parent = parent.parentElement
+  ) {
+    const style = window.getComputedStyle(parent)
+    if (style.position && style.position !== 'static') return false
+    if (style.transform && style.transform !== 'none') return false
+  }
+  return true
+}
+
 export default function AdminBar({
   hostId,
   consoleOrigin,
@@ -627,7 +663,10 @@ export default function AdminBar({
             if (element.closest('[data-aglyn-admin-bar]')) return
             const computed = window.getComputedStyle(element)
             const isPinned =
-              computed.position === 'fixed' || computed.position === 'sticky'
+              computed.position === 'fixed' ||
+              computed.position === 'sticky' ||
+              (computed.position === 'absolute' &&
+                anchoredToInitialContainingBlock(element))
             // `top: 0` (give or take a subpixel) means viewport-anchored where
             // the bar now sits; anything else is not under the bar.
             if (!isPinned || Math.abs(parseFloat(computed.top)) > 1) return
@@ -639,8 +678,10 @@ export default function AdminBar({
       }
     }
 
+    const previousHeightVar = html.style.getPropertyValue(ADMIN_BAR_HEIGHT_VAR)
     const apply = () => {
       const height = barRef.current?.offsetHeight || BAR_HEIGHT
+      html.style.setProperty(ADMIN_BAR_HEIGHT_VAR, `${height}px`)
       html.style.marginTop = `${height}px`
       html.style.scrollPaddingTop = `${height}px`
       adjusted.forEach((_, element) => {
@@ -650,6 +691,15 @@ export default function AdminBar({
     scan()
     apply()
     window.addEventListener('resize', apply)
+    // The bar's own box changing size (the phone breakpoint, a zoom, a late
+    // font) re-measures too — a window resize event misses every change
+    // that is not the window's.
+    const bar = barRef.current
+    const resizeObserver =
+      typeof ResizeObserver === 'function' && bar
+        ? new ResizeObserver(() => apply())
+        : null
+    if (resizeObserver && bar) resizeObserver.observe(bar)
 
     // One rescan per frame however many mutations land in it. Only
     // childList is observed, so the nudge's own `style.top` writes never
@@ -667,8 +717,14 @@ export default function AdminBar({
 
     return () => {
       observer.disconnect()
+      resizeObserver?.disconnect()
       if (frame) window.cancelAnimationFrame(frame)
       window.removeEventListener('resize', apply)
+      if (previousHeightVar) {
+        html.style.setProperty(ADMIN_BAR_HEIGHT_VAR, previousHeightVar)
+      } else {
+        html.style.removeProperty(ADMIN_BAR_HEIGHT_VAR)
+      }
       html.style.marginTop = previousMargin
       html.style.scrollPaddingTop = previousScrollPadding
       adjusted.forEach((previousTop, element) => {

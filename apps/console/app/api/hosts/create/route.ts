@@ -39,11 +39,16 @@ import {
 import {
   claimHostForOrg,
   findSubdomainConflict,
+  HostRegistrationIncompleteError,
+  isTransientFirestoreError,
   NEW_SITE_ENABLED_PLUGINS,
+  resumeUnfinishedCreate,
 } from '../../../../utils/server/provision-host'
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
 import { reportServerError } from '../../../../utils/report-server-error'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
+import { recordSignUpAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   announceNewSite,
@@ -98,6 +103,28 @@ async function handler(request: Request): Promise<Response> {
     // auto-creating a personal org for brand-new accounts. Creating hosts
     // is an org admin/owner power.
     const requestedOrgId = String(body?.orgId ?? '') || null
+    /*
+     * The same acquisition backstop `/api/orgs/create` runs (AGL-3674, AGL-3706), for
+     * the door a brand-new account most often takes: "Create your first site"
+     * provisions the workspace right here, through `ensureOrgForUser`, and
+     * the workspace copies its creator's record at birth. Without this, a
+     * sign-up whose page never sent its record left a workspace stamped
+     * `unknown` for good. Only when no workspace was named — a named one
+     * already exists — and never for an impersonated session. The writer
+     * refuses anything but a brand-new self-serve account, so for every other
+     * caller this writes nothing. Best-effort.
+     */
+    if (!requestedOrgId && !isImpersonationSession(decoded)) {
+      await recordSignUpAcquisition({
+        uid: decoded.uid,
+        provider: String(decoded.firebase?.sign_in_provider ?? '') || null,
+        email: decoded.email ?? null,
+        touch: body?.touch ?? readFirstTouchCookie(headers.cookie ?? null),
+        headers: request.headers,
+      }).catch((error) => {
+        console.error('[hosts/create] acquisition backstop failed', error)
+      })
+    }
     const orgMembership = requestedOrgId
       ? await resolveOrgMembership(decoded.uid, requestedOrgId)
       : await ensureOrgForUser(decoded.uid, {
@@ -129,6 +156,52 @@ async function handler(request: Request): Promise<Response> {
     // (AGL-147): name-2, name-<year>, …
     const conflict = await findSubdomainConflict(firestore, subdomain)
     if (conflict) {
+      // The caller's own create that claimed this name and never finished
+      // registering (AGL-3734): a retry finishes it instead of answering 409
+      // for a site they were told failed. Same lockdown verdict a create gets.
+      const resumable = await resumeUnfinishedCreate(
+        firestore,
+        orgMembership.orgId,
+        subdomain,
+      )
+      if (resumable) {
+        const resumedOrg = (
+          await firestore.collection('orgs').doc(orgMembership.orgId).get()
+        ).data()
+        const resumeLocked = await lockdownRefusal({
+          request,
+          staff: decoded['staff'] === true,
+          uid: decoded.uid,
+          org: resumedOrg,
+        })
+        if (resumeLocked) return resumeLocked
+        await logHostActivity(
+          resumable.hostId,
+          { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+          'Created the site',
+          { type: 'host', id: resumable.hostId, name: resumable.displayName },
+        )
+        await announceNewSite({
+          hostId: resumable.hostId,
+          displayName: resumable.displayName,
+          subdomain,
+          orgSlug: (resumedOrg?.['slug'] as string | undefined) ?? null,
+          createdBy: decoded.email ? String(decoded.email) : null,
+        })
+        return Response.json(
+          {
+            hostId: resumable.hostId,
+            subdomain,
+            orgId: orgMembership.orgId,
+            orgSlug: resumedOrg?.['slug'] ?? null,
+            guidedStart: resumable.guidedStart,
+            // The workspace, if this door made one, was made by the attempt
+            // that claimed the site, and reported then or never.
+            orgCreated: false,
+          },
+          { status: 200 },
+        )
+      }
       return Response.json(
         { error: 'That subdomain is taken', suggestions: conflict.suggestions },
         { status: 409 },
@@ -218,13 +291,20 @@ async function handler(request: Request): Promise<Response> {
     // for "a blank site" is what writes the starter
     // (`POST /api/hosts/starter`). Anyone who will not be offered the start
     // gets the starter now, as before.
-    const guidedStart = await guidedStartOffered({
-      orgId: orgMembership.orgId,
-      org,
-      host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
-      member: orgMembership.member,
-      staff: decoded['staff'] === true,
-    })
+    //
+    // A person who chose the starter in "Create site"'s start (AGL-3761) asked
+    // for it before the site existed, so it is born with it, in the same
+    // transaction, and is not offered the start again.
+    const starterChosen = body?.start === 'starter'
+    const guidedStart =
+      !starterChosen &&
+      (await guidedStartOffered({
+        orgId: orgMembership.orgId,
+        org,
+        host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
+        member: orgMembership.member,
+        staff: decoded['staff'] === true,
+      }))
     const claim = await claimHostForOrg({
       firestore,
       orgId: orgMembership.orgId,
@@ -332,6 +412,13 @@ async function handler(request: Request): Promise<Response> {
     const capped = freeWorkspaceCapRefusalResponse(error)
     if (capped) return capped
     console.error(error)
+    const incomplete = error instanceof HostRegistrationIncompleteError
+    // Nothing was claimed and a second try can succeed: contention the admin
+    // SDK's own transaction retries did not clear, an unreachable backend, a
+    // deadline (AGL-3734). Answered 503 with copy the dialog shows as is,
+    // after the report below. A claimed site is never this branch: it exists,
+    // and "try again" there means the resume path, not a fresh create.
+    const transient = !incomplete && isTransientFirestoreError(error)
     // Reported, not only logged (AGL-1921, AGL-3689). `onRequestError` fires for an
     // UNCAUGHT throw and this one is caught, and the log drain forwards the
     // status line but never a `console.error`, so the 2026-10-08 500 reached
@@ -348,6 +435,23 @@ async function handler(request: Request): Promise<Response> {
       },
       { service: 'console-web' },
     )
+    if (incomplete) {
+      return Response.json(
+        {
+          error:
+            'Your site was created but its setup did not finish. Select ' +
+            'Create again with the same address to finish it.',
+          hostId: error.hostId,
+        },
+        { status: 500 },
+      )
+    }
+    if (transient) {
+      return Response.json(
+        { error: 'Site creation is busy right now. Wait a few seconds and try again.' },
+        { status: 503, headers: { 'Retry-After': '5' } },
+      )
+    }
     return Response.json({ error: 'Site creation failed' }, { status: 500 })
   }
 }

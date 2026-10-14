@@ -30,6 +30,25 @@ plan**, free included; document uploads and higher storage are gated by plan. Vi
 uploads are paused on every plan for now — see [Upload](#upload).
 :::
 
+## Two libraries {#two-libraries}
+
+Every site has a media library of its own, and the workspace has one more that its sites
+share. A site's **Media** page shows both, as two tabs, so you upload where the file
+belongs and pick from either one.
+
+### This site's library {#site-library}
+
+The **This site** tab is the site's own library: files only this site uses, organized in
+folders and served over the CDN. Upload here for anything specific to the site — its
+photos, its downloads — and it stays out of every other site's picker.
+
+### The organization library {#organization-library}
+
+The organization's **Media** page holds the workspace's shared library — folders,
+uploads, editing and a storage meter — for assets more than one site uses, such as a
+logo or brand photography. A site sees it on its **Organization (shared)** tab, limited
+to the assets [shared with that site](#who-an-asset-is-shared-with).
+
 ## Organize
 
 - Arrange media in a **folder hierarchy**. Folders appear as **cards in the grid
@@ -115,6 +134,29 @@ uploads are paused on every plan for now — see [Upload](#upload).
 - **Deleting keeps your place.** However many times you clicked **Load more**, the files
   you deleted disappear and everything else stays exactly where it was — so a long
   clear-out is one pass, not one pass per file.
+
+### Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask [Aglyn Assist](../../ai/assist-builds.md) to organize files already in this
+site's library, such as *put kiln.jpg and wheel.jpg in a Studio folder*, *tag kiln.jpg
+portfolio*, *rename IMG_4021.jpg to Kiln at night.jpg* or *write the missing alt text from
+the captions*. The plan card lists the change, and **Confirm plan** saves it.
+
+- Name each file as the library shows it, by its file name. Two files with one name are
+  not guessed between.
+- A folder that is not there yet is made, as **New folder** makes it, up to five levels
+  deep. Files are filed the way the details drawer files them, and every file keeps its
+  link.
+- Tags are added and removed as the details drawer saves them: lower case, at most 20 a
+  file.
+- Alt text is written for one image you describe, or from the description or caption the
+  library already has for an image with none. An image with nothing to go on is named on
+  the card, so you can say what it shows. Pages that already place an image keep their own
+  alt text; images placed from then on take the new one.
+- It changes this site's library only, never the organization library, and it never
+  uploads, copies, replaces, deletes or shares a file.
+- It needs the admin, editor or author role on the site, works as soon as it is saved, and
+  costs no AI credits.
 
 ### Filter and search {#filter-and-search}
 
@@ -302,6 +344,10 @@ back afterwards, so Aglyn asks first.
   replaced. Videos already in your library keep playing, and the **Video** element can
   still use them. While the pause lasts, the library shows a **Video uploads paused**
   chip beside **Upload media**.
+- Upload **audio** — MP3, M4A, AAC, OGG and WAV — to play your own music with the
+  [Music player](../../building-sites/besigner/music-player.md). Each audio upload first
+  asks you to confirm you own the audio or have a license to use it on your site; see
+  [Your rights to the music](../../building-sites/besigner/music-player.md#rights).
 - **Create images with AI.** **Create with AI**, beside **Upload media**, draws an
   illustration, icon, pattern or logo mark as an SVG from a description, or, where photos
   are on, makes a photo, a piece of art such as a watercolor or a 3D render, or a design
@@ -564,6 +610,13 @@ datasets start on one, or the other way round. If the **Shared with** dialog eve
 from every site, and any file inside it turns up under **No folder** there. Pick a value
 and save to fix it.
 
+### Default sharing for new media {#default-media-sharing}
+
+**Default sharing for new media**, at the top of the workspace's **Media** page, decides
+what a newly uploaded file or new folder is shared with: **All sites**, or only the site
+it was created in. It changes nothing that already exists, and only workspace owners and
+admins can set it.
+
 In the media picker's **Organization (shared)** tab, a site sees only the assets it may
 use. An agency's internal artwork stays out of the client sites' pickers entirely.
 
@@ -694,6 +747,49 @@ for everyone but you. The warning names the host, so approving it is a copy and 
 If an image shows in the editor but not on the published page, an unapproved host is the
 first thing to check. Open the page, right-click the missing image, and the browser
 console will name the host it refused.
+
+### The other approved lists {#other-approved-hosts}
+
+**Admin → Security** keeps the same kind of list for everything else a page can pull in
+from another site. Each works like image hosts — enter `cdn.example.com` or
+`*.example.com`, and anything from a host that is not listed is refused — and each
+leaves what your own site serves untouched.
+
+#### Approved media hosts {#approved-media-hosts}
+
+Add a host to **Approved media hosts** when a page plays video or audio from a URL on
+another site. Files you upload always play; this list is only for media you point at by
+URL, and every host on it can see the IP address of each visitor whose browser fetches
+from it.
+
+#### Approved font hosts {#approved-font-hosts}
+
+Add a host to **Approved font hosts** when your pages load a web font served by another
+site, such as `fonts.gstatic.com`. Fonts you upload always work — and the theme's Google
+fonts are served from your own site — so a self-hosted font is the private option: a font
+host sees each visitor's IP address.
+
+#### Approved form destinations {#approved-form-destinations}
+
+Add a host to **Approved form destinations** only when a form on your site posts to
+another service. Forms handled by your own site always work; an approved destination
+receives whatever the visitor typed, directly, so list it only if you mean it to get
+submissions.
+
+#### Approved embeds {#approved-embeds}
+
+Add a host to **Approved embeds** to let your pages show another site in a frame — a
+map, a booking widget, a player the Video elements do not build in. The built-in video
+players, plugin embeds and checkout already work without being listed; an embedded page
+sees each visitor's IP address and can set its own cookies.
+
+#### Approved connections {#approved-connections}
+
+Add a host to **Approved connections** when something on your pages sends requests to
+another service in the background — usually an embedded widget calling its own API,
+including one in a Custom HTML block. Your own forms, analytics and checkout already work;
+a connection can carry anything the page has, so approve only hosts you mean to send data
+to.
 
 ## Reference {#reference}
 

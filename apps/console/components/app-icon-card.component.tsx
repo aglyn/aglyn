@@ -78,7 +78,8 @@ export function AppIconCard(props: AppIconCardProps) {
     <MediaFieldSection
       embedded={embedded}
       header={'App icon'}
-      help={docsHelp('media', {
+      help={docsHelp('seo', {
+        anchor: '#app-icon',
         excerpt:
           'The icon shown when someone installs this site to their phone or ' +
           'desktop — a square mark, separate from the tab favicon and the ' +

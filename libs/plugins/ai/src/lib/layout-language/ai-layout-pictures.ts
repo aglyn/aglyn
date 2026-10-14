@@ -58,6 +58,12 @@ export interface AiLayoutPictureSlot {
   /** The plan index of the section it sits in, or -1. */
   sectionIndex: number
   role: AiLayoutPictureRole
+  /**
+   * A product's photo (AGL-3676): what it is of, most specific first — its
+   * name, then what its photo should show — searched for with the shop's
+   * category and held to it, so a wick trimmer is never a laptop on a desk.
+   */
+  product?: { subjects: readonly string[] }
 }
 
 /** A photo a slot is filled with. */
@@ -217,7 +223,8 @@ function rotate<T>(list: readonly T[], by: number): T[] {
  * five starters, and the owner's photo went to a stoneware card before the
  * About section that described the artist asked for it. Only a page with more
  * slots than starters repeats one: the photo placed longest ago, never the
- * one in a slot beside it.
+ * one in a slot beside it. The owner's portrait goes only to a picture of
+ * people; a gallery picture never takes it, even to avoid a repeat.
  */
 export function aiLayoutStarterPhotos(
   slots: readonly AiLayoutPictureSlot[],
@@ -238,7 +245,9 @@ export function aiLayoutStarterPhotos(
       ALL_STARTERS.filter((name) => !pool.includes(name)),
       turn,
     )
-    const candidates = [...pool, ...rest]
+    // The owner's portrait is a picture of a person, and only a picture of
+    // people takes it: never a vase in a gallery (AGL-3660).
+    const candidates = [...pool, ...rest].filter((name) => slot.role === 'about' || name !== 'about')
     const unused = candidates.find((candidate) => !placedAt.has(candidate))
     const beside = new Set([names[index - 1], names[index + 1]].filter(Boolean))
     const name =
@@ -269,18 +278,25 @@ export function aiLayoutPlacePictures(
   photos: ReadonlyArray<AiLayoutPicturePhoto | null>,
 ): NodesMap {
   const next = { ...(nodes as unknown as Record<string, Record<string, unknown>>) }
+  // Only the page's first picture loads eagerly (rule 16, AGL-3660): a hero
+  // of several photos loaded them all eagerly, and a live Portfolio page was
+  // refused for it (2026-10-10). The slots are in document order; every later
+  // picture leaves `loading` unset, which the renderer loads when reached.
+  const lead = slots.findIndex((_, index) => Boolean(photos[index] && next[slots[index].imageId]))
   slots.forEach((slot, index) => {
     const photo = photos[index]
     const node = next[slot.imageId]
     if (!photo || !node) return
+    const props = { ...((node['props'] as Record<string, unknown> | undefined) ?? {}) }
+    delete props['loading']
     next[slot.imageId] = {
       ...node,
       props: {
-        ...((node['props'] as Record<string, unknown> | undefined) ?? {}),
+        ...props,
         src: photo.src,
         intrinsicWidth: photo.width,
         intrinsicHeight: photo.height,
-        loading: slot.role === 'hero' ? 'eager' : 'lazy',
+        ...(index === lead && slot.role === 'hero' ? { loading: 'eager' } : {}),
       },
     }
     if (slot.iconId && slot.frameId && next[slot.frameId]) {

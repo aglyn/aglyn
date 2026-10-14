@@ -228,7 +228,7 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
           ) : null}
         </Stack>
       }
-      help={pluginDocsHelp('emailCampaigns', { anchor: '#topics' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#preference-page' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

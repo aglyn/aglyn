@@ -16,6 +16,10 @@ pick a plan first).
 
 ## What you can add
 
+Buy extra capacity for the whole workspace on the **Plan add-ons** card under
+**Billing → Plan**: manager seats, datasets and extra sites apply straight away, while
+collaborator seats and POS registers become pools you then assign to a site.
+
 :::tip Prices live on one page
 Per-unit add-on prices are on **[aglyn.com/pricing](https://aglyn.com/pricing)**, and
 what YOUR workspace would pay is shown in **Billing** before you confirm. This page

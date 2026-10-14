@@ -308,17 +308,36 @@ export function useBesignerDraft(
    */
   const wroteRef = useRef(false)
 
+  /**
+   * The snapshot a pending write will store, and WHOSE it is — both taken
+   * when the canvas changed, never when the timer fires.
+   *
+   * Reading `idsRef` and the canvas at fire time sent a write that was
+   * pending across a version switch to the version being opened: `idsRef`
+   * is reassigned during the render that switches, and a router transition
+   * can yield before committing, so the timer could fire with the new ids
+   * and the old canvas — the last edits of one version stored as the next
+   * version's draft, and offered back there as its unsaved work. Fired
+   * after the reset, the same write instead dropped those edits from their
+   * own version's crash net.
+   */
+  const pendingRef = useRef<{
+    ids: BesignerDraftIds
+    nodes: Aglyn.ProcessableNodes
+    baseStamp: string | null
+  } | null>(null)
+
   const writeDraft = useCallback(() => {
-    const currentIds = idsRef.current
-    if (!currentIds) return
+    const pending = pendingRef.current
+    pendingRef.current = null
+    if (!pending) return
     wroteRef.current = true
     // Serialising here rather than in the autorun is the whole point of the
     // debounce: the tracking read is cheap to repeat, `JSON.stringify` of a
     // 200-node map plus a synchronous `setItem` is not (AGL-567).
-    const nodes = canvas.toJSON().nodes as Aglyn.ProcessableNodes
-    writeBesignerDraft(currentIds, {
-      nodes,
-      baseStamp: storedStampRef.current,
+    writeBesignerDraft(pending.ids, {
+      nodes: pending.nodes,
+      baseStamp: pending.baseStamp,
     })
   }, [])
 
@@ -387,14 +406,33 @@ export function useBesignerDraft(
   // is the same depth of read the existing `isInitialSame` computed already
   // performs on every change, so this adds a constant factor to a path that
   // is already O(nodes), not a new order of cost.
+  //
+  // Bound to the ids of the document it was started for, and flushed when
+  // that document goes, so a pending write always lands on its own version.
+  // `didSetInitial` is false from the reset until the next document is in,
+  // which is what keeps the reset's empty canvas — or a document still
+  // loading — from being snapshotted as anybody's draft.
   useEffect(() => {
-    if (!key || !loaded) return undefined
-    return autorun(() => {
-      canvas.toJSON()
-      if (canvas.isInitialSame) return
+    const ownIds = idsRef.current
+    if (!key || !ownIds || !loaded) return undefined
+    const dispose = autorun(() => {
+      const nodes = canvas.toJSON().nodes as Aglyn.ProcessableNodes
+      if (!canvas.didSetInitial || canvas.isInitialSame) return
+      pendingRef.current = {
+        ids: ownIds,
+        nodes,
+        baseStamp: storedStampRef.current,
+      }
       schedule()
     })
-  }, [key, loaded, schedule])
+    return () => {
+      dispose()
+      flush()
+      // What this session wrote was the previous document's; the next one
+      // starts with nothing of its own to clear.
+      wroteRef.current = false
+    }
+  }, [key, loaded, schedule, flush])
 
   // Returning to the saved state (an undo back to it, or a save landing)
   // means there is no unsaved work left IN THIS BROWSER to protect. Dropping

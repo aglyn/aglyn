@@ -221,9 +221,7 @@ export function OrgOverlaysCard(props: OrgOverlaysCardProps) {
     <CardDisplay
       header="Announcement bars & popups"
       subheader="Every site in this organization"
-      help={pluginDocsHelp('marketingOverlays', {
-        anchor: '#across-your-sites',
-      })}
+      help={pluginDocsHelp('marketingOverlays', { anchor: '#org-overlays' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

@@ -88,6 +88,11 @@ export const WEBHOOK_EVENTS = [
   // canceled automatically. charge.dispute.created, above, now files one too.
   'radar.early_fraud_warning.created',
   'review.opened',
+  // Payment fraud holds (AGL-3767): a failed charge on a workspace subscription
+  // is read for a Radar block at highest risk, a Stripe fraud report and card
+  // cycling, from apps/console/app/api/billing/webhook/route.ts, and places an
+  // automatic security hold. A failed charge that is no workspace is skipped.
+  'charge.failed',
   // Register card readers (AGL-3607): a Stripe Terminal reader finished or
   // failed a payment. libs/plugins/commerce/src/lib/server/pos-terminal.ts
   // captures the authorized charge with its final fee, or records the decline.

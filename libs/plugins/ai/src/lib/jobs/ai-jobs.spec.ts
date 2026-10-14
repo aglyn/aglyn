@@ -289,6 +289,7 @@ import { AI_JOB_TEXT_STEP_MINIMUM_MS } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
 import { assistFreeTasteRefusalText } from '../usage/assist-credits'
+import { FREE_AI_ACCOUNT_BUDGET_USD } from '../usage/assist-free-taste'
 import {
   ASSIST_EXCHANGE_RETENTION_DAYS,
   assistUsageDay,
@@ -1102,9 +1103,18 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
         registerAiJobStep('insight', spent({ refused: true, stopReason: 'refusal' }) as never)
         const declined = await freeJob()
         await runAiJobStep(firestore, 'org-free', declined.$id, { owner: 'route-1', now: NOW })
+        // The month's Free credits are spent: the customer's limit, given back
+        // like ours but announced as theirs, so no staff alert is raised.
+        registerAiJobStep('insight', spent({ failure: 'You have no free AI credits left.', customerLimit: true }) as never)
+        const limited = await freeJob()
+        await runAiJobStep(firestore, 'org-free', limited.$id, { owner: 'route-1', now: NOW })
+        expect(await getAiJob(firestore, 'org-free', limited.$id)).toMatchObject({
+          status: 'failed', refundedCredits: 6, refundReason: 'step-failure',
+        })
         expect(causes).toEqual([
           { ours: true, error: 'step failure: It could not be built.' },
           { ours: false, error: 'stop_reason refusal' },
+          { ours: false, error: 'step failure: You have no free AI credits left.' },
         ])
       } finally {
         registerAiJobTransitionListener(null)
@@ -2754,6 +2764,57 @@ describe('a build from one request settles item by item (AGL-3616)', () => {
     expect((await retryAiBuildJob(firestore, ORG, first.$id, NOW)).changed).toBe(false)
   })
 
+  it('a Free build confirmed past what is left PAUSES where its credits run out — never fails — and Resume carries on from the next item, charging nothing twice (AGL-3722)', async () => {
+    const orgId = 'org-free'
+    const accountMonth = `users/owner-1/aiUsage/${assistUsageMonth(NOW)}`
+    const job = await createAiJob(
+      firestore,
+      { orgId, hostId: 'host-1', kind: 'build', brief: 'Two pages and a contact form.', createdBy: 'uid-1' },
+      NOW,
+    )
+    expect((await runAiJobStep(firestore, orgId, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+    const confirmation = { by: 'uid-1', at: NOW, left: 90, likely: 106, p90: 127, ceiling: 300 }
+    const { job: confirmed } = await resumeAiJob(firestore, orgId, job.$id, { uid: 'uid-1' }, NOW, { creditsConfirmed: confirmation })
+    // The go-ahead is kept on the job: who, when, what was left, the range shown.
+    expect(confirmed.creditsConfirmed).toEqual(confirmation)
+    // The layout and the form are built; then the owner's month runs out.
+    await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })
+    await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })
+    mockDocs.set(accountMonth, { estCostUsd: FREE_AI_ACCOUNT_BUDGET_USD })
+    const run = await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })
+    if (run.outcome !== 'needs_input') throw new Error(`expected a pause, got ${run.outcome}`)
+    const paused = run
+    expect(paused.job).toMatchObject({ status: 'needs_input', error: assistFreeTasteRefusalText('account') })
+    // Nothing half-written: what was built stands, the next page never started.
+    expect(paused.job.items?.map((row) => [row.slot, row.status, row.creditsSpent])).toEqual([
+      ['c0', 'succeeded', 6],
+      ['c1', 'succeeded', 6],
+      ['p0', 'pending', 0],
+      ['p1', 'pending', 0],
+    ])
+    expect(handed.map((one) => one.kind)).toEqual(['layout', 'form'])
+    // Resume while still out: the meter refuses again, still paused, nothing run.
+    await resumeAiJob(firestore, orgId, job.$id, { uid: 'uid-1' }, NOW)
+    expect((await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })).outcome).toBe('needs_input')
+    expect(handed).toHaveLength(2)
+    // Next month's credits arrive (or an upgrade): Resume carries on from the next item.
+    mockDocs.delete(accountMonth)
+    const { job: resumed, changed } = await resumeAiJob(firestore, orgId, job.$id, { uid: 'uid-1' }, NOW)
+    expect(changed).toBe(true)
+    expect(resumed.status).toBe('queued')
+    const done = await runToEnd(orgId, job.$id)
+    expect(done.status).toBe('done')
+    // The layout and form were never built again, nor charged again.
+    expect(handed.map((one) => one.kind)).toEqual(['layout', 'form', 'page', 'page'])
+    expect(done.items?.map((row) => [row.slot, row.status, row.attempt, row.creditsSpent])).toEqual([
+      ['c0', 'succeeded', 1, 6],
+      ['c1', 'succeeded', 1, 6],
+      ['p0', 'succeeded', 1, 6],
+      ['p1', 'succeeded', 1, 6],
+    ])
+    expect(done.creditsSpent).toBe(6 + 4 * 6)
+  })
+
   it('a provider that throws for one item fails that item, not the build', async () => {
     behavior.form = () => {
       throw new AiUpstreamError(400, false, 'req-x')
@@ -2947,5 +3008,163 @@ describe('a building rule never reaches the wire (AGL-3596)', () => {
     expect(summary.error).toBe("Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.")
     expect(summary.review).toMatchObject({ message: "Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.", detail: RULE })
     expect(summary.items?.[0].failure).toEqual({ ours: true, reason: 'doctrine-refused', message: "Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page." })
+  })
+})
+
+describe('canceling a job (AGL-3616)', () => {
+  const told = jest.fn(async (..._args: unknown[]) => undefined)
+  beforeEach(() => {
+    told.mockClear()
+    registerAiJobTransitionListener(told)
+  })
+  afterEach(() => registerAiJobTransitionListener(null))
+
+  const jobPath = (id: string) => `orgs/${ORG}/aiJobs/${id}`
+  const BO = { uid: 'uid-2', email: 'bo@example.com' }
+
+  /** A provider call that only ends when its signal is aborted, as `fetch` does. */
+  const armAbortable = () =>
+    mockRunAiRequest.mockImplementation(
+      (input: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          const signal = input?.signal
+          if (!signal) return reject(new Error('the step was handed no signal'))
+          if (signal.aborted) return reject(signal.reason)
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        }),
+    )
+  const providerCalled = async () => {
+    for (let tries = 0; tries < 200 && mockRunAiRequest.mock.calls.length === 0; tries++) {
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+    expect(mockRunAiRequest).toHaveBeenCalled()
+  }
+
+  it('before it starts: ends canceled at once, holds nothing, and no step ever runs', async () => {
+    const job = await newTextJob()
+    const result = await cancelAiJob(firestore, ORG, job.$id, NOW, BO)
+    expect(result.changed).toBe(true)
+    expect(mockDocs.get(jobPath(job.$id))).toMatchObject({
+      status: 'canceled',
+      creditsReserved: 0,
+      creditsSpent: 0,
+      lease: null,
+      cancelRequested: { at: NOW, by: 'uid-2' },
+    })
+    expect(aiJobSummary(result.job, NOW).cancelRequested).toBeUndefined()
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat', now: NOW })).outcome).toBe('not-claimable')
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledTimes(1)
+    expect(told).not.toHaveBeenCalled()
+  })
+
+  it('mid-step: asks the step to stop, aborts its provider call, and ends canceled with nothing charged', async () => {
+    armAbortable()
+    const job = await newTextJob()
+    const monthKey = assistUsageMonth(NOW)
+    const running = runAiJobStep(firestore, ORG, job.$id, { owner: 'route', now: NOW, cancelPollMs: 5 })
+    await providerCalled()
+    // The step holds a live lease: the cancel is recorded, the job still runs.
+    const asked = await cancelAiJob(firestore, ORG, job.$id, NOW, BO)
+    expect(asked.changed).toBe(true)
+    expect(asked.job.status).toBe('running')
+    expect(aiJobSummary(asked.job, NOW).cancelRequested).toBe(true)
+    // A second cancel while it stops is not a second act.
+    expect((await cancelAiJob(firestore, ORG, job.$id, NOW, BO)).changed).toBe(false)
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledTimes(1)
+
+    const run = await running
+    expect(run.outcome).toBe('canceled')
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    expect(stored).toMatchObject({ status: 'canceled', creditsSpent: 0, creditsReserved: 0, lease: null, error: null })
+    expect(stored?.steps[0]).toMatchObject({ status: 'pending' })
+    expect(stored?.refundedCredits).toBeUndefined()
+    // The step's reserved message went back: nothing ran, nothing is charged.
+    expect(mockDocs.get(`orgs/${ORG}/assistUsage/${monthKey}`)?.['messages']).toBe(0)
+    // Not a failure: nobody is alerted or told.
+    expect(told).not.toHaveBeenCalled()
+  })
+
+  it('a step that finishes after the cancel keeps its spend and its draft, and ends canceled, not done', async () => {
+    let answer: (value: unknown) => void = () => undefined
+    mockRunAiRequest.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    const job = await newTextJob()
+    const running = runAiJobStep(firestore, ORG, job.$id, { owner: 'route', now: NOW })
+    await providerCalled()
+    await cancelAiJob(firestore, ORG, job.$id, NOW, BO)
+    expect(mockDocs.get(jobPath(job.$id))).toMatchObject({ status: 'running', cancelRequested: { by: 'uid-2' } })
+    answer({ kind: 'completion', text: 'Late copy.', toolUse: [], usage: USAGE, estCostUsd: 0.006, stopReason: 'end_turn' })
+    expect((await running).outcome).toBe('canceled')
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    // What ran stays charged; what it wrote stays.
+    expect(stored).toMatchObject({ status: 'canceled', creditsSpent: 6, creditsReserved: 0, lease: null })
+    expect(stored?.outputs).toHaveLength(1)
+    expect(told).not.toHaveBeenCalled()
+  })
+
+  it('after it finished: changes nothing and writes no row', async () => {
+    armCompletion()
+    const job = await newTextJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route', now: NOW })
+    const result = await cancelAiJob(firestore, ORG, job.$id, NOW, BO)
+    expect(result).toMatchObject({ changed: false, job: { status: 'done' } })
+    expect(mockDocs.get(jobPath(job.$id))?.['cancelRequested']).toBeUndefined()
+    expect(mockAiActivity.logAiJobCanceled).not.toHaveBeenCalled()
+  })
+
+  it('racing a finish resolves to whichever committed first', async () => {
+    const canceledFirst = await newTextJob()
+    await claimNextStep(firestore, ORG, canceledFirst.$id, 'route', NOW)
+    await cancelAiJob(firestore, ORG, canceledFirst.$id, NOW, BO)
+    expect((await completeAiJob(firestore, ORG, canceledFirst.$id, NOW)).status).toBe('canceled')
+
+    const finishedFirst = await newTextJob()
+    await claimNextStep(firestore, ORG, finishedFirst.$id, 'route', NOW)
+    await completeAiJob(firestore, ORG, finishedFirst.$id, NOW)
+    expect((await cancelAiJob(firestore, ORG, finishedFirst.$id, NOW, BO)).job.status).toBe('done')
+    // Only the job that finished is announced.
+    expect(told.mock.calls.map((call) => (call[0] as { to: string }).to)).toEqual(['done'])
+  })
+
+  it('a failure after the cancel is the cancel: no alert, nothing given back', async () => {
+    const job = await newTextJob()
+    await claimNextStep(firestore, ORG, job.$id, 'route', NOW)
+    await cancelAiJob(firestore, ORG, job.$id, NOW, BO)
+    const ended = await failAiJob(firestore, ORG, job.$id, 'It stopped.', { ours: true }, NOW)
+    expect(ended).toMatchObject({ status: 'canceled', error: null })
+    expect(told).not.toHaveBeenCalled()
+  })
+
+  it('a runner that never came back: the next claim after its lease ends the job canceled', async () => {
+    const job = await newTextJob()
+    await claimNextStep(firestore, ORG, job.$id, 'route', NOW)
+    await cancelAiJob(firestore, ORG, job.$id, NOW, BO)
+    // Still in flight: the beat leaves it alone.
+    expect(await claimNextStep(firestore, ORG, job.$id, 'beat', NOW)).toBeNull()
+    expect(mockDocs.get(jobPath(job.$id))?.['status']).toBe('running')
+    const expired = new Date(NOW.getTime() + AI_JOB_LEASE_MS + 1)
+    expect(await claimNextStep(firestore, ORG, job.$id, 'beat', expired)).toBeNull()
+    expect(mockDocs.get(jobPath(job.$id))).toMatchObject({ status: 'canceled', lease: null, creditsReserved: 0 })
+    expect(told).not.toHaveBeenCalled()
+  })
+
+  it('a build’s items: what was built stays, what was not is skipped with the cancel’s note', async () => {
+    const job = await newTextJob()
+    mockDocs.set(jobPath(job.$id), {
+      ...mockDocs.get(jobPath(job.$id)),
+      items: [
+        { slot: 'layout', op: 'layout', label: 'Header', status: 'succeeded', outputs: ['l1'], creditsSpent: 23 },
+        { slot: 'home', op: 'page', label: 'Home', status: 'pending' },
+      ],
+      creditsSpent: 23,
+    })
+    await cancelAiJob(firestore, ORG, job.$id, NOW, BO)
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    expect(stored?.items).toEqual([
+      expect.objectContaining({ slot: 'layout', status: 'succeeded' }),
+      expect.objectContaining({ slot: 'home', status: 'skipped', note: 'Not built: the job was canceled before it reached this.' }),
+    ])
+    // The 23 credits the header used stay charged.
+    expect(stored).toMatchObject({ status: 'canceled', creditsSpent: 23, creditsReserved: 0 })
   })
 })

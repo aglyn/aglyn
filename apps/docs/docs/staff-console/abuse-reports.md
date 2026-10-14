@@ -13,6 +13,12 @@ a staff claim. The `abuseReports` collection is `allow read: if isStaff()` and
 in a Firestore console tab is a supported path.
 :::
 
+## The queue page {#abuse-queue-page}
+
+**Staff → Abuse reports** lists every report filed from the public form, newest
+first: triage each one by severity, act with Lockdown or Disabled files, then save
+its status with what you did.
+
 This is the intake for people who are **not our customers**. A bank's fraud desk,
 a browser vendor, a photographer whose work was lifted, a stranger who clicked
 something wrong — none of them can open a support ticket (that route needs a
@@ -368,8 +374,8 @@ the reference is `PF-…`. It files a row for each of these Stripe events,
 
 | Event | Filed when |
 | -- | -- |
-| `radar.early_fraud_warning.created` | When the charge bills a workspace, or when it paid no one we can name. The card issuer reports the charge as likely fraud. It is not a chargeback yet, and refunding now can prevent one. |
-| `review.opened` | Same as above. Radar put the payment into review, and it stays there until someone closes the review in Stripe. |
+| `radar.early_fraud_warning.created` | When the charge bills a workspace, or when it paid no one we can name. The card issuer reports the charge as likely fraud. It is not a chargeback yet, and refunding now can prevent one. On a workspace's own charge, an **actionable** warning is refunded and the subscriptions canceled automatically; see [The early fraud warning refund](#efw-refund). |
+| `review.opened` | Same as above. Radar put the payment into review, and it stays there until someone closes the review in Stripe. On a workspace's own charge it also asks for the [payment-fraud hold](#payment-fraud-hold). |
 | `charge.dispute.created` | Only when the charge bills a workspace subscription. |
 
 A signal on a site's own sale (a storefront order, a booking, a membership or
@@ -399,16 +405,115 @@ payment, and the evidence deadline is running.
 Rows filed before 2026-10-02 were keyed per signal. A signal on one of those
 charges can still open one more row.
 
-**The alert refunds and cancels nothing.** You decide:
+**The alert itself refunds and cancels nothing.** On a workspace's own charge,
+what the platform did by itself is written under it as **Automated response**:
+the [early fraud warning refund](#efw-refund) and the
+[payment-fraud hold](#payment-fraud-hold). Read that line first, then decide
+what is left:
 
-- Refund on the charge in Stripe.
+- Refund on the charge in Stripe, if the automated response did not.
 - Cancel billing on the Subscription card ([Lockdown](./lockdown.md#cancel-billing)).
-- Lock the workspace if it is fraud.
+- Lock the workspace if it is fraud, or re-place the hold as `abuse`.
 - Close the review or answer the dispute in Stripe.
 
 Then close the row with a note saying what you did.
 
-The live webhook endpoint must be subscribed to the two new events. Run
+### The early fraud warning refund {#efw-refund}
+
+A dispute counts against the platform account's dispute rate even when we win
+it, and a charge that is **fully refunded cannot then be disputed for fraud**. So
+an early fraud warning on a **workspace's own Aglyn charge** (its subscription,
+its AI overage) is answered before it can become one:
+
+1. The charge is refunded in full with reason `fraudulent`, under the Stripe
+   idempotency key `efw-refund-<warning id>`. One warning makes one refund, ever.
+2. Every subscription of the workspace is canceled now, with no proration and no
+   final invoice.
+3. The [payment-fraud hold](#payment-fraud-hold) is asked for, with its guards.
+
+It happens only when Stripe marks the warning `actionable: true`, and the
+charge is read back first. **Nothing is refunded** when:
+
+| Case | What the row says |
+| -- | -- |
+| The warning is not actionable (Stripe already refunded or disputed it upstream) | "Not refunded: Stripe marked the warning not actionable." |
+| The charge is already fully refunded | "Not refunded again." |
+| The charge is already disputed | "Not refunded: the charge is already disputed." Answer the dispute in Stripe. |
+| The charge paid a connected account, or the event came from one | Never refunded here. A seller's sale keeps today's alert-only handling. |
+| The deployment has no Stripe key, or the refund call fails | "The refund did not run." Refund it in Stripe yourself, before it becomes a dispute. |
+
+A redelivery of the same warning adds nothing to the row, so it cannot refund
+or cancel twice. The refund and the cancel are both visible on the Stripe
+charge and subscription, with the actor `system:payment-fraud` in the
+cancellation comment and the refund's metadata.
+
+### The payment-fraud hold {#payment-fraud-hold}
+
+When Stripe flags a **workspace's own subscription payment** as fraud, the
+billing webhook places an automatic, reversible **`security`** hold. It is never
+an automatic `abuse` ban: a person upgrades the hold to a ban, or lifts it.
+
+It is asked for by any of these, and only for a charge whose customer is a
+workspace's (resolved through the `stripeCustomers` index, never a shopper on a
+site):
+
+| Trigger | Event |
+| -- | -- |
+| Radar **blocked** the charge at `highest` risk | `charge.failed` |
+| Stripe's own fraud report: `fraud_details.stripe_report = fraudulent` | `charge.failed` |
+| **Card cycling:** 3 or more different card fingerprints failed on the workspace within 30 minutes | `charge.failed` |
+| An issuer's early fraud warning, or a Radar review | `radar.early_fraud_warning.created`, `review.opened` |
+
+A block at `elevated` risk or by a custom rule is not enough on its own; card
+cycling catches the tester behind those. A customer retrying one card, or trying
+a second, never trips it.
+
+What the hold does, through the same code as [Lockdown](./lockdown.md):
+
+- the workspace and **each of its sites** are locked: reason `security`, mode
+  `full`, enforcement `takedown`. Members are signed out;
+- the owners are **not emailed**. The lock notice is recorded on the console only;
+- every subscription is canceled now, with no refund;
+- every lock writes an `adminAudit` row with the actor `system:payment-fraud`,
+  the trigger, the charges and the abuse row.
+
+**Guards.** A workspace **14 or more days old**, or one that has **paid an
+invoice** with any charge other than the flagged ones, is never locked. It gets
+the row and the alert, marked "Not locked — needs a decision". The flagged
+charge itself does not count as paying: a stolen card that went through has
+"paid" too. A workspace with no readable creation date counts as an existing
+customer. The house workspace and a workspace a staff account owns are never
+held at all.
+
+**The row.** A charge trigger files one row per workspace, source
+`stripe-payment-fraud-hold`, reference `PF-…`, urgent. A warning or review
+extends that charge's own `stripe-fraud-signal` row instead. Either way
+`paymentFraudHold` carries the evidence: the charge ids, risk levels, card
+countries, card fingerprints, and what was locked.
+
+**One alert.** Staff get one **Automatic security hold for payment fraud**
+operator alert per workspace per day. The next cards in the burst add to the
+workspace's record and alert no one. Once a workspace is held, the per-attempt
+**Payment failed** staff notifications for it stop as well: on 2026-10-13 one
+card tester's four cards produced five of them and nothing else.
+
+**Idempotent.** The hold is claimed in a transaction on
+`paymentFraudHolds/{workspace id}`, so a Stripe redelivery, or two events about
+one attempt arriving together, place one hold. A target staff already locked is
+left exactly as it was set: a ban is never softened to a hold.
+
+**Deciding it.** Open the workspace from the row, check the charges in Stripe,
+then on [Lockdown](./lockdown.md#payment-fraud-hold):
+
+- **Fraud:** re-place the workspace lock as `abuse`, and lock the owner's
+  account as `abuse` if you are banning the person.
+- **False positive:** lift the workspace and site locks. The subscriptions stay
+  canceled; the customer subscribes again from billing.
+
+Then close the row with what you did.
+
+The live webhook endpoint must be subscribed to these events and to
+`charge.failed`, which the payment-fraud hold reads. Run
 `node tools/scripts/setup-stripe.mjs`, which only adds missing events, or enable
 them on the endpoint in the Stripe dashboard. Until then, `/api/health/billing`
 reports the endpoint as missing required events.
@@ -434,8 +539,11 @@ warning or dispute never reaches this queue. The merchant handles it.
 
 The row names the connected account, the charges, and the workspaces and sites
 they were for, with links to the workspace and to the account in the Stripe
-Dashboard. **Nothing is refunded, canceled or paused.** If the seller is the
-fraudster:
+Dashboard. **Nothing is refunded, canceled or paused**: these are the seller's
+sales, not Aglyn's own billing, so the [early fraud warning refund](#efw-refund)
+never runs on them. The row recommends refunding each charge that drew an early
+fraud warning and is not disputed yet, which keeps it off the dispute rate. If
+the seller is the fraudster:
 
 - Lock the workspace at [Lockdown](./lockdown.md) with the `security`
   reason. A locked site's checkout, bookings and memberships stop taking new
@@ -535,6 +643,20 @@ Early fraud warnings and disputes on marketplace sales count toward the
 [seller fraud pattern](#seller-fraud-pattern) under the **publisher's**
 workspace, never the buyer's.
 
+### Reported listings and reviews {#reported-listings}
+
+**Staff → Marketplace reports** is the queue for reports users file against a
+marketplace listing or a review: read the reason each reporter gave, then move it to
+**Reviewing**, **Actioned** or **Dismiss** it, with a note saying what you did.
+
+The menu at the top of the card shows one state at a time — **Open** by default, or
+**Reviewing**, **Actioned**, **Dismissed** or **Everything** — newest update first,
+and says when older reports in that state are not shown. Each report shows its status,
+whether it is about a listing or a review, and the reason in full; the reporter's
+account is shown only to staff roles allowed to see it. The statuses mean what they do
+on the abuse queue ([Statuses](#statuses)). Closing a report needs a note, which the
+server refuses to skip, and every change writes an audit row.
+
 ## Risk notices: what the workspace is told {#risk-notices}
 
 Every row a risk source files — a held email, page or marketplace submission, a
@@ -601,6 +723,28 @@ cannot reach us escalates to a browser vendor or a blocklist, and that block doe
 not distinguish the phishing subdomain from the four hundred honest customer
 sites beside it. Answering one report quickly is the cheapest insurance we have
 on the whole platform.
+
+## Reading a report {#reading-a-report}
+
+Each report is its own card: read the header and the reported address, decide
+which lever answers it, then set its status and write what you did before you
+press **Save status**.
+
+- **The header** carries the severity, the category, the status, **reported N×**
+  when the same address was reported more than once, and — on copyright reports
+  only — the account's [copyright strikes](#repeat-infringers). A missing strike
+  chip means the count was not looked up, never zero.
+- **The reported address** is deliberately not a link. Open it, if you must, in a
+  disposable browser that is not signed in to the console.
+- **Site and workspace ids** resolved from the address sit beside it, with buttons
+  to **Lockdown** and **Disabled files**. Those pages open empty: copy the id across,
+  so the target is typed by the person who decided on it. See
+  [Which lever answers which report](#which-lever).
+- **Alerts** on the card explain reports the platform filed itself — a Stripe fraud
+  signal, a seller fraud pattern, a held outbound email or page — and any review the
+  workspace's owners asked for. Those rows have no reporter to reply to.
+- **What you did** is optional while a report is open and required when you close it.
+  Nothing changes until you save.
 
 ## CSAM is not a takedown button {#csam}
 
@@ -843,6 +987,10 @@ The queue shows the earliest and latest lawful instants either side of the date
 we picked, so you can see it sits inside the window rather than take our word.
 
 ### The steps {#counter-notice-steps}
+
+Each counter-notice is its own card in the queue: move it to the step that matches
+what happened, write what you did and why, and press **Save step** — each step
+changes what happens to the site.
 
 | Step | What it means | What it does to the site |
 | --- | --- | --- |

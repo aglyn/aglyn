@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { throwIfAiJobCanceled } from './ai-job-cancel'
 import { buildPageMarkdown } from '@aglyn/aglyn/app-utils/page-markdown'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { SCREEN_ROOT_PATH, screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
@@ -33,7 +34,12 @@ import { aiSiteWords } from '../model/ai-site-job'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
-import { validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
+import {
+  aiSettleMechanicalRules,
+  aiSettleUnrelatedScreenLinks,
+  validateAiDoctrineTree,
+  type AiDoctrineTree,
+} from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -83,18 +89,26 @@ import {
   aiPageSectionNodeId,
   aiPageSectionPrompt,
   aiPageSectionSmaller,
+  aiPageSectionWithRecordImage,
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
-import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
+import {
+  AI_STOCK_PHOTO_AVOID_INPUT,
+  AI_STOCK_PHOTO_PAGES_INPUT,
+  aiLayoutStockPhotoSource,
+  aiStockPhotoWordsOf,
+  aiStockPlacedSrcs,
+} from './ai-layout-stock-photos'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
 import {
   AI_JOB_PAGE_LANGUAGE_BUDGET,
   aiJobUsesLayoutLanguage,
   aiLayoutListingContext,
   aiLayoutPageTargets,
+  aiLayoutLeftOutNote,
   aiRunLayoutPage,
 } from './ai-job-page-language'
 import {
@@ -421,6 +435,35 @@ export const aiPageJobAdmission: AiJobAdmission = async (context) => {
   })
 }
 
+/**
+ * The library photos the job's other pages already show (AGL-3660): read
+ * from the screen drafts a site job names for its page unit
+ * (`AI_STOCK_PHOTO_PAGES_INPUT`), never this page's own, so a pass repeated
+ * over it keeps its photos, and those its datasets' records show
+ * (`AI_STOCK_PHOTO_AVOID_INPUT`, AGL-3616). Empty on any failure: a repeat is better than a
+ * page that fails over decoration.
+ */
+export async function aiJobPagesPlacedPhotos(
+  firestore: Parameters<typeof readAiDraftNodes>[0],
+  input: { hostId: string; job: Pick<AiJob, 'inputs'>; draftId: string },
+  readNodes: typeof readAiDraftNodes = readAiDraftNodes,
+): Promise<string[]> {
+  const listed = input.job.inputs?.[AI_STOCK_PHOTO_PAGES_INPUT]
+  const ids = Array.isArray(listed)
+    ? [...new Set(listed.filter((id): id is string => typeof id === 'string' && !!id && id !== input.draftId))]
+    : []
+  // What the site's datasets' records show (AGL-3616), named by the job.
+  const elsewhere = input.job.inputs?.[AI_STOCK_PHOTO_AVOID_INPUT]
+  const shown = Array.isArray(elsewhere)
+    ? elsewhere.filter((src): src is string => typeof src === 'string' && src.startsWith('media:'))
+    : []
+  if (!ids.length) return [...new Set(shown)]
+  const read = await Promise.all(
+    ids.map((id) => readNodes(firestore, { kind: 'screen', hostId: input.hostId, id }).catch(() => null)),
+  )
+  return [...new Set([...shown, ...read.flatMap((stored) => aiStockPlacedSrcs(stored?.nodes))])]
+}
+
 export interface AiJobPageStepDeps {
   /** The inventory reader; specs hand in a fake. */
   readInventory?: typeof readSiteInventory
@@ -587,7 +630,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 
     const stored = written ? await readAiDraftNodes(firestore, { kind: 'screen', hostId, id: draftId }) : null
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
-    const page = stored?.nodes ?? aiEmptyPage()
+    let page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
     // A workspace whose component allowance is finite — Free's one — draws
     // its repeats inline, and every pass is held to the rules that way
@@ -626,7 +669,38 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       : checked
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
-    if (index === -1 && written) {
+    // A page in the layout language is written whole by one pass (AGL-3660),
+    // so once written it is complete: a planned section missing from it was
+    // taken out by its last answer, never one still to build (AGL-3771).
+    if ((index === -1 || language) && written) {
+      // An attribute a rule has one answer for is settled on the stored page
+      // and stored (AGL-3660): this pass asks no model, so a page refused
+      // here for one would be refused the same way on every Try again. A
+      // Portfolio page whose opening photos all loaded eagerly was (2026-10-10).
+      // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729).
+      const settle = <T extends AiDoctrineTree>(tree: T): T =>
+        aiSettleUnrelatedScreenLinks(aiSettleMechanicalRules(tree, 'page'), 'page', {
+          ...context,
+          ownScreenIds: [screen.id, draftId],
+        })
+      const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
+      if (settled.nodes !== (page as unknown as AiDoctrineTree['nodes'])) {
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
+        const update = await updateAiDraftNodes(firestore, {
+          kind: 'screen',
+          hostId,
+          id: draftId,
+          now,
+          update: (nodes) => {
+            const tree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as AiDoctrineTree['nodes'] }
+            const next = settle(tree)
+            return next === tree ? null : (next.nodes as unknown as typeof nodes)
+          },
+        })
+        if (update.ok === false) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
+        page = settled.nodes as unknown as typeof page
+      }
       // A link the page carries to one of its sections goes there, now every section is built.
       const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
         ...context,
@@ -640,6 +714,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             inventory,
           }),
           recordNote,
+          // A section the last answer could not fill was left out, and the page says which (AGL-3771).
+          language ? aiLayoutLeftOutNote(screen, sectionIds, page as unknown as Record<string, unknown>) : null,
         ]
           .filter(Boolean)
           .join(' ') || null
@@ -716,6 +792,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             }
           }
         }
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
         await writeAiDraftScreenSeo(firestore, { hostId, id: draftId, seo: values, now })
       }
       return { ...spent, outputs: reports }
@@ -750,6 +828,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // library, else a starter photo. No AI credits; never fails the job.
       const sectionNames = screen.sections.map((section) => section.name)
       const seed = `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`
+      // A photo another page of the job already shows is not placed here.
+      const avoid = await aiJobPagesPlacedPhotos(firestore, { hostId, job, draftId })
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         sectionIds,
@@ -760,11 +840,16 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           uid: job.createdBy,
           seed,
           business: aiSiteWords(job.inputs).about,
+          ...aiStockPhotoWordsOf(job),
           sectionNames,
+          jobId: aiOriginJobId(job),
+          ...(avoid.length ? { avoid } : {}),
           ...(signal ? { signal } : {}),
         }),
       })
       if (!written) {
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
         const draft = await writeAiDraft(firestore, {
           kind: 'screen',
           hostId,
@@ -784,6 +869,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         }
       } else {
         // A draft written by an earlier, interrupted pass is replaced whole.
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
         const update = await updateAiDraftNodes(firestore, {
           kind: 'screen',
           hostId,
@@ -828,8 +915,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const spent = aiGenerationSpent(result)
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result, { page: true }) }
+    // A record template's page leads with each record's own photo (AGL-3616).
+    const section = aiPageSectionWithRecordImage(result.value, page, record)
 
     if (!written) {
+      // Never written once the job is canceled (AGL-3616).
+      throwIfAiJobCanceled(signal)
       const draft = await writeAiDraft(firestore, {
         kind: 'screen',
         hostId,
@@ -837,7 +928,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         uid: job.createdBy,
         org,
         name,
-        nodes: aiPageWithSection(aiEmptyPage(), result.value, sectionIds),
+        nodes: aiPageWithSection(aiEmptyPage(), section, sectionIds),
         slug,
         layoutId: aiPageDraftLayoutId(screen, inventory),
         aiJobId: aiOriginJobId(job),
@@ -848,6 +939,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         return { ...spent, review: aiLimitReview(draft.error) }
       }
     } else {
+      // Never written once the job is canceled (AGL-3616).
+      throwIfAiJobCanceled(signal)
       const update = await updateAiDraftNodes(firestore, {
         kind: 'screen',
         hostId,
@@ -855,7 +948,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         now,
         // A pass run again after its write finds its section and changes nothing.
         update: (nodes) =>
-          result.value.rootId in nodes ? null : aiPageWithSection(nodes, result.value, sectionIds),
+          section.rootId in nodes ? null : aiPageWithSection(nodes, section, sectionIds),
       })
       if (update.ok === false) return { ...spent, failure: AI_JOB_PAGE_DELETED_COPY }
     }

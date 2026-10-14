@@ -189,6 +189,7 @@ export function BusinessDetailsCard(props: { hostId: string }) {
     <CardDisplay
       header={'Business details'}
       help={docsHelp('bindings', {
+        anchor: '#site-details',
         excerpt:
           'Contact details that installed templates can reference with ' +
           'host variables, so their branding is right without editing.',

@@ -32,6 +32,7 @@ import {
   CRM_FIELD_OBJECT_LABELS,
   CRM_FORECAST_CATEGORY_LABELS,
   type ContactFieldDefinition,
+  customFieldCurrency,
   type CrmDealStage,
   type CrmPipeline,
   dealStageForecastCategory,
@@ -71,6 +72,7 @@ const FIELD_TYPES: Readonly<Record<string, string>> = {
   select: 'Dropdown',
   checkbox: 'Checkbox',
   url: 'Link',
+  currency: 'Currency',
 }
 
 /** A whole collection as rows, read once: what these small exports page over. */
@@ -164,6 +166,7 @@ const FIELD_ROWS: RowSource = {
         object: CRM_FIELD_OBJECT_LABELS[object] ?? object,
         type: FIELD_TYPES[field.type] ?? field.type,
         options: Array.isArray(field.options) ? field.options.map(String) : [],
+        currency: field.type === 'currency' ? customFieldCurrency(field).toUpperCase() : null,
         required: field.required === true,
         position: typeof field.order === 'number' ? field.order : null,
         retired: typeof field.retiredAt === 'number' && field.retiredAt > 0,

@@ -81,6 +81,11 @@ final class AppModel {
 
   var brandName: String { config?.brandName ?? AglynConfig.defaultBrandName }
 
+  /// This app's own name, as a person sees it: "Aglyn", or "Aglyn POS" (with
+  /// the space) for the register. The brand alone names the company and its
+  /// console; this names the app (sign out of it, update it, its notifications).
+  var appName: String { app == .pos ? "\(brandName) POS" : brandName }
+
   /// Follows the signed-in person: a new workspace store per person, none signed out.
   func userChanged(_ user: AglynUser?) {
     guard user?.uid != workspace?.uid else { return }
@@ -134,6 +139,7 @@ final class AppModel {
       firestore: reader,
       api: api,
       writer: ReaderMergeWriter(reader),
+      staff: auth?.staff,
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
       openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) },
       siteRole: workspace?.site?.role, orgRole: workspace?.org?.role,

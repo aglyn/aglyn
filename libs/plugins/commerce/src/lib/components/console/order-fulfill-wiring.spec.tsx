@@ -49,6 +49,8 @@ jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
   updateDoc: jest.fn(async () => undefined),
   runTransaction: jest.fn(),
+  // The store's settings (AGL-3705): a hand-entered shipping cost is in its currency.
+  getDoc: jest.fn(async () => ({ get: (key: string) => (key === 'currency' ? 'eur' : undefined) })),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -369,6 +371,48 @@ describe('what deliberately stays client-side', () => {
     expect(patch.timeline[patch.timeline.length - 1]).toEqual(
       expect.objectContaining({ event: 'note', detail: 'gift wrap please' }),
     )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('a hand-entered shipping cost (AGL-3705)', () => {
+  it('sends the cost typed in the store currency as whole cents', async () => {
+    fetchMock.mockResolvedValue(answer(200, { ok: true }))
+    show()
+    openFulfillForm()
+    // The store sells in euros: the field says so once the settings are read.
+    await waitFor(() => expect(screen.getByText('Optional. What sending this shipment cost you, in EUR.')).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Shipping cost'), { target: { value: '8.45' } })
+    fireEvent.click(fulfillButton())
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      hostId: 'host-1',
+      orderId: 'order-abc',
+      to: 'fulfilled',
+      carrier: 'UPS',
+      trackingNumber: '1Z999',
+      shippingCostCents: 845,
+    })
+  })
+
+  it('sends zero for free shipping, and nothing for an empty field', async () => {
+    fetchMock.mockResolvedValue(answer(200, { ok: true }))
+    show()
+    openFulfillForm()
+    fireEvent.change(screen.getByLabelText('Shipping cost'), { target: { value: '0' } })
+    fireEvent.click(fulfillButton())
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).shippingCostCents).toBe(0)
+  })
+
+  it('will not fulfill with a cost that is not an amount', async () => {
+    show()
+    openFulfillForm()
+    fireEvent.change(screen.getByLabelText('Shipping cost'), { target: { value: '-3' } })
+    expect(screen.getByText('Shipping cost cannot be negative')).toBeTruthy()
+    expect((fulfillButton() as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Shipping cost'), { target: { value: '' } })
+    expect((fulfillButton() as HTMLButtonElement).disabled).toBe(false)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

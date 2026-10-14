@@ -60,57 +60,6 @@
   ],
   "controls": [
     {
-      "why": "Two top-level headings on one card; a component carries at most one h1 (rule 11).",
-      "answer": {
-        "tree": {
-          "rootId": "_@_",
-          "nodes": {
-            "_@_": {
-              "componentId": "div",
-              "nodes": [
-                "card"
-              ]
-            },
-            "card": {
-              "componentId": "muiCard",
-              "props": {
-                "variant": "outlined"
-              },
-              "nodes": [
-                "content"
-              ]
-            },
-            "content": {
-              "componentId": "muiCardContent",
-              "nodes": [
-                "name",
-                "role"
-              ]
-            },
-            "name": {
-              "componentId": "muiTypography",
-              "props": {
-                "variant": "h1",
-                "component": "h1",
-                "children": "[Name]"
-              }
-            },
-            "role": {
-              "componentId": "muiTypography",
-              "props": {
-                "variant": "h1",
-                "component": "h1",
-                "children": "[Role on the crew]"
-              }
-            }
-          }
-        }
-      },
-      "fails": [
-        "rules"
-      ]
-    },
-    {
       "why": "A plan that creates a second testimonial component when the site already has one (rule 7).",
       "answer": {
         "tree": {

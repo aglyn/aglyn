@@ -239,3 +239,41 @@ export function platformInvoiceRevenue(
       asDate(source?.status_transitions?.paid_at) ?? asDate(source?.created),
   }
 }
+
+/**
+ * WAS THIS INVOICE CLOSED BEFORE THE SUBSCRIPTION WAS EVER PAID FOR?
+ * (AGL-3766)
+ *
+ * A Stripe sign-up whose first charge fails leaves the subscription
+ * `incomplete`; after 23 hours Stripe expires it (`incomplete_expired`) and
+ * VOIDS the opening invoice. That void is not revenue leaving the books: a
+ * subscription in `DEAD_SUBSCRIPTION_STATUSES` was never counted, and its
+ * workspace never left Free. So it must neither raise the "revenue not
+ * coming" alert nor be mistaken for a silent drop.
+ *
+ * Every clause is something the invoice states about itself, so the answer
+ * does not depend on the order Stripe sends the subscription's own events in:
+ *
+ * * `billing_reason === 'subscription_create'` — the subscription's FIRST
+ *   invoice, the one whose payment is what makes it active.
+ * * `collection_method !== 'send_invoice'` — a net-30 subscription is active
+ *   from the start, so its first invoice going uncollectible IS lost revenue.
+ * * nothing was paid on it: `amount_paid` is 0, `paid` is not true, and no
+ *   `status_transitions.paid_at` was ever stamped.
+ *
+ * A charge-automatically subscription cannot become active before its first
+ * invoice is paid (a trial's opening invoice is $0 and is paid at once), so
+ * those clauses together mean the subscription was never live.
+ */
+export function invoiceClosedBeforeFirstPayment(
+  // A raw Stripe invoice object, as the webhook receives it.
+  invoice: any,
+): boolean {
+  if (!invoice || typeof invoice !== 'object') return false
+  if (invoice.billing_reason !== 'subscription_create') return false
+  if (invoice.collection_method === 'send_invoice') return false
+  if (Number(invoice.amount_paid ?? 0) !== 0) return false
+  if (invoice.paid === true) return false
+  if (invoice.status_transitions?.paid_at) return false
+  return true
+}

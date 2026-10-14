@@ -45,6 +45,12 @@ import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { useCrmApi } from './use-crm-api'
 
+/**
+ * The help on a company's header card — one card, so the page's
+ * not-found branch carries the same link as the loaded one.
+ */
+export const COMPANY_PAGE_HELP = pluginDocsHelp('companies', { anchor: '#a-companys-page' })
+
 export interface CompanyPropertiesCardProps {
   company: Partial<CrmCompany> & { $id: string }
   /** Whether the document the card holds is server-confirmed. */
@@ -281,7 +287,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
       kind="Company"
       title={String(company.name || company.$id)}
       subtitle={company.domain}
-      help={pluginDocsHelp('companies', { anchor: '#a-companys-page' })}
+      help={COMPANY_PAGE_HELP}
       backHref={routes.section('companies')}
       backLabel="Back to companies"
       actions={

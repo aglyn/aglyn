@@ -15,16 +15,19 @@
  * limitations under the License.
  */
 
+import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import type { AiTool } from '../providers/contract'
+import type { AiBuildStorePages } from './ai-build-store-pages'
 
 /**
  * The plan a generation job builds from (AGL-2935): what the job's plan step
  * (`jobs/ai-job-plan-step.ts`) returns, before a single node is generated.
  *
  * This module is the plan's MODEL — its shape, its tool schema and its
- * reader — and imports nothing at runtime, so the doctrine validators, the
- * plan step, the job document and the proposal can all read it without
- * importing each other.
+ * reader — and imports nothing of the plugin's at runtime (its one runtime
+ * import is core's `seo-locale`, which imports nothing), so the doctrine
+ * validators, the plan step, the job document and the proposal can all read
+ * it without importing each other.
  *
  * A plan is REFERENCES, never documents (AGL-2937). It names what the site
  * already has by inventory id, what the job will create by a short name, and
@@ -129,6 +132,15 @@ export interface AiBuildPlanCreate {
    * palette paths it adds or changes.
    */
   fields: string[]
+  /**
+   * A form only: the dataset each of its submissions is also written to as a
+   * record (AGL-3616, Zach 2026-10-10: a volunteer sign-up writing to a
+   * Volunteers dataset) — `new:<name>` of a dataset this plan creates, or a
+   * dataset id from the inventory. Said by the plan, never inferred from a
+   * section's `uses`. Absent or null on every other creation, and on a form
+   * whose submissions only reach the Inbox.
+   */
+  writesTo?: string | null
   /**
    * The id the draft this creation becomes is written under, where a unit of
    * the job builds it (AGL-3079). Minted when the job keeps the plan, never
@@ -264,6 +276,29 @@ export interface AiBuildPlan {
    * Absent is none: every other kind's plan.
    */
   items?: AiBuildItem[]
+  /**
+   * The store pages a `build` adds where its plan turns the site into a store
+   * (AGL-3676): worked out by code as the plan is kept, never by the model,
+   * and built by a unit of their own after every planned one. Absent is none.
+   */
+  storePages?: AiBuildStorePages
+  /**
+   * The language a SITE plan's brief and copy are written in (AGL-3750), as
+   * the Languages card stores a code (`siteLanguageCode`). Absent is the site's
+   * own language: every other kind's plan, a plan that said null, and one
+   * whose code was not a language code, which is dropped rather than refused.
+   */
+  language?: string
+  /**
+   * What a SITE plan's photos show, in English whatever language the brief
+   * is in (AGL-3760): two to four words a stock photo library is searched by,
+   * the business's subject first — "bakery bread pastries" for "una panadería
+   * … con pan dulce, conchas". The libraries are tagged in English, so a site
+   * in another language searches by these rather than its own words. Absent
+   * on every other kind's plan, on one that said null, and on one whose words
+   * were not plain English letters.
+   */
+  photoWords?: string
 }
 
 /**
@@ -485,16 +520,36 @@ const RECORD_SCHEMA = {
     "When this page is one dataset's record template, serving a page per record at /<base>/<record address> with its copy bound as {{item.<field>}}: the dataset and the base. Otherwise null.",
 }
 
-/** A plan tool whose screens each name the dataset they are the record template of, or null. */
+const WRITES_TO_SCHEMA = nullableString(
+  'A form only, and only where each submission should also be kept as a record (a volunteer sign-up, an RSVP, an inquiry): the dataset it writes to, as new:<name> of a dataset this plan creates or a dataset id from the inventory. Otherwise null.',
+)
+
+/**
+ * A plan tool whose screens each name the dataset they are the record
+ * template of, or null, and whose creations each name the dataset a form
+ * writes its submissions to, or null (AGL-3616).
+ */
 function withRecords(tool: AiTool): AiTool {
   const properties = tool.inputSchema['properties'] as Record<string, unknown>
   const screens = properties['screens'] as { items: Record<string, unknown> }
+  const create = properties['create'] as { items: Record<string, unknown> }
   return {
     ...tool,
     inputSchema: {
       ...tool.inputSchema,
       properties: {
         ...properties,
+        create: {
+          ...create,
+          items: {
+            ...create.items,
+            required: [...(create.items['required'] as string[]), 'writesTo'],
+            properties: {
+              ...(create.items['properties'] as Record<string, unknown>),
+              writesTo: WRITES_TO_SCHEMA,
+            },
+          },
+        },
         screens: {
           ...screens,
           items: {
@@ -512,9 +567,10 @@ function withRecords(tool: AiTool): AiTool {
 }
 
 /**
- * The plan tools with a record template on every screen (AGL-3475), offered
- * only where the job may bind a dataset: a site with a dataset, or a job that
- * may create one. Record pages are a Starter feature, and every other plan's
+ * The plan tools with a record template on every screen (AGL-3475) and the
+ * dataset a form writes to on every creation (AGL-3616), offered only where
+ * the job may bind a dataset: a site with a dataset, or a job that may create
+ * one. Record pages are a Starter feature, and every other plan's
  * request is the plain tool, byte for byte, so the field costs a Free taste
  * nothing and a model planning a site with no dataset has none to bind.
  */
@@ -565,10 +621,60 @@ export function withBuildItems(tool: AiTool): AiTool {
   }
 }
 
+const LANGUAGE_SCHEMA = nullableString(
+  "The language the brief is written in, which the site's copy is written in too: a code such as en, es, fr or pt-BR. Null when unsure.",
+)
+
+/** The most words a plan's photo words keep. */
+export const AI_PLAN_PHOTO_WORDS_MAX = 4
+
+/**
+ * A plan's photo words as a stock photo search takes them (AGL-3760), or
+ * `null`: lowercase English words, at most {@link AI_PLAN_PHOTO_WORDS_MAX}.
+ * Words with letters outside English's — "panadería" — are no English at all,
+ * so the plan is kept without them.
+ */
+export function aiPlanPhotoWords(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const text = value.trim().toLowerCase()
+  if (!text || !/^[a-z][a-z\s,'&-]*$/.test(text)) return null
+  const words = text
+    .split(/[\s,&]+/)
+    .map((word) => word.replace(/^[-']+|[-']+$/g, ''))
+    .filter((word) => word.length > 1)
+  return words.length ? words.slice(0, AI_PLAN_PHOTO_WORDS_MAX).join(' ') : null
+}
+
+const PHOTO_WORDS_SCHEMA = nullableString(
+  "For a brief not in English: 2-4 English words for its stock photos, subject first, e.g. bakery bread pastries; no place. Else null.",
+)
+
+/**
+ * Any plan tool with the site's language (AGL-3750) and its photo words in
+ * English (AGL-3760), offered only to a `site` job, whose guided start sets
+ * the site's language from one and searches its photos by the other. One
+ * schema for every site plan, so the tool is the same bytes across briefs
+ * and the prompt cache keeps it; every other kind's tool is unchanged.
+ */
+export function withPlanLanguage(tool: AiTool): AiTool {
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      required: [...(tool.inputSchema['required'] as string[]), 'language', 'photoWords'],
+      properties: {
+        ...(tool.inputSchema['properties'] as Record<string, unknown>),
+        language: LANGUAGE_SCHEMA,
+        photoWords: PHOTO_WORDS_SCHEMA,
+      },
+    },
+  }
+}
+
 /** The plan tool a brief is answered with, on a job that may or may not bind a dataset. */
 export function aiBuildPlanToolFor(
   brief: string,
-  options: { records?: boolean; items?: boolean } = {},
+  options: { records?: boolean; items?: boolean; language?: boolean } = {},
 ): AiTool {
   const video = AI_PLAN_ASKS_FOR_VIDEO.test(brief)
   const tool = options.records
@@ -578,7 +684,8 @@ export function aiBuildPlanToolFor(
     : video
       ? AI_BUILD_PLAN_EMBEDS_TOOL
       : AI_BUILD_PLAN_TOOL
-  return options.items ? withBuildItems(tool) : tool
+  const built = options.items ? withBuildItems(tool) : tool
+  return options.language ? withPlanLanguage(built) : built
 }
 
 export type AiBuildPlanParse =
@@ -736,12 +843,16 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         const fields = list(entry['fields'] ?? [], `create[${index}].fields`, AI_BUILD_PLAN_LIMITS.fields)
           .map((field, fieldIndex) => text(field, `create[${index}].fields[${fieldIndex}]`))
           .filter(Boolean)
+        // Only a form writes its submissions to a dataset (AGL-3616); kept
+        // only where it says one, so a plan without one reads as it always did.
+        const writesTo = kind === 'form' ? nullable(entry['writesTo'], `create[${index}].writesTo`) : null
         return {
           kind,
           name,
           why: text(entry['why'], `create[${index}].why`),
           duplicateOf: nullable(entry['duplicateOf'], `create[${index}].duplicateOf`),
           fields: kind === 'layout' ? aiPlanLayoutRegionWords(fields) : fields,
+          ...(writesTo ? { writesTo } : {}),
         }
       },
     )
@@ -831,6 +942,17 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         }
       },
     )
+    // A language that is no code is dropped, never refused (AGL-3750): the
+    // site keeps the language it has.
+    const language = siteLanguageCode(root['language'])
+    if (typeof root['language'] === 'string' && root['language'].trim() && !language) {
+      repairs.push(`language "${root['language'].trim().slice(0, 40)}" is not a language code; ignored`)
+    }
+    // Photo words that are not plain English are dropped, never refused (AGL-3760).
+    const photoWords = aiPlanPhotoWords(root['photoWords'])
+    if (typeof root['photoWords'] === 'string' && root['photoWords'].trim() && !photoWords) {
+      repairs.push(`photoWords "${root['photoWords'].trim().slice(0, 40)}" is not plain English; ignored`)
+    }
     // A plan whose brief asks for no player carries no list, as it did before the list existed;
     // so does a plan with no items.
     return {
@@ -841,6 +963,8 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         screens,
         ...(embeds.length ? { embeds } : {}),
         ...(items.length ? { items } : {}),
+        ...(language ? { language } : {}),
+        ...(photoWords ? { photoWords } : {}),
       },
       repairs,
     }
@@ -879,6 +1003,29 @@ export function aiPlanCreateFor(
   if (!isAiPlanNewRef(ref)) return undefined
   const name = ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
   return plan.create.find((entry) => entry.name.toLowerCase() === name)
+}
+
+/** The operation a build's dataset item is planned as (AGL-3616), owned by the data plugin. */
+export const AI_PLAN_DATASET_ITEM_OP = 'dataset'
+
+/**
+ * The datasets this plan makes that one of its forms writes its submissions
+ * to (AGL-3616), by name lowercased: a dataset creation of a site start, or a
+ * build's dataset item. Such a dataset starts with no records — its records
+ * are the submissions — so a site start designs it from its planned fields
+ * with no model, and no page lists it.
+ */
+export function aiPlanFormDatasetNames(plan: Pick<AiBuildPlan, 'create'> & Partial<Pick<AiBuildPlan, 'items'>>): Set<string> {
+  const names = new Set<string>()
+  for (const entry of plan.create) {
+    if (entry.kind !== 'form' || !isAiPlanNewRef(entry.writesTo)) continue
+    const name = entry.writesTo.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
+    const made =
+      plan.create.some((one) => one.kind === 'dataset' && one.name.trim().toLowerCase() === name) ||
+      (plan.items ?? []).some((one) => one.op === AI_PLAN_DATASET_ITEM_OP && one.name.trim().toLowerCase() === name)
+    if (made) names.add(name)
+  }
+  return names
 }
 
 /** The item a `new:<name>` reference names, case-insensitively (AGL-3616). */

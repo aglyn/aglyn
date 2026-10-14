@@ -73,6 +73,14 @@ interface FirestoreReader {
   fun observeDoc(path: String): Flow<Live<FirestoreDoc?>>
 
   fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>>
+
+  /**
+   * How many documents [query] matches, as the server counts them (the web
+   * SDK's `getCountFromServer`): the figure a quota or a delete warning reads,
+   * never the length of a capped list. [FirestoreQuery.limit] is ignored.
+   * Null where this reader cannot count.
+   */
+  suspend fun count(query: FirestoreQuery): Long? = null
 }
 
 /** The order-field values of [doc] for a [FirestoreQuery.startAfter] cursor. */

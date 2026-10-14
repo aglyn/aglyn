@@ -19,7 +19,8 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { aiJobRefundCopy } from '../model/ai-job-failure-copy'
-import { AppLink } from '@aglyn/shared-ui-jsx'
+import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
+import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -30,14 +31,21 @@ import {
   Chip,
   CircularProgress,
   Container,
+  IconButton,
   List,
+  ListItem,
   ListItemButton,
+  ListItemText,
+  Menu,
+  MenuItem,
   Stack,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { aiJobCancelBlockedReason } from '../model/ai-job-cancel-copy'
+import { useAiJobCancel } from './ai-job-cancel.component'
 import { AI_JOB_PHASE_LABELS, aiJobKindNoun, aiJobPhase, type AiJobPhase } from '../model/ai-job-activity'
-import type { AiJobSummary } from '../model/ai-jobs.types'
+import { AI_JOB_KINDS, type AiJobSummary } from '../model/ai-jobs.types'
 import { publishAiJob } from './ai-jobs-store'
 import { useAiJobSite } from './ai-job-site'
 
@@ -85,6 +93,20 @@ export function aiJobNetCredits(job: Pick<AiJobSummary, 'creditsSpent' | 'refund
 export function aiJobKindLabel(kind: AiJobSummary['kind']): string {
   const noun = aiJobKindNoun(kind)
   return noun === 'AI job' ? noun : noun.charAt(0).toUpperCase() + noun.slice(1)
+}
+
+/**
+ * Every kind a row can name, in the kinds registry's order: the labels the
+ * rows' chips read, so the empty state never falls behind a new kind.
+ */
+export function aiJobKindLabels(): string[] {
+  const labels = AI_JOB_KINDS.map(aiJobKindLabel).filter((label) => label !== 'AI job')
+  return [...new Set(labels)]
+}
+
+/** `A, B and C`. */
+function listOf(items: readonly string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
 type ListState =
@@ -153,6 +175,17 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
 
   const retry = useCallback(() => setAttempt((count) => count + 1), [])
 
+  // A row's menu (AGL-3616): open the job, or cancel it after the confirm.
+  const [menu, setMenu] = useState<{ anchor: HTMLElement; job: AiJobSummary } | null>(null)
+  const patchJob = useCallback((next: AiJobSummary) => {
+    setList((current) =>
+      current.status === 'ready'
+        ? { status: 'ready', jobs: current.jobs.map((job) => (job.id === next.id ? next : job)) }
+        : current,
+    )
+  }, [])
+  const canceling = useAiJobCancel({ user, orgId, onJob: patchJob })
+
   const siteName = site.status === 'ready' ? site.name : ''
   const state: ListState =
     site.status === 'error'
@@ -199,13 +232,13 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
                 {'No AI jobs on this site yet'}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {`An AI job is ${PLATFORM_BRAND_NAME} AI building something for this site from a short ` +
-                  'description you write: a page, a page template, a layout, a form or a reusable component. ' +
-                  'Each one gets a page here that shows its progress and what it built.'}
+                {`An AI job is ${PLATFORM_BRAND_NAME} AI making something for this site from a short ` +
+                  `description you write. Each job is one of these kinds: ${listOf(aiJobKindLabels())}. ` +
+                  'Each one gets a page here that shows its progress and what it made.'}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {'To start one, choose Create with AI on this site’s Pages, Templates, Layouts, Forms or ' +
-                  'Components page. A new site can also be built with AI when it is created.'}
+                {'To start one, choose Create with AI on any list that offers it, such as this site’s ' +
+                  'Pages or Forms. A new site can also be built with AI when it is created.'}
               </Typography>
             </Stack>
           </Card>
@@ -220,37 +253,75 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
                   job.brief.length > BRIEF_PREVIEW_CHARS ? `${job.brief.slice(0, BRIEF_PREVIEW_CHARS)}…` : job.brief
                 const created = new Date(job.createdAt)
                 return (
-                  <ListItemButton
+                  <ListItem
                     key={job.id}
-                    component={AppLink}
-                    href={`${basePath ?? ''}/${encodeURIComponent(job.id)}`}
+                    disablePadding
                     divider={index < state.jobs.length - 1}
-                    sx={{ display: 'block', py: 1.5 }}
+                    secondaryAction={
+                      <IconButton
+                        edge="end"
+                        aria-label={`Actions for this ${aiJobKindLabel(job.kind).toLowerCase()} job`}
+                        aria-haspopup="menu"
+                        onClick={(event) => setMenu({ anchor: event.currentTarget, job })}
+                      >
+                        <MdiIcon path={mdiDotsVertical.path} fontSize="small" />
+                      </IconButton>
+                    }
                   >
-                    <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
-                      <Chip size="small" variant="outlined" label={aiJobKindLabel(job.kind)} />
-                      <Chip size="small" color={PHASE_COLOR[phase]} label={AI_JOB_PHASE_LABELS[phase]} />
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Typography variant="caption" color="text.secondary">
-                        {credits > 0 ? `${credits.toLocaleString('en-US')} credits · ` : ''}
-                        {Number.isNaN(created.getTime()) ? null : (
-                          <time dateTime={job.createdAt}>{WHEN.format(created)}</time>
-                        )}
+                    <ListItemButton
+                      component={AppLink}
+                      href={`${basePath ?? ''}/${encodeURIComponent(job.id)}`}
+                      sx={{ display: 'block', py: 1.5, pr: 7 }}
+                    >
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
+                        <Chip size="small" variant="outlined" label={aiJobKindLabel(job.kind)} />
+                        <Chip size="small" color={PHASE_COLOR[phase]} label={AI_JOB_PHASE_LABELS[phase]} />
+                        <Box sx={{ flexGrow: 1 }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {credits > 0 ? `${credits.toLocaleString('en-US')} credits · ` : ''}
+                          {Number.isNaN(created.getTime()) ? null : (
+                            <time dateTime={job.createdAt}>{WHEN.format(created)}</time>
+                          )}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="body2" sx={{ mt: 0.75, wordBreak: 'break-word' }}>
+                        {brief}
                       </Typography>
-                    </Stack>
-                    <Typography variant="body2" sx={{ mt: 0.75, wordBreak: 'break-word' }}>
-                      {brief}
-                    </Typography>
-                    {/* What became of its credits, from the job's recorded give-back (AGL-3596). */}
-                    {refund ? (
-                      <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
-                        {refund}
-                      </Typography>
-                    ) : null}
-                  </ListItemButton>
+                      {/* What became of its credits, from the job's recorded give-back (AGL-3596). */}
+                      {refund ? (
+                        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                          {refund}
+                        </Typography>
+                      ) : null}
+                    </ListItemButton>
+                  </ListItem>
                 )
               })}
             </List>
+            <Menu anchorEl={menu?.anchor ?? null} open={menu !== null} onClose={() => setMenu(null)}>
+              {menu ? (
+                <MenuItem component={AppLink} href={`${basePath ?? ''}/${encodeURIComponent(menu.job.id)}`} onClick={() => setMenu(null)}>
+                  {'Open job'}
+                </MenuItem>
+              ) : null}
+              {menu ? (
+                <MenuItem
+                  disabled={Boolean(aiJobCancelBlockedReason(menu.job))}
+                  onClick={() => {
+                    const job = menu.job
+                    setMenu(null)
+                    canceling.ask(job)
+                  }}
+                >
+                  <ListItemText
+                    primary="Cancel job"
+                    secondary={aiJobCancelBlockedReason(menu.job)}
+                    slotProps={{ secondary: { sx: { whiteSpace: 'normal', maxWidth: 260 } } }}
+                  />
+                </MenuItem>
+              ) : null}
+            </Menu>
+            {canceling.dialog}
           </Card>
         )}
         {state.status === 'ready' && state.jobs.length >= AI_JOBS_PAGE_LIMIT ? (

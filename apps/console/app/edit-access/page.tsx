@@ -78,6 +78,15 @@ const FAILURE_PHASES: readonly Phase[] = [
   'error',
 ]
 
+/** A rejection that only says the request was cancelled. */
+function isAbortError(error: unknown): boolean {
+  try {
+    return (error as { name?: unknown } | null)?.name === 'AbortError'
+  } catch {
+    return false
+  }
+}
+
 function EditAccessBody() {
   const params = useSearchParams()
   const hostId = params?.get('hostId') ?? ''
@@ -89,6 +98,7 @@ function EditAccessBody() {
   // One shot per mount — auth state can re-emit without the work needing
   // to run twice.
   const startedRef = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!hostId || !targetOrigin) {
@@ -116,12 +126,21 @@ function EditAccessBody() {
     }
     if (startedRef.current) return
     startedRef.current = true
+    // Aborted when the page goes away mid-mint (AGL-3734). The SITE ends this
+    // page — it closes the popup or removes the silent iframe the moment it
+    // has an answer, or gives up waiting — and a mint still in flight then
+    // rejects with an `AbortError`. That abort is ours and expected, so it
+    // lands nowhere: no phase, no report. Every other failure still shows
+    // the page's error state.
+    const controller = new AbortController()
+    abortRef.current = controller
     ;(async () => {
       try {
         const response = await authorizedFetch(user, '/api/edit-access/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId }),
+          signal: controller.signal,
         })
         if (response.status === 403) {
           setPhase('denied')
@@ -160,11 +179,26 @@ function EditAccessBody() {
         // No self-close: the site closes the popup on delivery. See the
         // module comment for why success must not be what closes it.
         setPhase('sent')
-      } catch {
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) return
         setPhase('error')
       }
     })()
   }, [hostId, targetOrigin, silent, user])
+
+  // Unmount only, not every re-run: the effect above re-runs when auth
+  // re-emits, and the one-shot guard means a re-run must never cancel the
+  // mint it will not start again. The guard is released with the abort, so
+  // a remount (React's development double-mount) mints afresh instead of
+  // waiting forever on the request it just cancelled.
+  useEffect(
+    () => () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+      startedRef.current = false
+    },
+    [],
+  )
 
   // Silent mode's explicit "no": the embedding bar removes its hidden iframe
   // on this instead of waiting out its timeout. Content-free by design — the

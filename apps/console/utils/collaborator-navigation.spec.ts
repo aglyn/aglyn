@@ -18,6 +18,8 @@ import {
   collaboratorLanding,
   collaboratorRedirect,
   isSitePath,
+  reachableSitesSettled,
+  siteListStaysPut,
 } from './collaborator-navigation'
 
 const ORG = 'acme'
@@ -101,5 +103,30 @@ describe('collaboratorRedirect', () => {
     expect(collaboratorRedirect('/manage/user', ORG, ONE)).toBeNull()
     expect(collaboratorRedirect('/admin/overview', ORG, ONE)).toBeNull()
     expect(collaboratorRedirect(null, ORG, ONE)).toBeNull()
+  })
+})
+
+describe('the sites list for a scoped member', () => {
+  it('stays put for several sites or none, and not for exactly one', () => {
+    expect(siteListStaysPut(ORG, TWO)).toBe(true)
+    expect(siteListStaysPut(ORG, [])).toBe(true)
+    // "View all sites" would bring this member straight back into their site.
+    expect(siteListStaysPut(ORG, ONE)).toBe(false)
+  })
+
+  it('never acts on a cached single row, which is the last site opened', () => {
+    // A member of several sites whose cache holds only the one they last
+    // opened: the list jumped into that site a moment after it painted.
+    expect(reachableSitesSettled(true, 1)).toBe(false)
+    expect(collaboratorRedirect('/acme/hosts', ORG, ONE)).toBe(
+      '/acme/hosts/northwind',
+    )
+  })
+
+  it('acts on the server, and on cached answers that move nobody wrongly', () => {
+    expect(reachableSitesSettled(false, 1)).toBe(true)
+    expect(reachableSitesSettled(false, 0)).toBe(true)
+    expect(reachableSitesSettled(true, 2)).toBe(true)
+    expect(reachableSitesSettled(true, 0)).toBe(true)
   })
 })

@@ -18,6 +18,7 @@
 import type { ComponentMapper } from '../vendor/data-driven-forms'
 import {
   FIELD_MAP_BREAKPOINT_SPAN,
+  FIELD_MAP_WEEKLY_HOURS,
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
   FIELD_MAP_CSS_BORDER,
@@ -71,6 +72,7 @@ export const componentMapper: ComponentMapper = {
   [FieldComponentType.BREAKPOINT_SPAN]: FIELD_MAP_BREAKPOINT_SPAN,
   [FieldComponentType.PRESET_CHOICE]: FIELD_MAP_PRESET_CHOICE,
   [FieldComponentType.THEME_SCALE]: FIELD_MAP_THEME_SCALE,
+  [FieldComponentType.WEEKLY_HOURS]: FIELD_MAP_WEEKLY_HOURS,
 }
 
 export const simpleComponentMapper = {

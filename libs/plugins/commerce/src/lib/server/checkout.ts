@@ -17,6 +17,10 @@
 
 import { type SiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  advertisingRequestFacts,
+  recordAdvertisingOrderConsent,
+} from '@aglyn/aglyn/plugin-manager/plugin-advertising-conversions'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
@@ -1307,6 +1311,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // reason: releasing here would hand the last unit to the next shopper while
     // this one still holds a payable session, which is the oversell itself.
     stockHold = null
+    // The shopper's advertising consent, for the order this session may
+    // become (AGL-3694): the plugin that sends Conversions API events reports
+    // the purchase only where it was granted. A no-op with no wire, with GPC,
+    // or on a site that connected no vendor; it never fails the checkout.
+    await recordAdvertisingOrderConsent({
+      hostId,
+      orderKey: String(session.id ?? ''),
+      wire: body.adConsent,
+      ...advertisingRequestFacts(req.headers as never),
+    })
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error) {

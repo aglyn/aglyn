@@ -25,8 +25,8 @@ describe('theme editor edits', () => {
     ])
     if (typeof edits === 'string') throw new Error(edits)
     const next = applyThemeEditorEdits(base as never, edits)
-    // A palette color writes `main` and keeps the rest of its record.
-    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#1a73e8', dark: '#000000' })
+    // A palette color writes `main` alone; the old main's `dark` goes with it.
+    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#1a73e8' })
     expect(next).toEqual(
       expect.objectContaining({ shape: { borderRadius: 12 }, spacing: 6, darkScheme: 'off' }),
     )

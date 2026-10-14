@@ -103,11 +103,11 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
   return (
     <CardDisplay
       header={'AI credits'}
-      help={pluginDocsHelp('billing', {
-        anchor: '#usage-meters',
+      help={pluginDocsHelp('aiCredits', {
+        anchor: '#see-your-credits',
         excerpt:
-          'AI credits drawn this month against your included band, plan ' +
-          'plus the AI add-on where you have it.',
+          'AI credits drawn this month against your included band: your plan’s ' +
+          'credits plus the AI add-on’s. The band resets on the first of the month.',
       })}
       contentGutterX
       contentGutterY

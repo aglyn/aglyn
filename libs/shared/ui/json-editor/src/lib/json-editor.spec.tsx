@@ -151,6 +151,47 @@ describe('JsonEditor', () => {
     expect(baseElement).toBeTruthy()
   })
 
+  describe('the warning can always be dismissed (AGL-3770)', () => {
+    it('is a banner above the editor, never an overlay on it', () => {
+      render(<JsonEditor open defaultValue={DOC as any} />)
+      const warning = screen.getByTestId('json-editor-warning')
+      const pane = screen.getByTestId('json-editor-pane')
+
+      // On a narrow viewport Monaco's minimap was drawn over the close
+      // button of an overlay that sat inside the editor pane. A banner that
+      // is outside the pane, before it in flow, has nothing to stack against.
+      expect(pane.contains(warning)).toBe(false)
+      expect(
+        warning.compareDocumentPosition(pane) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+      // Warning and pane share the dialog content as their column; nothing
+      // between the warning and that column takes it out of flow.
+      const column = pane.parentElement as HTMLElement
+      expect(column.contains(warning)).toBe(true)
+      for (
+        let el: HTMLElement | null = warning;
+        el && el !== column;
+        el = el.parentElement
+      ) {
+        expect(getComputedStyle(el).position).not.toBe('absolute')
+        expect(getComputedStyle(el).position).not.toBe('fixed')
+      }
+      // Monaco's own z-indexed layers stay inside the pane.
+      expect(getComputedStyle(pane).isolation).toBe('isolate')
+    })
+
+    it('closes from its close button and leaves the editor in place', () => {
+      render(<JsonEditor open defaultValue={DOC as any} />)
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Dismiss this warning' }),
+      )
+      expect(screen.queryByTestId('json-editor-warning')).toBeNull()
+      expect(screen.queryByText('Warning: Advanced Feature Ahead!')).toBeNull()
+      expect(editor().value).toBe(JSON.stringify(DOC, null, 2))
+    })
+  })
+
   describe('the editor is loading before it is needed (AGL-2541)', () => {
     it('mounts the editor UNDER the warning, not instead of it', () => {
       render(<JsonEditor open defaultValue={DOC as any} />)

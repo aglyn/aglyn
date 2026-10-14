@@ -395,6 +395,12 @@ export interface AglynAttributeSchema extends Dictionary<any> {
   actions?: FieldActions
   resolveProps?: ResolvePropsFunction
   description?: string
+  /**
+   * The one kind of media library file this attribute holds (AGL-3716):
+   * `image`, `video`, `pdf` or `audio`. Its "Browse media" picker lists and
+   * uploads only that kind. Read by the editor, never handed to the field.
+   */
+  mediaKind?: 'image' | 'video' | 'pdf' | 'audio'
 }
 
 export interface AglynNodeSchema<P = JSX.AnyProps> {

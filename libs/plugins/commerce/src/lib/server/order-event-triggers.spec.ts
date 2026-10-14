@@ -31,6 +31,10 @@ const mockEmit = jest.fn(async () => ({ alerts: [] }))
 jest.mock('@aglyn/tenant-runtime', () => ({ emitHostEvent: (...args: unknown[]) => mockEmit(...(args as [])) }))
 const mockDeliver = jest.fn(async () => ({ delivered: 0, failed: 0 }))
 jest.mock('./order-webhooks', () => ({ deliverOrderEventToWebhooks: (...args: unknown[]) => mockDeliver(...(args as [])) }))
+const mockScheduleReview = jest.fn(async () => undefined)
+jest.mock('./review-requests', () => ({
+  scheduleReviewRequestFromEvent: (...args: unknown[]) => mockScheduleReview(...(args as [])),
+}))
 
 const order = {
   id: 'o1',
@@ -48,6 +52,7 @@ beforeEach(() => {
   resetPluginDomainEventsForTests()
   mockEmit.mockClear()
   mockDeliver.mockClear()
+  mockScheduleReview.mockClear()
 })
 
 it('declares every event and subscribes one named bridge to each', () => {
@@ -69,8 +74,17 @@ it('declares every event and subscribes one named bridge to each', () => {
   expect(listPluginDomainEventSubscribers('order.paid')).toEqual([
     'commerce:workflow-triggers',
     'commerce:webhooks',
+    'commerce:review-requests',
     'commerce:shippingeasy',
   ])
+  // The review request (AGL-3736) is scheduled by a shipment, a delivery, or
+  // a paid order with nothing to ship — never by a refund or a cancellation.
+  for (const event of ['order.fulfilled', 'order.delivered', 'order.paid']) {
+    expect(listPluginDomainEventSubscribers(event)).toContain('commerce:review-requests')
+  }
+  for (const event of ['order.refunded', 'order.cancelled']) {
+    expect(listPluginDomainEventSubscribers(event)).not.toContain('commerce:review-requests')
+  }
   // ShippingEasy hears only what changes what it should hold (AGL-3633).
   expect(listPluginDomainEventSubscribers('order.cancelled')).toContain('commerce:shippingeasy')
   expect(listPluginDomainEventSubscribers('order.refunded')).toContain('commerce:shippingeasy')
@@ -109,6 +123,21 @@ it('raises the host event its declaration names, with a flat scope', async () =>
   )
   // The merchant's webhooks take the same envelope, under their own name.
   expect(mockDeliver).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1', event: 'order.fulfilled', attempt: 1 }))
+})
+
+it('hands a fulfilled order to the review-request scheduler (AGL-3736)', async () => {
+  registerCommerceEventTriggers()
+  await deliverPluginDomainEvent({
+    id: 'e2',
+    event: 'order.fulfilled',
+    hostId: 'h1',
+    orgId: null,
+    occurredAtMs: 5,
+    payload: { order, fulfillment: { id: 'f1', carrier: null, trackingNumber: null, trackingUrl: null } },
+  })
+  expect(mockScheduleReview).toHaveBeenCalledWith(
+    expect.objectContaining({ event: 'order.fulfilled', hostId: 'h1', occurredAtMs: 5 }),
+  )
 })
 
 it('flattens a refund and a return', () => {

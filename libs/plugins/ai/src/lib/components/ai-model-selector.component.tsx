@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { Button, ListItemText, Menu, MenuItem } from '@mui/material'
 import { useState, type MouseEvent } from 'react'
 import type { AiModelChoiceState } from './use-ai-model-choice'
@@ -27,6 +29,13 @@ export interface AiModelSelectorProps {
 
 const perRequest = (credits: number): string =>
   `≈ ${credits.toLocaleString()} credit${credits === 1 ? '' : 's'} a request`
+
+/** The Model switch's own section of the allotments guide (AGL-3660). */
+const AI_MODEL_HELP = pluginDocsHelp('aiAllotments', {
+  anchor: '#choosing-a-model',
+  excerpt:
+    'Auto picks a model for each request. Choosing one shows what a typical request costs on it; Free workspaces always run on Auto.',
+})
 
 /**
  * THE MODEL SWITCH (AGL-2942): Auto, and the models the reader's plan, the
@@ -65,6 +74,7 @@ export function AiModelSelector({ choice, disabled }: AiModelSelectorProps) {
       >
         {`Model: ${choice.label}`}
       </Button>
+      <HelpTip {...AI_MODEL_HELP} />
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
         {status === 'loading' || status === 'idle' ? (
           <MenuItem disabled>{'Loading models…'}</MenuItem>

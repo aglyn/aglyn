@@ -35,18 +35,22 @@ export * from './media-alt'
  * sort: `kind == 'image'` sits on any query the library builds, where a
  * `contentType` range would take the one range field the query has.
  *
- * Every type media ingress accepts that is not a picture, a film or a PDF is
+ * Every type media ingress accepts that is not a picture, a film, a track
+ * (AGL-3716) or a PDF is
  * a document — ZIP, Word, Excel, PowerPoint, CSV, text, Markdown, JSON — and
  * so is anything older than that allowlist.
  */
-export type MediaKind = 'image' | 'video' | 'pdf' | 'document'
+export type MediaKind = 'image' | 'video' | 'audio' | 'pdf' | 'document'
 
-export const MEDIA_KINDS: readonly MediaKind[] = ['image', 'video', 'pdf', 'document']
+export const MEDIA_KINDS: readonly MediaKind[] = ['image', 'video', 'audio', 'pdf', 'document']
 
 export function mediaKindOf(contentType: unknown): MediaKind {
   const type = String(contentType ?? '').trim().toLowerCase()
   if (type.startsWith('image/')) return 'image'
   if (type.startsWith('video/')) return 'video'
+  // A track (AGL-3716). No audio was accepted before the Music player, so no
+  // stored document needs re-stamping for this family.
+  if (type.startsWith('audio/')) return 'audio'
   if (type === 'application/pdf') return 'pdf'
   return 'document'
 }

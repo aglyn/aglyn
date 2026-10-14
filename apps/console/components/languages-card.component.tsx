@@ -167,7 +167,7 @@ export function LanguagesCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Languages'}
-      help={docsHelp('multilingual')}
+      help={docsHelp('multilingual', { anchor: '#languages-card' })}
       contentGutterX
       contentGutterY
     >

@@ -26,7 +26,7 @@ import {
 } from '../model/ai-build-plan'
 import { aiPageTypeDefinition, parseAiPageJobInputs } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
-import { aiHomeScreenIds, type AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, aiHomeScreenNames, type AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiTool } from '../providers/contract'
 import {
   AI_REASK_OFFENDING_MAX_CHARS,
@@ -38,6 +38,7 @@ import {
   aiSettleCutHeadings,
   aiSettleDisagreeingNodes,
   aiSettleGridItems,
+  aiSettleMechanicalRules,
   detectCutLines,
   detectDisagreeingNodes,
   isAiLinkElement,
@@ -119,7 +120,7 @@ export const AI_JOB_PAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'You build a web page one section at a time, in the order a confirmed plan gives. Each answer is ONE section: call submit_section with a flat node map whose root is the document wrapper (componentId "div") holding exactly one Section (section).',
       'The first section is the top of the page and holds the page’s one h1, its title. Every later section opens with an h2, and headings below it step down one level at a time.',
       'Place what the section’s plan line names. A component the site has is placed as an instance, never drawn again: componentId "reusableInstance", props {"refId": "<component id>", "propValues": {…}} filling the props the inventory lists. A form the site has is a Form (form) whose formId is that form’s id. Another page of the site is linked by its page id, with a Page Link (muiScreenLink) or a Button (muiButton) whose screenId is that id.',
-      'Where the request says the site keeps no reusable components, draw a repeated item in the section instead, written once. A form is only ever a saved one placed by its formId: where the plan line names no form, the section draws no form and no form fields.',
+      'Where the request says the site keeps no reusable components, draw a repeated item in the section instead, written once. A form is only ever a saved one placed by its formId: where the plan line names no form, the section draws no form and no field of one.',
       'Lay the section out with a Container, a Stack or a Grid ("container": true, "spacing": 3) of Grid items sized like "xs:12 md:4", and size nothing with a fixed width. Colors come from the theme’s palette tokens such as primary.main, spacing from the spacing scale, and type from the text variants.',
       'The page renders inside the site’s layout, so a section is never a header, navigation or footer.',
       'A picture is an Image (image) with alt text that says what it should show and no src, for the site owner to fill from the media library.',
@@ -147,6 +148,8 @@ export interface AiPageRecordTemplate {
   name: string
   base: string
   fields: Array<{ id: string; name: string }>
+  /** The field holding each record's photo, where the dataset has one (AGL-3616). */
+  imageField?: string
 }
 
 /** The record template a plan screen is, read against the site's datasets; null for a page that is one page. */
@@ -163,6 +166,7 @@ export function aiPageRecordTemplate(
       name: row.name,
       base: record.base,
       fields: row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name })),
+      ...(row.imageField ? { imageField: row.imageField } : {}),
     }
   }
   const created = aiPlanCreateFor(plan, record.dataset)
@@ -187,7 +191,42 @@ export function aiPageRecordLine(template: AiPageRecordTemplate): string {
         .map((field) => (field.name === field.id ? `{{item.${field.id}}}` : `{{item.${field.id}}} (${field.name})`))
         .join(', ')}.`
     : ''
-  return `This page is the record template of the dataset "${template.name}": it is served once per record, at /${template.base}/<record address>. Write what differs from one record to the next as {{item.<field>}}, never one record's copy, and write out what every record page shares.${fields}`
+  // A record's photo is a picture's address, never its words (AGL-3616).
+  const photo = template.imageField ? ` Each record's photo is {{item.${template.imageField}}}: the src of the page's main Image.` : ''
+  return `This page is the record template of the dataset "${template.name}": it is served once per record, at /${template.base}/<record address>. Write what differs from one record to the next as {{item.<field>}}, never one record's copy, and write out what every record page shares.${fields}${photo}`
+}
+
+/**
+ * A record template's section with the record's own photo (AGL-3616): where
+ * the dataset keeps one and the page shows it nowhere yet, the section's
+ * first Image that names no record's photo shows `{{item.<photo field>}}`,
+ * so each record's page leads with its piece, its dish, its person, as its
+ * card on the list does. Any other section, and a page already showing it,
+ * is returned as it came. Pure.
+ */
+export function aiPageSectionWithRecordImage(
+  section: AiPageSection,
+  page: NodesMap,
+  template: AiPageRecordTemplate | null,
+): AiPageSection {
+  const field = template?.imageField
+  if (!field) return section
+  const token = `{{item.${field}}}`
+  const showsIt = (nodes: NodesMap) =>
+    Object.values(nodes as unknown as Record<string, { componentId?: unknown; props?: Record<string, unknown> }>).some(
+      (node) => node?.componentId === 'image' && node.props?.['src'] === token,
+    )
+  if (showsIt(page) || showsIt(section.nodes)) return section
+  const first = walkTree({ rootId: section.rootId, nodes: section.nodes as unknown as Record<string, AiDoctrineNode> }).find(
+    ({ node }) => node.componentId === 'image',
+  )
+  if (!first) return section
+  const node = (section.nodes as unknown as Record<string, Record<string, unknown>>)[first.id]
+  const props = isRecord(node['props']) ? node['props'] : {}
+  return {
+    ...section,
+    nodes: { ...section.nodes, [first.id]: { ...node, props: { ...props, src: token } } } as unknown as NodesMap,
+  }
 }
 
 /**
@@ -196,7 +235,7 @@ export function aiPageRecordLine(template: AiPageRecordTemplate): string {
  * every record template is set up.
  */
 export function aiPageRecordNote(template: AiPageRecordTemplate): string {
-  return `This page is drafted as the record template of "${template.name}". To serve a page per record at /${template.base}/…, open Page Properties → Record pages and save its dataset, address and fields.`
+  return `This page is drafted as the record template of "${template.name}". To serve a page per record at /${template.base}/…, open Page Properties → Record pages and save its dataset, address and fields: the cards that list its records link those pages.`
 }
 
 export interface AiPageSectionPromptInput {
@@ -469,6 +508,7 @@ export function aiPageCheckContext(
     ...tree,
     ...(tree.screenIds || options.linkablePages?.length ? { screenIds } : {}),
     homeScreenIds: aiHomeScreenIds(inventory),
+    homeLabels: aiHomeScreenNames(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
     ...(options.sections?.length ? { pageSections: options.sections } : {}),
     ...(options.embeds?.length ? { plannedEmbeds: options.embeds } : {}),
@@ -636,7 +676,21 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     }
     const section: AiPageSection = { rootId: sectionId, nodes: sectionNodes as unknown as NodesMap, load: null }
 
-    const page = aiPageWithSection(input.page, section, input.sectionIds)
+    // An attribute a rule has one answer for is applied on the page with the
+    // section added, since the first image and the one h1 are the page's
+    // (AGL-3660). The section keeps what that settled of its own nodes; what
+    // it settled of an earlier pass's is the last pass's to store.
+    const settledPage = aiSettleMechanicalRules(
+      {
+        rootId: CANVAS_ROOT_ELEMENT_ID,
+        nodes: aiPageWithSection(input.page, section, input.sectionIds) as unknown as Record<string, AiDoctrineNode>,
+      },
+      'page',
+    )
+    for (const id of Object.keys(sectionNodes)) {
+      sectionNodes[id] = settledPage.nodes[id] as unknown as Record<string, unknown>
+    }
+    const page = settledPage.nodes as unknown as NodesMap
     const own = new Set(Object.keys(sectionNodes))
     // The page check reads the section as the page stores it, where the palette
     // validator has already dropped what it could not read, such as a

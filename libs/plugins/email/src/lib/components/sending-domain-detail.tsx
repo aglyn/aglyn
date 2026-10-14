@@ -336,7 +336,7 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
     <CardDisplay
       header={'Sending domain'}
       help={pluginDocsHelp('emailCampaigns', {
-        anchor: '#sending-domains',
+        anchor: '#domain-states',
       })}
       contentGutterX
       contentGutterY

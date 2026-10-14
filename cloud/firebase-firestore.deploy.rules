@@ -628,7 +628,7 @@ allow update: if (isSuperStaff() &&
 'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
 'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
 'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-'marketingConsentPolicy', 'upgradeProposal'])) ||
+'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
 (isBillingStaff() &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(
 ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -643,7 +643,7 @@ allow update: if (isSuperStaff() &&
 'suspendedEnforcement', 'suspended',
 'erasureRequestedAt', 'crmInbound', 'acquisition',
 'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-'marketingConsentPolicy', 'upgradeProposal'])) ||
+'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
 
 
 
@@ -719,7 +719,13 @@ allow update: if (isSuperStaff() &&
 
 
 
-'upgradeProposal']));
+'upgradeProposal',
+
+
+
+
+
+'lastActivityAt']));
 
 
 
@@ -917,6 +923,20 @@ match /postPurchaseHostSettings/{hostId} {
 allow read, write: if false;
 }
 match /postPurchaseOrders/{recordId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+match /reviewPlatformsHostSettings/{hostId} {
+allow read, write: if false;
+}
+match /reviewPlatformsInvitations/{recordId} {
 allow read, write: if false;
 }
 
@@ -2517,6 +2537,26 @@ allow read, write: if false;
 
 
 
+
+match /adConversionConnections/{connectionId} {
+allow read, write: if false;
+}
+match /adConversionConsents/{consentId} {
+allow read, write: if false;
+}
+match /adConversionEvents/{eventId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
 match /zapierHooks/{hookId} {
 allow read, write: if false;
 }
@@ -2541,6 +2581,23 @@ allow read, write: if false;
 }
 }
 match /fulfillmentNetworkOrders/{handOffId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
+match /courierConnections/{connectionId} {
+allow read, write: if false;
+}
+match /courierDeliveries/{deliveryId} {
 allow read, write: if false;
 }
 
@@ -3671,11 +3728,53 @@ request.resource.data.diff(resource.data)
 
 
 
+
+
+
+
+
+
+
+
 match /pluginSettings/{pluginId} {
 allow read: if isStaff() || isHostMember(hostId);
-allow write: if isStaff() ||
+allow write: if pluginId != 'live-chat' && (isStaff() ||
 (hostMemberRole(hostId) == 'admin' && isVerified() &&
-!hostWritesFrozen(hostId));
+!hostWritesFrozen(hostId)));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+match /reviews/{reviewId} {
+allow read: if isStaff() || isHostMember(hostId);
+allow update: if isStaff() ||
+(canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+request.resource.data.diff(resource.data).affectedKeys()
+.hasOnly(['status', 'reply', 'moderationReason', 'moderatedAtMs']) &&
+request.resource.data.status in ['pending', 'approved', 'hidden', 'rejected'] &&
+(resource.data.get('verified', false) != true ||
+(request.resource.data.status != 'pending' &&
+(request.resource.data.status == 'approved' ||
+request.resource.data.get('moderationReason', '') in
+['spam', 'abusive', 'off_topic', 'private_information']))));
 }
 
 
@@ -3704,6 +3803,7 @@ allow read: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
 subcollection != 'salesChannels' &&
+subcollection != 'reviewTokens' &&
 (isStaff() || (isHostMember(hostId) &&
 !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
 'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
@@ -3834,7 +3934,8 @@ subcollection != 'salesChannels' &&
 allow create: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
-subcollection != 'salesChannels' && (isStaff() ||
+subcollection != 'salesChannels' &&
+subcollection != 'reviewTokens' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'variables',
 'functions', 'workflows', 'services', 'redirects',
@@ -3853,7 +3954,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory']) &&
+'aiMemory', 'reviews', 'reviewTokens']) &&
 
 
 
@@ -4003,7 +4104,8 @@ subcollection != 'salesChannels' && (isStaff() ||
 allow update: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
-subcollection != 'salesChannels' && (isStaff() ||
+subcollection != 'salesChannels' &&
+subcollection != 'reviewTokens' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components', 'installs',
 'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -4022,7 +4124,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-'aiMemory'])));
+'aiMemory', 'reviews', 'reviewTokens'])));
 
 
 
@@ -4062,7 +4164,8 @@ subcollection != 'salesChannels' && (isStaff() ||
 allow delete: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
-subcollection != 'salesChannels' && (isStaff() ||
+subcollection != 'salesChannels' &&
+subcollection != 'reviewTokens' && (isStaff() ||
 ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
 !(subcollection in ['screens', 'layouts', 'components',
 'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -4079,7 +4182,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens'])));
 }
 
 

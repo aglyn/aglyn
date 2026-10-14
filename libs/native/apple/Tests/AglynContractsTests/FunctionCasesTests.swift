@@ -61,9 +61,31 @@ final class FunctionCasesTests: XCTestCase {
     for name in [
       "formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel",
       "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents",
-      "apportionCents",
+      "apportionCents", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions",
     ] {
       XCTAssertNotNil(functions[name], name)
+    }
+  }
+
+  func testTheRestockQuestionIsWordedAsTheConsoleWordsIt() throws {
+    for item in cases("describeRestockCheck") {
+      let data = try JSONSerialization.data(withJSONObject: item.args[0])
+      let check = try JSONDecoder().decode(OrderRestockCheck.self, from: data)
+      XCTAssertEqual(describeRestockCheck(check, order: try order(item.args[1])), item.result as? String, item.label)
+    }
+  }
+
+  func testPinsAreJudgedAsTheConsoleJudgesThem() {
+    for item in cases("posPinProblem") {
+      XCTAssertEqual(posPinProblem(string(item.args[0])), item.result as? String, item.label)
+    }
+  }
+
+  func testTheDrawerVarianceIsCountedMinusExpected() {
+    for item in cases("posCashVarianceCents") {
+      let counted = (item.args[0] as? NSNumber)?.doubleValue ?? 0
+      let expected = (item.args[1] as? NSNumber)?.doubleValue ?? 0
+      XCTAssertEqual(posCashVarianceCents(counted: counted, expected: expected), int(item.result), item.label)
     }
   }
 
@@ -144,5 +166,35 @@ final class FunctionCasesTests: XCTestCase {
   func testBundledContractValuesDecode() {
     XCTAssertEqual(ContractValues.shared.orderChannelLabels["online"], "Online")
     XCTAssertFalse(ContractValues.shared.orderListQuery.fields.isEmpty)
+  }
+
+  private func options(_ value: Any?) throws -> [ProductOption] {
+    let data = try JSONSerialization.data(withJSONObject: value as? [Any] ?? [])
+    return try JSONDecoder().decode([ProductOption].self, from: data)
+  }
+
+  private func variants(_ value: Any?) throws -> [ProductVariant] {
+    let data = try JSONSerialization.data(withJSONObject: value as? [Any] ?? [])
+    return try JSONDecoder().decode([ProductVariant].self, from: data)
+  }
+
+  func testTheVariantMatrixIsTheConsoles() throws {
+    for item in cases("expandVariantMatrix") {
+      let expected = item.result as! [[String: String]]
+      let given = item.args[0] is NSNull ? nil : try options(item.args[0])
+      XCTAssertEqual(expandVariantMatrix(given), expected, item.label)
+    }
+  }
+
+  func testRenamingAnOptionIsTheConsoles() throws {
+    for item in cases("renameProductOptions") {
+      let product = item.args[0] as! [String: Any]
+      let names = (item.args[1] as! [Any]).map { $0 as? String }
+      let answer = renameProductOptions(
+        options: try options(product["options"]), variants: try variants(product["variants"]), names: names)
+      let expected = item.result as! [String: Any]
+      XCTAssertEqual(answer.options, try options(expected["options"]), item.label)
+      XCTAssertEqual(answer.variants, try variants(expected["variants"]), item.label)
+    }
   }
 }

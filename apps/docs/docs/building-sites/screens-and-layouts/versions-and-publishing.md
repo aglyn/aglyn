@@ -35,6 +35,17 @@ changes the live site. Publishing a *layout* version reaches every page bound to
 layout, so check its **Used by** card first — see [Layouts](layouts.md#used-by). A
 *reusable component* version reaches every page that places it the same way.
 
+### A layout's versions {#layout-versions}
+
+A layout's page lists its versions in the **Versions** card, newest first, with when each
+was created and last updated; the live one carries a **Current** chip. **Open** takes a
+version into the Besigner, where you edit, publish or schedule it. A layout has no
+versions until you first open it in the Besigner.
+
+Publishing a layout version changes every page bound to it at once, so check its
+[Used by](layouts.md#used-by) card before you do. Saving never does — a save is not a
+publish.
+
 ## Scheduled publishing
 
 **Schedule** publishes a version automatically at a chosen future time; the row then

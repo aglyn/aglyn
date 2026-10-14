@@ -424,6 +424,17 @@ asked at once — a name "contains" filter beside a search, or an ID "starts wit
 why. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
+### A component's Details card {#component-details-card}
+
+The **Details** card on a component's page is where you name and describe it: edit the
+**Display name**, the **Description** shown in the components list and the element
+drawer, and the **icon** that marks every instance in the Besigner, then press **Save**.
+The component's **ID** is shown underneath; it is stored in every page that places the
+component, so it never changes.
+
+Saving here changes only the component's name, description and icon — what it looks like
+is changed in the Besigner, and reaches your pages when you publish a version.
+
 ## Duplicate
 
 To start a new component from an existing one, choose **Duplicate…** in its

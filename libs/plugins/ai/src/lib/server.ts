@@ -37,6 +37,11 @@ import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
 import { registerAiLogicJob } from './jobs/ai-job-logic-step'
 import { registerAiEditJob } from './jobs/ai-job-edit-step'
+import { registerAiNavigationJob } from './jobs/ai-job-navigation-step'
+import { registerAiDuplicateJob } from './jobs/ai-job-duplicate-step'
+import { registerAiSettingsJob } from './jobs/ai-job-settings-step'
+import { registerAiMediaJob } from './jobs/ai-job-media-step'
+import { registerAiTrackingJob } from './jobs/ai-job-tracking-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -131,6 +136,21 @@ function registerAiJobKinds(): void {
   // A change to a page or a layout the site has, from a description, saved
   // where no visitor sees it — the Assist edit rung run as a job (AGL-3616).
   registerAiEditJob()
+  // A change to a site's header or footer menu, made by code from a build's
+  // item and saved beside the live layout (AGL-3728).
+  registerAiNavigationJob()
+  // A copy of something a site already has, through core's duplicate — the
+  // console's own Duplicate… — as a build's item (AGL-3740).
+  registerAiDuplicateJob()
+  // A change to a site's settings — its name, search defaults, icons,
+  // language, time zone and contact details — saved live (AGL-3748).
+  registerAiSettingsJob()
+  // Folders, tags, alt text and names of files already in a site's media
+  // library, as its Details drawer saves them, live (AGL-3752).
+  registerAiMediaJob()
+  // The site's analytics and advertising tags, as Setup → Tracking sets
+  // them, saved live (AGL-3751).
+  registerAiTrackingJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()
@@ -219,7 +239,11 @@ export function registerAiConsoleApi(): void {
   // The weekly insights (AGL-2915): Monday's digests made for the people who
   // asked for them, and delivered once the beat has written them. Beside the
   // beat under `/api/admin/`, where the console's scheduled sweeps live.
-  registerPluginApiRoute(AI_INSIGHTS_DIGEST_PATH, { web: runAiInsightsDigest })
+  // A machine's route: Cloud Scheduler calls it on the cron secret with no
+  // site and no member, and the route checks that secret and the AI release
+  // flag itself. Unmarked, it was counted in the dispatcher's per-address
+  // write bucket and refused with a 429 at 14:00Z on 2026-10-09.
+  registerPluginApiRoute(AI_INSIGHTS_DIGEST_PATH, { web: runAiInsightsDigest }, { machine: true })
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })

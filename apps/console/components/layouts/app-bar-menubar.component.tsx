@@ -37,6 +37,11 @@ import { Menubar } from '@base-ui/react/menubar'
 import { ICON_VARIANT_MENU_DOWN } from '@aglyn/shared-data-enums'
 import { mdiMenu } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
+import {
+  MENU_POPUP_SX,
+  MENU_ROW_SX,
+  MenuRowContent,
+} from '@aglyn/shared-ui-jsx/components/menu-row.component'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   Box,
@@ -44,14 +49,11 @@ import {
   Divider,
   IconButton,
   ListItemButton,
-  ListItemIcon,
   type ListItemIconProps,
-  ListItemText,
   type ListItemTextProps,
   ListSubheader,
   Paper,
   Stack,
-  Typography,
   type TypographyProps,
 } from '@mui/material'
 import { Fragment } from 'react'
@@ -60,40 +62,14 @@ import { Fragment } from 'react'
 const ITEM_HEIGHT = 48
 
 /**
- * A dense `MenuItem` rebuilt on `ListItemButton`.
- *
- * MUI v9's `MenuItem` throws without a `MenuListContext` and takes its tab
- * index from `MenuList`'s roving-tabindex context, so it cannot live inside
- * another library's menu — and wrapping the popup in a `MenuList` to satisfy
- * it would put MUI's arrow-key and typeahead handlers in a fight with Base
- * UI's. `ListItemButton` is the same ButtonBase underneath with the same
- * hover / selected / disabled treatment and no menu context of its own; the
- * rest here is MenuItem's dense variant, copied.
+ * The row is a `ListItemButton`, not a `MenuItem`: MUI v9's `MenuItem` throws
+ * without a `MenuListContext` and takes its tab index from `MenuList`'s
+ * roving-tabindex context, so it cannot live inside another library's menu —
+ * and wrapping the popup in a `MenuList` to satisfy it would put MUI's
+ * arrow-key and typeahead handlers in a fight with Base UI's. Its look —
+ * MenuItem's dense variant — is `MENU_ROW_SX` from the shared menu row, which
+ * every table row's ⋮ menu renders too.
  */
-const ROW_SX = {
-  typography: 'body2',
-  minHeight: 32,
-  flexGrow: 0,
-  width: '100%',
-  paddingY: 0.5,
-  paddingX: 2,
-  whiteSpace: 'nowrap',
-  textAlign: 'left',
-  textDecoration: 'none',
-  color: 'inherit',
-  // Base UI drives the highlight — one state for both the pointer and the
-  // keyboard, so arrowing through a menu looks like hovering it.
-  '&[data-highlighted]': { backgroundColor: 'action.hover' },
-  '&[data-disabled]': {
-    opacity: (theme: any) => theme.palette.action.disabledOpacity,
-    cursor: 'default',
-  },
-  '& .MuiListItemIcon-root': { minWidth: 36 },
-  '& .MuiListItemIcon-root svg': { fontSize: '1.25rem' },
-  '& .MuiListItemText-root': { marginTop: 0, marginBottom: 0 },
-  '& .MuiListItemText-inset': { paddingLeft: '36px' },
-  '& + .MuiDivider-root': { marginTop: 1, marginBottom: 1 },
-}
 
 export interface AppBarMenubarRowProps {
   type?: 'item' | 'divider' | 'subheader'
@@ -192,44 +168,21 @@ const renderRow = (row: AppBarMenubarRowProps, i: number, hasAnyIcon: boolean) =
   }
 
   // One left edge per menu (AGL-1216): a row without an icon still gets the
-  // icon gutter when any sibling row has one, and `inset` — whose 56px never
-  // matched a dense ListItemIcon's 36px — stands down while the spacer is
-  // doing the job.
+  // icon gutter when any sibling row has one.
   const body = (
-    <Fragment>
-      {icon?.path ? (
-        <ListItemIcon {...listItemIconProps}>
-          <MdiIcon fontSize="small" {...icon} />
-        </ListItemIcon>
-      ) : hasAnyIcon ? (
-        <ListItemIcon {...listItemIconProps} />
-      ) : null}
-      <ListItemText
-        {...listItemTextProps}
-        inset={hasAnyIcon ? false : listItemTextProps?.inset}
-      >
-        {children}
-      </ListItemText>
-      {!endIcon ? null : (
-        <Typography
-          variant="body2"
-          {...endIconTypographyProps}
-          sx={mergeSxProps(
-            { color: 'text.secondary' },
-            endIconTypographyProps?.sx,
-          )}
-        >
-          {!(endIcon as MdiIconProps)?.path ? (
-            (endIcon as JSX.Node)
-          ) : (
-            <MdiIcon fontSize="small" {...(endIcon as MdiIconProps)} />
-          )}
-        </Typography>
-      )}
-    </Fragment>
+    <MenuRowContent
+      icon={icon}
+      gutter={hasAnyIcon}
+      endIcon={endIcon}
+      ListItemTextProps={listItemTextProps}
+      ListItemIconProps={listItemIconProps}
+      EndIconTypographyProps={endIconTypographyProps}
+    >
+      {children}
+    </MenuRowContent>
   )
 
-  const rowSx = mergeSxProps(ROW_SX, (rest as any)?.sx)
+  const rowSx = mergeSxProps(MENU_ROW_SX, (rest as any)?.sx)
 
   if (href) {
     // Base UI's link item renders an <a href>, which MUI's ButtonBase also
@@ -338,18 +291,7 @@ const renderEntry = (entry: AppBarMenubarEntryProps, i: number) => {
                 elevation={0}
                 sx={mergeSxProps(
                   {
-                    maxHeight: ITEM_HEIGHT * 4.5,
-                    width: '30ch',
-                    overflowY: 'auto',
-                    paddingY: 1,
-                    // Paper transitions `box-shadow` by default. Base UI reads
-                    // a running transition on the popup as a close animation
-                    // and waits for `transitionend` before unmounting — and
-                    // box-shadow never changes here, so that event never came:
-                    // the closed menu stayed on screen holding focus.
-                    transition: 'none',
-                    filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-                    backgroundColor: 'surface.main',
+                    ...POPUP_SX,
                     '&:before': {
                       content: '""',
                       display: 'block',
@@ -384,17 +326,10 @@ const renderEntry = (entry: AppBarMenubarEntryProps, i: number) => {
  * moving between triggers still lands on them.
  */
 const POPUP_SX = {
+  ...MENU_POPUP_SX,
   maxHeight: ITEM_HEIGHT * 4.5,
   width: '30ch',
   overflowY: 'auto',
-  paddingY: 1,
-  // Paper transitions `box-shadow` by default. Base UI reads a running
-  // transition on the popup as a close animation and waits for
-  // `transitionend` before unmounting — and box-shadow never changes here,
-  // so that event never came: the closed menu stayed on screen holding focus.
-  transition: 'none',
-  filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-  backgroundColor: 'surface.main',
 } as const
 
 const renderCompact = (entries: AppBarMenubarEntryProps[]) => {

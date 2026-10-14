@@ -195,8 +195,10 @@ export interface OrderFulfillment {
   labelRef?: string
   /**
    * What that label cost the store, in integer cents of the order's currency
-   * (AGL-3693), when the shipping plugin said. A marketplace that pays the
-   * seller back for shipping is told it.
+   * (AGL-3693), when the shipping plugin said — or, for a shipment entered
+   * by hand, what the merchant typed in the fulfill dialog's Shipping cost
+   * (AGL-3705; 0 is free shipping, absent is not known). A marketplace that
+   * pays the seller back for shipping is told it.
    */
   labelCostCents?: number
   /**

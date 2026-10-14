@@ -94,7 +94,7 @@ export default function HostAdminSectionsLayout({
         // leave and the one that tells them where they are.
         ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
-      help={{ topic: 'plugins', anchor: '#how-plugins-run' }}
+      help={{ topic: 'gettingStarted', anchor: '#site-admin' }}
       header={{
         children: 'Site Admin',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },
@@ -120,10 +120,8 @@ export default function HostAdminSectionsLayout({
         ) : (
           <CardDisplay
             header="Admin"
-            help={docsHelp('team', {
-              excerpt:
-                'Site admin actions — per-site plugin choices and deleting ' +
-                'the site — are limited to site admins.',
+            help={docsHelp('gettingStarted', {
+              anchor: '#who-can-open-site-admin',
             })}
             contentGutterX
             contentGutterY

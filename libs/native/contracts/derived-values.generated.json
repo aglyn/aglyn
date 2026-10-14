@@ -697,6 +697,11 @@
       "rolloutPercent": 0,
       "plans": []
     },
+    "release_weglot": {
+      "enabled": true,
+      "rolloutPercent": 0,
+      "plans": []
+    },
     "release_addon_store": {
       "enabled": true,
       "rolloutPercent": 0,
@@ -713,7 +718,7 @@
       "plans": []
     },
     "release_assist": {
-      "enabled": false,
+      "enabled": true,
       "rolloutPercent": 0,
       "plans": []
     },
@@ -728,12 +733,12 @@
       "plans": []
     },
     "release_ai_generative": {
-      "enabled": false,
+      "enabled": true,
       "rolloutPercent": 0,
       "plans": []
     },
     "release_crm_assist_whole_record": {
-      "enabled": false,
+      "enabled": true,
       "rolloutPercent": 0,
       "plans": []
     }

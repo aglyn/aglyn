@@ -18,6 +18,12 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-mui/plugin'),
   },
   {
+    id: 'lightbox',
+    alwaysOn: true,
+    register: {"site":"registerLightboxPlugin"},
+    load: () => import('@aglyn/plugins-lightbox/site'),
+  },
+  {
     id: 'forms',
     apiPrefixes: ["forms"],
     register: {"site":"registerFormsPlugin"},
@@ -52,5 +58,21 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["campaigns","experiments"],
     register: {"site":"registerMarketingPlugin"},
     load: () => import('@aglyn/plugins-marketing/site'),
+  },
+  {
+    id: 'live-chat',
+    apiPrefixes: ["live-chat"],
+    register: {"site":"registerLiveChatSite"},
+    load: () => import('@aglyn/plugins-live-chat/site'),
+  },
+  {
+    id: 'weglot',
+    register: {"site":"registerWeglotSite"},
+    load: () => import('@aglyn/plugins-weglot/site'),
+  },
+  {
+    id: 'music',
+    register: {"site":"registerMusicPlugin"},
+    load: () => import('@aglyn/plugins-music/site'),
   },
 ]

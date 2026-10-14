@@ -65,7 +65,7 @@ export interface OrderEventFulfillment {
   trackingNumber: string | null
   trackingUrl: string | null
   labelUrl: string | null
-  /** What the shipment's label cost, in integer cents of the order's currency; `null` when unknown (AGL-3693). */
+  /** What the shipment cost to send — its label's cost, or the merchant's hand-entered one (AGL-3705) — in integer cents of the order's currency; `null` when unknown (AGL-3693). */
   labelCostCents: number | null
   at: string
 }

@@ -234,6 +234,23 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
     FIELD_FULL_WIDTH,
     FIELD_SIZE,
     {
+      // A real `<button>`'s own `type` (MUI's ButtonBase passes it through).
+      // Inside a Form, Submit is what sends it — the Form then drops its
+      // built-in button, so the one you placed and styled is the one shown.
+      // Ignored when the button links to a page or URL.
+      name: 'type',
+      label: 'Type',
+      description:
+        'Submit sends the form this button sits in. Button does nothing on ' +
+        'its own, for interactions.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: 'button', label: 'Button' },
+        { value: 'submit', label: 'Submit' },
+        { value: 'reset', label: 'Reset' },
+      ],
+    },
+    {
       name: 'variant',
       description:
         'How much weight the button carries: Contained is a filled primary ' +

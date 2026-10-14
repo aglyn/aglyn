@@ -88,6 +88,7 @@ import {
   VIDEO_UPLOADS_PAUSED_CODE,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
 } from './media-upload-limits'
+import { AUDIO_RIGHTS_FIELD, audioRightsVerdict } from './media-audio-rights'
 import {
   isSvgUploadType,
   sanitizeSvgBuffer,
@@ -724,6 +725,24 @@ async function createMedia(
     })
   }
 
+  // Audio needs the integrator's rights confirmation (AGL-3716): a
+  // `rightsConfirmed: true` field, the REST API's answer to the console's
+  // checkbox. Refused above the idempotency claim like the other refusals
+  // about the file itself.
+  const rights = audioRightsVerdict({
+    contentType,
+    confirmed: body[AUDIO_RIGHTS_FIELD],
+    uid: `api:${ctx.keyId}`,
+  })
+  if (rights.refusal) {
+    return ApiErrors.badRequest({
+      message: rights.refusal.message,
+      code: rights.refusal.code,
+      fields: { [AUDIO_RIGHTS_FIELD]: 'must be true for an audio file' },
+      headers: ctx.headers,
+    })
+  }
+
   // Video ingress is behind a release flag (AGL-2830). Above the idempotency
   // claim with the other refusals about the file itself, so a key sent with a
   // refused video is still unused when the flag opens, and before the body is
@@ -948,6 +967,8 @@ async function createMedia(
       // `sources.api`, beside the console's own uploads, so a merchant can see
       // which files an integration put there.
       uploadedBy: `api:${ctx.keyId}`,
+      // Who confirmed an audio file's rights, and when (AGL-3716).
+      ...rights.fields,
       createdAt: Timestamp.now(),
     })
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import {
@@ -22,7 +23,7 @@ import {
   writeContentCollection,
   writeContentEntryDraft,
 } from '@aglyn/tenant-data-admin/server/content-entry-drafts'
-import { aiProductsProposalOf } from '../model/ai-products'
+import { aiCatalogPrice, aiProductsProposalOf } from '../model/ai-products'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS, aiSiteWords } from '../model/ai-site-job'
@@ -38,7 +39,8 @@ import {
   type AiLayoutPicturePhoto,
   type AiLayoutPictureSlot,
 } from '../layout-language/ai-layout-pictures'
-import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
+import { aiOriginJobId } from './ai-job-draft-ids'
+import { aiLayoutStockPhotoSource, aiStockPhotoWordsOf } from './ai-layout-stock-photos'
 import {
   aiLayoutListingId,
   aiLayoutListingPlacements,
@@ -64,19 +66,24 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    `AI_SITE_POSTS` posts in it, one generation a pass. Each is written as a
  *    draft through the same rules the console's routes hold
  *    (`content-entry-drafts.ts`), bylined with the business's name the person
- *    gave, and given a starter photo as its cover. They go live with the
+ *    gave, and given a cover: a stock photo of its own title where the
+ *    deployment has a library, else a starter (AGL-3676), which the blog's
+ *    cards show. They go live with the
  *    site: the guided start's publish publishes them with its pages
  *    (`aiPublishSitePosts`), as a person's Publish would.
  *  - ADDING YOUR FIRST PRODUCTS: the `products` step's catalog, asked for
  *    `AI_SITE_PRODUCTS` products, each written through the commerce plugin's
- *    `product` draft writer with NO price, since no price is ever invented.
- *    Since the 2026-10-08 Ember & Wick start, whose store showed no product
- *    at all, each is LISTED before it has a price (`comingSoon`): on the
- *    storefront as "Price coming soon", sold by no door until the owner sets
- *    one — the job's row and the products list both say that is the step
- *    left. Each gets a photo in its slot, a stock photo of its own words
- *    where the deployment has a library, else a starter, for the owner to
- *    replace with their own.
+ *    `product` draft writer, at the price the catalog suggests for what it
+ *    is (Zach, 2026-10-12: a bar of soap is not priced like a gift set),
+ *    which code keeps in range (`aiCatalogPrice`); a product with no price
+ *    in range takes the writer's default price (his 2026-10-08 "default a
+ *    price", AGL-3676). Every price is the owner's to change, and the job's
+ *    row says so. Since the
+ *    2026-10-08 Ember & Wick start, whose store showed no product at all,
+ *    each is LISTED at once (`comingSoon`: written `active`). Each gets a
+ *    photo in its slot, a stock photo of its own words where the deployment
+ *    has a library, else a starter, for the owner to replace with their
+ *    own.
  *
  * The pages built after them are told their titles or names, and the
  * sections that show them list the real records (`aiSiteListings`,
@@ -98,6 +105,9 @@ export const AI_SITE_POSTS = 3
 
 /** How many first products a paid store gets: asked for, and the most written. */
 export const AI_SITE_PRODUCTS = { min: 3, max: 6 } as const
+
+/** What a products row says when none of what we made could be written: our failure, refunded. */
+export const AI_SITE_PRODUCTS_NOT_WRITTEN_COPY = 'Your first products could not be added this time.'
 
 /** What each part's row reads. */
 export const AI_SITE_POSTS_LABEL = 'Writing your first posts'
@@ -191,6 +201,72 @@ export interface AiSitePostsRunnerDeps {
   generate?: typeof generateAiBlogPost
   writeCollection?: typeof writeContentCollection
   writeEntry?: typeof writeContentEntryDraft
+  /** Where each post's cover comes from; the stock library, else the starters, otherwise. */
+  cover?: typeof aiSitePostCover
+}
+
+/** A post's cover's shape: the blog's cards' (`COLLECTION_LIST_COVER_RATIO`, the posts listing's). */
+const AI_SITE_POST_COVER_ASPECT = 3 / 2
+
+/**
+ * A post's cover (AGL-3676): a stock photo of the post's own title, copied
+ * into the site's library, where the deployment has a stock library; else the
+ * starter photo a post was always given, turned by the job so blogs differ.
+ * The blog's cards and the post's page show it, for the owner to replace.
+ * Never throws: a post whose search fails takes its starter.
+ */
+export async function aiSitePostCover(input: {
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief' | 'plan'>
+  title: string
+  index: number
+  total: number
+  signal?: AbortSignal
+  stockPhotos?: typeof aiLayoutStockPhotoSource
+}): Promise<string | null> {
+  const { job, index } = input
+  if (job.hostId && input.title.trim()) {
+    try {
+      const source = (input.stockPhotos ?? aiLayoutStockPhotoSource)({
+        hostId: job.hostId,
+        uid: job.createdBy,
+        seed: `${job.$id}:posts:${index}`,
+        business: aiSiteWords(job.inputs).about || job.brief,
+        ...aiStockPhotoWordsOf(job),
+        sectionNames: ['Blog'],
+        jobId: aiOriginJobId(job),
+        ...(input.signal ? { signal: input.signal } : {}),
+      })
+      const [found] = source
+        ? await source([
+            {
+              imageId: `cover${index}`,
+              frameId: null,
+              iconId: null,
+              alt: input.title,
+              aspect: AI_SITE_POST_COVER_ASPECT,
+              sectionIndex: 0,
+              role: 'gallery' as const,
+            },
+          ])
+        : []
+      if (found?.src) return found.src
+    } catch (error) {
+      console.warn('ai site posts: the stock photo failed; the starter covers it', { error: String(error) })
+    }
+  }
+  const starters = aiLayoutStarterPhotos(
+    Array.from({ length: Math.max(input.total, index + 1) }, (_, slot) => ({
+      imageId: `cover${slot}`,
+      frameId: null,
+      iconId: null,
+      alt: '',
+      aspect: 16 / 9,
+      sectionIndex: slot + 1,
+      role: 'gallery' as const,
+    })),
+    job.$id,
+  )
+  return starters[index]?.src ?? null
 }
 
 /**
@@ -203,6 +279,7 @@ export function createAiSitePostsRunner(deps: AiSitePostsRunnerDeps = {}): AiJob
   const generate = deps.generate ?? generateAiBlogPost
   const writeCollection = deps.writeCollection ?? writeContentCollection
   const writeEntry = deps.writeEntry ?? writeContentEntryDraft
+  const coverFor = deps.cover ?? aiSitePostCover
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore, signal } = context
     const model = context.modelFor?.(AI_BLOG_POST_STEP) ?? aiModelForStep(AI_BLOG_POST_STEP)
@@ -237,19 +314,14 @@ export function createAiSitePostsRunner(deps: AiSitePostsRunnerDeps = {}): AiJob
     if (generation.status === 'refused') return { ...spent, refused: true }
     if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
     const post = generation.value
-    // A starter photo as its cover, turned by the job so blogs differ.
-    const covers = aiLayoutStarterPhotos(
-      Array.from({ length: input.total }, (_, slot) => ({
-        imageId: `cover${slot}`,
-        frameId: null,
-        iconId: null,
-        alt: '',
-        aspect: 16 / 9,
-        sectionIndex: slot + 1,
-        role: 'gallery' as const,
-      })),
-      job.$id,
-    )
+    // A stock photo of its title as its cover, else a starter (AGL-3676).
+    const cover = await coverFor({
+      job,
+      title: post.title,
+      index,
+      total: input.total,
+      ...(signal ? { signal } : {}),
+    }).catch(() => null)
     const byline = input.byline || site.name
     const written = await writeEntry(firestore, {
       hostId: job.hostId,
@@ -261,7 +333,7 @@ export function createAiSitePostsRunner(deps: AiSitePostsRunnerDeps = {}): AiJob
         excerpt: post.excerpt,
         body: post.body,
         seoDescription: post.seoDescription,
-        coverImage: covers[index]?.src,
+        ...(cover ? { coverImage: cover, coverImageAlt: post.title } : {}),
         ...(byline ? { authorName: byline } : {}),
       },
       now: context.now,
@@ -299,8 +371,10 @@ export interface AiSiteProductsRunnerDeps {
  * throws: a product with no photo is still written.
  */
 export async function aiSiteProductPhotos(input: {
-  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief' | 'plan'>
   names: readonly string[]
+  /** What each product's photo should show, as its catalog proposed it, by position (AGL-3676). */
+  shows?: readonly string[]
   signal?: AbortSignal
   stockPhotos?: typeof aiLayoutStockPhotoSource
 }): Promise<Array<string | null>> {
@@ -314,6 +388,9 @@ export async function aiSiteProductPhotos(input: {
     aspect: 4 / 5,
     sectionIndex: 0,
     role: 'gallery' as const,
+    // Searched for by its own name, then what its photo shows, with the shop's
+    // category, and held to that category (AGL-3676).
+    product: { subjects: [name, input.shows?.[index] ?? ''].filter((words) => words.trim()) },
   }))
   const seed = `${input.job.$id}:products`
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
@@ -323,7 +400,12 @@ export async function aiSiteProductPhotos(input: {
       uid: input.job.createdBy,
       seed,
       business: aiSiteWords(input.job.inputs).about || input.job.brief,
+      ...aiStockPhotoWordsOf(input.job),
       sectionNames: ['Products'],
+      jobId: aiOriginJobId(input.job),
+      // Each product may try its name, its photo's subject, its category, a
+      // gift's wrapper and the craft's broad searches (AGL-3660).
+      searches: slots.length * 6,
       ...(input.signal ? { signal: input.signal } : {}),
     })
     if (source) found = await source(slots)
@@ -331,7 +413,50 @@ export async function aiSiteProductPhotos(input: {
     console.warn('ai site products: the stock photos failed; starter photos fill them', { error: String(error) })
   }
   const starters = aiLayoutStarterPhotos(slots, seed)
-  return slots.map((_slot, index) => found[index]?.src ?? starters[index]?.src ?? null)
+  const hostId = input.job.hostId
+  // Every product has a photo (AGL-3676): a starter where no stock photo
+  // named its category, never an empty tile.
+  return slots.map(
+    (_slot, index) =>
+      aiSiteProductPhotoSrc(found[index]?.src, hostId) ?? aiSiteProductPhotoSrc(starters[index]?.src, hostId),
+  )
+}
+
+/**
+ * A photo as a product stores it: the form the console's picker writes when
+ * an owner picks one from the library (`console-media-picker-provider`), the
+ * asset's CDN path `/api/media/cdn/{scope}/{mediaId}`, or a starter's own
+ * site path. A page's picture slot holds the library's `media:` reference
+ * (`mediaNodeSrc`), which is what the stock source hands back, and the
+ * product's rules take only an https address or a path on the site: the
+ * candle store's guided start of 2026-10-09 (job FYNasg1h0S) wrote no
+ * product at all because every photo was a `media:` reference. The path
+ * names the asset, not its bytes, so a replace in the library still reaches
+ * the product. Anything else is no photo, never a value the product refuses.
+ */
+export function aiSiteProductPhotoSrc(src: string | null | undefined, hostId: string): string | null {
+  if (!src) return null
+  const path = resolveMediaSrc(src, { hostId })
+  if (!path || path.length > 2_000 || /[\s"'<>]/.test(path)) return null
+  return path.startsWith('/') || path.startsWith('https://') ? path : null
+}
+
+/**
+ * A proposed product's real choices (AGL-3676): each option with two or more
+ * distinct values. An option of one value is no choice for a shopper to make
+ * — the beta.237 Willow Wick gift set's "Scent" select offered nothing — so
+ * it is left out, and its one value stays in the product's own words.
+ */
+export function aiSiteProductChoices(
+  options: ReadonlyArray<{ name: string; values: readonly string[] }> | null | undefined,
+): Array<{ name: string; values: string[] }> {
+  return (options ?? []).flatMap((option) => {
+    const seen = new Set<string>()
+    const values = option.values
+      .map((value) => value.trim())
+      .filter((value) => value && !seen.has(value.toLowerCase()) && !!seen.add(value.toLowerCase()))
+    return option.name.trim() && values.length >= 2 ? [{ name: option.name.trim(), values }] : []
+  })
 }
 
 /** The sentence the products unit's brief ends with, which the catalog's rules read as how many. */
@@ -342,9 +467,13 @@ export function aiSiteProductsBriefLine(input: AiSiteProductsInput = AI_SITE_PRO
 /**
  * The products unit's runner: the `products` step's catalog for the store's
  * brief, then each proposed product, up to the most a site starts with,
- * written as an unpriced draft by the plugin that keeps products. A product
- * past the plan's allowance stops the writing there, and the row says how
- * many were added; none at all is the allowance's review.
+ * written by the plugin that keeps products at its suggested price (else the
+ * store's default), listed. A
+ * product past the plan's allowance stops the writing there, and the row
+ * says how many were added; none at all is the allowance's review. A photo
+ * the product's rules refuse is dropped and the product written without it;
+ * a product they refuse outright is skipped, and none written for that
+ * reason is our failure, refunded, never the person's review (AGL-3676).
  */
 export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJobStepRunner {
   const writerFor = deps.writerFor ?? pluginResourceDraftWriter
@@ -366,12 +495,47 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
     const photos = await (deps.photos ?? aiSiteProductPhotos)({
       job,
       names: proposed.map((product) => product.name),
+      shows: proposed.map((product) => product.photo ?? ''),
       ...(context.signal ? { signal: context.signal } : {}),
     }).catch(() => proposed.map(() => null))
     const outputs: AiJobOutput[] = []
     let stopped: string | null = null
+    /** The product's rules refusing what we made: ours, never the workspace's (AGL-3676). */
+    let rejected: string | null = null
     for (const [index, product] of proposed.entries()) {
-      const photo = photos[index]
+      const content: Record<string, unknown> = {
+        name: product.name,
+        type: product.type,
+        // Listed at once, so no "[gift card terms]" gap reaches a shopper:
+        // a sentence that leaves a fact for the owner is left out.
+        description: aiSiteProductDescriptionWithoutGaps(product.description),
+        tags: product.tags,
+        // A choice is two values or more (AGL-3676): a "Scent" of one value
+        // drew a select with nothing to pick on the live Willow Wick page.
+        options: aiSiteProductChoices(product.options),
+        seoTitle: product.seoTitle,
+        seoDescription: product.seoDescription,
+        comingSoon: true,
+        // The catalog's suggested price for what the product is (Zach,
+        // 2026-10-12), held to range once more here: none, or one out of
+        // range, is left unstated and the writer gives the store's default.
+        ...aiSiteProductPriceContent(product.price),
+      }
+      // A photo we picked that the product's rules refuse is dropped, never
+      // the product: its slot stays empty for the owner's own.
+      const photo = photos[index] ?? null
+      const withPhoto = photo ? { ...content, mediaUrls: [photo] } : content
+      const photoRefused =
+        photo !== null &&
+        keeper.writer.check(withPhoto, { hostId: job.hostId }).ok === false &&
+        keeper.writer.check(content, { hostId: job.hostId }).ok
+      if (photoRefused) {
+        console.warn('ai site products: the product refused its photo; written without it', {
+          orgId: job.orgId,
+          jobId: job.$id,
+          photo,
+        })
+      }
       const written = await keeper.writer.write({
         orgId: job.orgId,
         hostId: job.hostId,
@@ -380,24 +544,25 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         now: context.now,
         id: aiSiteProductId(job.$id, index),
         name: product.name,
-        // No price: the owner sets it, and until then the store lists it as
-        // "Price coming soon" and sells it nowhere (AGL-3676). Its photo
-        // slot holds a stock or starter photo for the owner to replace.
-        content: {
-          name: product.name,
-          type: product.type,
-          // Listed at once, so no "[gift card terms]" gap reaches a shopper:
-          // a sentence that leaves a fact for the owner is left out.
-          description: aiSiteProductDescriptionWithoutGaps(product.description),
-          tags: product.tags,
-          options: product.options,
-          seoTitle: product.seoTitle,
-          seoDescription: product.seoDescription,
-          comingSoon: true,
-          ...(photo ? { mediaUrls: [photo] } : {}),
-        },
+        // Its suggested price, else the store's default, for the owner to
+        // change (AGL-3676). Listed at once. Its photo slot holds a stock or
+        // starter photo for the owner to replace.
+        content: photoRefused ? content : withPhoto,
       })
       if (written.ok === false) {
+        // A 400 is the product's rules refusing content we made: that one
+        // product is skipped and the rest are still written. Anything else
+        // (the allowance, the role, the site) stops the writing there.
+        if (written.status === 400) {
+          console.error('ai site products: the product writer refused a product we made', {
+            orgId: job.orgId,
+            jobId: job.$id,
+            index,
+            error: written.error,
+          })
+          rejected = written.error
+          continue
+        }
         stopped = written.error
         break
       }
@@ -411,12 +576,19 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
       })
     }
     if (!outputs.length) {
+      // Nothing written because the product's rules refused what we made:
+      // the failure is ours, so the item's credits are refunded
+      // (`aiUnitFailure` → `ours: true`). Only the workspace's allowance,
+      // role or site is the person's to review.
+      if (!stopped && rejected) return { ...outcome, outputs: [], failure: AI_SITE_PRODUCTS_NOT_WRITTEN_COPY }
       return { ...outcome, outputs: [], review: limitReview(stopped ?? 'No product could be added.') }
     }
     // The allowance that stopped the rest is said where the last one added is.
+    const last = outputs[outputs.length - 1]
     if (stopped) {
-      const last = outputs[outputs.length - 1]
       last.note = `${last.note} ${outputs.length} of ${proposed.length} added: ${stopped}.`
+    } else if (outputs.length < proposed.length) {
+      last.note = `${last.note} ${outputs.length} of ${proposed.length} added.`
     }
     return { ...outcome, outputs }
   }
@@ -526,17 +698,45 @@ export function aiSiteListings(input: {
   screens: readonly AiLayoutListingScreen[]
   /** The ledger owes a store's first products: a layout built before them carries the cart. */
   sells?: boolean
+  /**
+   * The site is a store (`siteKind: 'store'`, AGL-3676): its Shop page and
+   * its home list the catalog whatever its first products came to — the
+   * live Hearth & Wick start's products step failed, and its Shop page was
+   * six cards naming kinds of candle. An empty catalog says so in the grid.
+   */
+  store?: boolean
+  /**
+   * The site is a music site (`siteKind: 'music'`, AGL-3716): its Music page,
+   * or its home, places an empty Music player for the artist's own tracks.
+   * Nothing is sourced: the owner uploads the recordings.
+   */
+  music?: boolean
 }): AiLayoutListing[] {
   const listings: AiLayoutListing[] = []
   const products = input.outputs.filter((output) => output.resource === 'product' && !output.proposal)
-  if (products.length || input.sells) {
+  if (products.length || input.sells || input.store) {
+    const contact = aiSiteContactPath(input.screens)
     listings.push({
       id: aiLayoutListingId('products'),
       kind: 'products',
       name: 'the shop',
       records: products.map((product) => product.label),
-      placements: products.length ? aiLayoutListingPlacements('products', input.screens) : [],
+      ...(contact ? { emptyAction: { label: 'Get in touch', href: contact } } : {}),
+      // A store whose first products were skipped or failed lists its
+      // (empty) catalog, but its header carries no cart until it sells.
+      ...(products.length || input.sells ? {} : { cart: false }),
+      placements: aiLayoutListingPlacements('products', input.screens),
     })
+    // A store that sells shows its customers' reviews and takes newsletter
+    // sign-ups where its pages name them (AGL-3676): both commerce elements,
+    // so only where the store's commerce runs, never on a store that cannot
+    // sell yet.
+    if (products.length || input.sells) {
+      for (const kind of ['reviews', 'signup'] as const) {
+        const placements = aiLayoutListingPlacements(kind, input.screens)
+        if (placements.length) listings.push({ id: aiLayoutListingId(kind), kind, name: kind === 'reviews' ? 'the store' : 'the newsletter', records: [], placements })
+      }
+    }
   }
   const posts = input.outputs.filter((output) => output.resource === 'entry')
   const slug = str(posts[0]?.proposal?.['collectionSlug'])
@@ -551,7 +751,23 @@ export function aiSiteListings(input: {
       placements: aiLayoutListingPlacements('posts', input.screens),
     })
   }
+  if (input.music) {
+    const placements = aiLayoutListingPlacements('tracks', input.screens)
+    if (placements.length) {
+      listings.push({ id: aiLayoutListingId('tracks'), kind: 'tracks', name: 'the music', records: [], placements })
+    }
+  }
   return listings
+}
+
+/** The page a visitor gets in touch on, by its path: one whose address or name says contact, else the one placing a form. */
+function aiSiteContactPath(screens: readonly AiLayoutListingScreen[]): string | null {
+  const path = (slug: string) => `/${slug.trim().replace(/^\/+|\/+$/g, '')}`
+  const isPath = (slug: string) => /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(path(slug))
+  const named = screens.find((screen) => isPath(screen.slug) && /\b(contact|get in touch|enquir|inquir)/i.test(`${screen.slug} ${screen.title}`))
+  if (named) return path(named.slug)
+  const form = screens.find((screen) => isPath(screen.slug) && screen.sections.some((section) => (section.uses ?? []).some((use) => /form/i.test(use))))
+  return form ? path(form.slug) : null
 }
 
 /**
@@ -577,11 +793,23 @@ export function aiSiteProductDescriptionWithoutGaps(description: string): string
 
 /** What each product a start wrote says on the job's page (AGL-3676). */
 export const AI_SITE_PRODUCT_NOTE =
-  'On your store as “Price coming soon”. Set its price — and your own photo — in Products to start selling it.'
+  'On your store at a suggested price. Change its price — and add your own photo — in Products.'
 
 /** The note a store's products row carries once they are written (AGL-3676): the step left before it sells. */
 export const AI_SITE_PRODUCTS_PRICE_NOTE =
-  'Your products are on your store marked “Price coming soon”. Set their prices in Products to start selling.'
+  'Your products are on your store at suggested prices. Review and change them in Products.'
+
+/**
+ * The price a start writes a product with (Zach, 2026-10-12): the catalog's
+ * suggestion as `aiCatalogPrice` keeps it, stated as the writer reads one
+ * (`priceUsd`); nothing when there is none in range, so the writer gives the
+ * store's default price. Never `priceUsd: null`, which would leave the
+ * product unpriced on purpose.
+ */
+export function aiSiteProductPriceContent(price: unknown): { priceUsd?: number } {
+  const kept = aiCatalogPrice(price)
+  return kept === null ? {} : { priceUsd: kept }
+}
 
 /** What a page of a blog or a store is told about the posts or products built before it. */
 export function aiSiteContentBriefLines(outputs: readonly AiJobOutput[]): string[] {
@@ -599,6 +827,8 @@ export function aiSiteContentBriefLines(outputs: readonly AiJobOutput[]): string
     lines.push(
       `This store's products are: ${products.map((product) => `“${product.label}”`).join(', ')}.`,
       'Where a page features products, feature these by their names; never name another product, and never state a price.',
+      // The collection tiles a storefront home shows (AGL-3676): its own range, grouped.
+      'Where a page shows the shop by collection, group these products into two to four collections by what they are (a kind, a use or an occasion), one item each, named for the group and never for one product.',
     )
   }
   return lines

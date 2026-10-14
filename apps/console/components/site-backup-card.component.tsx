@@ -186,9 +186,7 @@ export function SiteBackupCard(props: { hostId: string }) {
     <CardDisplay
       header={'Backup & restore'}
       help={docsHelp('siteBackupAndPackages', {
-        excerpt:
-          'Download the whole site — pages, emails, forms, theme, content, ' +
-          'data — as one package, and import a package here or into another site.',
+        anchor: '#backup-and-restore-card',
       })}
       HeaderProps={{
         action: (

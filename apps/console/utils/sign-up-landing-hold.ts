@@ -102,3 +102,32 @@ function subscribe(listener: () => void): () => void {
 export function useSignUpLandingHeld(): boolean {
   return useSyncExternalStore(subscribe, isSignUpLandingHeld, () => false)
 }
+
+/**
+ * A top-level navigation AWAY from the console has started (AGL-3690).
+ *
+ * `window.location.assign` returns at once, but the document keeps running
+ * until the destination answers. Work started in that gap is killed half
+ * done, and for the sign-up workspace the half that survives is the claim,
+ * which clears the held name. The create is never sent, so the account is
+ * left with no name and no workspace.
+ *
+ * The leaving side marks it here before it navigates, and work that must not
+ * be cut in half checks it first. Paired with the landing hold, which the
+ * leaving side checks, each sees the other's mark synchronously, so the two
+ * can never overlap. A reload clears it, being a new document.
+ */
+let leaving = false
+
+export function markLeavingConsole(): void {
+  leaving = true
+}
+
+export function isLeavingConsole(): boolean {
+  return leaving
+}
+
+/** Test seam: a spec runs many "documents" in one module instance. */
+export function resetLeavingConsoleForTests(): void {
+  leaving = false
+}

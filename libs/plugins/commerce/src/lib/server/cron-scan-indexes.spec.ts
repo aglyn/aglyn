@@ -112,9 +112,27 @@ describe('commerce cron collection-group scans (AGL-1793)', () => {
     expect(declared).toContain('COLLECTION_GROUP:ASCENDING')
   })
 
+  // `review-requests.ts` (AGL-3736):
+  //   collectionGroup('orders').where('reviewRequestDueAtMs','<=',now)
+  //     .orderBy('reviewRequestDueAtMs','asc').limit(100)
+  it('declares the COLLECTION_GROUP index on orders.reviewRequestDueAtMs', () => {
+    expect(scopes(override('orders', 'reviewRequestDueAtMs'))).toContain(
+      'COLLECTION_GROUP:ASCENDING',
+    )
+  })
+
+  // The review links expire on their own: a TTL policy on `expiresAt`.
+  it('declares the TTL on reviewTokens.expiresAt (AGL-3736)', () => {
+    const entry = override('reviewTokens', 'expiresAt') as
+      | (FieldOverride & { ttl?: boolean })
+      | undefined
+    expect(entry?.ttl).toBe(true)
+  })
+
   it.each([
     ['checkouts', 'status'],
     ['restockAlerts', 'notifiedAtMs'],
+    ['orders', 'reviewRequestDueAtMs'],
     // `createdAtMs` is read per-host all over the console's order lists, so
     // this one would be the most expensive automatic index to lose.
     ['orders', 'createdAtMs'],

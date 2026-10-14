@@ -21,6 +21,8 @@ import {
   stockPhotoProvider,
   stockPhotoSourceKey,
   type StockPhotoProvider,
+  registerStockPhotoPicker,
+  stockPhotoPicker,
 } from './stock-photo-provider'
 import { pluginMediaIngest, registerPluginMediaIngest } from './plugin-media-ingest'
 
@@ -100,5 +102,21 @@ describe('the media ingest (AGL-3660)', () => {
         pluginId: 'console',
       }),
     ).toThrow(/findStockPhoto/)
+  })
+})
+
+describe('the stock photo picker (AGL-3755)', () => {
+  it('answers null until a plugin registers one, then the one registered last', () => {
+    expect(stockPhotoPicker()).toBeNull()
+    const first = { pick: async (): Promise<null> => null }
+    const second = { pick: async (): Promise<null> => null }
+    registerStockPhotoPicker(first, { pluginId: 'ai' })
+    expect(stockPhotoPicker()).toBe(first)
+    registerStockPhotoPicker(second, { pluginId: 'ai' })
+    expect(stockPhotoPicker()).toBe(second)
+  })
+
+  it('refuses a picker with no pick', () => {
+    expect(() => registerStockPhotoPicker({} as never, { pluginId: 'ai' })).toThrow(/pick/)
   })
 })

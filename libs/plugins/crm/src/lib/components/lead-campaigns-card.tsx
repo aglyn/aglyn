@@ -174,7 +174,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
   return (
     <CardDisplay
       header={'Campaigns'}
-      help={pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
+      help={pluginDocsHelp('crmLeads', { anchor: '#lead-campaigns' })}
       contentGutterX
       contentGutterY
       HeaderProps={{
