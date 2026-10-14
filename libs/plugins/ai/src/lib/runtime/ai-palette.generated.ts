@@ -2819,6 +2819,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         offset: {
           type: 'string',
         },
+        fillLastRow: {
+          type: 'boolean',
+        },
         spacing: {
           type: 'string',
           maxLength: 200,
@@ -2864,6 +2867,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       container: 'switch',
       size: 'breakpoint-span',
       offset: 'breakpoint-span',
+      fillLastRow: 'switch',
       spacing: 'text-field',
       rowSpacing: 'text-field',
       columnSpacing: 'text-field',

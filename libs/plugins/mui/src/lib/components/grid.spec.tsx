@@ -17,7 +17,15 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { render, screen } from '@testing-library/react'
-import Grid, { ID, parseOffset, parseSpan, presets, schema } from './grid'
+import { createTheme } from '@mui/material/styles'
+import Grid, {
+  ID,
+  loneLastCellStyles,
+  parseOffset,
+  parseSpan,
+  presets,
+  schema,
+} from './grid'
 
 describe('parseSpan (AGL-1201)', () => {
   it('reads a bare span, and the auto/grow keywords', () => {
@@ -330,5 +338,92 @@ describe('a page stored before the breakpoint row resolves identically', () => {
     expect(cell).toBeTruthy()
     expect(cell.className).toContain('MuiGrid-grid-xs-12')
     expect(cell.className).toContain('MuiGrid-grid-md-4')
+  })
+})
+
+describe('a cell alone on the last row fills it (AGL-3715)', () => {
+  const { breakpoints } = createTheme()
+  /** Every rule emotion has inserted so far, in order. */
+  const emittedCss = () =>
+    Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules).map((rule) => rule.cssText))
+      .concat(
+        Array.from(document.querySelectorAll('style')).map(
+          (style) => style.textContent ?? '',
+        ),
+      )
+      .join('\n')
+  const between = (from: string, to: string) =>
+    breakpoints.between(from as any, to as any)
+
+  it('spans the row at each breakpoint range where it is alone, bounded', () => {
+    // One a row on a phone, two from sm, three from md: an odd last cell
+    // fills its row from sm until md, and a 3n+1 last cell from md up.
+    expect(loneLastCellStyles({ xs: 12, sm: 6, md: 4 }, 12, breakpoints)).toEqual({
+      [between('sm', 'md')]: {
+        '&:last-child:nth-child(2n + 1)': { width: '100%' },
+      },
+      [breakpoints.up('md')]: {
+        '&:last-child:nth-child(3n + 1)': { width: '100%' },
+      },
+    })
+  })
+
+  it('counts against the row\'s own Columns', () => {
+    expect(loneLastCellStyles(2, 6, breakpoints)).toEqual({
+      [breakpoints.up('xs')]: {
+        '&:last-child:nth-child(3n + 1)': { width: '100%' },
+      },
+    })
+  })
+
+  it('adds nothing where a cell is already a whole row, auto, or grow', () => {
+    expect(loneLastCellStyles(12, 12, breakpoints)).toEqual({})
+    expect(loneLastCellStyles('auto', 12, breakpoints)).toEqual({})
+    expect(loneLastCellStyles({ xs: 12, md: 'grow' }, 12, breakpoints)).toEqual({})
+    expect(loneLastCellStyles(undefined, 12, breakpoints)).toEqual({})
+  })
+
+  it('ends a range where an auto span takes over', () => {
+    expect(
+      loneLastCellStyles({ xs: 6, lg: 'auto' }, 12, breakpoints),
+    ).toEqual({
+      [between('xs', 'lg')]: {
+        '&:last-child:nth-child(2n + 1)': { width: '100%' },
+      },
+    })
+  })
+
+  it('emits the rule for the row\'s columns in the rendered page', () => {
+    render(
+      <Grid container columns={6}>
+        <Grid size="2" fillLastRow>
+          {'One'}
+        </Grid>
+        <Grid size="2" fillLastRow>
+          {'Two'}
+        </Grid>
+      </Grid>,
+    )
+    expect(emittedCss()).toMatch(/:last-child:nth-child\(3n \+ 1\)\s*\{\s*width:\s*100%;?\s*\}/)
+  })
+
+  it('leaves a cell without the setting alone', () => {
+    const rules = () => emittedCss().match(/nth-child/g)?.length ?? 0
+    const before = rules()
+    render(<Grid size="4">{'Plain'}</Grid>)
+    expect(rules()).toBe(before)
+  })
+
+  it('is a cell setting, hidden on a container', () => {
+    const attribute = schema.attributes.find(
+      (a: any) => a.name === 'fillLastRow',
+    ) as any
+    expect(attribute.component).toBe(Aglyn.FieldComponentType.SWITCH)
+    expect(attribute.condition).toEqual({
+      when: 'container',
+      is: true,
+      notMatch: true,
+    })
   })
 })
