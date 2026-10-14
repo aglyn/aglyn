@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.253 — 2026-10-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.252...v1.0.0-beta.253)
+
+### Added
+
+- **ai:** a paid site plan asks medium effort, layout-language pages and frames low ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
+
+### Fixed
+
+- **tenant:** a site's 404 names itself in the tab in the site's language ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791), [AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
+- **ai:** a non-English site's search listing sets no English around its answers ([AGL-3792](https://linear.app/aglyn/issue/AGL-3792))
+- **ai:** the AI lib's other word matches read letters in any script ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791))
+- **ai:** a word in any script stays whole, so a Spanish heading keeps its last "a" ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791))
+- **ai:** a slow batch keeps its answers, arm recordings get short names, live runs print ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **marketing:** the conversions card spec loads its module once, outside any test's budget
+
+</details>
+
 ## v1.0.0-beta.252 — 2026-10-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.251...v1.0.0-beta.252)
