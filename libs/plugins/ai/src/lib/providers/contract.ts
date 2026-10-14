@@ -662,8 +662,30 @@ export interface AiProvider {
 export interface AiBatchOptions {
   /** Between two looks at a batch still processing; 10 s when absent. */
   pollMs?: number
-  /** The most a batch is waited for before every request in it fails; an hour when absent. */
+  /**
+   * The most a batch is waited for; an hour when absent. Past it the batch
+   * is canceled, which keeps every answer it already has, and each request
+   * it did not answer comes back as an `AiBatchUnfinishedError` (AGL-3781).
+   */
   timeoutMs?: number
+  /** How long a canceled batch is given to end, so its answers can be read; 10 minutes when absent. */
+  cancelGraceMs?: number
+}
+
+/**
+ * A request a batch did not answer (AGL-3781): canceled when its wait ran
+ * out, expired, errored, or missing from the results. Not the request's own
+ * failure — the caller answers it with a request of its own rather than
+ * losing it, and a failure that request meets is the real one.
+ */
+export class AiBatchUnfinishedError extends Error {
+  override readonly name = 'AiBatchUnfinishedError'
+  constructor(
+    readonly batchId: string,
+    readonly reason: string,
+  ) {
+    super(`batch ${batchId} did not answer this request (${reason})`)
+  }
 }
 
 /** A count off the wire: finite, non-negative, whole; anything else is 0. */

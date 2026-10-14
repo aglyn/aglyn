@@ -42,7 +42,7 @@ import {
   aiUnderLiveRun,
   aiWarnIfReplayAskedInDeployment,
 } from './ai-dev-env'
-import { aiCompleteInBatch } from './ai-live-batch'
+import { aiAnsweredOutsideBatch, aiCompleteInBatch } from './ai-live-batch'
 
 export {
   AI_UPSTREAM_FAILURE_COPY,
@@ -417,7 +417,9 @@ async function runInDevelopment(
     const result = batch
       ? await aiCompleteInBatch(provider, request)
       : await dev.aiDevWarmPrefixFirst(prefix, ttlMs, () => provider.complete(request))
-    dev.aiDevCountLive(result.usage, request.model, batch ? AI_BATCH_PRICE_FACTOR : 1)
+    // A request its batch left unanswered was asked on its own, at full price (AGL-3781).
+    const discounted = batch && !aiAnsweredOutsideBatch(result)
+    dev.aiDevCountLive(result.usage, request.model, discounted ? AI_BATCH_PRICE_FACTOR : 1)
     return result
   }
   return mode === 'off' ? live() : dev.aiDevReplayComplete(provider, request, mode, live)
