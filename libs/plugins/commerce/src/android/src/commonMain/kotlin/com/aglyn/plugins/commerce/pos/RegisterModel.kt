@@ -57,6 +57,8 @@ class RegisterModel(
   private val reconnectMs: Long = RECONNECT_MS,
   /** The shift and staff PIN routes. */
   val opsApi: PosOpsApi = OfflinePosOps,
+  /** The return route. */
+  returnsApi: PosReturnsApi = OfflinePosReturns,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -65,6 +67,9 @@ class RegisterModel(
 
   /** The register's shift and its drawer. */
   val shift = PosShiftModel(opsApi, scope, { register?.id }, { cashier.assertion })
+
+  /** The return being rung at the register. */
+  val returns = PosReturnModel(returnsApi, scope, { register?.id }, { cashier.assertion })
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set

@@ -146,3 +146,134 @@ final class ProductWritesTests: XCTestCase {
     XCTAssertNotEqual(api.keys[1], api.keys[2], "a refusal ends the attempt")
   }
 }
+
+/// The options and variant matrix, replaying the Kotlin kit's VariantMatrixTest.
+final class VariantMatrixTests: XCTestCase {
+  private func counter() -> () -> String {
+    var n = 0
+    return {
+      n += 1
+      return "n\(n)"
+    }
+  }
+
+  private let storedTee = FirestoreDocument(
+    id: "p",
+    data: [
+      "name": "Tee", "slug": "tee", "status": "active", "type": "physical",
+      "options": [["name": "Size", "values": ["S", "M"]]],
+      "variants": [
+        ["id": "vs", "options": ["Size": "S"], "priceUsd": 10.0, "inventory": 4, "sku": "TEE-S"],
+        ["id": "vm", "options": ["Size": "M"], "priceUsd": 12.0, "inventory": 0],
+      ],
+    ])
+
+  func testValuesAreSplitTrimmedAndDeduplicated() {
+    XCTAssertEqual(parseOptionValues(" Small, ,Large,\nSmall "), ["Small", "Large"])
+    XCTAssertEqual(parseOptionValues(" , "), [])
+  }
+
+  func testAnOptionWithValuesMakesOneVariantEachStartingFromTheFirstOnesPriceAndStock() {
+    let start = ProductDraft(
+      productID: "p", create: true, name: "Tee", variants: [VariantDraft(id: "default", label: "Default", price: "9.50", stock: "7")])
+    let mint = counter()
+    let made = start.withOptionAdded().withOptionName(0, "Size", mintID: mint).withOptionValues(0, "S, M, L", mintID: mint)
+    XCTAssertEqual(made.variants.map(\.label), ["S", "M", "L"])
+    XCTAssertEqual(made.variants.map(\.id), ["n1", "n2", "n3"])
+    XCTAssertTrue(made.variants.allSatisfy { $0.fresh && $0.price == "9.50" && $0.stock == "7" })
+    XCTAssertEqual(made.variants[1].selections, ["Size": "M"])
+  }
+
+  func testAnOptionWithNoNameYetJoinsTheMatrixWhenItIsNamed() {
+    let start = ProductDraft(
+      productID: "p", create: true, name: "Tee", variants: [VariantDraft(id: "default", label: "Default", price: "5")])
+    let mint = counter()
+    let valuesFirst = start.withOptionAdded().withOptionValues(0, "S, M", mintID: mint)
+    XCTAssertEqual(valuesFirst.variants.count, 1, "an unnamed option is not in the matrix")
+    XCTAssertEqual(valuesFirst.withOptionName(0, "Size", mintID: mint).variants.map(\.label), ["S", "M"])
+  }
+
+  func testChangingValuesKeepsTheVariantsThatSurvive() {
+    var draft = productDraft(storedTee)
+    draft.variants[0].price = "11"
+    draft.variants[0].sku = "KEEP"
+    let mint = counter()
+    let more = draft.withOptionValues(0, "S, M, L", mintID: mint)
+    XCTAssertEqual(more.variants.map(\.id), ["vs", "vm", "n1"])
+    XCTAssertEqual(more.variants[0].sku, "KEEP")
+    XCTAssertEqual(more.variants[0].price, "11")
+    XCTAssertFalse(more.variants[0].fresh)
+    XCTAssertTrue(more.variants[2].fresh)
+    XCTAssertEqual(more.withOptionValues(0, "M", mintID: mint).variants.map(\.id), ["vm"])
+  }
+
+  func testRenamingAnOptionMovesTheSelectionsAndKeepsEveryVariant() {
+    let renamed = productDraft(storedTee).withOptionName(0, "Fit", mintID: counter())
+    XCTAssertEqual(renamed.variants.map(\.id), ["vs", "vm"])
+    XCTAssertEqual(renamed.variants[0].selections, ["Fit": "S"])
+    XCTAssertEqual(renamed.variants[0].sku, "TEE-S")
+    XCTAssertTrue(renamed.variants.allSatisfy { !$0.fresh })
+  }
+
+  func testTwoOptionsMakeTheCartesianProductInTheOptionsOrder() {
+    let mint = counter()
+    let two = ProductDraft(
+      productID: "p", create: true, name: "Tee", variants: [VariantDraft(id: "default", label: "Default", price: "1")]
+    )
+    .withOptionAdded().withOptionName(0, "Size", mintID: mint).withOptionValues(0, "S, M", mintID: mint)
+    .withOptionAdded().withOptionName(1, "Color", mintID: mint).withOptionValues(1, "Red, Blue, Green", mintID: mint)
+    XCTAssertEqual(two.variants.count, 6)
+    XCTAssertEqual(two.variants.first?.label, "S / Red", "labels read in the options' order, not the dictionary's")
+    XCTAssertEqual(two.variants.last?.label, "M / Green")
+    let back = two.withOptionRemoved(1, mintID: mint)
+    XCTAssertEqual(back.variants.map(\.label), ["S", "M"])
+    XCTAssertTrue(back.variants.allSatisfy { $0.fresh && $0.price == "1" }, "variants of a different shape are new, from the first one's price")
+  }
+
+  func testASaveWritesTheOptionsTheSelectionsAndTheStockOfOnlyTheNewVariants() {
+    let draft = productDraft(storedTee).withOptionValues(0, "S, M, L", mintID: counter())
+    let body = productSaveJSON(draft, stored: storedTee.data)
+    guard case .array(let options)? = body["options"], case .array(let variants)? = body["variants"] else {
+      return XCTFail("no options or variants")
+    }
+    XCTAssertEqual(options[0]["name"], "Size")
+    XCTAssertEqual(options[0]["values"], .array(["S", "M", "L"]))
+    XCTAssertEqual(variants[0]["options"], .object(["Size": "S"]))
+    XCTAssertEqual(variants[0]["inventory"], .number(4), "an existing variant's stock is left as stored")
+    XCTAssertEqual(variants[2]["id"], "n1")
+    XCTAssertEqual(variants[2]["inventory"], .number(4), "a new variant starts from the first variant's stock")
+    XCTAssertEqual(variants[2]["priceUsd"], .number(10))
+  }
+
+  func testANewProductWithoutOptionsWritesNone() {
+    let draft = ProductDraft(
+      productID: "p", create: true, name: "Mug", variants: [VariantDraft(id: "default", label: "Default", price: "4")])
+    XCTAssertNil(productSaveJSON(draft, stored: nil)["options"])
+  }
+
+  func testTheOptionLimitsAreTheConsoles() {
+    func option(_ name: String, _ count: Int) -> OptionDraft {
+      OptionDraft(name: name, valuesText: (1...count).map { "v\($0)" }.joined(separator: ", "))
+    }
+    XCTAssertNil(checkOptions([option("A", 25), option("B", 4)]))
+    XCTAssertEqual(checkOptions([OptionDraft(name: "", valuesText: "x")]), "Option names are required")
+    XCTAssertEqual(checkOptions([OptionDraft(name: "Size", valuesText: " , ")]), "Option \"Size\" needs at least one value")
+    XCTAssertEqual(checkOptions([option("A", 26)]), "Option \"A\" has too many values")
+    XCTAssertEqual(checkOptions([option("A", 2), option("A ", 2)]), "Each option needs its own name")
+    XCTAssertEqual(checkOptions([option("A", 1), option("B", 1), option("C", 1), option("D", 1)]), "At most 3 options per product")
+    XCTAssertEqual(checkOptions([option("A", 25), option("B", 5)]), "At most 100 variants per product")
+  }
+
+  func testADraftChecksPricesAndCodesAcrossVariants() {
+    func variant(_ id: String, _ price: String, compareAt: String = "", sku: String = "") -> VariantDraft {
+      VariantDraft(id: id, label: id, price: price, compareAt: compareAt, sku: sku)
+    }
+    func draft(_ variants: VariantDraft...) -> ProductDraft {
+      ProductDraft(productID: "p", create: true, name: "x", variants: variants)
+    }
+    XCTAssertEqual(checkProductDraft(draft(variant("a", "1", sku: "S"), variant("b", "1", sku: "S"))), "Variant SKUs must be unique")
+    XCTAssertEqual(checkProductDraft(draft(variant("a", "5", compareAt: "5"))), "Compare-at price must exceed the price")
+    XCTAssertEqual(checkProductDraft(draft(variant("a", "10000.01"))), "Prices are capped at $10000")
+    XCTAssertNil(checkProductDraft(draft(variant("a", "5", compareAt: "6"), variant("b", "5"))))
+  }
+}

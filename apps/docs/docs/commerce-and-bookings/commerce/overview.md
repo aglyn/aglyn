@@ -660,22 +660,10 @@ out for delivery, and the buyer is emailed at each step. See
 
 ## Dropshipping
 
-Assign a **supplier** to a product and paid orders route automatically —
-by email and/or HMAC-signed webhook — with a token link the supplier uses
-to post tracking back, which fulfills the order. Pro plan and above.
-
-The supplier needs no Aglyn account. To set it up:
-
-1. In the store's settings, find the **Dropship suppliers** card and select
-   **Add supplier**.
-2. Enter the supplier's **Name**, and how it hears about orders: a
-   **Notification email**, which gets the order details and a tracking link for
-   each sale, a **Webhook URL** with its **Webhook secret**, or both.
-3. Open each product the supplier fulfills, and choose it under **Supplier** in
-   the product editor. **None (self-fulfilled)** keeps the product with you.
-
-From then on, each paid order for that product is sent to the supplier. When
-the supplier posts tracking through its link, the order is fulfilled.
+Add a **supplier** on the **Dropship suppliers** card, assign it to the
+products it ships, and each paid order is sent to it by email or webhook with a
+link to record the tracking, which marks its items shipped. Pro plan and above.
+See [Dropship suppliers](./dropship-suppliers.md).
 
 ## Store settings {#store-settings}
 
@@ -700,46 +688,20 @@ live under Site Protection.
 
 ## Discounts and coupons {#discounts-and-coupons}
 
-Your store has two kinds of money-off code, both in the **Promotions** section
-of the products hub. They are your codes for your buyers — not the coupons
-Aglyn applies to your own subscription.
+Money off lives on the **Promotions** tab of your site's **Products** page.
+[Discounts and coupons](./discounts-and-coupons.md) is the full setup guide.
 
 ### Discounts {#discounts}
 
-The **Discounts** card makes codes buyers type at checkout, or automatic
-promotions that apply on their own, for a percent off, an amount off or free
-shipping.
-
-1. Select **Add discount**.
-2. Enter a **Code**, such as `SAVE10`, or leave it blank for an automatic
-   promotion and give it a **Promotion name** instead.
-3. Choose the **Type** — **Percent off**, **Fixed amount off** or **Free
-   shipping** — and its value.
-4. Optionally set a **Min subtotal**, a **Max uses**, and the dates it
-   **Starts** and **Ends**.
-5. Select **Save**.
-
-Discounts apply at your storefront checkout and at the register. Each row shows
-how many times it has been used; **Edit** changes it and **Delete** removes it.
-**Import** and **Export** in the card header move discounts in and out with a
-file.
+Discounts are codes shoppers type at checkout, or automatic promotions with
+nothing to type, for a percent off, an amount off or free shipping, with an
+optional minimum, use limit and dates. See
+[Add a discount](./discounts-and-coupons.md#add-a-discount).
 
 ### Coupons {#coupons}
 
-The **Coupons** card makes simple percent-off codes buyers enter at checkout,
-with an optional limit on uses and an expiry date. For anything more, use a
-[discount](#discounts).
-
-1. Select **Add coupon**.
-2. Enter the **Code**: letters and numbers, saved in capitals, such as
-   `LAUNCH20`.
-3. Enter the **Percent off**, and optionally **Max redemptions** (blank is
-   unlimited) and the day it expires. The code still works on the day it
-   expires.
-4. Select **Create**. The coupon is live at once.
-
-Each row shows the code, the percent off, its uses and its expiry.
-**Disable** stops a coupon without deleting it, and **Enable** brings it back.
+Coupons are the older, simpler percent-off codes, with an optional use limit
+and expiry date. See [Coupons](./discounts-and-coupons.md#coupons).
 
 ## Commerce at a glance {#commerce-glance}
 

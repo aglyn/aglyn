@@ -207,6 +207,11 @@ export const PLUGIN_DOCS = {
     title: 'Build a workflow',
     excerpt: 'Create a multi-step workflow that runs when a site event fires.',
   },
+  carrierAccounts: {
+    path: '/commerce-and-bookings/commerce/carrier-accounts-and-labels',
+    title: 'Carrier accounts and labels',
+    excerpt: 'The carrier accounts your shipping labels and checkout rates come from, connecting your own, and how label costs are paid. Rolling out.',
+  },
   catalog: {
     path: '/commerce-and-bookings/commerce/catalog',
     title: 'Product catalog',
@@ -226,6 +231,11 @@ export const PLUGIN_DOCS = {
     path: '/content-and-data/crm/companies',
     title: 'Companies',
     excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.',
+  },
+  connectOtherAccounting: {
+    path: '/commerce-and-bookings/commerce/connect-other-accounting-software',
+    title: 'Connect other accounting software',
+    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to accounting software other than QuickBooks Online or Xero, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave. Rolling out.',
   },
   connectQuickbooksOnline: {
     path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
@@ -321,6 +331,16 @@ export const PLUGIN_DOCS = {
     path: '/marketing-and-automation/email-campaigns/designed-emails',
     title: 'Designed emails',
     excerpt: 'Build campaign emails in the besigner with email-safe blocks and merge tokens — no separate editor.',
+  },
+  discountsAndCoupons: {
+    path: '/commerce-and-bookings/commerce/discounts-and-coupons',
+    title: 'Discounts and coupons',
+    excerpt: 'Create discount codes and automatic promotions with a minimum spend, a use limit and start and end dates, add percent-off coupons, and show the code field on your cart and product pages.',
+  },
+  dropshipSuppliers: {
+    path: '/commerce-and-bookings/commerce/dropship-suppliers',
+    title: 'Dropship suppliers',
+    excerpt: 'Send each paid order to the supplier that ships it, by email or a signed webhook, and let the supplier record the tracking number without an Aglyn account.',
   },
   emailCampaigns: {
     path: '/marketing-and-automation/email-campaigns/overview',
@@ -562,11 +582,13 @@ export const PLUGIN_DOCS_ANCHORS = {
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#functions-card', '#parameters-a-visitor-can-answer', '#a-calculator-you-lay-out', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#draft-services', '#price-labels', '#phone-and-address', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#export-bookings', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#waiting', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
-  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
+  carrierAccounts: ['#carrier-accounts', '#shipping-labels', '#related'],
+  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
-  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-books', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
+  connectOtherAccounting: ['#before-you-start', '#connect', '#choose-your-books', '#choose-your-accounts', '#what-is-posted', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect', '#related'],
+  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleTour: ['#the-app-bar', '#choose-a-workspace', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#alerts-on-this-device'],
   contactActivities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
@@ -585,6 +607,8 @@ export const PLUGIN_DOCS_ANCHORS = {
   deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#import-from-csv', '#creating-a-deal', '#type-and-lead-source', '#contact-roles', '#line-items', '#moving-winning-and-losing', '#a-won-deal-makes-its-contact-a-customer', '#a-deals-page', '#deal-properties', '#deals-on-a-record', '#files', '#related'],
   deliveryApps: ['#connect-a-store', '#the-menu', '#match-items', '#taking-orders'],
   designedEmails: ['#create-a-template', '#find-a-template', '#duplicate-a-template', '#template-page', '#template-report', '#template-preview', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version', '#start-from-a-brief-instead'],
+  discountsAndCoupons: ['#add-a-discount', '#discount-types', '#product-discounts', '#automatic-promotions', '#discount-codes', '#use-limits', '#where-discounts-apply', '#coupons', '#import-and-export', '#show-the-code-field', '#what-shoppers-see', '#troubleshooting', '#related'],
+  dropshipSuppliers: ['#add-a-supplier', '#assign-products', '#when-an-order-is-paid', '#supplier-email', '#record-the-shipment', '#webhook-orders', '#signed-webhooks', '#webhook-retries', '#troubleshooting', '#related'],
   emailCampaigns: ['#send-a-campaign', '#campaigns-belong-to-the-organization', '#organization-emails-page', '#campaigns-group-emails', '#campaign-page', '#filter-the-lists', '#what-belongs-to-a-campaign', '#who-the-email-comes-from', '#sending-domains', '#account-email-always-sends', '#marketing-needs-a-domain', '#two-ways-to-get-a-domain', '#a-domain-we-set-up-is-a-request', '#domain-states', '#org-sending-domain', '#senders', '#add-a-sender', '#send-a-test', '#preview-the-email', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#held-for-review', '#duplicate-an-email', '#email-lists', '#manual-lists', '#list-members', '#add-to-a-list', '#import-a-list', '#export-a-list', '#remove-from-a-list', '#lists-built-from-a-rule', '#experiments', '#experiments-across-sites', '#opens--clicks', '#last-campaign-card', '#messages-list', '#email-page', '#email-preview', '#email-recipients', '#the-campaign-report', '#per-contact-engagement', '#which-links-were-clicked', '#revenue-from-a-campaign', '#how-a-visit-is-credited', '#utm-labels', '#who-it-reached', '#conversions', '#compliance', '#list-unsubscribe', '#topics', '#preference-page', '#consent-groups', '#consent-group-create', '#consent-group-join', '#consent-group-leave', '#consent-group-rename', '#consent-group-progress', '#frequency-opt-down', '#double-opt-in', '#consent-group-confirmation', '#marketing-mail', '#frequency-cap', '#suppressions', '#org-suppressions', '#add-a-suppression', '#import-export-suppressions', '#platform-suppressions', '#related'],
   emailPlatforms: ['#connect', '#who-is-sent', '#unsubscribes-from-the-platform', '#settings', '#sync-log', '#disconnect', '#one-off-imports'],
   events: ['#manage-events', '#import-and-export-events', '#columns', '#how-a-row-finds-an-existing-event', '#conflicts-the-dry-run-and-undo', '#files-from-other-calendars', '#show-events-on-a-screen', '#ask-aglyn-ai', '#search-engines', '#related'],
@@ -618,7 +642,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   salesChannels: ['#set-up-sales-channels', '#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#what-a-reviewer-checks', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#import-export-do-not-contact', '#sequences', '#build-a-sequence', '#sequence-sending-settings', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#person-activity', '#person-details', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
-  shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from', '#carrier-accounts', '#shipping-labels'],
+  shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from'],
   shippingEasy: ['#before-you-start', '#connect', '#what-is-sent', '#ship', '#manage', '#troubleshooting', '#related'],
   shipStation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#staff-overview-organizations', '#staff-overview-signups', '#staff-overview-sites', '#staff-overview-users', '#staff-overview-mrr', '#staff-overview-newest-orgs', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#staff-org-automations', '#emails-sent', '#staff-media-library', '#users-admin', '#users-accounts', '#user-detail', '#user-identity', '#user-organizations', '#user-audit-trail', '#user-data-access', '#user-activity', '#legal-acceptances', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#organization-page-cards', '#org-staff-actions', '#org-edit', '#org-sites', '#org-members', '#org-effective-entitlements', '#org-metered-usage', '#enterprise-custom-billing', '#org-recent-admin-actions', '#org-activity', '#success-manager', '#site-page-cards', '#site-usage', '#site-settings-snapshot', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#margin-utilization', '#margin-scan', '#margin-fleet-utilization', '#margin-fleet-margin', '#margin-by-organization', '#refunds', '#impersonation', '#system-emails', '#edit-a-system-email', '#platform-send-rate', '#platform-suppressions', '#platform-settings', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#audit-admin-actions', '#coupons', '#create-a-coupon', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#record-a-dnc-request', '#suppressed-numbers', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
@@ -810,6 +834,10 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#1-open-the-workflows-page': '1. Open the workflows page',
     '#4-save-and-test': '4. Save and test',
   },
+  carrierAccounts: {
+    '#carrier-accounts': 'Carrier accounts',
+    '#shipping-labels': 'Shipping labels',
+  },
   catalog: {
     '#categories-and-tags': 'Categories and tags',
     '#review-moderation': 'Review moderation',
@@ -818,9 +846,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   commerce: {
     '#commerce-analytics': 'Commerce analytics',
     '#commerce-glance': 'Commerce at a glance',
-    '#coupons': 'Coupons',
-    '#discounts': 'Discounts',
-    '#dropshipping': 'Dropshipping',
     '#gift-cards': 'Gift cards & store credit',
     '#inventory-locations': 'Inventory locations',
     '#orders-screen': 'The Orders page',
@@ -843,7 +868,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#create-a-company': 'Create a company',
     '#the-companies-list': 'The companies list',
   },
-  connectQuickbooksOnline: {
+  connectOtherAccounting: {
     '#choose-your-books': 'Choose your books',
   },
   connectXero: {
@@ -911,7 +936,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   crmSettings: {
     '#assignment-rules': 'Assignment rules',
-    '#companies': 'Companies',
     '#default-owner': 'Default owner',
     '#email-capture': 'Email capture',
     '#recipes': 'Recipes',
@@ -953,6 +977,13 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#template-page': 'A template\'s page',
     '#template-preview': 'Preview',
     '#template-report': 'Sent from this template',
+  },
+  discountsAndCoupons: {
+    '#add-a-discount': 'Add a discount',
+    '#coupons': 'Coupons',
+  },
+  dropshipSuppliers: {
+    '#add-a-supplier': 'Add a supplier',
   },
   emailCampaigns: {
     '#a-domain-we-set-up-is-a-request': 'A domain we set up is asked for, not included',
@@ -1173,8 +1204,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#sequences': 'Sequences',
   },
   shipping: {
-    '#carrier-accounts': 'Carrier accounts',
-    '#shipping-labels': 'Shipping labels',
     '#where-parcels-ship-from': 'Where parcels ship from',
     '#zones-and-rates': 'Zones and rates',
   },
@@ -1258,7 +1287,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#user-organizations': 'Organizations',
     '#users-accounts': 'Accounts',
     '#users-admin': 'Users admin',
-    '#whats-there': 'What\'s there',
   },
   taxServices: {
     '#connect': 'Connect',
