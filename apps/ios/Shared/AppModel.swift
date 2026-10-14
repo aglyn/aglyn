@@ -130,7 +130,19 @@ final class AppModel {
           try await self?.auth?.unlinkProvider(provider)
           await self?.refreshClaims(force: true)
         },
-        message: { passwordChangeMessage($0) }))
+        linkGoogle: { [weak self] authenticate in
+          let parts = await MainActor.run { (self?.config, self?.auth, self?.auth?.user?.email) }
+          guard let config = parts.0, let client = config.google, let auth = parts.1 else {
+            throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
+          }
+          try await GoogleLink.link(
+            iosClientID: client.iosClientID, apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost,
+            loginHint: parts.2, transport: URLSession.shared,
+            firebaseIDToken: { try await auth.idToken(forceRefresh: true) }, authenticate: authenticate)
+          await self?.refreshClaims(force: true)
+        },
+        message: { passwordChangeMessage($0) }),
+      googleConfigured: config?.google != nil)
   }
 
   func signOut() async {

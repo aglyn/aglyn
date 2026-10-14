@@ -35,6 +35,10 @@ data class AccountOperations(
   },
   /** Keeps the account's display name in step with the profile. */
   val updateDisplayName: suspend (name: String) -> Unit = {},
+  /** Connects Google through the platform's sign-in sheet and links it to the account. */
+  val linkGoogle: suspend () -> Unit = {
+    throw IllegalStateException("Connecting Google is not set up in this build.")
+  },
   /** Disconnects a sign-in provider (`google.com`) from the account. */
   val unlinkProvider: suspend (providerId: String) -> Unit = {
     throw IllegalStateException("Disconnecting a sign-in method is not available here.")
@@ -63,6 +67,8 @@ data class ScreenSession(
   /** Leaves the current screen (an action that ends it, like a delete). */
   val back: () -> Unit = {},
   val account: AccountOperations = AccountOperations(),
+  /** Whether this build can connect Google (its OAuth client is configured and a sign-in sheet runner is bound). */
+  val googleConfigured: Boolean = false,
 ) {
   fun context(plugin: NativePluginContext?, params: NativeParams): JsonElement {
     val role = orgRole.orEmpty()
@@ -87,6 +93,8 @@ data class ScreenSession(
         put("name", displayName)
         put("providers", kotlinx.serialization.json.JsonArray(claims.signInMethods.map { JsonPrimitive(it) }))
         put("emailVerified", claims.emailVerified)
+        // Google can be connected where this build has its client, the account is not on a company login (a tenant), and Google is not connected already.
+        put("canLinkGoogle", googleConfigured && (claims.values["firebase"] as? JsonObject)?.get("tenant") == null && "google.com" !in claims.signInMethods)
       })
       put("staff", buildJsonObject {
         put("is", claims.isStaff)
@@ -265,6 +273,7 @@ class ScreenModel(
           }
           // A blank name is not written over the one the account has.
           "updateDisplayName" -> field("name").trim().takeIf { it.isNotEmpty() }?.let { target.updateDisplayName(it) }
+          "linkGoogle" -> target.linkGoogle()
           "unlinkProvider" -> {
             val provider = field("providerId")
             if (provider.isEmpty()) return ActionOutcome.Failed("Choose a sign-in method.")

@@ -16,6 +16,9 @@ public struct AccountOperations: Sendable {
   public var updateDisplayName: @Sendable (_ name: String) async throws -> Void
   /// Disconnects a sign-in provider (`google.com`) from the account.
   public var unlinkProvider: @Sendable (_ providerID: String) async throws -> Void
+  /// Connects Google: opens the platform's auth sheet through `authenticate` (the URL to open and the
+  /// scheme it returns to), and links the credential it earns to the account.
+  public var linkGoogle: @Sendable (_ authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws -> Void
   /// The words a refusal from either shows.
   public var message: @Sendable (_ error: Error) -> String
 
@@ -27,11 +30,15 @@ public struct AccountOperations: Sendable {
     unlinkProvider: @escaping @Sendable (String) async throws -> Void = { _ in
       throw ConsoleAPIError(status: 0, message: "Disconnecting a sign-in method is not available here.")
     },
+    linkGoogle: @escaping @Sendable (@escaping @Sendable (URL, String) async throws -> URL) async throws -> Void = { _ in
+      throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
+    },
     message: @escaping @Sendable (Error) -> String = { $0.localizedDescription }
   ) {
     self.changePassword = changePassword
     self.updateDisplayName = updateDisplayName
     self.unlinkProvider = unlinkProvider
+    self.linkGoogle = linkGoogle
     self.message = message
   }
 }
@@ -52,13 +59,15 @@ public struct ScreenSession: Sendable {
   /// Re-reads the token's claims (after a reauth, or when a screen asks).
   public var refreshClaims: @Sendable () async -> Void
   public var account: AccountOperations
+  /// Whether this build can connect Google (its OAuth client is configured).
+  public var googleConfigured: Bool
 
   public init(
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
     siteName: String? = nil, claims: TokenClaims = TokenClaims(), origin: String = "",
     reauthenticate: @escaping @Sendable (String) async throws -> Void = { _ in },
     refreshClaims: @escaping @Sendable () async -> Void = {},
-    account: AccountOperations = AccountOperations()
+    account: AccountOperations = AccountOperations(), googleConfigured: Bool = false
   ) {
     self.email = email
     self.displayName = displayName
@@ -70,6 +79,7 @@ public struct ScreenSession: Sendable {
     self.reauthenticate = reauthenticate
     self.refreshClaims = refreshClaims
     self.account = account
+    self.googleConfigured = googleConfigured
   }
 
   /// The base context every template reads.
@@ -97,6 +107,10 @@ public struct ScreenSession: Sendable {
         "email": email.map(JSONValue.string) ?? .null,
         "name": displayName.map(JSONValue.string) ?? .null,
         "providers": .array(claims.signInMethods.map(JSONValue.string)),
+        // Google can be connected where this build has its client, the account is not on a company
+        // login (a tenant), and Google is not connected already.
+        "canLinkGoogle": .bool(
+          googleConfigured && claims.values["firebase"]?["tenant"] == nil && !claims.signInMethods.contains("google.com")),
         "emailVerified": .bool(claims.emailVerified),
       ],
       "staff": [
@@ -164,6 +178,8 @@ public final class ScreenModel {
   @ObservationIgnored private let reader: FirestoreReader?
   @ObservationIgnored private let writer: FirestoreWriter?
   @ObservationIgnored private let account: AccountOperations?
+  /// Opens a URL in the platform's auth sheet and returns where it came back to; the screen sets it.
+  @ObservationIgnored public var authenticate: (@Sendable (URL, String) async throws -> URL)?
 
   public init(
     spec: ScreenSpec, context: JSONValue, api: ConsoleAPIClient?, reader: FirestoreReader? = nil,
@@ -331,6 +347,9 @@ public final class ScreenModel {
           // A blank name is not written over the one the account has.
           let name = ScreenValues.text(form["name"]).trimmingCharacters(in: .whitespaces)
           if !name.isEmpty { try await account.updateDisplayName(name) }
+        case "linkGoogle":
+          guard let authenticate else { return .failed("Connecting Google is not available here.") }
+          try await account.linkGoogle(authenticate)
         case "unlinkProvider":
           let provider = ScreenValues.text(form["providerId"])
           guard !provider.isEmpty else { return .failed("Choose a sign-in method.") }

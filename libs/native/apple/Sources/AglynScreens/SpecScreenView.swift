@@ -25,6 +25,7 @@ public struct SpecScreenView: View {
   var embedded = false
 
   @Environment(\.aglynScreenSession) private var session
+  @Environment(\.webAuthenticationSession) private var webAuthentication
   @State private var model: ScreenModel?
   @State private var selection: ListSelection?
 
@@ -77,6 +78,9 @@ public struct SpecScreenView: View {
       let fresh = ScreenModel(
         spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer,
         account: session.account)
+      fresh.authenticate = { [webAuthentication] url, scheme in
+        try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
+      }
       model = fresh
       selection = nil
       await fresh.load()

@@ -255,6 +255,19 @@
               "success": "{const.providers[@item]|item} disconnected"
             }
           ]
+        },
+        {
+          "type": "actions",
+          "when": "user.canLinkGoogle",
+          "items": [
+            {
+              "id": "linkGoogle",
+              "label": "Connect Google",
+              "icon": "link.badge.plus|link",
+              "account": "linkGoogle",
+              "success": "Google connected"
+            }
+          ]
         }
       ],
       "constants": {
