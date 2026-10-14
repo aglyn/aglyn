@@ -577,7 +577,10 @@
           "name": "orgMember",
           "title": "More",
           "params": {
-            "uid": "{params.uid}"
+            "uid": "{params.uid}",
+            "subject": "member:{params.uid}",
+            "who": "{data.member.displayName|data.member.email}",
+            "hostId": ""
           }
         }
       ],
