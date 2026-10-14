@@ -109,6 +109,11 @@ export interface HostBrand {
    */
   siteTitle?: string
   titleSeparator?: string
+  /**
+   * The site's language, as its `<html lang>` names it (AGL-3771): what the
+   * status pages' own words — the 404's, the error screen's — are written in.
+   */
+  language?: string
 }
 
 const HostBrandContext = createContext<HostBrand>({})
@@ -121,6 +126,7 @@ export function HostBrandProvider({
   hostKey,
   siteTitle,
   titleSeparator,
+  language,
   children,
 }: HostBrand & { children: ReactNode }) {
   // The theme, not the route's scheme segment: the two agree on the server
@@ -137,6 +143,7 @@ export function HostBrandProvider({
       hostKey,
       siteTitle,
       titleSeparator,
+      language,
     }),
     [
       brandName,
@@ -146,6 +153,7 @@ export function HostBrandProvider({
       hostKey,
       siteTitle,
       titleSeparator,
+      language,
     ],
   )
   return (

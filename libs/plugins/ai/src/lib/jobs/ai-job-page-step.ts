@@ -108,6 +108,7 @@ import {
   aiJobUsesLayoutLanguage,
   aiLayoutListingContext,
   aiLayoutPageTargets,
+  aiLayoutLeftOutNote,
   aiRunLayoutPage,
 } from './ai-job-page-language'
 import {
@@ -668,7 +669,10 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       : checked
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
-    if (index === -1 && written) {
+    // A page in the layout language is written whole by one pass (AGL-3660),
+    // so once written it is complete: a planned section missing from it was
+    // taken out by its last answer, never one still to build (AGL-3771).
+    if ((index === -1 || language) && written) {
       // An attribute a rule has one answer for is settled on the stored page
       // and stored (AGL-3660): this pass asks no model, so a page refused
       // here for one would be refused the same way on every Try again. A
@@ -710,6 +714,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             inventory,
           }),
           recordNote,
+          // A section the last answer could not fill was left out, and the page says which (AGL-3771).
+          language ? aiLayoutLeftOutNote(screen, sectionIds, page as unknown as Record<string, unknown>) : null,
         ]
           .filter(Boolean)
           .join(' ') || null

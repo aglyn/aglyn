@@ -39,6 +39,7 @@ import {
 import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import type { AiBuildPlan } from '../model/ai-build-plan'
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 
 /**
  * STOCK PHOTOS FOR A LANGUAGE PAGE'S PICTURE SLOTS (AGL-3660).
@@ -1880,6 +1881,12 @@ export interface AiLayoutStockPhotoSourceInput {
    * language is searched by, in place of its business type and its alt texts.
    */
   photoWords?: string
+  /**
+   * The English name of the kind of site the person picked (AGL-3771): what a
+   * site in another language whose plan gave no photo words is searched by,
+   * rather than its business type in its own language.
+   */
+  kindWords?: string
   /** The page's section names, by plan index. */
   sectionNames: readonly string[]
   /**
@@ -1908,14 +1915,22 @@ interface AiStockChoice {
   repeat?: boolean
 }
 
-/** A job's language and English photo words (AGL-3760), as a stock photo source takes them. */
+/**
+ * A job's language and English photo words (AGL-3760), and the English name
+ * of its kind of site (AGL-3771), as a stock photo source takes them.
+ */
 export function aiStockPhotoWordsOf(job: {
   plan?: Pick<AiBuildPlan, 'language' | 'photoWords'> | null
-}): Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords'> {
+  inputs?: Readonly<Record<string, unknown>> | null
+}): Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords'> {
   const plan = job.plan
+  const kind = job.inputs ? aiSiteKindOfInputs(job.inputs) : null
+  // "Restaurant & café" searches as "restaurant cafe".
+  const kindWords = kind ? kind.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase() : ''
   return {
     ...(plan?.language ? { language: plan.language } : {}),
     ...(plan?.photoWords ? { photoWords: plan.photoWords } : {}),
+    ...(kindWords ? { kindWords } : {}),
   }
 }
 
@@ -1947,14 +1962,21 @@ export function aiStockPhotoWordsSubject(photoWords: string): string {
  * searches by words another slot is held against.
  */
 export function aiStockSourceTerms(
-  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords'>,
+  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords'>,
 ): AiStockSiteTerms {
   return aiStockSiteTerms(aiStockSourceSubject(input) || input.business)
 }
 
-/** The photo words' subject a site in another language is searched by ({@link aiStockSourceTerms}); empty for every other site. */
-function aiStockSourceSubject(input: Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords'>): string {
-  return aiLayoutSpeaksOtherThanEnglish(input.language) ? aiStockPhotoWordsSubject(input.photoWords ?? '') : ''
+/**
+ * What a site in another language is searched by ({@link aiStockSourceTerms}):
+ * its photo words' subject, else, where its plan gave none, the English name
+ * of its kind of site (AGL-3771) — Panaderia El Trigal's plan gave no photo
+ * words, and its pages searched "con pan dulce" again and placed the Río
+ * Dulce beside its story. Empty for every other site.
+ */
+function aiStockSourceSubject(input: Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords'>): string {
+  if (!aiLayoutSpeaksOtherThanEnglish(input.language)) return ''
+  return aiStockPhotoWordsSubject(input.photoWords ?? '') || (input.kindWords ?? '').trim()
 }
 
 /**

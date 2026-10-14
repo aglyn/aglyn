@@ -20,7 +20,7 @@
  * limitations under the License.
  */
 
-import { aiLayoutPageCheck } from './ai-job-page-language'
+import { aiLayoutLeftOutNote, aiLayoutPageCheck } from './ai-job-page-language'
 
 const block = (kind: string, text: string) => ({ kind, col: -1, text, to: '', icon: '', style: 'none', items: [] })
 
@@ -151,6 +151,47 @@ describe('a section planned with items shows them (AGL-3660)', () => {
     })
     expect(result.violations).toEqual([])
     expect(result.value?.items).toEqual([3, 0, 3])
+  })
+
+  /*
+   * The Panaderia El Trigal start (AGL-3771, beta.249): its home's "Del menú"
+   * section was planned with six items and both answers showed none, so the
+   * whole home was refused and the published site had nothing at its
+   * address. The last answer's empty section is taken out instead, and the
+   * rest of the page kept.
+   */
+  it('takes an empty section out of the last answer rather than refusing the page', () => {
+    const check = page()
+    const empty = {
+      sections: [hero, { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'What the inspection covers'), block('lede', 'Every part of the roof.')] }],
+    }
+    expect(check(empty).violations.map((violation) => violation.code)).toEqual(['layout-section-no-items'])
+    const last = check(empty)
+    expect(last.violations).toEqual([])
+    expect(last.value?.dropped).toEqual(['the section "What the inspection covers", planned with 3 items and showing none'])
+    const nodes = last.value?.nodes as unknown as Record<string, unknown>
+    expect(nodes['sec-1']).toBeUndefined()
+    expect(JSON.stringify(nodes)).not.toContain('Every part of the roof.')
+    expect(JSON.stringify(nodes)).toContain('Storm damage, checked')
+    expect(aiLayoutLeftOutNote(screen, ['sec-0', 'sec-1'], nodes)).toBe(
+      'Left out: the section “What the inspection covers”, which could not be built well enough to publish. Add it in the Besigner when you are ready.',
+    )
+  })
+
+  it('never takes out the section that heads the page', () => {
+    const headed = { ...screen, sections: [{ name: 'Services', uses: [], items: 3 }, screen.sections[0]] }
+    const check = aiLayoutPageCheck({
+      screen: headed as never,
+      sectionIds: ['sec-0', 'sec-1'],
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: 'A roofer.' } as never,
+      context: { screenIds: [], formIds: [], componentIds: [], codeBuilt: true, scrollTargetIds: ['sec-0', 'sec-1'], reusableComponents: false },
+      reusableComponents: false,
+    })
+    const answer = { sections: [hero, { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'Call us'), block('lede', 'We answer.')] }] }
+    check(answer)
+    const last = check(answer)
+    expect(last.value).toBeNull()
+    expect(last.violations.map((violation) => violation.code)).toEqual(['layout-section-no-items'])
   })
 
   it('admits the section with its cards', () => {

@@ -231,6 +231,7 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'plugins.verification.decline': 'Declined a plugin verification',
   'plugins.verifier.regression': 'Plugin verifier regression',
   'security.pageSecurityHold': 'Put a page on security hold',
+  'security.paymentFraudHold': 'Put a workspace on hold for payment fraud',
   'security.staffGranted': 'Granted staff access',
   'site.package.apply': 'Applied a site package',
   'site.package.undo': 'Undid a site package',

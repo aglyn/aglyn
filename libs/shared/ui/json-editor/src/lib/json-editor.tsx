@@ -250,12 +250,48 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
               {description}
             </Box>
           ) : null}
+          <When condition={open && warnOpen}>
+            {/*
+              The warning is a banner IN the dialog's column, above the
+              editor, and the editor is pushed down by it (AGL-3770).
+
+              It must never be layered over Monaco. Monaco positions its
+              minimap, scrollbars and overview ruler with z-indexes of its
+              own, and on a narrow viewport they land exactly where the
+              alert's close button sits: the button was drawn UNDER the
+              minimap, so the warning could not be dismissed and covered the
+              editor for good. In normal flow there is nothing to stack
+              against, and the editor pane below is `isolation: isolate` so
+              none of Monaco's layers can escape it either way.
+            */}
+            <Alert
+              severity="warning"
+              data-testid="json-editor-warning"
+              sx={{ mx: { xs: 2, sm: 3 }, mb: 1, flexShrink: 0 }}
+              action={
+                <IconButton
+                  onClick={closeWarn}
+                  color="inherit"
+                  aria-label="Dismiss this warning"
+                  title="Dismiss this warning"
+                >
+                  <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+                </IconButton>
+              }
+            >
+              <AlertTitle>Warning: Advanced Feature Ahead!</AlertTitle>
+              Using the raw json editor is highly discouraged and should
+              only be used by individuals who understand the consequences.
+              Changes may potentially result in undesired outcomes which
+              are <strong>destructive and irreversible</strong>.
+            </Alert>
+          </When>
           {saveError ? (
-            <Alert severity="error" sx={{ mx: 3, mb: 1 }}>
+            <Alert severity="error" sx={{ mx: 3, mb: 1, flexShrink: 0 }}>
               {saveError}
             </Alert>
           ) : parseError ? (
-            <Alert severity="warning" sx={{ mx: 3, mb: 1 }}>
+            <Alert severity="warning" sx={{ mx: 3, mb: 1, flexShrink: 0 }}>
               {'Not valid JSON yet — '}
               {parseError}
               {'. Your text is kept exactly as typed; Save JSON works again '}
@@ -264,21 +300,16 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
           ) : null}
           <When condition={open}>
             {/*
-              The editor mounts UNDER the warning, not instead of it
-              (AGL-2541).
+              The editor mounts while the warning is showing, not instead of
+              it (AGL-2541).
 
-              The gate used to be an `If`/`Else`, so while the warning stood
-              the `Editor` was not rendered at all — its chunk was never
-              requested and Monaco's loader never ran. An author who dismissed
-              the warning was then waiting on a download that had not started,
-              against a pane that renders nothing while it waits. That is the
-              "the editor never mounts, and no request for loader.js is ever
-              issued" report: both halves are true, and neither is Monaco's.
-
-              Rendering both, warning stacked above, puts the chunk in flight
-              while the warning is being read. The overlay was already written
-              to be an overlay — full-bleed, blurred, over a translucent wash
-              — it was only ever wired as a replacement.
+              Gated on the warning, the `Editor` was not rendered at all while
+              the warning stood — its chunk was never requested and Monaco's
+              loader never ran. An author who dismissed the warning was then
+              waiting on a download that had not started, against a pane that
+              renders nothing while it waits: "the editor never mounts, and no
+              request for loader.js is ever issued". Rendering both puts the
+              chunk in flight while the warning is being read.
 
               `value` is the author's buffer VERBATIM, and nothing else
               (AGL-2486 item 17). It used to be
@@ -297,50 +328,21 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
               cursor whenever the author's valid text was not already 2-space
               pretty-printed.
             */}
-            <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            <Box
+              data-testid="json-editor-pane"
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                position: 'relative',
+                isolation: 'isolate',
+              }}
+            >
               <Editor
                 height="100%"
                 defaultValue={documentText}
                 value={data}
                 onChange={handleChange}
               />
-              <When condition={warnOpen}>
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 1,
-                    bgcolor: 'action.disabled',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backdropFilter: 'blur(2px)',
-                    p: { xs: 2, sm: 3 }
-                  }}>
-                  <Alert
-                    severity="warning"
-                    sx={{
-                      maxWidth: 620,
-                    }}
-                    action={
-                      <IconButton
-                        onClick={closeWarn}
-                        color="inherit"
-                        aria-label="Dismiss this warning"
-                        title="Dismiss this warning"
-                      >
-                        <MdiIcon path={ICON_VARIANT_CLOSE.path} />
-                      </IconButton>
-                    }
-                  >
-                    <AlertTitle>Warning: Advanced Feature Ahead!</AlertTitle>
-                    Using the raw json editor is highly discouraged and should
-                    only be used by individuals who understand the consequences.
-                    Changes may potentially result in undesired outcomes which
-                    are <strong>destructive and irreversible</strong>.
-                  </Alert>
-                </Box>
-              </When>
             </Box>
           </When>
         </DialogContent>

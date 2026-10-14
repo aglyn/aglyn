@@ -80,7 +80,7 @@ import {
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_LISTINGS_INPUT, aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
-import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiJobUsesLayoutLanguage, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiMergeSitePublish, aiPublishGuidedSite, aiRestoreGuidedBlogEntry } from './ai-site-publish'
 import {
   AI_SITE_CONTENT_INPUT,
@@ -110,6 +110,7 @@ import {
   aiSiteDatasetPlacedPhotos,
   aiSiteDatasetRefusal,
   aiSitePlanDatasets,
+  aiSiteReusedDatasetListings,
   aiSiteRecordTemplateOf,
   runAiSiteDatasetUnit,
 } from './ai-job-site-datasets'
@@ -768,6 +769,8 @@ export function aiSiteUnitJob(
       // The events this start drafted, in the section that names them (AGL-3755).
       ...aiSiteEventListings({ outputs: job.outputs ?? [], items: aiSitePlanEvents(plan), screens: merged.screens }),
     )
+    // And the workspace's own datasets the plan reuses, in the sections that name them (AGL-3771).
+    listings.push(...aiSiteReusedDatasetListings({ plan, screens: merged.screens, listed: listings }))
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
     // A paid store's header links its account beside the cart, and its footer
     // its account and policies (AGL-3676), by path: they are written after.
@@ -1041,21 +1044,35 @@ export const AI_SITE_PAGE_NOT_WRITTEN_COPY =
   'A page of this site was not written from its plan. Try the site brief again.'
 
 /**
- * Whether a page unit's draft holds every section its plan named, under the
- * ids the page step writes them by (AGL-3596). A page counts as written only
+ * Whether a page unit's draft holds the sections its plan named, under the
+ * ids the page step writes them by (AGL-3596): every one, or for a page in
+ * the layout language its first (AGL-3771). A page counts as written only
  * then: a run that reported a page and wrote none of its sections — a copy of
  * a page the site already had, byte for byte — is not a page the job built,
  * and is never reported done.
  */
 export async function aiSitePageWritten(
   firestore: FirebaseFirestore.Firestore,
-  input: { hostId: string; unitJobId: string; screen: AiBuildPlanScreen; draftId: string },
+  input: {
+    hostId: string
+    unitJobId: string
+    screen: AiBuildPlanScreen
+    draftId: string
+    /** The page was designed in the layout language (`aiJobUsesLayoutLanguage`). */
+    layoutLanguage?: boolean
+  },
   readNodes: typeof readAiDraftNodes = readAiDraftNodes,
 ): Promise<boolean> {
   if (!input.screen.sections.length) return false
   const stored = await readNodes(firestore, { kind: 'screen', hostId: input.hostId, id: input.draftId })
   if (!stored) return false
-  return input.screen.sections.every((_, index) => aiPageSectionNodeId(input.unitJobId, index) in stored.nodes)
+  const present = (index: number) => aiPageSectionNodeId(input.unitJobId, index) in stored.nodes
+  // A page in the layout language is written whole, its first section
+  // heading it (AGL-3660); a later section its last answer could not fill
+  // was taken out, and the page says so (AGL-3771). A record template is
+  // built section by section, and is written once every section is.
+  if (input.layoutLanguage && !input.screen.record) return present(0)
+  return input.screen.sections.every((_, index) => present(index))
 }
 
 /**
@@ -1455,7 +1472,13 @@ export function createAiJobSiteStep(
         page !== undefined &&
         (await aiSitePageWritten(
           context.firestore,
-          { hostId: job.hostId, unitJobId: aiSiteUnitJobId(job, unit), screen: unit.screen, draftId: page.id },
+          {
+            hostId: job.hostId,
+            unitJobId: aiSiteUnitJobId(job, unit),
+            screen: unit.screen,
+            draftId: page.id,
+            layoutLanguage: aiJobUsesLayoutLanguage(handed),
+          },
           readNodes,
         ))
       if (!written) {
