@@ -53,7 +53,28 @@
         "h1": "editor",
         "h2": "viewer"
       },
-      "hostKey": "h2"
+      "hostKey": "h2",
+      "addons": {
+        "plan": "pro",
+        "catalog": {
+          "hosts": {
+            "unitUsd": 5,
+            "max": 20,
+            "configured": true,
+            "upgradeRequired": false
+          },
+          "aiAddon": {
+            "unitUsd": null,
+            "max": 0,
+            "configured": false,
+            "upgradeRequired": true
+          }
+        },
+        "quantities": {
+          "hosts": 2
+        }
+      },
+      "kindKey": "hosts"
     }
   },
   "render": [
@@ -152,6 +173,14 @@
     {
       "template": "{data.access[@data.hostKey]}",
       "expect": "viewer"
+    },
+    {
+      "template": "{data.addons.catalog[@data.kindKey].unitUsd:dollars}/mo",
+      "expect": "$5.00/mo"
+    },
+    {
+      "template": "{data.addons.quantities[@data.kindKey]|'0'} of {data.addons.catalog[@data.kindKey].max}",
+      "expect": "2 of 20"
     },
     {
       "template": "{data.missing + 1}",
@@ -415,6 +444,22 @@
     },
     {
       "when": "data.flag",
+      "expect": false
+    },
+    {
+      "when": "data.addons.catalog[@data.kindKey].configured && !data.addons.catalog[@data.kindKey].upgradeRequired",
+      "expect": true
+    },
+    {
+      "when": "data.addons.catalog[@data.kindKey].upgradeRequired",
+      "expect": false
+    },
+    {
+      "when": "data.addons.plan == enterprise",
+      "expect": false
+    },
+    {
+      "when": "!data.addons.quantities[@data.kindKey]",
       "expect": false
     }
   ]
