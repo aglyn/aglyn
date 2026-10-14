@@ -26,6 +26,12 @@ struct OrdersScreen: View {
   @State private var model = OrdersModel()
   @State private var selection: OrderRow.ID?
   @State private var searchText = ""
+  // Select mode: tick orders, then mark them all fulfilled in one go (the console's bulk action on the orders list).
+  @State private var selecting = false
+  @State private var picked: Set<OrderRow.ID> = []
+  @State private var confirmingBulk = false
+  @State private var running = false
+  @State private var outcome: BulkFulfillResult?
 
   var body: some View {
     WideLayoutReader { wide in
@@ -48,6 +54,34 @@ struct OrdersScreen: View {
       }
     }
     .navigationTitle("Orders")
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button(selecting ? "Done" : "Select") {
+          selecting.toggle()
+          picked = []
+        }
+        .accessibilityIdentifier("orders-select")
+      }
+    }
+    .safeAreaInset(edge: .bottom) {
+      if selecting {
+        Button("Mark \(picked.count) fulfilled") { confirmingBulk = true }
+          .buttonStyle(.borderedProminent)
+          .disabled(picked.isEmpty || running)
+          .padding()
+          .frame(maxWidth: .infinity)
+          .background(.bar)
+          .accessibilityIdentifier("orders-bulk-fulfill")
+      }
+    }
+    .confirmationDialog(
+      "Mark \(picked.count) \(picked.count == 1 ? "order" : "orders") fulfilled?", isPresented: $confirmingBulk, titleVisibility: .visible
+    ) {
+      Button("Mark fulfilled") { Task { await fulfillPicked() } }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Each order is checked on its own: one that cannot be fulfilled is skipped and the rest go ahead. Customers are emailed as they are for a single order.")
+    }
     .searchable(text: $searchText, prompt: "Order, customer or email")
     .onSubmit(of: .search) { model.search = searchText }
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
@@ -56,6 +90,18 @@ struct OrdersScreen: View {
       model.start(context.firestore, hostID: context.hostID)
     }
     .onDisappear { model.stop() }
+  }
+
+  private func fulfillPicked() async {
+    guard let hostID = context.hostID else { return }
+    running = true
+    outcome = await bulkFulfillOrders(
+      api: context.api, hostID: hostID, orders: model.rows.filter { picked.contains($0.id) },
+      batchKey: "bulk-fulfill-\(UUID().uuidString.lowercased())")
+    running = false
+    picked = []
+    selecting = false
+    model.start(context.firestore, hostID: hostID)
   }
 
   private var chips: some View {
@@ -78,6 +124,12 @@ struct OrdersScreen: View {
       if let notice = model.notice {
         AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
       }
+      if let done = outcome {
+        AglynNotice(describeBulkFulfill(done), tone: done.refused.isEmpty && done.unknown.isEmpty ? .success : .warning) {
+          outcome = nil
+        }
+        .padding(.horizontal, AglynSpace.two)
+      }
       content(selectable: selectable)
     }
     .background(AglynColor.page)
@@ -96,6 +148,28 @@ struct OrdersScreen: View {
         model.filter == .all && model.search.isEmpty ? "No orders yet" : "No matching orders", systemImage: "bag",
         message: model.filter == .all && model.search.isEmpty
           ? "Orders from your store and register show up here." : "Try another filter or search.")
+    } else if selecting {
+      List {
+        ForEach(model.rows) { row in
+          Button {
+            if picked.contains(row.id) { picked.remove(row.id) } else { picked.insert(row.id) }
+          } label: {
+            HStack {
+              Image(systemName: picked.contains(row.id) ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(picked.contains(row.id) ? AglynColor.primary : .secondary)
+              OrderListRow(row: row)
+            }
+          }
+          .buttonStyle(.plain)
+          .aglynListRow()
+          .accessibilityIdentifier("order-select-\(row.id)")
+        }
+        if model.hasMore {
+          Button("Show more orders") { model.loadMore() }.frame(maxWidth: .infinity)
+        }
+      }
+      .aglynListBackground()
+      .accessibilityIdentifier("orders-list")
     } else if selectable {
       List(selection: $selection) {
         rows(selectable: true)

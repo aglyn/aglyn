@@ -1,6 +1,7 @@
 package com.aglyn.plugins.commerce.orders
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -55,6 +56,7 @@ import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.plugins.commerce.pos.Load
+import com.aglyn.plugins.commerce.pos.newAttemptKey
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -72,6 +74,7 @@ import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.space
+import kotlinx.coroutines.launch
 
 const val COMMERCE_ORDERS_SCREEN = "commerce.orders"
 
@@ -113,7 +116,7 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
   LaunchedEffect(model) { model.reload() }
   AglynListDetail(
     initialSelected = initialOrderId,
-    list = { selected, onSelect -> OrdersList(model, selected, onSelect) },
+    list = { selected, onSelect -> OrdersList(context, model, selected, onSelect) },
     detail = { selected ->
       if (selected == null) {
         EmptyState("Pick an order to see it here", icon = AglynIcons.named("receipt"))
@@ -125,8 +128,16 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
 }
 
 @Composable
-private fun OrdersList(model: OrdersListModel, selected: String?, onSelect: (String) -> Unit) {
+private fun OrdersList(context: NativePluginContext, model: OrdersListModel, selected: String?, onSelect: (String) -> Unit) {
   val listState = rememberLazyListState()
+  val scope = rememberCoroutineScope()
+  // Select mode: tick orders, then mark them all fulfilled in one go (the console's bulk action on the orders list).
+  var selecting by remember { mutableStateOf(false) }
+  var picked by remember { mutableStateOf(emptySet<String>()) }
+  var confirming by remember { mutableStateOf(false) }
+  var running by remember { mutableStateOf(false) }
+  var outcome by remember { mutableStateOf<BulkFulfillResult?>(null) }
+  val loaded = (model.rows as? Load.Ready)?.value.orEmpty()
   val nearEnd by remember {
     derivedStateOf {
       val info = listState.layoutInfo
@@ -136,7 +147,16 @@ private fun OrdersList(model: OrdersListModel, selected: String?, onSelect: (Str
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
   Column(Modifier.fillMaxSize()) {
     Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      SearchField(model.search, model::type, placeholder = "Search by order number or customer")
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) { SearchField(model.search, model::type, placeholder = "Search by order number or customer") }
+        TextButton(
+          onClick = { selecting = !selecting; picked = emptySet() },
+          modifier = Modifier.testTag("orders-select"),
+        ) { Text(if (selecting) "Done" else "Select") }
+      }
+      outcome?.let { done ->
+        NoticeBanner(describeBulkFulfill(done), if (done.refused.isEmpty() && done.unknown.isEmpty()) StatusTone.SUCCESS else StatusTone.WARNING)
+      }
       ChoiceChipRow(
         options = OrderFilter.entries.map { ChipOption(it.name, it.label) },
         selected = model.filter.name,
@@ -159,17 +179,55 @@ private fun OrdersList(model: OrdersListModel, selected: String?, onSelect: (Str
           icon = AglynIcons.named("receipt"),
         )
       } else {
-        LazyColumn(Modifier.fillMaxSize().testTag("orders-list"), state = listState) {
-          items(rows.value, key = { it.id }) { row -> OrderListRow(row, row.id == selected) { onSelect(row.id) } }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("orders-list"), state = listState) {
+          items(rows.value, key = { it.id }) { row ->
+            if (selecting) {
+              OrderListRow(row, row.id in picked, ticked = row.id in picked) { picked = if (row.id in picked) picked - row.id else picked + row.id }
+            } else {
+              OrderListRow(row, row.id == selected) { onSelect(row.id) }
+            }
+          }
           if (model.hasMore || model.loadingMore) item { SkeletonList(rows = 2) }
         }
       }
+    }
+    if (selecting) {
+      Row(Modifier.fillMaxWidth().padding(space(2f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        Button(
+          onClick = { confirming = true },
+          enabled = picked.isNotEmpty() && !running,
+          modifier = Modifier.weight(1f).testTag("orders-bulk-fulfill"),
+        ) { Text("Mark ${picked.size} fulfilled") }
+      }
+    }
+    if (confirming) {
+      ActionDialog(
+        title = "Mark ${picked.size} ${if (picked.size == 1) "order" else "orders"} fulfilled?",
+        body = "Each order is checked on its own: one that cannot be fulfilled is skipped and the rest go ahead. Customers are emailed as they are for a single order.",
+        icon = "done_all",
+        confirmLabel = "Mark fulfilled",
+        busy = running,
+        error = null,
+        onDismiss = { confirming = false },
+        onConfirm = {
+          val hostId = context.hostId ?: return@ActionDialog
+          scope.launch {
+            running = true
+            outcome = bulkFulfillOrders(context.api, hostId, loaded.filter { it.id in picked }, newAttemptKey("bulk-fulfill"))
+            running = false
+            confirming = false
+            picked = emptySet()
+            selecting = false
+            model.reload()
+          }
+        },
+      )
     }
   }
 }
 
 @Composable
-private fun OrderListRow(row: OrderRow, selected: Boolean, onClick: () -> Unit) {
+private fun OrderListRow(row: OrderRow, selected: Boolean, ticked: Boolean? = null, onClick: () -> Unit) {
   val now = nowMillis()
   val items = if (row.itemCount == 1L) "1 item" else "${row.itemCount} items"
   AglynListItem(
@@ -180,7 +238,7 @@ private fun OrderListRow(row: OrderRow, selected: Boolean, onClick: () -> Unit) 
       row.channelLabel,
       row.createdAtMs.takeIf { it > 0 }?.let { relativeTime(it, now) },
     ).joinToString(" · "),
-    icon = AglynIcons.named(if (row.channelLabel == orderChannelLabel("pos")) "point_of_sale" else "receipt"),
+    icon = AglynIcons.named(if (ticked == true) "check_circle" else if (row.channelLabel == orderChannelLabel("pos")) "point_of_sale" else "receipt"),
     selected = selected,
     trailing = {
       Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
