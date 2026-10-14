@@ -13,7 +13,10 @@
     },
     "params": {
       "uid": "u2",
-      "empty": ""
+      "empty": "",
+      "col": "1",
+      "mrow": "r1",
+      "mcol": "c2"
     },
     "data": {
       "members": [
@@ -101,7 +104,48 @@
           "items": []
         }
       ],
-      "pick": "y"
+      "pick": "y",
+      "samples": [
+        [
+          "a",
+          "b",
+          "c"
+        ],
+        [
+          "d",
+          "e",
+          "f"
+        ],
+        [
+          "g",
+          "h"
+        ]
+      ],
+      "matrix": {
+        "r1": {
+          "c1": "x",
+          "c2": "y"
+        }
+      },
+      "picklists": [
+        {
+          "fieldId": "status",
+          "proposals": {
+            "x": {
+              "action": "leaveBlank"
+            }
+          }
+        },
+        {
+          "fieldId": "tier",
+          "proposals": {
+            "gold": {
+              "action": "mapTo",
+              "valueId": "g"
+            }
+          }
+        }
+      ]
     }
   },
   "render": [
@@ -244,6 +288,34 @@
     {
       "template": "{data.groups.*.label}",
       "expect": "Sequences, Campaigns, Empty"
+    },
+    {
+      "template": "{data.groups[label='Campaigns'].items.0.key}",
+      "expect": "campaign/c"
+    },
+    {
+      "template": "{data.samples.*.[@params.col]}",
+      "expect": "b, e, h"
+    },
+    {
+      "template": "{data.matrix[@params.mrow][@params.mcol]}",
+      "expect": "y"
+    },
+    {
+      "template": "{data.groups[label='Missing'].items.0.key|'none'}",
+      "expect": "none"
+    },
+    {
+      "template": "{data.list:first1}",
+      "expect": "x"
+    },
+    {
+      "template": "{data.groups.*.items.*.key:first2}",
+      "expect": "outreach/a, outreach/b"
+    },
+    {
+      "template": "{data.access.*}",
+      "expect": "editor, viewer"
     },
     {
       "template": "{'(512) 555-0123':phone}",
@@ -446,6 +518,63 @@
       "expect": {
         "clear": null
       }
+    },
+    {
+      "body": {
+        "merged": {
+          "$merge": [
+            {
+              "$index": {
+                "rows": "data.picklists",
+                "key": "{item.fieldId}",
+                "value": "{item.proposals}"
+              }
+            },
+            {
+              "status": {
+                "x": {
+                  "action": "addValue"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expect": {
+        "merged": {
+          "status": {
+            "x": {
+              "action": "addValue"
+            }
+          },
+          "tier": {
+            "gold": {
+              "action": "mapTo",
+              "valueId": "g"
+            }
+          }
+        }
+      }
+    },
+    {
+      "body": {
+        "a?": "{data.missing}",
+        "b?": "",
+        "c?": "{data.flag}",
+        "d": "x",
+        "e?": "{data.list}",
+        "f?": "{org.name}",
+        "g?": []
+      },
+      "expect": {
+        "c": false,
+        "d": "x",
+        "e": [
+          "x",
+          "y"
+        ],
+        "f": "Acme"
+      }
     }
   ],
   "condition": [
@@ -571,6 +700,14 @@
     },
     {
       "when": "data.groups.*.label ~= @data.missing",
+      "expect": false
+    },
+    {
+      "when": "staff.is && org.manager || org.role == admin",
+      "expect": true
+    },
+    {
+      "when": "staff.is && org.manager || org.role == owner",
       "expect": false
     }
   ]

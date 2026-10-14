@@ -52,6 +52,17 @@
           "text": "Every import shows what it would do before it writes anything, asks how to handle each conflict, and can be undone for seven days."
         },
         {
+          "type": "links",
+          "items": [
+            {
+              "title": "Records and packages",
+              "subtitle": "Export what each plugin keeps, or move a package",
+              "icon": "tablecells|view_agenda",
+              "screen": "core.settings.data.records"
+            }
+          ]
+        },
+        {
           "type": "actions",
           "items": [
             {
@@ -83,6 +94,17 @@
           "tertiary": "Left {item.updatedAt:datetime}",
           "icon": "tray.and.arrow.down|inbox",
           "actions": [
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play|play_arrow",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.jobId}"
+                }
+              }
+            },
             {
               "id": "discard",
               "label": "Discard",
@@ -139,6 +161,18 @@
               },
               "download": "import-{item.id}-results.csv",
               "success": "Results ready to save"
+            },
+            {
+              "id": "open",
+              "label": "Open",
+              "icon": "arrow.up.right.square|open_in_new",
+              "when": "item.kind == records && item.status != undone",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.id}"
+                }
+              }
             },
             {
               "id": "undo",

@@ -130,6 +130,7 @@ struct SpecScreenBody: View {
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
   @State private var exporting: ExportedDownload?
+  @State private var exportSheet: TransferExportRequest?
   @State private var running: String?
   @State private var searchText = ""
 
@@ -179,6 +180,12 @@ struct SpecScreenBody: View {
         contentType: exporting?.type ?? .data, defaultFilename: exporting?.name
       ) { result in
         if case .failure(let error) = result { show(error.localizedDescription, .error) }
+      }
+      .sheet(item: $exportSheet) { request in
+        TransferExportSheet(context: plugin, request: request) { message in
+          exportSheet = nil
+          if let message { show(message, .success) }
+        }
       }
       .alert(
         revealed?.title ?? "",
@@ -385,6 +392,10 @@ struct SpecScreenBody: View {
   }
 
   private func execute(_ action: ActionSpec, scope: JSONValue) async {
+    if let request = action.exportRequest(in: scope) {
+      exportSheet = request
+      return
+    }
     if let copy = action.copy {
       copyToClipboard(ScreenValues.render(copy, in: scope))
       show("Copied", .success)

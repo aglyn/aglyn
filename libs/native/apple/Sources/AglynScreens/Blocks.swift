@@ -292,13 +292,27 @@ struct ListRow: View {
 enum FieldValue: Equatable {
   case text(String)
   case flag(Bool)
+  /// A chosen file: its name, and its text.
+  case file(name: String, text: String)
 
   var json: JSONValue {
     switch self {
     case .text(let text): .string(text)
     case .flag(let flag): .bool(flag)
+    case .file(_, let text): .string(text)
     }
   }
+}
+
+/// The `form` a block hands its action: every field's value, and for a chosen file also `<key>Name`.
+func formObject(_ fields: [FieldSpec], _ value: (FieldSpec) -> FieldValue?) -> [String: JSONValue] {
+  var form: [String: JSONValue] = [:]
+  for field in fields {
+    let held = value(field)
+    form[field.key] = fieldJSON(field, held)
+    if case .file(let name, _)? = held { form[field.key + "Name"] = .string(name) }
+  }
+  return form
 }
 
 func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
@@ -308,7 +322,7 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
     // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
     let chosen = text.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
     return chosen.isEmpty ? .null : .array(chosen.map(JSONValue.string))
-  case ("file", .text(let text)?):
+  case ("file", .text(let text)?), ("file", .file(_, let text)?):
     if text.isEmpty { return .null }
     return field.parse == "json" ? (JSONValue.decode(Data(text.utf8)) ?? .null) : .string(text)
   case ("number", .text(let text)?):
@@ -317,6 +331,7 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   case (_, .text(let text)?):
     return .string(field.kind == "multiline" || field.kind == "password" ? text : text.trimmingCharacters(in: .whitespaces))
   case (_, .flag(let flag)?): return .bool(flag)
+  case (_, .file(_, let text)?): return .string(text)
   case (_, nil): return field.kind == "toggle" ? .bool(false) : .null
   }
 }
@@ -339,10 +354,21 @@ struct FieldInput: View {
   let context: JSONValue
   @Binding var value: FieldValue
   @State private var picking: PickSource?
-  @State private var fileName: String?
 
   private var text: Binding<String> {
-    Binding(get: { if case .text(let t) = value { t } else { "" } }, set: { value = .text($0) })
+    Binding(
+      get: {
+        switch value {
+        case .text(let t): t
+        case .file(_, let t): t
+        case .flag: ""
+        }
+      }, set: { value = .text($0) })
+  }
+
+  private var fileNameShown: String {
+    if case .file(let name, _) = value { return name }
+    return "File chosen"
   }
 
   private var flag: Binding<Bool> {
@@ -380,13 +406,12 @@ struct FieldInput: View {
         HStack {
           Button(text.wrappedValue.isEmpty ? "Choose a file" : "Choose a different file") { picking = .files }
           if !text.wrappedValue.isEmpty {
-            Text(fileName ?? "File chosen").font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text(fileNameShown).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
           }
         }
         .aglynMediaPicker($picking, multiple: false) { files in
           guard let file = files.first else { return }
-          fileName = file.name
-          text.wrappedValue = String(data: file.data, encoding: .utf8) ?? ""
+          value = .file(name: file.name, text: ScreenValues.decodeFileText(file.data))
         }
       case "multiline":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
@@ -441,9 +466,7 @@ struct FormBlock: View {
   }
 
   private var filled: JSONValue {
-    var form: [String: JSONValue] = [:]
-    for field in fields { form[field.key] = fieldJSON(field, values[field.key]) }
-    return ScreenContext.with(scope, "form", .object(form))
+    ScreenContext.with(scope, "form", .object(formObject(fields) { values[$0.key] }))
   }
 
   private var missing: Bool {
@@ -503,9 +526,8 @@ struct ActionInputSheet: View {
   private var inputs: [FieldSpec] { pending.action.inputs }
 
   private var filled: JSONValue {
-    var form: [String: JSONValue] = [:]
-    for field in inputs { form[field.key] = fieldJSON(field, values[field.key] ?? initialValue(field, in: pending.scope)) }
-    return ScreenContext.with(pending.scope, "form", .object(form))
+    ScreenContext.with(
+      pending.scope, "form", .object(formObject(inputs) { values[$0.key] ?? initialValue($0, in: pending.scope) }))
   }
 
   /// A field the person cannot see (its `when` fails) never holds up the action.

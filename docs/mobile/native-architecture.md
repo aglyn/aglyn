@@ -962,6 +962,31 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   `a.*.b.*.c` flattens lists it meets, so `resources.*.items.*.key` is every
   resource's item keys. `path ~= @other.path` asks whether a list holds, or a text
   contains, what the other path reads.
+- `export: { resource, title, hostId }` opens the platform's export sheet for a records
+  resource (its fields, the format, then the file saved or shared), the sheet every list
+  uses; the Imports and exports hub's lists open it per resource.
+- A path can chain bracket groups (`stash.choices[@field][@value]`), take a quoted literal in a
+  selector (`rows[id='crm']`), and read an `@path` after `*` against the whole context
+  (`samples.*.[@index]` is one column of every sample row).
+- `libs/native/screens/transfer-resources.screens.json` is generated from the plugins'
+  `transferResources` (`generate-native-contracts.mjs`): the hub lists every resource whose
+  plugin runs (the `switchboard` load) and whose plan feature the entitlements carry.
+- `chunk: { field, bytes, idFrom, idKey, firstOnly, until }` sends the file text in `field` of
+  the body in parts that each fit `bytes` once JSON-encoded (never cutting a character), each
+  with `part` and `parts`, the job the first answer names (`idFrom`) sent back as `idKey`, the
+  keys in `firstOnly` on the first part alone, and `until` the answer path that must be true when
+  the last part has landed. A chosen file is read as UTF-8 (a byte-order mark dropped), UTF-16
+  where it carries its mark, else Windows-1252, and its name is `form.<key>Name`.
+- `repeat: { until, max, stop, stopMessage }` runs the action again until the answer meets
+  `until` (a condition over `response`), as the console calls apply until the route is done; the
+  stash takes every pass, so a screen shows the progress, and `stop` ends it as a failure with
+  the route's words. `after` is a follow-up that must succeed, run with the stash just made;
+  `reload: true` reloads a screen after an action with no route of its own.
+- In a body, `"name?": …` is sent only when it holds something (not null, `""`, `[]` or `{}`),
+  `{"$index": {rows, key, value}}` makes a map of rows, and `{"$merge": [a, b]}` lays maps over
+  one another deeply. A row's position is `index`; `*` also walks an object's values; the format
+  `first3` keeps a list's first three entries; a condition may mix `&&` and `||` (`&&` binds
+  tighter).
 - A POST load pages too: `cursor` names the response field, and the next page is
   the same body with the cursor under `cursorParam` (a number cursor, such as a
   job's `createdAt`, goes back as a number).

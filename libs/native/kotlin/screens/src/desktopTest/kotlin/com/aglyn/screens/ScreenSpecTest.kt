@@ -690,8 +690,61 @@ class ScreenSpecTest {
     val actions = history.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
     val job = Json.parseToJsonElement("""{"org":{"id":"o1"},"item":{"id":"j9","kind":"package","resultFile":true,"undo":{"available":true}}}""")
     assertEquals(listOf("results", "undo"), actions.filter { ScreenValues.condition(it.whenCondition, job) }.map { it.id })
-    val records = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","resultFile":false,"undo":{"available":true}}}""")
-    assertEquals(emptyList(), actions.filter { ScreenValues.condition(it.whenCondition, records) }.map { it.id })
+    // A records import opens in the wizard (its results and its undo), until it is undone.
+    val records = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","status":"applied","resultFile":false,"undo":{"available":true}}}""")
+    assertEquals(listOf("open"), actions.filter { ScreenValues.condition(it.whenCondition, records) }.map { it.id })
+    val undone = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","status":"undone","resultFile":true}}""")
+    assertEquals(listOf("results"), actions.filter { ScreenValues.condition(it.whenCondition, undone) }.map { it.id })
     assertEquals("import-j9-results.csv", ScreenValues.render(actions.first().download!!, job))
+  }
+
+  @Test
+  fun theRecordsListShowsWhatThePluginsAndThePlanAllowAndExportsThroughTheDialog() {
+    val records = ScreenSpec.parseFile(File(screensDir, "transfer-resources.screens.json").readText()).first { it.id == "core.settings.data.records" }
+    val consts = records.raw.obj("constants")!!
+    fun context(crm: Boolean, running: List<String>) = Json.parseToJsonElement(
+      """{"org":{"id":"o1","manager":true},"const":$consts,"data":{
+          "sw":{"rows":[${running.joinToString(",") { """{"id":"$it","on":true}""" }}]},
+          "ent":{"features":{"crm":$crm}},
+          "datasets":{"items":[{"${'$'}id":"d1","name":"Pets"}]}}}""",
+    )
+    val crmList = records.blocks.first { it.title == "CRM" }
+    val on = context(false, listOf("crm"))
+    assertTrue(ScreenValues.condition(crmList.whenCondition, on))
+    // On a plan without the CRM only the exports that stay free are listed.
+    val free = ScreenValues.scopes(crmList.string("items").orEmpty(), null, crmList.string("filter"), on)
+    assertEquals(listOf("crm.contacts", "crm.leads"), free.map { ScreenValues.render("{item.key}", it) })
+    val paid = ScreenValues.scopes(crmList.string("items").orEmpty(), null, crmList.string("filter"), context(true, listOf("crm")))
+    assertTrue(paid.size > free.size)
+    assertFalse(ScreenValues.condition(crmList.whenCondition, context(true, emptyList())))
+    val note = records.blocks.first { it.type == "notice" && it.whenCondition?.contains("!data.ent.features.crm") == true }
+    assertTrue(ScreenValues.condition(note.whenCondition, on))
+    assertFalse(ScreenValues.condition(note.whenCondition, context(true, listOf("crm"))))
+
+    // A row's Export opens the platform dialog on its resource, for the whole workspace.
+    val export = ActionSpec.parse(crmList.raw.arr("actions").first())!!
+    val request = export.exportRequest(free[0])!!
+    assertEquals("crm.contacts", request.resource)
+    assertEquals("Export Contacts", request.title)
+    assertNull(request.hostId)
+    assertEquals("crm-contacts", request.fileStem)
+    assertTrue(ScreenValues.condition(export.whenCondition, free[0]))
+
+    // A dataset is exported on its own, under the key that names it.
+    val datasets = records.blocks.first { it.title == "Dataset records" }
+    val dataset = ScreenValues.scopes("data.datasets.items", null, null, on).first()
+    val one = ActionSpec.parse(datasets.raw.arr("actions").first())!!.exportRequest(dataset)!!
+    assertEquals("data.dataset:d1", one.resource)
+    assertEquals("Export Pets", one.title)
+    assertEquals("data-dataset-d1", one.fileStem)
+
+    // A site's resources name the site.
+    val site = ScreenSpec.parseFile(File(screensDir, "transfer-resources.screens.json").readText()).first { it.id == "core.site.data" }
+    val redirects = site.blocks.first { it.title == "Redirects" }
+    val siteContext = ScreenContext.withItem(Json.parseToJsonElement("""{"site":{"id":"h1"}}"""), Json.parseToJsonElement("""{"key":"redirects","label":"Redirects"}"""))
+    val inSite = ActionSpec.parse(redirects.raw.arr("actions").first())!!.exportRequest(siteContext)!!
+    assertEquals("h1", inSite.hostId)
+    assertEquals("redirects", inSite.resource)
+    assertNull(ActionSpec.parse(Json.parseToJsonElement("""{"label":"Go","url":"/api/x"}"""))!!.exportRequest(JsonObject(emptyMap())))
   }
 }

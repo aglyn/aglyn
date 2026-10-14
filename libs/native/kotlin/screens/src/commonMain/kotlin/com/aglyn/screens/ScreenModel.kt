@@ -22,6 +22,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -299,20 +300,46 @@ class ScreenModel(
   }
 
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
-    val outcome = perform(action, scope)
-    action.stash?.let { stash ->
-      val answer: JsonElement? = when (outcome) {
-        is ActionOutcome.Done -> outcome.response ?: JsonNull
-        is ActionOutcome.File -> JsonNull
-        else -> null
-      }
-      if (answer != null) {
-        ScreenStash.set(ScreenValues.resolveBody(stash, ScreenContext.with(scope, "response", answer)))
-        context = ScreenContext.with(context, "stash", ScreenStash.values)
+    var outcome = perform(action, scope)
+    // `repeat`: asked again until the answer meets `until`, the stash taking each pass so a screen shows
+    // the progress; `stop` ends it as a failure with the route's own words.
+    action.repeating?.let { again ->
+      val ceiling = (again.obj("max") as? JsonPrimitive)?.doubleOrNull?.toInt() ?: 200
+      var passes = 1
+      while (outcome is ActionOutcome.Done && passes < ceiling) {
+        val seen = ScreenContext.with(scope, "response", (outcome as ActionOutcome.Done).response ?: JsonNull)
+        stashAnswer(action, outcome, scope)
+        again.str("stop")?.let { stop ->
+          if (ScreenValues.condition(stop, seen)) {
+            return ActionOutcome.Failed(ScreenValues.render(again.str("stopMessage") ?: "The action stopped. Run it again to carry on.", seen))
+          }
+        }
+        if (ScreenValues.condition(again.str("until") ?: "response.done", seen)) break
+        outcome = perform(action, scope)
+        passes += 1
       }
     }
+    stashAnswer(action, outcome, scope)
     if (outcome is ActionOutcome.Done) action.then?.let { perform(it, ScreenContext.with(scope, "response", outcome.response)) }
+    // A follow-up that must succeed runs with the stash just made and the answer in scope.
+    if (outcome is ActionOutcome.Done) action.after?.let { follow ->
+      val seen = ScreenContext.with(ScreenContext.with(scope, "stash", ScreenStash.values), "response", outcome.response)
+      val next = run(follow, seen)
+      if (next is ActionOutcome.Failed || next is ActionOutcome.NeedsReauth) return next
+    }
     return outcome
+  }
+
+  /** Keeps what an action's `stash` asks for from its outcome. */
+  private fun stashAnswer(action: ActionSpec, outcome: ActionOutcome, scope: JsonElement) {
+    val stash = action.stash ?: return
+    val answer: JsonElement = when (outcome) {
+      is ActionOutcome.Done -> outcome.response ?: JsonNull
+      is ActionOutcome.File -> JsonNull
+      else -> return
+    }
+    ScreenStash.set(ScreenValues.resolveBody(stash, ScreenContext.with(scope, "response", answer)))
+    context = ScreenContext.with(context, "stash", ScreenStash.values)
   }
 
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
@@ -378,7 +405,8 @@ class ScreenModel(
           file.name ?: ScreenValues.render(fallback, scope), file.contentType, file.bytes, action.success?.let { ScreenValues.render(it, scope) },
         )
       }
-      val response = client.request(path, action.method, body, headers = headers(action, path, body, scope))
+      val response = action.chunk?.let { sendInParts(client, it, path, action.method, body) }
+        ?: client.request(path, action.method, body, headers = headers(action, path, body, scope))
       ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
     } catch (error: CancellationException) {
       throw error
@@ -401,6 +429,39 @@ class ScreenModel(
     val key = attempts.getOrPut(signature) { Uuid.random().toString() }
     val withAttempt = ScreenContext.with(scope, "attempt", JsonPrimitive(key))
     return action.headers.mapValues { (_, template) -> ScreenValues.render(template, withAttempt) }
+  }
+
+  /**
+   * A file sent in parts, as the console's upload client sends it: each part's text under `field` with its
+   * `part` and `parts`, the job the first answer names sent back with the rest. The last answer must say the
+   * file is whole (`until`).
+   */
+  private suspend fun sendInParts(client: ConsoleApiClient, chunk: JsonElement, path: String, method: ApiMethod, body: JsonElement?): JsonElement? {
+    val record = body as? JsonObject
+    val field = chunk.str("field")
+    if (record == null || field == null) return client.request(path, method, body)
+    val budget = (chunk.obj("bytes") as? JsonPrimitive)?.doubleOrNull?.toInt() ?: 3_000_000
+    val parts = ScreenValues.splitUpload(ScreenValues.text(record[field]), budget)
+    val firstOnly = chunk.arr("firstOnly").mapNotNull { (it as? JsonPrimitive)?.content }
+    var jobId: String? = null
+    var last: JsonElement? = null
+    for ((at, content) in parts.withIndex()) {
+      val one = record.toMutableMap()
+      one[field] = JsonPrimitive(content)
+      if (parts.size > 1) {
+        one["part"] = JsonPrimitive(at)
+        one["parts"] = JsonPrimitive(parts.size)
+      }
+      if (at > 0) firstOnly.forEach { one.remove(it) }
+      val key = chunk.str("idKey")
+      if (jobId != null && key != null) one[key] = JsonPrimitive(jobId)
+      last = client.request(path, method, JsonObject(one))
+      chunk.str("idFrom")?.let { from -> (last?.let { ScreenValues.lookup(from, it) } as? JsonPrimitive)?.takeIf { it.isString }?.content?.let { jobId = it } }
+    }
+    chunk.str("until")?.let { until ->
+      if (!ScreenValues.truthy(last?.let { ScreenValues.lookup(until, it) })) throw ConsoleApiError("The file did not finish uploading. Try again.", 500, null)
+    }
+    return last
   }
 
   companion object {

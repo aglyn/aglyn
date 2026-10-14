@@ -175,6 +175,7 @@ private fun SpecBody(
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
+  var exportDialog by remember { mutableStateOf<ExportRequest?>(null) }
   val exporter = com.aglyn.ui.LocalFileExporter.current
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
@@ -192,6 +193,10 @@ private fun SpecBody(
   }
 
   suspend fun execute(action: ActionSpec, actionScope: JsonElement) {
+    action.exportRequest(actionScope)?.let {
+      exportDialog = it
+      return
+    }
     action.copy?.let {
       clipboard.setText(AnnotatedString(ScreenValues.render(it, actionScope)))
       show("Copied", StatusTone.SUCCESS)
@@ -336,6 +341,15 @@ private fun SpecBody(
     }
   }
 
+  exportDialog?.let { request ->
+    com.aglyn.pluginhost.TransferExportDialog(
+      plugin, resource = request.resource, title = request.title, hostId = request.hostId,
+      scope = mapOf("kind" to "all"), fileStem = request.fileStem,
+    ) { message ->
+      exportDialog = null
+      if (message != null) show(message, StatusTone.SUCCESS)
+    }
+  }
   confirming?.let { pending ->
     ActionDialog(
       title = pending.action.confirmText(pending.scope) ?: ScreenValues.render(pending.action.label, pending.scope),
@@ -405,7 +419,7 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
   val inputs = pending.action.inputs
   fun filled(): JsonElement = ScreenContext.with(
     pending.scope, "form",
-    JsonObject(inputs.associate { it.key to fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)) }),
+    formObject(inputs) { values[it.key] ?: initialValue(it, pending.scope) },
   )
   // A field the person cannot see (its `when` fails) never holds up the action.
   val visible = filled()
@@ -729,18 +743,34 @@ private fun ListRow(
 internal sealed interface FieldValue {
   data class Text(val value: String) : FieldValue
   data class Flag(val value: Boolean) : FieldValue
+  /** A chosen file: its name, and its text. */
+  data class File(val name: String, val text: String) : FieldValue
 }
+
+/** The `form` a block hands its action: every field's value, and for a chosen file also `<key>Name`. */
+internal fun formObject(fields: List<FieldSpec>, value: (FieldSpec) -> FieldValue?): JsonObject = JsonObject(
+  buildMap {
+    for (field in fields) {
+      val held = value(field)
+      put(field.key, fieldJson(field, held))
+      if (held is FieldValue.File) put(field.key + "Name", JsonPrimitive(held.name))
+    }
+  },
+)
 
 internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when {
   field.kind == "toggle" && value is FieldValue.Flag -> JsonPrimitive(value.value)
   // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
   field.kind == "multiselect" && value is FieldValue.Text ->
     value.value.split('\n').filter { it.isNotEmpty() }.let { chosen -> if (chosen.isEmpty()) JsonNull else JsonArray(chosen.map { JsonPrimitive(it) }) }
-  field.kind == "file" && value is FieldValue.Text ->
-    if (value.value.isEmpty()) JsonNull else if (field.parse == "json") runCatching { kotlinx.serialization.json.Json.parseToJsonElement(value.value) }.getOrDefault(JsonNull) else JsonPrimitive(value.value)
+  field.kind == "file" && (value is FieldValue.Text || value is FieldValue.File) -> {
+    val text = if (value is FieldValue.File) value.text else (value as FieldValue.Text).value
+    if (text.isEmpty()) JsonNull else if (field.parse == "json") runCatching { kotlinx.serialization.json.Json.parseToJsonElement(text) }.getOrDefault(JsonNull) else JsonPrimitive(text)
+  }
   field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
+  value is FieldValue.File -> JsonPrimitive(value.text)
   else -> if (field.kind == "toggle") JsonPrimitive(false) else JsonNull
 }
 
@@ -758,7 +788,11 @@ internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValue, onChange: (FieldValue) -> Unit) {
-  val text = (value as? FieldValue.Text)?.value.orEmpty()
+  val text = when (value) {
+    is FieldValue.Text -> value.value
+    is FieldValue.File -> value.text
+    else -> ""
+  }
   val help = field.help?.let { ScreenValues.render(it, context) }
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
@@ -767,7 +801,6 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         // The chosen file is read whole as text (a package, a CSV); its name sits beside the button.
         val picker = com.aglyn.ui.LocalMediaPicker.current
         val chooser = rememberCoroutineScope()
-        var fileName by remember { mutableStateOf<String?>(null) }
         Text(field.label, style = MaterialTheme.typography.titleSmall)
         androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
           OutlinedButton(
@@ -775,13 +808,12 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
             onClick = {
               chooser.launch {
                 picker?.pick(com.aglyn.ui.PickSource.FILES, multiple = false)?.firstOrNull()?.let { file ->
-                  fileName = file.name
-                  onChange(FieldValue.Text(file.bytes.decodeToString()))
+                  onChange(FieldValue.File(file.name, ScreenValues.decodeFileText(file.bytes)))
                 }
               }
             },
           ) { Text(if (text.isEmpty()) "Choose a file" else "Choose a different file") }
-          if (text.isNotEmpty()) Text(fileName ?: "File chosen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+          if (text.isNotEmpty()) Text((value as? FieldValue.File)?.name ?: "File chosen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       }
@@ -851,7 +883,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   val scope = base?.let { ScreenContext.withItem(context, it) } ?: context
   // Re-seeded whenever the loaded data changes, as after a save.
   val values = remember(scope) { mutableStateMapOf<String, FieldValue>().apply { fields.forEach { put(it.key, initialValue(it, scope)) } } }
-  val filled = ScreenContext.with(scope, "form", JsonObject(fields.associate { it.key to fieldJson(it, values[it.key]) }))
+  val filled = ScreenContext.with(scope, "form", formObject(fields) { values[it.key] })
   val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, values[it.key]), scope) }
   Column(Modifier.fillMaxWidth().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {

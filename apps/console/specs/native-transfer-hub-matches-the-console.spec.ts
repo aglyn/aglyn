@@ -16,7 +16,28 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { TRANSFER_API_ROUTES } from '@aglyn/aglyn/data-transfer'
+import {
+  TRANSFER_API_ROUTES,
+  TRANSFER_CSV_DELIMITERS,
+  TRANSFER_UPLOAD_MAX_BYTES,
+  TRANSFER_UPLOAD_PART_MAX_BYTES,
+  transferResourceImports,
+} from '@aglyn/aglyn/data-transfer'
+import {
+  BLANK_WORDS,
+  MATCH_KIND_WORDS,
+  MATCH_REASON_WORDS,
+  MODE_WORDS,
+  NORMALIZER_WORDS,
+  ON_AMBIGUOUS_WORDS,
+  ON_MATCH_WORDS,
+  ON_NEW_WORDS,
+  REASON_WORDS as ROW_REASON_WORDS,
+  VERDICT_WORDS as ROW_VERDICT_WORDS,
+  WARNING_CLASS_WORDS,
+} from '@aglyn/aglyn-transfer-ui'
+import { FIRST_PARTY_PLUGINS } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
+import { listDeclaredTransferResources } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
   DECISION_WORDS,
   DEPENDENCY_WORDS,
@@ -89,5 +110,91 @@ describe('native imports and exports hub', () => {
     expect(text).toContain('"download": "results"')
     expect(text).toContain('"unfinished": true')
     expect(text).toContain('"sitePackages": true')
+  })
+
+  it('lists every resource the plugins declare, once, where the console lists it', () => {
+    const generated = JSON.parse(
+      readFileSync(join(__dirname, '../../../libs/native/screens/transfer-resources.screens.json'), 'utf8'),
+    ) as { screens: Array<{ id: string; constants: Record<string, Array<{ key: string; imports: boolean; kind: string }>> }> }
+    const listed = (id: string) =>
+      Object.values(generated.screens.find((screen) => screen.id === id)?.constants ?? {}).flat()
+    const org = listed('core.settings.data.records')
+    const site = listed('core.site.data')
+    const declared = listDeclaredTransferResources().filter((resource) => !resource.instances)
+    expect(org.map((row) => row.key).sort()).toEqual(
+      declared.filter((resource) => resource.scope === 'org').map((resource) => resource.key).sort(),
+    )
+    expect(site.map((row) => row.key).sort()).toEqual(
+      declared.filter((resource) => resource.scope === 'host').map((resource) => resource.key).sort(),
+    )
+    for (const row of [...org, ...site]) {
+      const resource = declared.find((one) => one.key === row.key)
+      expect(row.imports).toBe(transferResourceImports(resource ?? {}))
+      expect(row.kind).toBe(resource?.kinds.includes('package') ? 'package' : 'records')
+    }
+  })
+
+  it('asks the switchboard about plugins the app knows', () => {
+    const generated = readFileSync(join(__dirname, '../../../libs/native/screens/transfer-resources.screens.json'), 'utf8')
+    const asked = [...generated.matchAll(/data\.sw\.rows\[id='([^']+)'\]/g)].map((match) => match[1])
+    expect(asked.length).toBeGreaterThan(0)
+    const known = new Set(FIRST_PARTY_PLUGINS.map((plugin) => plugin.id))
+    for (const id of asked) expect(known.has(id)).toBe(true)
+  })
+
+  describe('the records import wizard', () => {
+    const importText = readFileSync(join(__dirname, '../../../libs/native/screens/transfer-import.screens.json'), 'utf8')
+    const wizard = (JSON.parse(importText) as { screens: Screen[] }).screens
+    const words = (id: string) => wizard.find((screen) => screen.id === id)?.constants ?? {}
+
+    it('says every code in the kit\u2019s words', () => {
+      const review = words('core.settings.data.import.review')
+      expect(review['warning']).toEqual(WARNING_CLASS_WORDS)
+      expect(review['verdict']).toEqual(ROW_VERDICT_WORDS)
+      expect(review['reason']).toEqual(ROW_REASON_WORDS)
+      expect(review['mode']).toEqual(MODE_WORDS)
+      const rules = words('core.settings.data.import.rules')
+      expect(rules['mode']).toEqual(MODE_WORDS)
+      expect(rules['blank']).toEqual(BLANK_WORDS)
+      expect(words('core.settings.data.import.columns')['matchReason']).toEqual(MATCH_REASON_WORDS)
+      const matching = words('core.settings.data.import.matching')
+      expect(matching['matchKind']).toEqual(MATCH_KIND_WORDS)
+      expect(matching['normalizer']).toEqual(NORMALIZER_WORDS)
+      expect(words('core.settings.data.import.done')['reason']).toEqual(ROW_REASON_WORDS)
+    })
+
+    it('offers the record rules the console offers, with its sentences', () => {
+      const rules = wizard.find((screen) => screen.id === 'core.settings.data.import.rules') as unknown as {
+        blocks: Array<{ id?: string; fields?: Array<{ key: string; options: Array<{ value: string; label: string }> }> }>
+      }
+      const policy = rules.blocks.find((block) => block.id === 'policy')?.fields ?? []
+      const options = (key: string) => Object.fromEntries((policy.find((field) => field.key === key)?.options ?? []).map((one) => [one.value, one.label]))
+      expect(options('onMatch')).toEqual(ON_MATCH_WORDS)
+      expect(options('onNew')).toEqual(ON_NEW_WORDS)
+      expect(options('onAmbiguous')).toEqual(ON_AMBIGUOUS_WORDS)
+      // Append only suits a list field, so the default for every field does not offer it.
+      expect(Object.keys(options('mode'))).toEqual(Object.keys(MODE_WORDS).filter((mode) => mode !== 'append'))
+      expect(options('blank')).toEqual(Object.fromEntries(Object.entries(BLANK_WORDS).map(([key, word]) => [key, word.label])))
+    })
+
+    it('uploads in the parts, with the separators and the choices the routes take', () => {
+      expect(importText).toContain(`"bytes": ${TRANSFER_UPLOAD_PART_MAX_BYTES}`)
+      expect(TRANSFER_UPLOAD_MAX_BYTES).toBe(24_000_000)
+      expect(importText).toContain('24 MB')
+      const delimiters = (JSON.parse(importText) as { screens: Array<{ id: string; constants?: { delimiter?: Record<string, string> } }> }).screens.find(
+        (screen) => screen.id === 'core.settings.data.import',
+      )?.constants?.delimiter
+      expect(Object.values(delimiters ?? {})).toEqual([...TRANSFER_CSV_DELIMITERS, '|'])
+      for (const route of ['fields', 'upload', 'analyze', 'plan', 'apply', 'status', 'undo'] as const) {
+        expect(importText).toContain(`"${TRANSFER_API_ROUTES[route]}"`)
+      }
+      for (const action of ['mapTo', 'addValue', 'leaveBlank', 'refuseRow', 'create']) expect(importText).toContain(`"${action}"`)
+      expect(words('core.settings.data.import.values')['picklistAction']).toEqual({
+        mapTo: 'Map to a list value',
+        addValue: 'Add it to the list',
+        leaveBlank: 'Leave the field blank',
+        refuseRow: 'Refuse these rows',
+      })
+    })
   })
 })
