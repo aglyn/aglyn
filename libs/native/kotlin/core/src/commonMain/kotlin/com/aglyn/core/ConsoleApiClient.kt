@@ -81,8 +81,12 @@ class ConsoleApiClient(
     idempotencyKey: String? = null,
     anonymous: Boolean = false,
     rawBody: RawBody? = null,
+    /** A paired device's own credential (the customer display's token), where there is no signed-in member. */
+    headers: Map<String, String> = emptyMap(),
   ): JsonElement? {
-    val retryable = method == ApiMethod.GET || idempotencyKey != null
+    // A write that names its own `Idempotency-Key` (a spec action's `headers`) is as safe to retry as one given `idempotencyKey`.
+    val keyed = idempotencyKey != null || headers.keys.any { it.equals("Idempotency-Key", ignoreCase = true) }
+    val retryable = method == ApiMethod.GET || keyed
     var forceRefresh = false
     var lastError: Throwable? = null
     var attempt = 1
@@ -95,6 +99,7 @@ class ConsoleApiClient(
         http.request(urlFor(path, query)) {
           this.method = HttpMethod.parse(method.name)
           header("Accept", "application/json")
+          for ((name, value) in headers) header(name, value)
           if (bearer != null) header("Authorization", "Bearer $bearer")
           if (idempotencyKey != null) header("Idempotency-Key", idempotencyKey)
           if (rawBody != null) {
