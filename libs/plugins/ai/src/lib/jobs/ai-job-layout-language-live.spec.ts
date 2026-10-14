@@ -137,12 +137,16 @@ import {
   aiRunLayoutPage,
 } from './ai-job-page-language'
 import { aiPageCheckContext, aiPageLinkablePages, aiPageSectionNodeId } from './ai-job-page-sections'
+import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
 const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
 const MODEL = process.env['AGLYN_LIVE_AI_MODEL'] || null
 const OUT = process.env['AGLYN_LIVE_AI_OUT'] || null
-const NOW = new Date()
+// A fixed day (AGL-3781): a build's or an events plan's prompt states today's
+// date, and a date that moved every run gave each run new request bytes, so
+// the replay cache answered none of them.
+const NOW = new Date('2026-10-14T12:00:00Z')
 const LAYOUT_ID = 'layout-main'
 const FORM_ID = 'form-contact'
 const CARD_ID = 'cmp-card'
@@ -578,7 +582,7 @@ async function buildLook(brief: Brief): Promise<LookResult> {
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive('six guided starts designed by the real model in the layout language', () => {
-  jest.setTimeout(15 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(15 * 60_000))
 
   it('builds every page and every header and footer with no refusal', async () => {
     if (OUT) mkdirSync(OUT, { recursive: true })

@@ -55,9 +55,13 @@ import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { AI_OWNED_CAPABILITIES } from './ai-build-capabilities'
 import { createAiJobPlanStep } from './ai-job-plan-step'
+import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
-const NOW = new Date()
+// A fixed day (AGL-3781): a build's or an events plan's prompt states today's
+// date, and a date that moved every run gave each run new request bytes, so
+// the replay cache answered none of them.
+const NOW = new Date('2026-10-14T12:00:00Z')
 
 /** The founder's words, 2026-10-06. */
 const CANONICAL_REQUEST =
@@ -168,7 +172,7 @@ function buildJob(): AiJob {
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive('the canonical request, planned by the real model (AGL-3616)', () => {
-  jest.setTimeout(15 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(15 * 60_000))
 
   it('keeps one plan that reuses the layout and makes the contact form, a booking service and an about page', async () => {
     const outcome = (await createAiJobPlanStep({

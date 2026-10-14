@@ -142,6 +142,7 @@ import {
   type AiPageSection,
 } from './ai-job-page-sections'
 import { aiJobPageSectionMaxElements } from './ai-job-page-step'
+import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
 const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
@@ -150,7 +151,10 @@ const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'busines
  * runs to uncut (`AGLYN_LIVE_AI_MAX_TOKENS=2000`); absent, the step's own.
  */
 const MAX_TOKENS = Number(process.env['AGLYN_LIVE_AI_MAX_TOKENS']) || null
-const NOW = new Date()
+// A fixed day (AGL-3781): a build's or an events plan's prompt states today's
+// date, and a date that moved every run gave each run new request bytes, so
+// the replay cache answered none of them.
+const NOW = new Date('2026-10-14T12:00:00Z')
 const LAYOUT_ID = 'layout-main'
 const FORM_ID = 'form-contact'
 const CARD_ID = 'cmp-card'
@@ -419,7 +423,7 @@ async function buildHome(entry: (typeof HOMES)[number], index: number): Promise<
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive("a guided start's Home page from the real model, a section a pass", () => {
-  jest.setTimeout(10 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(10 * 60_000))
 
   it('builds every Home page whole', async () => {
     const pages = await Promise.all(HOMES.map(buildHome))

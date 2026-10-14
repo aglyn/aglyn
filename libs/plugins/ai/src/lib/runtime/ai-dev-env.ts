@@ -24,6 +24,8 @@
  * in a deployed server.
  */
 
+import type { AiEffort } from '../providers/contract'
+
 export type AiDevReplayMode = 'off' | 'replay' | 'refresh'
 
 /** The variable that turns the replay cache on, off, or to refresh. */
@@ -47,9 +49,20 @@ export function aiIsDeployedRuntime(env: AiDevEnv = process.env): boolean {
   )
 }
 
-/** Whether this process is a development run that asked for the live provider through the launcher. */
-function underLiveLauncher(env: AiDevEnv): boolean {
-  return Boolean(env[AI_LIVE_LAUNCHER_ENV])
+/** The variable every live spec is started with. */
+export const AI_LIVE_RUN_ENV = 'AGLYN_LIVE_AI'
+
+/**
+ * Whether this process is a development run that asked for the live
+ * provider: through the launcher, or a live spec started with
+ * `AGLYN_LIVE_AI=1` (AGL-3781). Every development layer is on by default in
+ * such a run — a live spec started without the launcher's mark used to send
+ * every request again, at the five-minute cache and full price — and each can
+ * still be turned off by its own variable.
+ */
+export function aiUnderLiveRun(env: AiDevEnv = process.env): boolean {
+  if (aiIsDeployedRuntime(env)) return false
+  return Boolean(env[AI_LIVE_LAUNCHER_ENV]) || String(env[AI_LIVE_RUN_ENV] ?? '').trim() === '1'
 }
 
 /** The replay mode this process runs under; `off` in any deployed server. */
@@ -59,7 +72,7 @@ export function aiDevReplayMode(env: AiDevEnv = process.env): AiDevReplayMode {
   if (raw === 'refresh') return 'refresh'
   if (raw === '1' || raw === 'on' || raw === 'true' || raw === 'replay') return 'replay'
   if (raw === '0' || raw === 'off' || raw === 'false') return 'off'
-  return underLiveLauncher(env) ? 'replay' : 'off'
+  return aiUnderLiveRun(env) ? 'replay' : 'off'
 }
 
 /**
@@ -76,7 +89,7 @@ export function aiDevCacheTtl(env: AiDevEnv = process.env): '1h' | undefined {
   const raw = String(env[AI_DEV_CACHE_TTL_ENV] ?? '').trim().toLowerCase()
   if (raw === '1h') return '1h'
   if (raw === '5m') return undefined
-  return underLiveLauncher(env) ? '1h' : undefined
+  return aiUnderLiveRun(env) ? '1h' : undefined
 }
 
 /** A deployed server that was handed the variable says so once, and runs without it. */
@@ -93,8 +106,55 @@ export function aiWarnIfReplayAskedInDeployment(env: AiDevEnv = process.env): vo
 /** The variable that turns batch mode on (`runtime/ai-live-batch.ts`). */
 export const AI_LIVE_BATCH_ENV = 'AGLYN_LIVE_AI_BATCH'
 
-/** Whether this process batches its live requests. */
+/**
+ * Whether this process batches its live requests: what `AGLYN_LIVE_AI_BATCH`
+ * says, and in a live run that says nothing, yes (AGL-3781). Nobody waits on
+ * an eval's answers, and a batch is half price on every token, cache reads
+ * and writes included; `AGLYN_LIVE_AI_BATCH=0` is for the quick single run an
+ * iteration wants back in seconds.
+ */
 export function aiLiveBatchWanted(env: AiDevEnv = process.env): boolean {
   if (aiIsDeployedRuntime(env)) return false
-  return /^(?:1|true|yes|on)$/i.test(String(env[AI_LIVE_BATCH_ENV] ?? '').trim())
+  const raw = String(env[AI_LIVE_BATCH_ENV] ?? '').trim()
+  if (/^(?:1|true|yes|on)$/i.test(raw)) return true
+  if (/^(?:0|false|no|off)$/i.test(raw)) return false
+  return aiUnderLiveRun(env)
+}
+
+/**
+ * The most a batched live run may take: the adapter waits up to an hour on
+ * each batch, and a run's requests go as a few batches one after another —
+ * the answers, their re-asks, the grades. A spec that timed out would keep
+ * none of the answers it already paid for, so the bound is the worst case.
+ */
+export const AI_LIVE_BATCH_TIMEOUT_MS = 5 * 60 * 60_000
+
+/** A live spec's timeout: `baseMs`, or the batched run's when this run batches. */
+export function aiLiveTimeoutMs(baseMs: number, env: AiDevEnv = process.env): number {
+  return aiLiveBatchWanted(env) ? Math.max(baseMs, AI_LIVE_BATCH_TIMEOUT_MS) : baseMs
+}
+
+/**
+ * The variable an effort A/B names its arm with (AGL-3781): a step kind's
+ * effort for this run, as `job.form:medium,job.text:low`, or `*:medium` for
+ * every kind. A development run only, so the defaults stay where production
+ * runs them until a recorded round shows a lower effort holds.
+ */
+export const AI_EFFORT_ARM_ENV = 'AGLYN_AI_EFFORT'
+
+const AI_EFFORT_LEVELS: readonly AiEffort[] = ['low', 'medium', 'high']
+
+/** The effort this development run's A/B arm asks `step` at, or `undefined` for the step's own. */
+export function aiDevEffortFor(step: string | undefined, env: AiDevEnv = process.env): AiEffort | undefined {
+  if (aiIsDeployedRuntime(env)) return undefined
+  const raw = String(env[AI_EFFORT_ARM_ENV] ?? '').trim()
+  if (!raw) return undefined
+  let fallback: AiEffort | undefined
+  for (const pair of raw.split(',')) {
+    const [kind, level] = pair.split(':').map((part) => part.trim())
+    if (!AI_EFFORT_LEVELS.includes(level as AiEffort)) continue
+    if (kind === step) return level as AiEffort
+    if (kind === '*') fallback = level as AiEffort
+  }
+  return fallback
 }

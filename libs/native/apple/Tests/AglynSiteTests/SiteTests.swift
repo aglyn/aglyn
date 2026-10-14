@@ -185,6 +185,14 @@ final class SiteTests: XCTestCase {
     // A blank box asks nothing, and a megabyte box takes digits and one point.
     XCTAssertEqual(MediaFilters(tag: "  ", minMegabytes: " ").clauses(scoped: false), [])
     XCTAssertEqual(megabytesInput("1a2.5.7"), "12.57")
+    // The day a file was uploaded and who uploaded it: a range on the creation time, and an equality.
+    let dated = mediaQuery(
+      scope: .site(hostID: "h"), folder: .all, scopeTokens: nil, type: nil, sort: .newest, search: "",
+      filters: MediaFilters(uploadedAfter: "2026-03-14", uploadedBefore: "2026-03-15", uploadedBy: "u1"))
+    XCTAssertEqual(MediaFilters(uploadedAfter: "2026-03-14", uploadedBefore: "2026-03-15", uploadedBy: "u1").count, 3)
+    XCTAssertTrue(has(dated, "uploadedBy", .equal, "u1"))
+    XCTAssertTrue(dated.filters.contains { $0.path == "createdAt" && $0.op == .greaterThanOrEqual })
+    XCTAssertTrue(dated.filters.contains { $0.path == "createdAt" && $0.op == .lessThan })
     // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
     let notices = mediaPlanNotices(
       mediaPlan(
@@ -228,6 +236,9 @@ final class SiteTests: XCTestCase {
     // A film's measured length, in whole seconds.
     XCTAssertEqual(try file("m6", ["video": ["durationMs": 63_400, "width": 1920, "height": 1080]]).videoSeconds, 63)
     XCTAssertNil(try file("m7").videoSeconds)
+    // A film's captured poster frame is recorded on its document; without one, its poster address is no picture.
+    XCTAssertTrue(try file("m8", ["poster": ["width": 640]]).hasPoster)
+    XCTAssertFalse(try file("m9").hasPoster)
   }
 
   func testShowsAStoredPictureFromTheCDNForTheSiteBeingEdited() {

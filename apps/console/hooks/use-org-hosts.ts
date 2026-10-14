@@ -20,9 +20,11 @@ import type { HostAccessRole } from '@aglyn/aglyn'
 import {
   collection,
   doc,
+  documentId,
   getDocsFromServer,
   onSnapshot,
   query,
+  where,
   type DocumentData,
   type Firestore,
 } from 'firebase/firestore'
@@ -110,6 +112,25 @@ export interface OrgHost extends DocumentData {
  * denied host read and the host is dropped — it can cost a visible site, never
  * leak one.
  *
+ * ## A missing host is confirmed, not believed (AGL-3789)
+ *
+ * The mirror is server-written and removed with the site, so a row it still
+ * lists whose host snapshot says "no such document" is a contradiction, and
+ * the cache is the likelier liar: a NoDocument tombstone written while two
+ * tabs both ran as primary (AGL-3788) is served to this listen from cache,
+ * and a resumed listen only pulls deltas, so it outlives reloads. Taken at
+ * its word it empties a workspace that has sites — "No sites yet" again.
+ *
+ * So each such host is asked once per attempt with a one-shot server query:
+ * `__name__ == id` plus `memberRoles.{uid} in` the access roles, the
+ * rules-provable shape the pre-AGL-1190 list used. Its canonical id is new
+ * to the cache, so the server sends the whole document rather than a delta,
+ * and writing it back overwrites the tombstone. What the server says wins:
+ * the document is shown; no match drops the host, as an absence; a failed
+ * ask counts as a refusal, so a list nobody could confirm is an error with a
+ * retry and never a clean empty. The live listens above stay unconstrained —
+ * a one-shot read never holds a target open for a write to fall out of.
+ *
  * ## Retry
  *
  * Not via `useFirestoreCollectionData` (reactfire), whose cached Observable is
@@ -171,6 +192,13 @@ export function useOrgHosts(
      * fact. Absence is an answer; refusal is the absence of one.
      */
     const deniedIds = new Set<string>()
+    /**
+     * The server's answer for a host whose snapshot said it does not exist
+     * (AGL-3789): the document, or `null` when no readable one matched.
+     * Asked once per attempt; `confirming` holds the ids being asked.
+     */
+    const confirmations = new Map<string, OrgHost | null>()
+    const confirming = new Set<string>()
     const hostUnsubs = new Map<string, () => void>()
     let wantedIds: string[] = []
 
@@ -228,6 +256,48 @@ export function useOrgHosts(
       setReady(true)
     }
 
+    /**
+     * Settle a host the cache says does not exist by asking the server
+     * (AGL-3789). Until it answers the host stays unresolved, so `publish`
+     * holds rather than settling a list that may be missing it.
+     */
+    const confirmMissing = (id: string) => {
+      if (confirmations.has(id)) {
+        deniedIds.delete(id)
+        hostDocs.set(id, confirmations.get(id) ?? null)
+        publish()
+        return
+      }
+      if (confirming.has(id)) return
+      confirming.add(id)
+      getDocsFromServer(
+        query(
+          collection(firestore, 'hosts'),
+          where(documentId(), '==', id),
+          where(`memberRoles.${uid}`, 'in', [...HOST_ACCESS_ROLES]),
+        ),
+      )
+        .then((fresh) => {
+          if (cancelled || !confirming.has(id)) return
+          const found = fresh.docs[0]
+          const answer: OrgHost | null = found
+            ? { $id: found.id, ...found.data() }
+            : null
+          confirmations.set(id, answer)
+          deniedIds.delete(id)
+          hostDocs.set(id, answer)
+          publish()
+        })
+        .catch(() => {
+          if (cancelled || !confirming.has(id)) return
+          // Not confirmed is not absent: count it with the refusals, so a
+          // list whose every host went this way is an error, not empty.
+          deniedIds.add(id)
+          hostDocs.set(id, null)
+          publish()
+        })
+    }
+
     const watchHost = (id: string) => {
       if (hostUnsubs.has(id)) return
       hostUnsubs.set(
@@ -236,13 +306,16 @@ export function useOrgHosts(
           doc(firestore, 'hosts', id),
           (snap) => {
             if (cancelled) return
-            // An answer of any kind clears the refusal: a listen that
-            // recovers must not leave the list latched as degraded.
+            // "No such document" is the cache's word, not an answer: the
+            // server settles it, and only an answer clears a refusal.
+            if (!snap.exists()) {
+              confirmMissing(id)
+              return
+            }
+            // A document clears the refusal: a listen that recovers must not
+            // leave the list latched as degraded.
             deniedIds.delete(id)
-            hostDocs.set(
-              id,
-              snap.exists() ? { $id: snap.id, ...snap.data() } : null,
-            )
+            hostDocs.set(id, { $id: snap.id, ...snap.data() })
             publish()
           },
           () => {
@@ -270,6 +343,8 @@ export function useOrgHosts(
           hostUnsubs.delete(id)
           hostDocs.delete(id)
           deniedIds.delete(id)
+          confirmations.delete(id)
+          confirming.delete(id)
         }
       }
       ids.forEach(watchHost)

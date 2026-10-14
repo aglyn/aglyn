@@ -2761,7 +2761,7 @@
     {
       "id": "ai",
       "mobile": {
-        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json.",
+        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json. AGL-3668: the site's listing from the guided start, in Setup → SEO's zone, and what Aglyn AI learned, in Setup → Business profile's.",
         "ios": {
           "module": "AglynAiPlugin",
           "register": "registerAINative"
@@ -2781,6 +2781,10 @@
             "ai.signals",
             "ai.hostMember",
             "ai.allotment"
+          ],
+          "widgets": [
+            "ai.seo-start",
+            "ai.site-memory"
           ],
           "quickActions": [
             "ai.open"

@@ -660,6 +660,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
       "why": "What a store's shipping zones and rates cover: the resolver checkout builds its shipping options from and the Coverage block's words. Pure arithmetic over the settings document; the native Shipping page replays it from function-cases.generated.json."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "why": "The media image editor's arithmetic: the quarter-turn size, the crop a drag draws, where an edit cuts and how big it comes out, the copy's name and type (AGL-3668). No imports."
     }
   ]
 }

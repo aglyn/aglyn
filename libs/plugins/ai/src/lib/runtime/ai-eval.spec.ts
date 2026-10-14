@@ -317,10 +317,14 @@ describe('the routing table (AGL-2937)', () => {
     },
   )
 
-  it('asks no fast-tier step for thinking or effort, which that tier refuses', () => {
+  it('tells every fast-tier step not to think: each ceiling holds the answer alone (AGL-3781)', () => {
+    // The fast tier's model thinks unless told not to, and thinking is drawn
+    // from the same ceiling as the answer, so a fast row that named nothing
+    // would spend a ceiling sized for its answer on thinking first.
     for (const [step, row] of Object.entries(AI_ROUTING_TABLE)) {
       if (AI_STEP_TIERS[step as keyof typeof AI_STEP_TIERS] !== 'fast') continue
-      expect([step, row.thinking, row.effort]).toEqual([step, null, null])
+      expect([step, row.thinking]).toEqual([step, 'off'])
+      expect([step, row.effort === null || row.effort === 'low']).toEqual([step, true])
     }
   })
 })

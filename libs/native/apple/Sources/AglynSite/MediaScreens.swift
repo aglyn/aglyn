@@ -177,7 +177,7 @@ struct MediaLibrary: View {
       }
     }
     .sheet(isPresented: $filtersSheet) {
-      MediaFiltersSheet(filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
+      MediaFiltersSheet(context: context, filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
         filtersSheet = false
       }
     }
@@ -565,6 +565,7 @@ struct MediaDetailBody: View {
   @State private var deleting = false
   @State private var replaceSource: PickSource?
   @State private var audioReplacement: PickedFile?
+  @State private var editingImage = false
   @State private var references: [MediaReference]?
 
   private var origin: String { context.api.origin }
@@ -755,6 +756,7 @@ struct MediaDetailBody: View {
       }
     }
     .sheet(isPresented: $moving) { moveSheet }
+    .sheet(isPresented: $editingImage) { imageEditor }
     .confirmationDialog("Delete \(item.fileName)?", isPresented: $deleting, titleVisibility: .visible) {
       Button("Delete", role: .destructive) {
         let (id, name) = (item.id, item.fileName)
@@ -802,6 +804,45 @@ struct MediaDetailBody: View {
     .buttonStyle(.bordered)
     .disabled(!canEdit || runner.busy)
     .accessibilityIdentifier("media-replace")
+    // Rotate, flip, crop and shrink are for pictures only: there is nothing to crop in a PDF.
+    if item.contentType.hasPrefix("image/") {
+      Button {
+        runner.clear()
+        editingImage = true
+      } label: {
+        Label("Edit image", systemImage: "crop.rotate")
+      }
+      .buttonStyle(.bordered)
+      .disabled(!canEdit || runner.busy)
+      .accessibilityIdentifier("media-edit-image")
+    }
+  }
+
+  /// The image editor, over the file itself rather than the display copy the library shows, so "Replace original"
+  /// never saves a shrunken copy over it.
+  private var imageEditor: some View {
+    let (api, item, scope, origin) = (api, item, scope, origin)
+    return ImageEditorSheet(
+      fileName: item.fileName,
+      loadOriginal: {
+        let link: String?
+        if item.isPrivate && scope.isOrg { link = try? await api.signedLink(item.id) } else { link = item.src(origin: origin).map(mediaOriginalSrc) }
+        guard let link, let url = URL(string: link), let (data, response) = try? await URLSession.shared.data(from: url),
+          (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return data
+      },
+      busy: runner.busy, error: runner.error,
+      onCancel: { editingImage = false },
+      onSave: { file, asCopy in
+        if asCopy {
+          runner.run("Saved an edited copy.", onDone: { editingImage = false }) { _ = try await api.upload(file, folderID: item.folderID) }
+        } else {
+          runner.run("Image replaced. Everywhere it is used now shows the edited image.", onDone: { editingImage = false }) {
+            try await api.replace(item, with: file, rightsConfirmed: false)
+          }
+        }
+      })
   }
 
   private var moveSheet: some View {
