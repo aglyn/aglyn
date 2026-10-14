@@ -37,6 +37,7 @@ content on the marketing site and is written separately.
 - **native:** the theme editor's Style components choices on Apple and Android ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **native:** the Marketplace and Logic plugins on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **native:** dataset fields take image, page, page address and rating types on Apple; Apple datasets, records and schema screens ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **admin:** nightly hashed-email ad audience sync to Meta, Google and LinkedIn, off until `release_ad_audience_sync` ([AGL-3780](https://linear.app/aglyn/issue/AGL-3780))
 
 ### Fixed
 
@@ -57,10 +58,12 @@ content on the marketing site and is written separately.
 - **accounting:** a Codat connection's help opens its own guide ([AGL-3776](https://linear.app/aglyn/issue/AGL-3776))
 - **shipping:** keep carrier accounts and labels out of the listed docs ([AGL-3777](https://linear.app/aglyn/issue/AGL-3777))
 - **docs:** anchored help tooltips quote their own section ([AGL-3778](https://linear.app/aglyn/issue/AGL-3778))
+- **admin:** name the audience sync's Auth page reader listUserPage ([AGL-3780](https://linear.app/aglyn/issue/AGL-3780))
 
 <details>
 <summary>Also in this release: ci, docs, tests and chores</summary>
 
+- **linear:** raise the issue-id ceiling to AGL-3782 ([AGL-3780](https://linear.app/aglyn/issue/AGL-3780))
 - **ci:** build Swift tests once, cache from main, macOS only for Swift changes ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **docs:** commerce setup guides for discounts, coupons, product reviews and dropship suppliers ([AGL-3714](https://linear.app/aglyn/issue/AGL-3714))
 - **docs:** the register's tenders and receipt printing ([AGL-3651](https://linear.app/aglyn/issue/AGL-3651))
