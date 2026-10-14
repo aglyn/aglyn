@@ -36,7 +36,7 @@ import {
 } from '../model/ai-crm'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import type { AiTool } from '../providers/contract'
-import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep, aiRouteSettings } from '../providers/routing'
 import { aiDoctrineScopeFor, aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import {
@@ -957,6 +957,7 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
       }
       const generation = await runValidatedGeneration(AI_CRM_GENERATION_KINDS.record, {
         step: 'job.crm',
+        ...aiRouteSettings('job.crm'),
         model,
         instructions,
         messages: [{ role: 'user', content: prompt }],
@@ -986,6 +987,7 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
       const mergeFields = aiCrmEmailMergeFields(kind)
       const generation = await runValidatedGeneration(AI_CRM_GENERATION_KINDS.email, {
         step: 'job.crm',
+        ...aiRouteSettings('job.crm'),
         model,
         instructions: AI_CRM_EMAIL_INSTRUCTIONS,
         messages: [{ role: 'user', content: aiCrmEmailPrompt({ kind, facts, request: job.brief }) }],
@@ -1016,6 +1018,7 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
     }
     const generation = await runValidatedGeneration(AI_CRM_GENERATION_KINDS.mapping, {
       step: 'job.crm',
+      ...aiRouteSettings('job.crm'),
       model,
       instructions: AI_CRM_MAPPING_INSTRUCTIONS,
       messages: [

@@ -44,6 +44,7 @@ import {
   type AiTool,
   type AiUsage,
 } from './ai-runtime'
+import { aiDevEffortFor } from './ai-dev-env'
 import {
   AI_SIMILAR_PAGES_MIN,
   aiDoctrineViolationText,
@@ -1097,13 +1098,16 @@ export async function runValidatedGeneration(
     input.maxTokens ??
     AI_GENERATION_MAX_TOKENS[kind as AiGenerationKind] ??
     AI_CUSTOM_GENERATION_MAX_TOKENS
+  // A development run's effort A/B arm (AGL-3781) asks its step at the arm's
+  // effort; everywhere else the door's own stands.
+  const effort = aiDevEffortFor(input.step) ?? input.effort
   const spend: AiGenerationSpend = {
     attempts: 0,
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
     estCostUsd: 0,
     model,
     stopReason: null,
-    effort: input.effort ?? null,
+    effort: effort ?? null,
   }
   // "More on request" (AGL-2937). A door that reads a site is offered the
   // lookup tool beside its own on EVERY request, whatever the site's size:
@@ -1150,7 +1154,7 @@ export async function runValidatedGeneration(
       maxTokens: Math.min(maxTokens, left),
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
-      ...(input.effort ? { effort: input.effort } : {}),
+      ...(effort ? { effort } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.settings ? { settings: input.settings } : {}),
       ...(input.provider ? { provider: input.provider } : {}),

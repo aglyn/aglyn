@@ -23,8 +23,9 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
-import { readAiEvalCase, type AiEvalCase } from './ai-eval'
+import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
 import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
+import { AI_EFFORT_ARM_ENV, aiLiveTimeoutMs } from './ai-dev-env'
 import { aiLiveRunLedger } from './ai-dev-replay'
 import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 
@@ -49,8 +50,9 @@ import { aiActiveProvider, aiProviderReady } from './ai-runtime'
  *      for the prompts you changed — read `run.live` in the table: 0 means
  *      nothing new was asked and the run proves nothing;
  *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
- *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
- *      as one Message Batch at half price (minutes, not seconds).
+ *      asks every request again; the launcher sends the round as Message
+ *      Batches at half price (minutes, not seconds) unless
+ *      `AGLYN_LIVE_AI_BATCH=0` (AGL-3781).
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -73,6 +75,7 @@ const files = (dir: string): string[] =>
 
 const live = aiEvalLiveAllowed(process.env)
 
+
 ;(live ? describe : describe.skip)('the live eval run', () => {
   it(
     'records and grades an answer for every brief a recorder covers',
@@ -92,12 +95,24 @@ const live = aiEvalLiveAllowed(process.env)
         process.env,
       )
       const report = await recordAiEvalLive(cases, { env: process.env, readFixture })
+      // An effort A/B arm (AGL-3781) records beside the defaults' answers, not
+      // over them, and says per brief what it scored, so two runs compare.
+      const arm = String(process.env[AI_EFFORT_ARM_ENV] ?? '').trim()
+      const suffix = arm ? `.effort-${arm.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}` : ''
       for (const { caseId, kind, candidate } of report.recorded) {
         const dir = join(RECORDINGS_DIR, kind)
         mkdirSync(dir, { recursive: true })
         writeFileSync(
-          join(dir, `${caseId}.${candidate.model ?? 'unknown'}.json`),
+          join(dir, `${caseId}.${candidate.model ?? 'unknown'}${suffix}.json`),
           `${JSON.stringify({ caseId, candidate }, null, 2)}\n`,
+        )
+        const evalCase = cases.find((entry) => entry.id === caseId)
+        const score = evalCase ? scoreAiEvalCandidate(evalCase, candidate) : null
+        const rubric = candidate.rubric
+        console.log(
+          `score ${caseId} (${kind}) ${candidate.model}${arm ? ` effort ${arm}` : ''}: ${score?.pass ? 'pass' : 'fail'}` +
+            `, structure ${rubric?.structure ?? '-'}, copy ${rubric?.copy ?? '-'}, reuse ${rubric?.reuse ?? '-'}` +
+            `, output ${candidate.usage?.outputTokens ?? '-'} tokens`,
         )
       }
       // Live against replayed (AGL-3660): a recording whose request was
@@ -127,6 +142,6 @@ const live = aiEvalLiveAllowed(process.env)
       expect(report.recorded.length).toBeGreaterThan(0)
       expect(report.failed).toEqual([])
     },
-    30 * 60_000,
+    aiLiveTimeoutMs(30 * 60_000),
   )
 })

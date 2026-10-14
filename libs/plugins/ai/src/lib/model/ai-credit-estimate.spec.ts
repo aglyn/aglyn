@@ -37,23 +37,25 @@ import { aiFreeSiteCreditEstimate, aiFreeSiteCreditRange } from './ai-site-job'
 describe('what a job is quoted from (AGL-3722)', () => {
   it('holds the production measurement as read on 2026-10-09, done jobs since 2026-10-01', () => {
     expect(AI_MEASURED_AT).toEqual({ read: '2026-10-09', since: '2026-10-01' })
+    // Its fast-tier parts — the look, a Free start's plan and each page's
+    // listing — repriced at Claude Haiku 5.5's billed rate (AGL-3781).
     expect(AI_MEASURED_UNIT_CREDITS).toEqual({
-      page: { median: 30, p90: 40 },
+      page: { median: 28, p90: 38 },
       form: { median: 29, p90: 31 },
       layout: { median: 23, p90: 24 },
-      theme: { median: 4, p90: 8 },
-      plan: { median: 21, p90: 70 },
+      theme: { median: 1, p90: 2 },
+      plan: { median: 4, p90: 70 },
     })
   })
 
   it('scales a page by its sections around the ~5-section median: about 6 a section, 8 at the p90', () => {
     expect(aiMeasuredPageCredits(AI_MEASURED_PAGE_SECTIONS)).toEqual(AI_MEASURED_UNIT_CREDITS.page)
-    expect(aiMeasuredPageCredits(6)).toEqual({ median: 36, p90: 48 })
-    expect(aiMeasuredPageCredits(3)).toEqual({ median: 18, p90: 24 })
+    expect(aiMeasuredPageCredits(6)).toEqual({ median: 34, p90: 46 })
+    expect(aiMeasuredPageCredits(3)).toEqual({ median: 17, p90: 23 })
     expect(aiMeasuredPageCredits(0)).toEqual({ median: 6, p90: 8 })
   })
 
-  it('quotes a whole Free two-page site near what one measured (148–160), its p90 above it, its ceiling the worst case', () => {
+  it('quotes a whole Free two-page site near what one measured (121–133 repriced), its p90 above it, its ceiling the worst case', () => {
     const range = aiFreeSiteCreditRange(2)
     // The sum of per-item medians runs a little under a whole job's median; within a tenth of it.
     expect(range.likely).toBeGreaterThanOrEqual(Math.floor(AI_MEASURED_FREE_SITE_CREDITS.low * 0.9))

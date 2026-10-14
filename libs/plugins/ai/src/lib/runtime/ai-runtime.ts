@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { aiModelCacheMinTokens } from '../providers/catalog'
+import { aiCatalogEntry, aiModelCacheMinTokens } from '../providers/catalog'
 import {
   AI_IMAGE_MAX_BYTES,
   AI_IMAGE_MEDIA_TYPES,
@@ -39,6 +39,7 @@ import {
   aiDevReplayMode,
   aiIsDeployedRuntime,
   aiLiveBatchWanted,
+  aiUnderLiveRun,
   aiWarnIfReplayAskedInDeployment,
 } from './ai-dev-env'
 import { aiCompleteInBatch } from './ai-live-batch'
@@ -355,6 +356,7 @@ export async function runAiRequest(
   input: AiRequest | AiStreamRequest,
 ): Promise<AsyncIterable<AiStreamEvent> | AiResult> {
   validateAiSystemBlocks(input.system)
+  refuseRetiredModelInLiveRun(input.model)
   const { provider, apiKey } = providerFor(input)
   validateAiMessages(input.messages, () => aiModelReadsImages(provider, input.model))
   const { stream, settings: _settings, provider: _provider, ...request } = input
@@ -369,6 +371,21 @@ export async function runAiRequest(
   } catch (error) {
     await reportAccountProblem(provider, error)
     throw error
+  }
+}
+
+/**
+ * A live development run that names a retired model is refused before it
+ * spends (AGL-3781). Routing serves a retired id's successor wherever a
+ * setting or an override names it, so a retired id reaching here was asked
+ * for by name — an override left in a run, or a comparison a spec kept — and
+ * would bill a model production no longer serves.
+ */
+function refuseRetiredModelInLiveRun(model: string): void {
+  if (!aiUnderLiveRun()) return
+  const successor = aiCatalogEntry(model)?.successor
+  if (successor) {
+    throw new AiRequestShapeError(`${model} is retired; ${successor} serves in its place`)
   }
 }
 
