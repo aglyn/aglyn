@@ -12543,6 +12543,105 @@
         }
       ]
     },
+    "mediaPosterSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "cases": [
+        {
+          "args": [
+            "media:h1/m1"
+          ],
+          "result": "/api/media/cdn/h1/m1?poster=1"
+        },
+        {
+          "args": [
+            "media:h1/m1",
+            {
+              "hostId": "h9"
+            }
+          ],
+          "result": "/api/media/cdn/h1/m1?poster=1"
+        },
+        {
+          "args": [
+            "media:org:o1/m2",
+            {
+              "hostId": "h9",
+              "width": 640
+            }
+          ],
+          "result": "/api/media/cdn/org:o1:h9/m2?poster=1&w=640"
+        },
+        {
+          "args": [
+            "media:org:o1/m2",
+            {
+              "width": 320.4
+            }
+          ],
+          "result": "/api/media/cdn/org:o1/m2?poster=1&w=320"
+        },
+        {
+          "args": [
+            "media:h1/m1",
+            {
+              "width": 0
+            }
+          ],
+          "result": "/api/media/cdn/h1/m1?poster=1"
+        },
+        {
+          "args": [
+            "media:h1/m1",
+            {
+              "width": -5
+            }
+          ],
+          "result": "/api/media/cdn/h1/m1?poster=1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/h1/m1?x=1"
+          ],
+          "result": "/api/media/cdn/h1/m1?x=1&poster=1"
+        },
+        {
+          "args": [
+            "/api/media/cdn/h1/m1"
+          ],
+          "result": "/api/media/cdn/h1/m1?poster=1"
+        },
+        {
+          "args": [
+            "https://example.com/v.mp4"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media"
+          ],
+          "result": "/api/media/cdn/h1/m5?poster=1"
+        },
+        {
+          "args": [
+            "media:bad scope/m1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        }
+      ]
+    },
     "mediaQueryRequest": {
       "module": "libs/aglyn/src/lib/app-utils/media-filter.ts",
       "cases": [

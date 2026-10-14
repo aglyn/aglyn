@@ -146,6 +146,16 @@ public func resolveMediaSrc(_ value: String?, hostID: String? = nil) -> String? 
   return "\(mediaCDNRoute)/\(hostQualifiedScope(ref.scope, hostID: hostID))/\(ref.mediaId)"
 }
 
+/// The poster frame a film's reference can be asked for, or nil when the value
+/// is not served by this platform's CDN. Asking is not a promise one exists:
+/// only a film whose document records a captured `poster` has one.
+public func mediaPosterSrc(_ value: String?, hostID: String? = nil, width: Double? = nil) -> String? {
+  guard let src = resolveMediaSrc(value, hostID: hostID), src.hasPrefix("\(mediaCDNRoute)/") else { return nil }
+  var query = "poster=1"
+  if let width, width.isFinite, width > 0 { query += "&w=\(Int64((width + 0.5).rounded(.down)))" }
+  return src + (src.contains("?") ? "&" : "?") + query
+}
+
 /// An org asset's CDN path rewritten to name the site using it, but only for
 /// an asset restricted to some sites; an org-wide asset, a site's own file and
 /// a path already naming a site are returned untouched.

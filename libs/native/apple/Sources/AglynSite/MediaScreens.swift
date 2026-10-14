@@ -177,7 +177,7 @@ struct MediaLibrary: View {
       }
     }
     .sheet(isPresented: $filtersSheet) {
-      MediaFiltersSheet(filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
+      MediaFiltersSheet(context: context, filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
         filtersSheet = false
       }
     }

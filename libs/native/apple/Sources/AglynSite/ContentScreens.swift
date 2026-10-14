@@ -530,6 +530,14 @@ private struct EntryForm: View {
         onPick: { chosen in
           draft.coverVideo = chosen.reference
           draft.coverVideoDuration = chosen.item.videoSeconds.map(String.init) ?? ""
+          // A film with a captured frame and an entry with no cover of its own: the frame is the cover (and its description follows).
+          if draft.coverImage.trimmed.isEmpty, chosen.item.hasPoster,
+            let poster = mediaPosterSrc(chosen.reference, hostID: env.context.hostID)
+          {
+            draft.coverImage = poster
+            draft.coverImageAlt =
+              inheritedMediaAlt(placementAlt: draft.coverImageAlt, assetAlt: chosen.item.alt) ?? draft.coverImageAlt
+          }
         },
         onClear: { draft.coverVideo = "" }, onLink: { draft.coverVideo = $0 })
       AglynCountedField(
