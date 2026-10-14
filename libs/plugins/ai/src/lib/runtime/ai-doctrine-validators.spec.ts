@@ -1376,6 +1376,35 @@ describe('rule 14 — a line cut short (AGL-3072)', () => {
     ).toEqual([null, null, null, null, null, null, null, null, null, null, null])
   })
 
+  it('reads a word with accented letters as one word, in every language (AGL-3791)', () => {
+    // A live Spanish page stored "Galería de la panaderí": read as ASCII, the
+    // "a" after the "í" was a word of its own, the article "a".
+    expect(
+      [
+        'Galería de la panadería',
+        'Menú completo por categoría',
+        'Conchas del día',
+        '3. Mediodía',
+        'Panadería en la montaña',
+        'Pregunta al señor',
+        'Lo que ofrecían',
+        'Pâtisserie',
+        'Le café',
+        'Pão fresco da padaria',
+        'A melhor confeitaria',
+        'Bäckerei Müller',
+        'Galería de la panadería',
+        'Suite 4a',
+      ].map(aiDanglingWord),
+    ).toEqual(Array(14).fill(null))
+  })
+
+  it('still reads an English line cut short when its words around the end carry accents (AGL-3791)', () => {
+    expect(
+      ['Café pastries and', 'Crème brûlée for the', 'Our pâtisserie, with', 'Señor Frog’s and'].map(aiDanglingWord),
+    ).toEqual(['and', 'the', 'with', 'and'])
+  })
+
   it('refuses a heading, a subhead or a body line cut short, naming each node and quoting the first line’s end', () => {
     const found = detectDanglingWords(
       tree(

@@ -319,4 +319,33 @@ describe('the tab title (AGL-2291)', () => {
 
     await waitFor(() => expect(document.title).toBe(''))
   })
+
+  /**
+   * A Spanish site's 404 said "No encontramos esa página" under a tab that
+   * read "Page not found – Panadería Flor de Oaxaca" (AGL-3791): the tab now
+   * names the page in the language the heading is in.
+   */
+  it('names the page in the site’s language, as the heading under it is', async () => {
+    mockFetch(() => ({ ok: false, status: 404, body: { error: 'Not found' } }))
+
+    render(
+      <HostBrandProvider brandName="Panadería Flor de Oaxaca" hostKey="cname--panaderia.example" language="es">
+        <SiteNotFound code="404" />
+      </HostBrandProvider>,
+    )
+
+    await waitFor(() => expect(document.title).toBe('Página no encontrada – Panadería Flor de Oaxaca'))
+    expect(await screen.findByRole('heading', { level: 1, name: 'No encontramos esa página' })).toBeTruthy()
+  })
+
+  it('reads the document’s language where the layout published none, as the heading does', async () => {
+    mockFetch(() => ({ ok: false, status: 404, body: { error: 'Not found' } }))
+    document.documentElement.lang = 'pt-BR'
+    try {
+      renderBoundary()
+      await waitFor(() => expect(document.title).toBe('Página não encontrada – Northwind Coffee'))
+    } finally {
+      document.documentElement.lang = ''
+    }
+  })
 })

@@ -446,7 +446,12 @@ function takesForm(planned: AiLayoutPlannedSection): boolean {
 /** What a form's section scores against a planned section that asks for no form: never chosen while another fits. */
 const AI_LAYOUT_FORM_MISFIT = -100
 
-const WORD = /[a-z0-9]+/g
+/**
+ * A word as a heading and a plan's name are compared: letters in any script,
+ * with their accents (AGL-3791). As ASCII, "Menú" was "men", which every
+ * "mensajes" began with, and "galería" was "galer" and "a".
+ */
+const WORD = /[\p{L}\p{M}\p{N}]+/gu
 const STOP = new Set(['a', 'an', 'and', 'the', 'of', 'for', 'to', 'our', 'your', 'with', 'in', 'on', 'we', 'us', 'you'])
 const wordsOf = (text: string) => new Set((text.toLowerCase().match(WORD) ?? []).filter((word) => !STOP.has(word)))
 
