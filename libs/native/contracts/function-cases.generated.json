@@ -1520,6 +1520,699 @@
         }
       ]
     },
+    "buildFormula": {
+      "module": "libs/plugins/logic/src/lib/model/formula.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "P1"
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": ""
+                }
+              ]
+            },
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "number",
+                  "value": " 4 "
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "4"
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "number",
+                  "value": "abc"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "text",
+                  "value": "it's"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "\"it's\""
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "text",
+                  "value": "say \"hi\""
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "'say \"hi\"'"
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "text",
+                  "value": "both ' and \""
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "'both ' and '"
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "current"
+                }
+              ]
+            },
+            "P1 + P2"
+          ],
+          "result": "(P1 + P2)"
+        },
+        {
+          "args": [
+            {
+              "operation": "value",
+              "operands": [
+                {
+                  "source": "current"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "P1 + P2"
+        },
+        {
+          "args": [
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                },
+                {
+                  "source": "number",
+                  "value": "3"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "P1 + P2 + 3"
+        },
+        {
+          "args": [
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "current"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                }
+              ]
+            },
+            "P1 * 2"
+          ],
+          "result": "(P1 * 2) + P2"
+        },
+        {
+          "args": [
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "current"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                }
+              ]
+            },
+            "P1"
+          ],
+          "result": "P1 + P2"
+        },
+        {
+          "args": [
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "current"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                }
+              ]
+            },
+            "-1.5"
+          ],
+          "result": "-1.5 + P2"
+        },
+        {
+          "args": [
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "operation": "subtract",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                },
+                {
+                  "source": "name",
+                  "name": "P3"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "P1 - P2"
+        },
+        {
+          "args": [
+            {
+              "operation": "multiply",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "number",
+                  "value": "2"
+                },
+                {
+                  "source": "number",
+                  "value": "0.5"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "P1 * 2 * 0.5"
+        },
+        {
+          "args": [
+            {
+              "operation": "divide",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "a.b"
+                },
+                {
+                  "source": "number",
+                  "value": "4"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "a.b / 4"
+        },
+        {
+          "args": [
+            {
+              "operation": "min",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "min(P1, P2)"
+        },
+        {
+          "args": [
+            {
+              "operation": "max",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "number",
+                  "value": "10"
+                },
+                {
+                  "source": "name",
+                  "name": "P3"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "max(P1, 10, P3)"
+        },
+        {
+          "args": [
+            {
+              "operation": "min",
+              "operands": [
+                {
+                  "source": "current"
+                },
+                {
+                  "source": "number",
+                  "value": "5"
+                }
+              ]
+            },
+            "P1 + P2"
+          ],
+          "result": "min(P1 + P2, 5)"
+        },
+        {
+          "args": [
+            {
+              "operation": "round",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "round(P1, 0)"
+        },
+        {
+          "args": [
+            {
+              "operation": "round",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ],
+              "places": 2
+            },
+            ""
+          ],
+          "result": "round(P1, 2)"
+        },
+        {
+          "args": [
+            {
+              "operation": "round",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ],
+              "places": 9
+            },
+            ""
+          ],
+          "result": "round(P1, 0)"
+        },
+        {
+          "args": [
+            {
+              "operation": "round",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ],
+              "places": -1
+            },
+            ""
+          ],
+          "result": "round(P1, 0)"
+        },
+        {
+          "args": [
+            {
+              "operation": "round",
+              "operands": [
+                {
+                  "source": "current"
+                }
+              ]
+            },
+            "P1 + P2"
+          ],
+          "result": "round(P1 + P2, 0)"
+        },
+        {
+          "args": [
+            {
+              "operation": "roundDown",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "floor(P1)"
+        },
+        {
+          "args": [
+            {
+              "operation": "roundUp",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "ceil(P1)"
+        },
+        {
+          "args": [
+            {
+              "operation": "absolute",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "abs(P1)"
+        },
+        {
+          "args": [
+            {
+              "operation": "currency",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "'$' + format(P1, 2)"
+        },
+        {
+          "args": [
+            {
+              "operation": "currency",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ],
+              "symbol": "€",
+              "places": 0
+            },
+            ""
+          ],
+          "result": "'€' + format(P1, 0)"
+        },
+        {
+          "args": [
+            {
+              "operation": "currency",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ],
+              "symbol": "",
+              "places": 3
+            },
+            ""
+          ],
+          "result": "'' + format(P1, 3)"
+        },
+        {
+          "args": [
+            {
+              "operation": "currency",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ],
+              "symbol": "'"
+            },
+            ""
+          ],
+          "result": "\"'\" + format(P1, 2)"
+        },
+        {
+          "args": [
+            {
+              "operation": "number",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "format(P1, 0)"
+        },
+        {
+          "args": [
+            {
+              "operation": "number",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ],
+              "places": 2
+            },
+            ""
+          ],
+          "result": "format(P1, 2)"
+        },
+        {
+          "args": [
+            {
+              "operation": "join",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "A"
+                },
+                {
+                  "source": "text",
+                  "value": "x"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": "A + ' ' + 'x'"
+        },
+        {
+          "args": [
+            {
+              "operation": "join",
+              "operands": [
+                {
+                  "source": "text",
+                  "value": "a"
+                },
+                {
+                  "source": "text",
+                  "value": "b"
+                },
+                {
+                  "source": "text",
+                  "value": "c"
+                }
+              ],
+              "separator": ", "
+            },
+            ""
+          ],
+          "result": "'a' + ', ' + 'b' + ', ' + 'c'"
+        },
+        {
+          "args": [
+            {
+              "operation": "join",
+              "operands": [
+                {
+                  "source": "text",
+                  "value": "a"
+                },
+                {
+                  "source": "name",
+                  "name": "B"
+                }
+              ],
+              "separator": ""
+            },
+            ""
+          ],
+          "result": "'' + 'a' + B"
+        },
+        {
+          "args": [
+            {
+              "operation": "join",
+              "operands": [
+                {
+                  "source": "text",
+                  "value": "a"
+                },
+                {
+                  "source": "text",
+                  "value": "b"
+                }
+              ],
+              "separator": "'"
+            },
+            ""
+          ],
+          "result": "'a' + \"'\" + 'b'"
+        },
+        {
+          "args": [
+            {
+              "operation": "join",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "A"
+                },
+                {
+                  "source": "current"
+                }
+              ]
+            },
+            "A + B"
+          ],
+          "result": "A + ' ' + (A + B)"
+        }
+      ]
+    },
     "buyerNotificationEnabled": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "cases": [
@@ -2772,6 +3465,46 @@
             1800000000000
           ],
           "result": "This guest is not checked in"
+        }
+      ]
+    },
+    "choiceRowsFromOptions": {
+      "module": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              {
+                "value": "a"
+              },
+              {
+                "value": "b",
+                "label": "Bee"
+              }
+            ]
+          ],
+          "result": [
+            {
+              "label": "",
+              "value": "a"
+            },
+            {
+              "label": "Bee",
+              "value": "b"
+            }
+          ]
         }
       ]
     },
@@ -8129,6 +8862,1337 @@
         }
       ]
     },
+    "formulaDraftFor": {
+      "module": "libs/plugins/logic/src/lib/model/formula.ts",
+      "cases": [
+        {
+          "args": [
+            "value",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "value"
+          }
+        },
+        {
+          "args": [
+            "add",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              },
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "add"
+          }
+        },
+        {
+          "args": [
+            "subtract",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              },
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "subtract"
+          }
+        },
+        {
+          "args": [
+            "multiply",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              },
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "multiply"
+          }
+        },
+        {
+          "args": [
+            "divide",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              },
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "divide"
+          }
+        },
+        {
+          "args": [
+            "min",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              },
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "min"
+          }
+        },
+        {
+          "args": [
+            "max",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              },
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "max"
+          }
+        },
+        {
+          "args": [
+            "round",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "round"
+          }
+        },
+        {
+          "args": [
+            "roundDown",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "roundDown"
+          }
+        },
+        {
+          "args": [
+            "roundUp",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "roundUp"
+          }
+        },
+        {
+          "args": [
+            "absolute",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "absolute"
+          }
+        },
+        {
+          "args": [
+            "currency",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "currency"
+          }
+        },
+        {
+          "args": [
+            "number",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "number"
+          }
+        },
+        {
+          "args": [
+            "join",
+            null,
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "source": "text",
+                "value": ""
+              },
+              {
+                "source": "text",
+                "value": ""
+              }
+            ],
+            "operation": "join"
+          }
+        },
+        {
+          "args": [
+            "add",
+            {
+              "operation": "subtract",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "number",
+                  "value": "2"
+                },
+                {
+                  "source": "name",
+                  "name": "P3"
+                }
+              ],
+              "places": 1,
+              "symbol": "€",
+              "separator": "-"
+            },
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "P1",
+                "source": "name"
+              },
+              {
+                "source": "number",
+                "value": "2"
+              }
+            ],
+            "operation": "add",
+            "places": 1,
+            "separator": "-",
+            "symbol": "€"
+          }
+        },
+        {
+          "args": [
+            "join",
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                }
+              ]
+            },
+            ""
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "P1",
+                "source": "name"
+              },
+              {
+                "source": "text",
+                "value": ""
+              }
+            ],
+            "operation": "join"
+          }
+        },
+        {
+          "args": [
+            "value",
+            null,
+            "P1 + 2"
+          ],
+          "result": {
+            "operands": [
+              {
+                "source": "current"
+              }
+            ],
+            "operation": "value"
+          }
+        },
+        {
+          "args": [
+            "add",
+            null,
+            "P1 + 2"
+          ],
+          "result": {
+            "operands": [
+              {
+                "source": "current"
+              },
+              {
+                "name": "",
+                "source": "name"
+              }
+            ],
+            "operation": "add"
+          }
+        },
+        {
+          "args": [
+            "join",
+            null,
+            "x"
+          ],
+          "result": {
+            "operands": [
+              {
+                "source": "current"
+              },
+              {
+                "source": "text",
+                "value": ""
+              }
+            ],
+            "operation": "join"
+          }
+        },
+        {
+          "args": [
+            "subtract",
+            {
+              "operation": "add",
+              "operands": [
+                {
+                  "source": "name",
+                  "name": "P1"
+                },
+                {
+                  "source": "name",
+                  "name": "P2"
+                },
+                {
+                  "source": "name",
+                  "name": "P3"
+                }
+              ]
+            },
+            "q"
+          ],
+          "result": {
+            "operands": [
+              {
+                "name": "P1",
+                "source": "name"
+              },
+              {
+                "name": "P2",
+                "source": "name"
+              }
+            ],
+            "operation": "subtract"
+          }
+        }
+      ]
+    },
+    "formulaNames": {
+      "module": "libs/plugins/logic/src/lib/model/formula-names.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "parameters": [],
+              "locals": [],
+              "siteVariables": []
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "parameters": [
+                {
+                  "name": "P1"
+                },
+                {
+                  "name": "bad name"
+                },
+                {
+                  "name": "P1"
+                }
+              ],
+              "locals": [
+                {
+                  "name": "V1"
+                },
+                {
+                  "name": "P1"
+                },
+                {
+                  "name": "1x"
+                }
+              ],
+              "siteVariables": []
+            }
+          ],
+          "result": [
+            {
+              "group": "Parameters",
+              "label": "P1",
+              "value": "P1"
+            },
+            {
+              "group": "This function’s variables",
+              "label": "V1",
+              "value": "V1"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "parameters": [
+                {
+                  "name": "P1"
+                }
+              ],
+              "locals": [],
+              "siteVariables": [
+                {
+                  "name": "zeta",
+                  "type": "number",
+                  "value": "1"
+                },
+                {
+                  "name": "alpha",
+                  "type": "text",
+                  "value": "x"
+                },
+                {
+                  "name": "P1",
+                  "type": "text",
+                  "value": "shadowed"
+                },
+                {
+                  "name": "list",
+                  "type": "collection",
+                  "value": "[1,2]"
+                },
+                {
+                  "name": "prices",
+                  "type": "dictionary",
+                  "value": "{\"small\":1,\"big\":2,\"nested\":{\"a\":1},\"ok\":\"x\",\"flag\":true,\"bad key\":1,\"nul\":null}"
+                },
+                {
+                  "name": "broken",
+                  "type": "dictionary",
+                  "value": "{nope"
+                },
+                {
+                  "name": "arr",
+                  "type": "dictionary",
+                  "value": "[1]"
+                },
+                {
+                  "name": "nothing",
+                  "type": "dictionary"
+                },
+                {
+                  "name": "9bad",
+                  "type": "text"
+                },
+                {
+                  "type": "text"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "group": "Parameters",
+              "label": "P1",
+              "value": "P1"
+            },
+            {
+              "group": "Site variables",
+              "label": "alpha",
+              "value": "alpha"
+            },
+            {
+              "group": "Site variables",
+              "label": "prices → small",
+              "value": "prices.small"
+            },
+            {
+              "group": "Site variables",
+              "label": "prices → big",
+              "value": "prices.big"
+            },
+            {
+              "group": "Site variables",
+              "label": "prices → ok",
+              "value": "prices.ok"
+            },
+            {
+              "group": "Site variables",
+              "label": "prices → flag",
+              "value": "prices.flag"
+            },
+            {
+              "group": "Site variables",
+              "label": "zeta",
+              "value": "zeta"
+            }
+          ]
+        }
+      ]
+    },
+    "formulaOperandLabel": {
+      "module": "libs/plugins/logic/src/lib/model/formula.ts",
+      "cases": [
+        {
+          "args": [
+            "value",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "value",
+            1
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "value",
+            3
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "add",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "add",
+            1
+          ],
+          "result": "Plus"
+        },
+        {
+          "args": [
+            "add",
+            3
+          ],
+          "result": "Plus"
+        },
+        {
+          "args": [
+            "subtract",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "subtract",
+            1
+          ],
+          "result": "Minus"
+        },
+        {
+          "args": [
+            "subtract",
+            3
+          ],
+          "result": "Minus"
+        },
+        {
+          "args": [
+            "multiply",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "multiply",
+            1
+          ],
+          "result": "Times"
+        },
+        {
+          "args": [
+            "multiply",
+            3
+          ],
+          "result": "Times"
+        },
+        {
+          "args": [
+            "divide",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "divide",
+            1
+          ],
+          "result": "Divided by"
+        },
+        {
+          "args": [
+            "divide",
+            3
+          ],
+          "result": "Divided by"
+        },
+        {
+          "args": [
+            "min",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "min",
+            1
+          ],
+          "result": "Or"
+        },
+        {
+          "args": [
+            "min",
+            3
+          ],
+          "result": "Or"
+        },
+        {
+          "args": [
+            "max",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "max",
+            1
+          ],
+          "result": "Or"
+        },
+        {
+          "args": [
+            "max",
+            3
+          ],
+          "result": "Or"
+        },
+        {
+          "args": [
+            "round",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "round",
+            1
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "round",
+            3
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "roundDown",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "roundDown",
+            1
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "roundDown",
+            3
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "roundUp",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "roundUp",
+            1
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "roundUp",
+            3
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "absolute",
+            0
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "absolute",
+            1
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "absolute",
+            3
+          ],
+          "result": "Value"
+        },
+        {
+          "args": [
+            "currency",
+            0
+          ],
+          "result": "Amount"
+        },
+        {
+          "args": [
+            "currency",
+            1
+          ],
+          "result": "Amount"
+        },
+        {
+          "args": [
+            "currency",
+            3
+          ],
+          "result": "Amount"
+        },
+        {
+          "args": [
+            "number",
+            0
+          ],
+          "result": "Number"
+        },
+        {
+          "args": [
+            "number",
+            1
+          ],
+          "result": "Number"
+        },
+        {
+          "args": [
+            "number",
+            3
+          ],
+          "result": "Number"
+        },
+        {
+          "args": [
+            "join",
+            0
+          ],
+          "result": "Text"
+        },
+        {
+          "args": [
+            "join",
+            1
+          ],
+          "result": "Then"
+        },
+        {
+          "args": [
+            "join",
+            3
+          ],
+          "result": "Then"
+        }
+      ]
+    },
+    "functionGlobals": {
+      "module": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [],
+              "variables": [],
+              "operations": [],
+              "returnValue": ""
+            },
+            {
+              "a": {
+                "name": "rate",
+                "type": "number",
+                "value": "0.07"
+              },
+              "b": {
+                "name": "floor",
+                "type": "number",
+                "value": "3"
+              },
+              "c": {
+                "name": "shipping",
+                "type": "text",
+                "value": "flat"
+              },
+              "d": {
+                "name": "tax",
+                "type": "dictionary",
+                "value": "{\"rate\":0.08}"
+              },
+              "e": {
+                "name": "unused",
+                "type": "boolean",
+                "value": "true"
+              },
+              "f": {
+                "name": "P1",
+                "type": "text",
+                "value": "shadowed"
+              },
+              "g": {
+                "type": "text",
+                "value": "nameless"
+              }
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [
+                {
+                  "name": "P1",
+                  "type": "number"
+                },
+                {
+                  "name": "P2",
+                  "type": "number"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "V1",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "P1",
+                    "comparator": "<=",
+                    "right": "P2"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "P1 + rate"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "V1",
+                      "expression": "P2 * tax.rate + max(P1, floor)"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "V1"
+            },
+            {
+              "a": {
+                "name": "rate",
+                "type": "number",
+                "value": "0.07"
+              },
+              "b": {
+                "name": "floor",
+                "type": "number",
+                "value": "3"
+              },
+              "c": {
+                "name": "shipping",
+                "type": "text",
+                "value": "flat"
+              },
+              "d": {
+                "name": "tax",
+                "type": "dictionary",
+                "value": "{\"rate\":0.08}"
+              },
+              "e": {
+                "name": "unused",
+                "type": "boolean",
+                "value": "true"
+              },
+              "f": {
+                "name": "P1",
+                "type": "text",
+                "value": "shadowed"
+              },
+              "g": {
+                "type": "text",
+                "value": "nameless"
+              }
+            }
+          ],
+          "result": {
+            "floor": 3,
+            "rate": 0.07,
+            "tax": "{\"rate\":0.08}"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [
+                {
+                  "name": "P1",
+                  "type": "number"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "V1",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "shipping",
+                    "comparator": "<=",
+                    "right": "P1 + 1"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "P1"
+                    }
+                  ],
+                  "otherwise": []
+                },
+                {
+                  "if": {
+                    "left": "P1",
+                    "comparator": "<=",
+                    "right": "0"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "tax.rate"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": ""
+            },
+            {
+              "a": {
+                "name": "rate",
+                "type": "number",
+                "value": "0.07"
+              },
+              "b": {
+                "name": "floor",
+                "type": "number",
+                "value": "3"
+              },
+              "c": {
+                "name": "shipping",
+                "type": "text",
+                "value": "flat"
+              },
+              "d": {
+                "name": "tax",
+                "type": "dictionary",
+                "value": "{\"rate\":0.08}"
+              },
+              "e": {
+                "name": "unused",
+                "type": "boolean",
+                "value": "true"
+              },
+              "f": {
+                "name": "P1",
+                "type": "text",
+                "value": "shadowed"
+              },
+              "g": {
+                "type": "text",
+                "value": "nameless"
+              }
+            }
+          ],
+          "result": {
+            "shipping": "flat",
+            "tax": "{\"rate\":0.08}"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [
+                {
+                  "name": "P1",
+                  "type": "number"
+                },
+                {
+                  "name": "P2",
+                  "type": "number"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "V1",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "P1",
+                    "comparator": "<=",
+                    "right": "P2"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "P1 + rate"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "V1",
+                      "expression": "P2 * tax.rate + max(P1, floor)"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "V1"
+            },
+            {}
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [
+                {
+                  "name": "P1",
+                  "type": "number"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "V1",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "shipping",
+                    "comparator": "<=",
+                    "right": "P1 + 1"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "P1"
+                    }
+                  ],
+                  "otherwise": []
+                },
+                {
+                  "if": {
+                    "left": "P1",
+                    "comparator": "<=",
+                    "right": "0"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "tax.rate"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": ""
+            },
+            {
+              "x": {
+                "name": "shipping",
+                "type": "boolean",
+                "value": "true"
+              },
+              "y": {
+                "name": "tax",
+                "type": "number",
+                "value": ""
+              }
+            }
+          ],
+          "result": {
+            "shipping": true,
+            "tax": 0
+          }
+        }
+      ]
+    },
+    "functionReferencedNames": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [],
+              "variables": [],
+              "operations": [],
+              "returnValue": ""
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [
+                {
+                  "name": "P1",
+                  "type": "number"
+                },
+                {
+                  "name": "P2",
+                  "type": "number"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "V1",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "P1",
+                    "comparator": "<=",
+                    "right": "P2"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "P1 + rate"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "V1",
+                      "expression": "P2 * tax.rate + max(P1, floor)"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "V1"
+            }
+          ],
+          "result": [
+            "rate",
+            "tax",
+            "floor"
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "f",
+              "parameters": [
+                {
+                  "name": "P1",
+                  "type": "number"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "V1",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "shipping",
+                    "comparator": "<=",
+                    "right": "P1 + 1"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "P1"
+                    }
+                  ],
+                  "otherwise": []
+                },
+                {
+                  "if": {
+                    "left": "P1",
+                    "comparator": "<=",
+                    "right": "0"
+                  },
+                  "then": [
+                    {
+                      "set": "V1",
+                      "expression": "tax.rate"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": ""
+            }
+          ],
+          "result": [
+            "shipping",
+            "tax"
+          ]
+        }
+      ]
+    },
     "funnelStepTitle": {
       "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
       "cases": [
@@ -10444,6 +12508,71 @@
         }
       ]
     },
+    "optionsFromChoiceRows": {
+      "module": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              {
+                "value": "a",
+                "label": ""
+              },
+              {
+                "value": " b ",
+                "label": " Bee "
+              }
+            ]
+          ],
+          "result": [
+            {
+              "value": "a"
+            },
+            {
+              "label": "Bee",
+              "value": "b"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "value": "",
+                "label": "no value"
+              },
+              {
+                "value": "a",
+                "label": "a"
+              },
+              {
+                "value": "a",
+                "label": "again"
+              },
+              {
+                "value": "c",
+                "label": "C"
+              }
+            ]
+          ],
+          "result": [
+            {
+              "value": "a"
+            },
+            {
+              "label": "C",
+              "value": "c"
+            }
+          ]
+        }
+      ]
+    },
     "orderChannelLabel": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -11955,6 +14084,197 @@
               "value": "plus"
             }
           ]
+        }
+      ]
+    },
+    "parseStructuredValue": {
+      "module": "libs/plugins/logic/src/lib/model/structured-value.ts",
+      "cases": [
+        {
+          "args": [
+            "",
+            "dictionary"
+          ],
+          "result": {
+            "rows": [],
+            "unreadable": false
+          }
+        },
+        {
+          "args": [
+            "   ",
+            "collection"
+          ],
+          "result": {
+            "rows": [],
+            "unreadable": false
+          }
+        },
+        {
+          "args": [
+            "{\"name\":\"Ada\",\"age\":36,\"admin\":true,\"gone\":null,\"tags\":[\"a\",\"b\"],\"box\":{\"k\":1}}",
+            "dictionary"
+          ],
+          "result": {
+            "rows": [
+              {
+                "key": "name",
+                "kind": "text",
+                "value": "Ada"
+              },
+              {
+                "key": "age",
+                "kind": "number",
+                "value": "36"
+              },
+              {
+                "key": "admin",
+                "kind": "boolean",
+                "value": "true"
+              },
+              {
+                "key": "gone",
+                "kind": "text",
+                "value": ""
+              },
+              {
+                "kept": [
+                  "a",
+                  "b"
+                ],
+                "key": "tags",
+                "kind": "kept",
+                "value": "[\"a\",\"b\"]"
+              },
+              {
+                "kept": {
+                  "k": 1
+                },
+                "key": "box",
+                "kind": "kept",
+                "value": "{\"k\":1}"
+              }
+            ],
+            "unreadable": false
+          }
+        },
+        {
+          "args": [
+            "[\"a\",2,false,null,{\"k\":1},[1]]",
+            "collection"
+          ],
+          "result": {
+            "rows": [
+              {
+                "key": "",
+                "kind": "text",
+                "value": "a"
+              },
+              {
+                "key": "",
+                "kind": "number",
+                "value": "2"
+              },
+              {
+                "key": "",
+                "kind": "boolean",
+                "value": "false"
+              },
+              {
+                "key": "",
+                "kind": "text",
+                "value": ""
+              },
+              {
+                "kept": {
+                  "k": 1
+                },
+                "key": "",
+                "kind": "kept",
+                "value": "{\"k\":1}"
+              },
+              {
+                "kept": [
+                  1
+                ],
+                "key": "",
+                "kind": "kept",
+                "value": "[1]"
+              }
+            ],
+            "unreadable": false
+          }
+        },
+        {
+          "args": [
+            "{bad",
+            "dictionary"
+          ],
+          "result": {
+            "rows": [],
+            "unreadable": true
+          }
+        },
+        {
+          "args": [
+            "[1,2]",
+            "dictionary"
+          ],
+          "result": {
+            "rows": [],
+            "unreadable": true
+          }
+        },
+        {
+          "args": [
+            "{\"a\":1}",
+            "collection"
+          ],
+          "result": {
+            "rows": [],
+            "unreadable": true
+          }
+        },
+        {
+          "args": [
+            "\"text\"",
+            "dictionary"
+          ],
+          "result": {
+            "rows": [],
+            "unreadable": true
+          }
+        },
+        {
+          "args": [
+            "null",
+            "dictionary"
+          ],
+          "result": {
+            "rows": [],
+            "unreadable": true
+          }
+        },
+        {
+          "args": [
+            "{\"a\":1.5e3,\"b\":-0.25}",
+            "dictionary"
+          ],
+          "result": {
+            "rows": [
+              {
+                "key": "a",
+                "kind": "number",
+                "value": "1500"
+              },
+              {
+                "key": "b",
+                "kind": "number",
+                "value": "-0.25"
+              }
+            ],
+            "unreadable": false
+          }
         }
       ]
     },
@@ -20053,6 +22373,136 @@
             "truncated": true,
             "unattributedClicks": 1
           }
+        }
+      ]
+    },
+    "serializeStructuredValue": {
+      "module": "libs/plugins/logic/src/lib/model/structured-value.ts",
+      "cases": [
+        {
+          "args": [
+            [],
+            "dictionary"
+          ],
+          "result": "{}"
+        },
+        {
+          "args": [
+            [],
+            "collection"
+          ],
+          "result": "[]"
+        },
+        {
+          "args": [
+            [
+              {
+                "key": "a",
+                "kind": "text",
+                "value": "x"
+              },
+              {
+                "key": " b ",
+                "kind": "number",
+                "value": " 2.5 "
+              },
+              {
+                "key": "c",
+                "kind": "boolean",
+                "value": "true"
+              },
+              {
+                "key": "d",
+                "kind": "boolean",
+                "value": "no"
+              }
+            ],
+            "dictionary"
+          ],
+          "result": "{\"a\":\"x\",\"b\":2.5,\"c\":true,\"d\":false}"
+        },
+        {
+          "args": [
+            [
+              {
+                "key": "",
+                "kind": "text",
+                "value": "dropped"
+              },
+              {
+                "key": "a",
+                "kind": "text",
+                "value": "first"
+              },
+              {
+                "key": "a",
+                "kind": "text",
+                "value": "last"
+              }
+            ],
+            "dictionary"
+          ],
+          "result": "{\"a\":\"last\"}"
+        },
+        {
+          "args": [
+            [
+              {
+                "key": "n",
+                "kind": "number",
+                "value": ""
+              },
+              {
+                "key": "m",
+                "kind": "number",
+                "value": "abc"
+              },
+              {
+                "key": "k",
+                "kind": "kept",
+                "value": "{}",
+                "kept": {
+                  "z": [
+                    1,
+                    2
+                  ]
+                }
+              }
+            ],
+            "dictionary"
+          ],
+          "result": "{\"n\":null,\"m\":null,\"k\":{\"z\":[1,2]}}"
+        },
+        {
+          "args": [
+            [
+              {
+                "key": "ignored",
+                "kind": "text",
+                "value": "one"
+              },
+              {
+                "key": "",
+                "kind": "number",
+                "value": "2"
+              },
+              {
+                "key": "",
+                "kind": "boolean",
+                "value": "true"
+              },
+              {
+                "key": "",
+                "kind": "kept",
+                "value": "[1]",
+                "kept": [
+                  1
+                ]
+              }
+            ],
+            "collection"
+          ],
+          "result": "[\"one\",2,true,[1]]"
         }
       ]
     },

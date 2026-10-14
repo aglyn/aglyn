@@ -33,14 +33,16 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: (...args: unknown[]) => mockTrack(...args),
 }))
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AI_SITE_PASS_CREDITS, aiJobPlanCreditRange, aiPlanCreditEstimate, aiPlanCreditRange } from '../model/ai-site-job'
 import { aiBuildCreditRange, aiBuildFirstPagePlan } from '../model/ai-build-job'
 import { aiCreditRangeText } from '../model/ai-credit-estimate'
 import { aiBuildStorePagesFor } from '../model/ai-build-store-pages'
+import { AI_SITE_BUILD_IN_FLIGHT_COPY } from '../model/ai-job-activity'
 import { AiJobPlan, aiJobReviewDetails, aiPlanEmbedLine } from './ai-job-plan.component'
+import { publishAiJob, resetAiJobsStoreForTests } from './ai-jobs-store'
 
 const PLAN = {
   reuse: [],
@@ -479,5 +481,53 @@ describe('a build that makes the site a store (AGL-3676)', () => {
     ])
     // They change no figure on the card.
     expect(aiBuildCreditRange(STORE as never)).toEqual(aiBuildCreditRange({ ...STORE, storePages: undefined } as never))
+  })
+})
+
+describe('confirming while another page is being built on the site (AGL-3765)', () => {
+  const PAGE = job({ id: 'job-2', kind: 'page' })
+  const sibling = (patch: Partial<AiJobSummary> = {}) =>
+    job({
+      id: 'job-1',
+      kind: 'page',
+      status: 'running',
+      review: null,
+      plan: { ...PLAN, status: 'confirmed' },
+      steps: [
+        { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 33, error: null },
+        { name: 'generate', status: 'running', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+      ] as never,
+      ...patch,
+    })
+
+  beforeEach(() => {
+    resetAiJobsStoreForTests()
+    mockFetch.mockReset()
+  })
+
+  it('says so beside Confirm plan from the list the console already holds, and still confirms', () => {
+    const onResume = jest.fn()
+    render(<AiJobPlan job={PAGE} onResume={onResume} user={mockUser as never} />)
+    expect(screen.queryByText(AI_SITE_BUILD_IN_FLIGHT_COPY)).toBeNull()
+    // The indicator's read, or the door that started it, hands the job in.
+    act(() => publishAiJob(sibling()))
+    expect(screen.getByText(AI_SITE_BUILD_IN_FLIGHT_COPY)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm plan' }))
+    expect(onResume).toHaveBeenCalledWith(PAGE, undefined)
+    // It asks no server of its own.
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('says nothing for a build on another site, a settled one, or a plan that builds no page', () => {
+    render(<AiJobPlan job={PAGE} onResume={jest.fn()} user={mockUser as never} />)
+    act(() => publishAiJob(sibling({ id: 'elsewhere', hostId: 'host-2' })))
+    act(() => publishAiJob(sibling({ id: 'settled', status: 'done' })))
+    expect(screen.queryByText(AI_SITE_BUILD_IN_FLIGHT_COPY)).toBeNull()
+
+    render(<AiJobPlan job={job({ id: 'job-3', kind: 'form' })} onResume={jest.fn()} user={mockUser as never} />)
+    act(() => publishAiJob(sibling()))
+    // The page plan above now warns; the form's plan beside it does not.
+    expect(screen.getAllByText(AI_SITE_BUILD_IN_FLIGHT_COPY)).toHaveLength(1)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

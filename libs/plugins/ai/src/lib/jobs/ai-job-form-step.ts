@@ -71,9 +71,11 @@ import {
   aiDraftAllowanceRefusal,
   aiSiteSubdomain,
   readAiDraft,
+  readAiDraftBandTakenSince,
   writeAiDraft,
   type AiDraftRecord,
 } from './ai-job-drafts'
+import { AI_FORM_REUSED_NOTE, aiSiblingJobForm } from './ai-job-form-reuse'
 import {
   aiBracketedFactsNote,
   aiConfirmedPlan,
@@ -86,7 +88,7 @@ import {
   aiPlanReferenceLines,
   aiUnspentOutcome,
 } from './ai-job-generation'
-import type { AiJobStepRunner } from './ai-job-text-step'
+import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -127,6 +129,14 @@ import { registerAiJobStep } from './ai-jobs'
  * step asks `checkFormContract` of the stored copy itself before it reports
  * one (AGL-3024). A copy still bound to the form it was copied from is a
  * failure, never an output.
+ *
+ * A site that holds every form its plan includes refuses the draft
+ * (AGL-3765). A form the step builds for a page (a unit of a page job, a
+ * guided start or a build) then places the form another AI job made on the
+ * site moments before (`ai-job-form-reuse.ts`), as two jobs started from one
+ * brief race to. Failing that, a site that still had room when the plan was
+ * confirmed stops the job on our side, its credits given back; one that was
+ * already full is the workspace's limit, for the member to change.
  *
  * Like the other generation steps, it runs on the job beat, never at an inline
  * door: it registers the least time its lookup rounds, its answer and its
@@ -762,6 +772,14 @@ export const aiFormJobAdmission: AiJobAdmission = (context) =>
     ownCheck: (hostId) => aiJobPlanCreationsRefusal('form', context, hostId),
   })
 
+/**
+ * What a form step says when the site's last form was taken after its plan
+ * was confirmed (AGL-3765): by another build running beside it, or by a
+ * member. The failure is ours, so what the job spent is given back.
+ */
+export const AI_FORM_BAND_TAKEN_COPY =
+  'Another build on this site used the last form your plan includes while this one was running, so this one stopped. Describe it again to build it with the form the site has now.'
+
 export interface AiJobFormStepDeps {
   /** The inventory reader; specs hand in a fake. */
   readInventory?: typeof readSiteInventory
@@ -769,11 +787,14 @@ export interface AiJobFormStepDeps {
   duplicate?: typeof duplicateResource
   /** The data plugin's writer lookup the form's dataset is read through (AGL-3616); specs hand in a fake. */
   datasetWriterFor?: AiFormDatasetReadDeps['writerFor']
+  /** The form another build just made that a refused unit places (AGL-3765); specs hand in a fake. */
+  siblingForm?: typeof aiSiblingJobForm
 }
 
 export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunner {
   const readInventory = deps.readInventory ?? readSiteInventory
   const duplicate = deps.duplicate ?? duplicateResource
+  const siblingForm = deps.siblingForm ?? aiSiblingJobForm
   return async ({ job, now, signal, firestore, modelFor }) => {
     const hostId = job.hostId
     if (!hostId) throw new Error('a form job names no site, and its admission refuses one')
@@ -806,6 +827,33 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     const plan = aiConfirmedPlan(job)
     const creation = aiPlanCreation(plan, 'form')
     const name = creation?.name || AI_JOB_FORM_DEFAULT_NAME
+    // The site holds every form its plan includes (AGL-3765). A unit places a
+    // form another build on this site just made, as its page would place any
+    // form the site has. Otherwise a site that had room when the plan was
+    // confirmed and was filled since stopped this job on our side, given
+    // back; one that was already full is the workspace's limit to change. A
+    // lookup that fails leaves the refusal as it was.
+    const refused = async (
+      refusal: string,
+      spent: Pick<AiJobStepOutcome, 'outputs' | 'usage' | 'estCostUsd' | 'model' | 'stopReason'>,
+    ): Promise<AiJobStepOutcome> => {
+      const lookup = async <T>(read: () => Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await read()
+        } catch (error) {
+          console.error('ai form step: band refusal lookup failed', { jobId: job.$id, hostId, error })
+          return fallback
+        }
+      }
+      const reused = await lookup(() => siblingForm(firestore, { job, now }), null)
+      if (reused) return { ...spent, outputs: [output(reused, { note: AI_FORM_REUSED_NOTE })] }
+      const taken = await lookup(
+        () => readAiDraftBandTakenSince(firestore, { kind: 'form', hostId, org, since: plan?.confirmedAt }),
+        false,
+      )
+      if (taken) return { ...spent, failure: AI_FORM_BAND_TAKEN_COPY }
+      return { ...spent, review: aiLimitReview(refusal) }
+    }
 
     // The plan starts from a copy of a form the site has (rule 15): the copy
     // is the draft, and nothing is generated. A source gone since the plan
@@ -858,12 +906,12 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
         })
       }
       if (copy.ok === false && copy.status === 403) {
-        return aiUnspentOutcome(model, { review: aiLimitReview(copy.error) })
+        return refused(copy.error, aiUnspentOutcome(model))
       }
     }
 
     const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'form', hostId, org })
-    if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
+    if (allowance) return refused(allowance, aiUnspentOutcome(model))
 
     // What the person answered about this form, where they were asked
     // (AGL-2918): a scaffold's form unit carries the guided start's inputs.
@@ -933,7 +981,7 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     })
     if (write.ok === false) {
       if (write.status === 404) throw new Error(`site ${hostId} vanished while its form was generated`)
-      return { ...spent, review: aiLimitReview(write.error) }
+      return refused(write.error, spent)
     }
     // What the person decides next, then the facts the brief did not give (AGL-3056).
     const note = [
