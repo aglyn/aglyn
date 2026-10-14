@@ -628,6 +628,46 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
       "why": "The single sign-on rehearsal table's rows and the break-glass eligibility rule, no imports: the native workspace settings replay them (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "why": "The media: reference grammar the pickers write and the previews read (mediaNodeSrc, resolveMediaSrc); its one import is the tenant apex constant (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "why": "A site's business profile: what the owner typed, what the site's own settings say and the workspace defaults, field by field with where each came from, and the owner's save; the native Business profile section reads and writes the same document (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/content-authors.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/screen-seo-fields.ts",
+      "why": "Reached by seo-listing-fields: a page's search text fields (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "why": "The SEO check's report model, finding labels and the target-keyword lines; the native SEO check card reads the same report and writes the same lines (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "why": "Target keywords: the limits and how a typed list is split; the native keyword rows hold the same limits (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-listing-fields.ts",
+      "why": "Reached by seo-audit: the listing fields' lengths (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/url-slug.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/platform.types.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
+    },
+    {
+      "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
     }
   ]
 }

@@ -499,12 +499,16 @@ class ScreenModel(
       return try {
         val edited = ScreenValues.resolveBody(profile.obj("edited") ?: JsonObject(emptyMap()), scope)
         val current = ScreenValues.lookup(profile.str("current").orEmpty(), scope)
-        val next = BusinessProfile.ownerWrite(current, edited)
+        // One rule for the owner's save, shared with the site's profile: `businessProfileOwnerWrite` (the contracts module).
+        @Suppress("UNCHECKED_CAST")
+        val next = com.aglyn.contracts.businessProfileOwnerWrite(plain(current) as? Map<String, Any?>, (plain(edited) as? Map<String, Any?>) ?: emptyMap())
+        val profileFields = com.aglyn.contracts.Contracts.businessProfileFieldOrder
         val fields = linkedMapOf<String, JsonElement>()
-        for (field in BusinessProfile.fields) fields[field] = next[field] ?: JsonNull
+        for (field in profileFields) fields[field] = com.aglyn.core.jsonValue(next[field])
         // `sources` replaces the stored map: a field with no source loses its key.
-        val written = (next["sources"] as? JsonObject) ?: JsonObject(emptyMap())
-        fields["sources"] = JsonObject(BusinessProfile.fields.associateWith { written[it] ?: JsonObject(mapOf("\$delete" to JsonPrimitive(true))) })
+        @Suppress("UNCHECKED_CAST")
+        val written = (next["sources"] as? Map<String, Any?>).orEmpty()
+        fields["sources"] = JsonObject(profileFields.associateWith { field -> (written[field] as? String)?.let { JsonPrimitive(it) } ?: JsonObject(mapOf("\$delete" to JsonPrimitive(true))) })
         fields["updatedAt"] = JsonObject(mapOf("\$serverTimestamp" to JsonPrimitive(true)))
         fields["updatedBy"] = ScreenValues.lookup("user.uid", scope) ?: JsonNull
         @Suppress("UNCHECKED_CAST")

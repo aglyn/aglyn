@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import Foundation
@@ -548,12 +549,16 @@ public final class ScreenModel {
       do {
         let edited = ScreenValues.resolveBody(profile["edited"] ?? [:], in: scope)
         let current = ScreenValues.lookup(profile["current"]?.stringValue ?? "", in: scope)
-        let next = BusinessProfile.ownerWrite(current: current, edited: edited)
+        // One rule for the owner's save, shared with the site's profile: `businessProfileOwnerWrite` (AglynContracts).
+        let next = businessProfileOwnerWrite(
+          current.flatMap { FirestoreLoads.plainValue($0) as? [String: Any] }, FirestoreLoads.plainValue(edited) as? [String: Any] ?? [:])
+        let profileFields = ContractValues.shared.businessProfileFieldOrder
         var fields: [String: JSONValue] = [:]
-        for field in BusinessProfile.fields { fields[field] = next[field] ?? .null }
+        for field in profileFields { fields[field] = next[field].flatMap(jsonValue) ?? .null }
         // `sources` replaces the stored map: a field with no source loses its key.
+        let written = next["sources"] as? [String: Any] ?? [:]
         var sources: [String: JSONValue] = [:]
-        for field in BusinessProfile.fields { sources[field] = next["sources"]?[field] ?? ["$delete": true] }
+        for field in profileFields { sources[field] = (written[field] as? String).map(JSONValue.string) ?? ["$delete": true] }
         fields["sources"] = .object(sources)
         fields["updatedAt"] = ["$serverTimestamp": true]
         fields["updatedBy"] = scope["user"]?["uid"] ?? .null

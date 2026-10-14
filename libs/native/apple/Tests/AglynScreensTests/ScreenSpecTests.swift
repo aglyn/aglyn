@@ -392,19 +392,6 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(unlinked.providers, ["google.com"])
   }
 
-  func testTheBusinessProfileOwnerWriteReplaysTheConsolesAnswers() throws {
-    let url = Self.screensDir.deletingLastPathComponent().appendingPathComponent("contracts/function-cases.generated.json")
-    let file = try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url)))
-    let cases = file["functions"]?["businessProfileOwnerWrite"]?["cases"].array ?? []
-    XCTAssertFalse(cases.isEmpty)
-    for entry in cases {
-      let args = entry["args"].array
-      let current: JSONValue? = args.first == .null ? nil : args.first
-      let got = BusinessProfile.ownerWrite(current: current, edited: args.last ?? .null)
-      XCTAssertEqual(JSONValue.object(got), entry["result"], "\(args)")
-    }
-  }
-
   @MainActor
   func testSavingTheBusinessProfileWritesFieldsSourcesAndWhoSavedIt() async throws {
     final class Recorder: FirestoreWriter, @unchecked Sendable {

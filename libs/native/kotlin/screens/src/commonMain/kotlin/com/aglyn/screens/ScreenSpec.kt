@@ -204,7 +204,7 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     return ExportRequest(key, title, host, key.replace(':', '-').replace('.', '-'))
   }
 
-  /** `{ doc, current, edited }`: the owner's save of a business profile (`edited` the typed values, `current` the path to the stored document); the write follows [BusinessProfile.ownerWrite]. */
+  /** `{ doc, current, edited }`: the owner's save of a business profile (`edited` the typed values, `current` the path to the stored document); the write follows `businessProfileOwnerWrite` of the contracts module. */
   val businessProfile: JsonElement? = json.obj("businessProfile")
 
   /** After a `write` to the site document that changes how pages render, stage the site-wide republish the console's host-document writes do (`publishSiteWideChange`). */

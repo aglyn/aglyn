@@ -426,19 +426,6 @@ class ScreenSpecTest {
   }
 
   @Test
-  fun theBusinessProfileOwnerWriteReplaysTheConsolesAnswers() {
-    val file = Json.parseToJsonElement(File(root, "libs/native/contracts/function-cases.generated.json").readText())
-    val cases = file.obj("functions").obj("businessProfileOwnerWrite").arr("cases")
-    assertTrue(cases.isNotEmpty())
-    for (case in cases) {
-      val args = case.arr("args")
-      val current = args.first().takeIf { it != JsonNull }
-      val got = JsonObject(BusinessProfile.ownerWrite(current, args.last()))
-      assertEquals(case.obj("result"), got, args.toString())
-    }
-  }
-
-  @Test
   fun savingTheBusinessProfileWritesFieldsSourcesAndWhoSavedIt() = runTest {
     var path = ""
     var fields: Map<String, Any?> = emptyMap()

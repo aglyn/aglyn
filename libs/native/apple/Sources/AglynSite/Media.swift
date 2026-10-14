@@ -129,6 +129,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let updatedAt: Date?
   public let uploadedBy: String?
   public let visibleTo: [String]
+  /// A film's measured length in whole seconds (`videoMediaProps`); nil for anything else or a film that records none.
+  public let videoSeconds: Int?
 
   /// Nil for a deleted file.
   public init?(_ doc: FirestoreDocument) {
@@ -153,6 +155,7 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     updatedAt = doc.date("updatedAt")
     uploadedBy = doc.string("uploadedBy")
     visibleTo = (doc.data["visibleTo"] as? [Any])?.compactMap { $0 as? String } ?? []
+    videoSeconds = libraryVideoSeconds(doc.data["video"])
   }
 
   private static func trimmedOrigin(_ origin: String) -> String {
@@ -210,12 +213,75 @@ public func mediaTypeChoices() -> [(value: String?, label: String)] {
   [(nil, "All")] + ContractValues.shared.mediaTypeOptions.map { ($0.value, $0.label) }
 }
 
+/// The library's Filters beyond the type chips and the search, the console's
+/// own fields (`MEDIA_FILTER_FIELDS`): orientation, whether alt text is set, a
+/// tag, and a size range in megabytes. A blank one is not asked.
+public struct MediaFilters: Equatable, Sendable {
+  public var orientation: String?
+  public var alt: String?
+  public var tag: String
+  public var minMegabytes: String
+  public var maxMegabytes: String
+
+  public init(
+    orientation: String? = nil, alt: String? = nil, tag: String = "", minMegabytes: String = "",
+    maxMegabytes: String = ""
+  ) {
+    self.orientation = orientation
+    self.alt = alt
+    self.tag = tag
+    self.minMegabytes = minMegabytes
+    self.maxMegabytes = maxMegabytes
+  }
+
+  /// How many are set, for the Filters button.
+  public var count: Int {
+    [orientation != nil, alt != nil, !tag.trimmed.isEmpty, !minMegabytes.trimmed.isEmpty, !maxMegabytes.trimmed.isEmpty]
+      .filter { $0 }.count
+  }
+
+  /// The clauses the query plan reads. A reader limited to some sites has no
+  /// Tags filter: the scope already holds the query's one array clause
+  /// (`mediaFilterFields`). Tags are stored trimmed and lower-cased
+  /// (`normalizeMediaTags`), so the one asked for is too.
+  public func clauses(scoped: Bool) -> [ListFilterRequest] {
+    var clauses: [ListFilterRequest] = []
+    if let orientation { clauses.append(ListFilterRequest(field: "orientation", op: "equals", value: orientation)) }
+    if let alt { clauses.append(ListFilterRequest(field: "alt", op: "equals", value: alt)) }
+    let tag = self.tag.trimmed.lowercased()
+    if !scoped && !tag.isEmpty { clauses.append(ListFilterRequest(field: "tags", op: "contains", value: tag)) }
+    if !minMegabytes.trimmed.isEmpty {
+      clauses.append(mediaQueryRequest(ListFilterRequest(field: "sizeMb", op: ">=", value: minMegabytes.trimmed)))
+    }
+    if !maxMegabytes.trimmed.isEmpty {
+      clauses.append(mediaQueryRequest(ListFilterRequest(field: "sizeMb", op: "<=", value: maxMegabytes.trimmed)))
+    }
+    return clauses
+  }
+}
+
+/// What a size box takes: digits and one decimal point.
+public func megabytesInput(_ text: String) -> String {
+  var point = false
+  return String(
+    text.filter { char in
+      if char.isASCII && char.isNumber { return true }
+      if char == "." && !point {
+        point = true
+        return true
+      }
+      return false
+    }.prefix(8))
+}
+
 /// The library's request for one view, as `mediaQuery` builds it: the folder
-/// and the scope as base filters, the type as a clause, and the search on
-/// the name tokens, or, for a reader limited to some sites, a "starts with"
-/// on the name (the scope already holds the query's one array clause).
+/// and the scope as base filters, the type and the other filters as clauses,
+/// and the search on the name tokens, or, for a reader limited to some sites,
+/// a "starts with" on the name (the scope already holds the query's one array
+/// clause).
 public func mediaRequest(
-  folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String
+  folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String,
+  filters: MediaFilters = MediaFilters()
 ) -> ListQueryRequest {
   var base: [ListQueryFilter] = []
   switch folder {
@@ -232,21 +298,44 @@ public func mediaRequest(
   var clauses: [ListFilterRequest] = []
   if let scopedSearch { clauses.append(scopedSearch) }
   if let type { clauses.append(ListFilterRequest(field: "type", op: "equals", value: type)) }
+  clauses.append(contentsOf: filters.clauses(scoped: scopeTokens != nil))
   return ListQueryRequest(
     base: base, clauses: clauses,
     search: scopedSearch == nil && !typed.isEmpty ? [typed] : nil,
     sort: ContractValues.shared.mediaSortOrder[sort.rawValue])
 }
 
-public func mediaQuery(
-  scope: MediaScope, folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String,
-  limit: Int = mediaPageSize
-) -> FirestoreQuery {
+/// What the console's plan makes of one view: the query, and what it left out and why.
+public func mediaPlan(
+  folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String,
+  filters: MediaFilters = MediaFilters()
+) -> ListQueryPlan {
   planListQuery(
     ContractValues.shared.mediaListQuery,
-    mediaRequest(folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search),
-    names: MediaNameNormalizers()
+    mediaRequest(
+      folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters),
+    names: MediaNameNormalizers())
+}
+
+public func mediaQuery(
+  scope: MediaScope, folder: FolderPick, scopeTokens: [String]?, type: String?, sort: MediaSort, search: String,
+  filters: MediaFilters = MediaFilters(), limit: Int = mediaPageSize
+) -> FirestoreQuery {
+  mediaPlan(
+    folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters
   ).firestoreQuery(scope.path + ["media"], limit: limit)
+}
+
+/// What the plan could not honor, in words: a clause it refused (two array
+/// filters cannot share a query, a number that is not one) and its own notices.
+public func mediaPlanNotices(_ plan: ListQueryPlan) -> [String] {
+  plan.notices
+    + plan.refused.map { refusal in
+      var column: String?
+      if case .object(let clause) = refusal.clause, case .string(let field)? = clause["field"] { column = field }
+      let name = column.flatMap { ContractValues.shared.mediaFilterHeaders[$0] } ?? column ?? "A filter"
+      return "\(name): \(refusal.reason)"
+    }
 }
 
 /// One library view: its folder, filters and the files read so far, live,
@@ -258,6 +347,9 @@ public final class MediaListModel {
   public private(set) var hasMore = false
   public var folder = FolderPick.all { didSet { if oldValue != folder { restart() } } }
   public var type: String? { didSet { if oldValue != type { restart() } } }
+  public var filters = MediaFilters() { didSet { if oldValue != filters { restart() } } }
+  /// What the last view's plan left out, shown under the filters.
+  public private(set) var notices: [String] = []
   public var sort = MediaSort.newest { didSet { if oldValue != sort { restart() } } }
   public var search = "" { didSet { if oldValue != search { restart() } } }
   /// The scope clause a limited reader's queries carry; nil reads the whole library.
@@ -305,9 +397,12 @@ public final class MediaListModel {
     if !keep { rows = .loading }
     guard let reader, let scope else { return }
     let window = limit
+    notices = mediaPlanNotices(
+      mediaPlan(
+        folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search, filters: filters))
     let query = mediaQuery(
       scope: scope, folder: folder, scopeTokens: scopeTokens, type: type, sort: sort, search: search,
-      limit: window + 1)
+      filters: filters, limit: window + 1)
     listener = reader.listen(query) { [weak self] result in
       guard let self else { return }
       switch result {
