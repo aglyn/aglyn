@@ -159,6 +159,51 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(asked("question"), ["kind", "summary", "question", "tried", "skipDeflection", "contactConsent"])
   }
 
+  /// An action's `headers` go out with the request, and `{attempt}` holds one key while the same
+  /// request is sent again and takes a new one when the body changes (enterprise billing).
+  @MainActor
+  func testHeadersCarryAnAttemptKeyThatFollowsTheRequest() async throws {
+    let transport = RecordingTransport(responses: [(503, "{}"), (200, "{}"), (200, "{}")])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: ["form": ["amount": "900"]], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Provision", "url": "/api/admin/enterprise-billing", "body": ["amountMonthlyUsd": "{form.amount}"],
+        "headers": ["Idempotency-Key": "{attempt}", "X-Staff": "yes"],
+      ]))
+    _ = await model.run(action, in: model.context)
+    _ = await model.run(action, in: ["form": ["amount": "1200"]])
+    let keys = transport.requests.map { $0.value(forHTTPHeaderField: "Idempotency-Key") }
+    XCTAssertEqual(keys.count, 3)
+    XCTAssertNotNil(keys[0])
+    // The 503 was retried with the very same key, because a keyed write is safe to repeat.
+    XCTAssertEqual(keys[0], keys[1])
+    XCTAssertNotEqual(keys[1], keys[2])
+    XCTAssertEqual(transport.requests[0].value(forHTTPHeaderField: "X-Staff"), "yes")
+    _ = await model.run(action, in: model.context)
+    XCTAssertEqual(transport.requests.last?.value(forHTTPHeaderField: "Idempotency-Key"), keys[0])
+  }
+
+  /// `{press}` is one key per tap: its own retry shares it, and a second tap of the very same request gets another.
+  @MainActor
+  func testAPressKeyIsNewForEachTapAndSharedByItsRetries() async throws {
+    let transport = RecordingTransport(responses: [(503, "{}"), (200, "{}"), (200, "{}")])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: ["form": ["points": "50"]], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Adjust", "url": "/api/loyalty/member", "body": ["points": "{form.points}"],
+        "headers": ["Idempotency-Key": "{press}"],
+      ]))
+    _ = await model.run(action, in: model.context)
+    _ = await model.run(action, in: model.context)
+    let keys = transport.requests.map { $0.value(forHTTPHeaderField: "Idempotency-Key") }
+    XCTAssertEqual(keys.count, 3)
+    XCTAssertNotNil(keys[0])
+    XCTAssertEqual(keys[0], keys[1])
+    XCTAssertNotEqual(keys[1], keys[2])
+  }
+
   @MainActor
   func testTheAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })

@@ -143,6 +143,9 @@ public final class ScreenModel {
   public private(set) var loadingMore: Set<String> = []
   /// Per-block search words for loads whose route searches (`search` param).
   public var search: [String: String] = [:]
+  /// The `{attempt}` key of each action's last request, by action, path and body: a retry of the
+  /// same request reuses it, and a different request gets its own.
+  @ObservationIgnored private var attempts: [String: String] = [:]
   @ObservationIgnored private let api: ConsoleAPIClient?
   @ObservationIgnored private let reader: FirestoreReader?
   @ObservationIgnored private let writer: FirestoreWriter?
@@ -368,7 +371,9 @@ public final class ScreenModel {
     let path = ScreenValues.renderURL(urlTemplate, in: scope)
     let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: scope) }
     do {
-      let response = try await api.request(path, method: action.method, body: body ?? (action.method == .get ? nil : [:]))
+      let sentBody = body ?? (action.method == .get ? nil : [:])
+      let headers = headers(for: action, path: path, body: sentBody, in: scope)
+      let response = try await api.request(path, method: action.method, body: sentBody, headers: headers)
       let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", response ?? .null)) }
       performed = action
       return .done(message: message, response: response)
@@ -379,6 +384,17 @@ public final class ScreenModel {
     } catch {
       return .failed(error.localizedDescription)
     }
+  }
+
+  /// The action's request headers, rendered; `{attempt}` is the key held for this exact request.
+  func headers(for action: ActionSpec, path: String, body: JSONValue?, in scope: JSONValue) -> [String: String] {
+    guard !action.headers.isEmpty else { return [:] }
+    let signature = "\(action.id)|\(path)|\(String(data: (try? body?.encoded()) ?? Data(), encoding: .utf8) ?? "")"
+    let key = attempts[signature] ?? UUID().uuidString.lowercased()
+    attempts[signature] = key
+    // `{press}`: a key for this one press alone (its own retries share it); a second tap of the same request gets a new one.
+    let withAttempt = ScreenContext.with(ScreenContext.with(scope, "attempt", .string(key)), "press", .string(UUID().uuidString.lowercased()))
+    return action.headers.mapValues { ScreenValues.render($0, in: withAttempt) }
   }
 
   /// A route's "sign in again first" answer, in any of the shapes the routes use.
