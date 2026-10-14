@@ -226,6 +226,10 @@
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-returns.ts",
+      "why": "The return reasons and their labels, so the register's return sheet offers the same ones the console does (AGL-3609); imports only commerce, commerce-orders and order-fulfillment."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
       "why": "The store's tax settings and the rate arithmetic, imports nothing; the offline register's totals tax a basket with it (AGL-3625)."
     },

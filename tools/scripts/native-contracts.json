@@ -598,6 +598,15 @@
         "POS_TENDER_LABELS"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {
+      "types": [
+        "ReturnReason"
+      ],
+      "values": [
+        "RETURN_REASONS",
+        "RETURN_REASON_LABELS"
+      ]
+    },
     "libs/plugins/data/src/lib/model/dataset-model-core.ts": {
       "types": [
         "DatasetModel",
