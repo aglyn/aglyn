@@ -50,7 +50,7 @@ export const AD_CONVERSIONS_HOSTS: PluginEgressHostDeclaration[] = [
   },
 ]
 
-/** `graph.facebook.com` is declared by the sales-channels plugin; this plugin reaches it too. */
+/** `graph.facebook.com` is declared by core's subprocessor inventory (AGL-3780); this plugin reaches it too. */
 export const AD_CONVERSIONS_USES: PluginEgressUseDeclaration[] = [
   {
     host: 'graph.facebook.com',

@@ -4461,13 +4461,16 @@ allow read, delete: if isStaff() ||
 
 
 
+
+
 allow create: if (isStaff() ||
 (isSignedIn() && request.auth.uid == userId)) &&
-!('acquisition' in request.resource.data);
+!('acquisition' in request.resource.data) &&
+!('adAudienceOptOut' in request.resource.data);
 allow update: if (isStaff() ||
 (isSignedIn() && request.auth.uid == userId)) &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-['acquisition']);
+['acquisition', 'adAudienceOptOut']);
 
 
 

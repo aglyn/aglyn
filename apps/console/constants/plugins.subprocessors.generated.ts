@@ -866,12 +866,6 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         dataReceived: "The store's own listed products as the channel's feed states them: per product configuration, its id, title, description, page link, photo links, price and sale price, availability, stock quantity (Meta), condition, brand, GTIN, MPN, categories, variant group, color, size, weight and packed size, and the store's shipping price per country. Also the deployment's OAuth client credentials and the grant's own tokens. No order, no buyer and nothing about a site visitor.",
       },
       {
-        host: "graph.facebook.com",
-        disposition: "not-a-subprocessor",
-        reason: "Customer-chosen destination. The Graph API of the merchant's own Meta business, which a site admin connects on the store's Sales channels card (`libs/plugins/sales-channels/src/lib/server/connect/meta-catalog.ts`): the code exchange and long-lived token exchange at connect, listing the businesses and product catalogs the grant reaches, writing the store's products into the chosen catalog through its `items_batch` edge when a member syncs, and revoking the app's permissions on disconnect.",
-        dataReceived: "The store's own listed products as the channel's feed states them: per product configuration, its id, title, description, page link, photo links, price and sale price, availability, stock quantity (Meta), condition, brand, GTIN, MPN, categories, variant group, color, size, weight and packed size, and the store's shipping price per country. Also the deployment's OAuth client credentials and the grant's own tokens. No order, no buyer and nothing about a site visitor.",
-      },
-      {
         host: "merchants.google.com",
         disposition: "no-request",
         reason: "A link on the store's Sales channels card (`libs/plugins/sales-channels/src/lib/model/channels.ts`): a channel's own page where the merchant sets up its product feed, or its product data specification. No server of ours requests it.",
@@ -939,6 +933,11 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
       },
     ],
     uses: [
+      {
+        host: "graph.facebook.com",
+        reason: "Customer-chosen destination. The Graph API of the merchant's own Meta business, which a site admin connects on the store's Sales channels card (`libs/plugins/sales-channels/src/lib/server/connect/meta-catalog.ts`): the code exchange and long-lived token exchange at connect, listing the businesses and product catalogs the grant reaches, writing the store's products into the chosen catalog through its `items_batch` edge when a member syncs, and revoking the app's permissions on disconnect.",
+        dataReceived: "The store's own listed products as the channel's feed states them: per product configuration, its id, title, description, page link, photo links, price and sale price, availability, stock quantity (Meta), condition, brand, GTIN, MPN, categories, variant group, color, size, weight and packed size, and the store's shipping price per country. Also the deployment's OAuth client credentials and the grant's own tokens. No order, no buyer and nothing about a site visitor.",
+      },
       {
         host: "oauth2.googleapis.com",
         reason: "Since AGL-3637 also the Sales channels OAuth token endpoint for a merchant's own Merchant Center grant — the code exchange at connect, the access-token refresh before each sync, and the revocation on disconnect (`google-merchant.ts`) — the merchant's own account at the merchant's own provider, the same footing as `merchantapi.googleapis.com`.",
