@@ -837,6 +837,18 @@
           ]
         },
         {
+          "type": "fields",
+          "id": "total",
+          "when": "data.rates.results.*.rate.rateId",
+          "rows": [
+            {
+              "label": "Total for labels on discounted rates",
+              "value": "{data.rates.results[?item.rate && !item.rate.merchantCarrierAccount].*.rate.amountCents:sumcents}"
+            }
+          ],
+          "footer": "Labels on your own carrier accounts are billed by the carrier, so they are not in this total."
+        },
+        {
           "type": "actions",
           "id": "buy",
           "when": "data.rates.results.*.rate.rateId",

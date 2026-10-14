@@ -118,7 +118,7 @@ export interface SiteNotFoundProps {
 }
 
 export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
-  const { hostKey, brandName, siteTitle, titleSeparator } = useHostBrand()
+  const { hostKey, brandName, siteTitle, titleSeparator, language } = useHostBrand()
   // `undefined` is PENDING and `null` is "no designed screen" — two different
   // states that must not collapse, or the fallback renders for a moment on
   // every site that has a 404 screen.
@@ -163,18 +163,34 @@ export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
    *
    * Waits for the fetch to settle so the tab is not written twice; `null` (no
    * designed screen) is a settled answer, `undefined` is still pending.
+   *
+   * The page's name is in the language the heading is (AGL-3791), from the
+   * status screen's table, imported here lazily: this boundary's static
+   * imports are first-paint weight on every page (point (2) above), and the
+   * table rides the status screen's chunk, which a 404 loads anyway.
    */
   useEffect(() => {
     if (screen === undefined) return
     const designed = screen?.data?.screen?.data as
       | { seo?: { title?: string } }
       | undefined
-    document.title = resolveNotFoundTitle({
-      designedTitle: designed?.seo?.title,
-      siteTitle: siteTitle ?? brandName,
-      separator: titleSeparator,
-    })
-  }, [screen, brandName, siteTitle, titleSeparator])
+    let live = true
+    void import('../utils/site-status-copy')
+      .then(({ siteStatusCopy, siteStatusLanguage }) => siteStatusCopy(siteStatusLanguage(language)).notFoundPageName)
+      .catch(() => null)
+      .then((pageName) => {
+        if (!live) return
+        document.title = resolveNotFoundTitle({
+          designedTitle: designed?.seo?.title,
+          siteTitle: siteTitle ?? brandName,
+          separator: titleSeparator,
+          pageName,
+        })
+      })
+    return () => {
+      live = false
+    }
+  }, [screen, brandName, siteTitle, titleSeparator, language])
 
   const fallback = (
     <SiteStatusScreen

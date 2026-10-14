@@ -9,12 +9,44 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.253 — 2026-10-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.252...v1.0.0-beta.253)
+
+### Added
+
+- **ai:** templates and theme ask medium effort, text low, from the golden A/B ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
+- **ai:** a paid site plan asks medium effort, layout-language pages and frames low ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
+
+### Fixed
+
+- **forms:** finish the manager notification before answering a submission ([AGL-3793](https://linear.app/aglyn/issue/AGL-3793))
+- **tenant:** a site's 404 names itself in the tab in the site's language ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791), [AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
+- **ai:** a non-English site's search listing sets no English around its answers ([AGL-3792](https://linear.app/aglyn/issue/AGL-3792))
+- **ai:** the AI lib's other word matches read letters in any script ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791))
+- **ai:** a word in any script stays whole, so a Spanish heading keeps its last "a" ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791))
+- **ai:** a slow batch keeps its answers, arm recordings get short names, live runs print ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **ci:** manifests cached in the scratch path; xcodebuild says what it rebuilt (AGL-3783)
+- **marketing:** the conversions card spec loads its module once, outside any test's budget
+
+</details>
+
 ## v1.0.0-beta.252 — 2026-10-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.251...v1.0.0-beta.252)
 
 ### Added
 
+- **native:** rewards sentence, home glance, batch label total, row filters ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** the shipping page says what its zones and rates cover ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** turn a product's related products on and off ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** site setup hosts the business profile and SEO zones, filled by the AI plugin ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** edit an image: rotate, flip, crop and shrink, then replace it or save a copy ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** uploaded filters and the cover film's poster ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **legal:** v15 — Privacy and Subprocessors: hashed email matching for Aglyn's own ads ([AGL-3780](https://linear.app/aglyn/issue/AGL-3780))
 - **ai:** serve the fast tier from Haiku 5.5, retire Haiku 4.5 and Sonnet 5 ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **ai:** bill the fast tier at the platform's 1.5x markup ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
@@ -56,6 +88,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **e2e:** the signup canary presses Confirm when shown, so it works on either verify page ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
+- **marketplace:** a plugin's page uninstall runs the impact check ([AGL-3790](https://linear.app/aglyn/issue/AGL-3790))
 - **auth:** verify-email link waits for a press before redeeming ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
 - **billing:** every staff refund carries a Stripe reason derived from ours ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
 - **billing:** a fraud refund tells Stripe it is fraudulent ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
@@ -78,6 +112,7 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **native:** one weekly hours model and one picker for every screen ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 - **tenant:** name the shared consent reader for what it reads, not a plugin
 
 ### Documentation
@@ -89,8 +124,9 @@ content on the marketing site and is written separately.
 - **commerce:** name each store settings page in place of Products > Settings ([AGL-3713](https://linear.app/aglyn/issue/AGL-3713))
 
 <details>
-<summary>Also in this release: 3 test, 1 chore, 3 ci</summary>
+<summary>Also in this release: 3 test, 1 chore, 4 ci</summary>
 
+- **native:** only main saves the swift build cache; a PR restores it ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **native:** judge a PR by its test merge, not a lagging base sha ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **native:** key the swift build cache by runner image and cache manifests ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **native:** refresh main's swift build cache after auto-merges too ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))

@@ -19,6 +19,8 @@ import { getMdiAllIcons, MDI_ICON_SEARCH_LIMIT, searchMdiIcons } from '@aglyn/sh
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
+// lockdown-423: exempt — serves the static Material Design icon catalog and reads or writes nothing of any organization or site, so no verdict has a scope to bind to
+
 /**
  * The icon catalog a component's icon is picked from (AGL-3668), searched for the native apps.
  *

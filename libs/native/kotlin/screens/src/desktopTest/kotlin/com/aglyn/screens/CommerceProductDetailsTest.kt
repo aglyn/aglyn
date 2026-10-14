@@ -98,4 +98,50 @@ class CommerceProductDetailsTest : SpecTestBase() {
     val model = screen(spec("commerce", "commerce.productDetails"), mapOf("productId" to "gone"), """{"product":null}""")
     assertEquals(listOf("missing"), model.shown())
   }
+
+  // ---- related products ------------------------------------------------------------------------------------------
+
+  private val catalog = """{"items":[{"${'$'}id":"p1","name":"Mug","status":"active"},{"${'$'}id":"p2","name":"Plate","status":"active"},
+    {"${'$'}id":"p3","name":"Bowl","status":"draft"},{"${'$'}id":"p4","name":"Gone","status":"active","deletedAt":1}]}"""
+
+  private fun related(stored: String = """{"name":"Mug","relatedProductIds":["p3"],"variants":[{"id":"default","priceUsd":12}]}""") =
+    screen(spec("commerce", "commerce.productRelated"), mapOf("productId" to "p1"), """{"product":$stored,"products":$catalog}""")
+
+  @Test
+  fun detailsLinkToTheRelatedProductsOfThatProduct() {
+    val link = details().block("related").raw.let { (it as kotlinx.serialization.json.JsonObject)["items"] as kotlinx.serialization.json.JsonArray }.single()
+    assertEquals("commerce.productRelated", ScreenValues.text((link as kotlinx.serialization.json.JsonObject)["screen"]))
+    assertTrue("related" !in screen(spec("commerce", "commerce.productDetails"), mapOf("productId" to "p1"), """{"product":null}""").shown())
+  }
+
+  @Test
+  fun anyOtherLiveProductCanBeRelatedAndTheStoredOnesAreOn() {
+    val model = related()
+    val list = model.block("products")
+    val rows = ScreenValues.rows(ScreenValues.lookup("data.products.items", model.context))
+      .filter { ScreenValues.condition(list.string("filter"), ScreenContext.withItem(model.context, it)) }
+    assertEquals(listOf("Plate", "Bowl"), rows.map { ScreenValues.text(ScreenValues.lookup("name", it)) }, "not itself, not a deleted one")
+    val toggle = (list.raw as kotlinx.serialization.json.JsonObject)["toggle"] as kotlinx.serialization.json.JsonObject
+    val valueTemplate = (toggle["value"] as kotlinx.serialization.json.JsonPrimitive).content
+    val on = rows.map { ScreenValues.truthy(ScreenValues.resolve(valueTemplate, ScreenContext.withItem(model.context, it))) }
+    assertEquals(listOf(false, true), on)
+    assertEquals(listOf("hint", "products"), model.shown())
+    assertEquals(listOf("missing"), screen(spec("commerce", "commerce.productRelated"), mapOf("productId" to "p1"), """{"product":null,"products":$catalog}""").shown())
+  }
+
+  @Test
+  fun turningOneOnOrOffSavesTheStoredProductWithOnlyTheRelatedListChanged() {
+    val model = related()
+    val toggle = (model.block("products").raw as kotlinx.serialization.json.JsonObject)["toggle"] as kotlinx.serialization.json.JsonObject
+    val on = ActionSpec.parse(toggle["on"])!!
+    val off = ActionSpec.parse(toggle["off"])!!
+    assertEquals("/api/commerce/products/save", on.url)
+    assertEquals("hosts/{site.id}/products/{params.productId}", on.overlay)
+    val stored = """{"name":"Mug","relatedProductIds":["p3"],"variants":[{"id":"default","priceUsd":12}]}"""
+    fun sent(action: ActionSpec, row: String) =
+      ScreenValues.resolveBody(action.body!!, ScreenContext.with(ScreenContext.with(model.context, "overlay", json(stored)), "item", json(row)))
+        .let { (it as kotlinx.serialization.json.JsonObject)["product"] }
+    assertEquals(json("""{"name":"Mug","relatedProductIds":["p3","p2"],"variants":[{"id":"default","priceUsd":12}]}"""), sent(on, """{"${'$'}id":"p2"}"""))
+    assertEquals(json("""{"name":"Mug","relatedProductIds":[],"variants":[{"id":"default","priceUsd":12}]}"""), sent(off, """{"${'$'}id":"p3"}"""))
+  }
 }

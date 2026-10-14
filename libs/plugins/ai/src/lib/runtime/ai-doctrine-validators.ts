@@ -2518,6 +2518,16 @@ const OPENING_WORDS = new Set([
 const CLOSED_LINE = /[.!?…:;"'”’»)\]]$/
 
 /**
+ * A line's last word: its letters in any script, with their accents, or a
+ * lone ampersand (AGL-3791). A word is letters no letter, digit, ampersand or
+ * apostrophe sits right before, so "panadería" is one word and "Suite 4a",
+ * "R&D" and "don't" end on none. Read as ASCII letters, the "a" after the
+ * "í" of "panadería" was a word of its own, the article "a", and a live
+ * Spanish page stored "Galería de la panaderí".
+ */
+const LAST_WORD = /(?<![\p{L}\p{M}\p{N}&'’])(?:\p{L}[\p{L}\p{M}]*|&)$/u
+
+/**
  * The word a line ends on when that word leaves it unfinished (AGL-3072), or
  * `null`. A line that closes itself, ends on a binding or a bracketed fact the
  * member fills, or ends on any other word, is finished as far as a check can
@@ -2526,7 +2536,7 @@ const CLOSED_LINE = /[.!?…:;"'”’»)\]]$/
 export function aiDanglingWord(line: string): string | null {
   const text = line.trim()
   if (!text || CLOSED_LINE.test(text)) return null
-  const word = /(?:^|[^A-Za-z&'’])([A-Za-z]+|&)$/.exec(text)?.[1]
+  const word = LAST_WORD.exec(text)?.[0]
   if (!word) return null
   const lower = word.toLowerCase()
   if (word === 'a' || DANGLING_WORDS.has(lower)) return word

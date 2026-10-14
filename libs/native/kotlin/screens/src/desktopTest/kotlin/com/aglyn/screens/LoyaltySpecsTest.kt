@@ -19,8 +19,11 @@ class LoyaltySpecsTest : SpecTestBase() {
     "referrerRewardCents":1000,"refereeRewardCents":1500,"refereeMinimumCents":2500,"emails":true,"connected":%CONNECTED%}"""
   private val totals = """{"members":1250,"outstandingPoints":84000,"outstandingPointsCents":84000,"outstandingCreditCents":4550}"""
 
-  private fun rewards(connected: String = "null", totals: String = this.totals, programJson: String = program) =
-    screen(spec("loyalty", "loyalty.rewards"), emptyMap(), """{"program":{"program":${programJson.replace("%CONNECTED%", connected)},"totals":$totals}}""")
+  private fun rewards(connected: String = "null", totals: String = this.totals, programJson: String = program, configured: Boolean = true) =
+    screen(
+      spec("loyalty", "loyalty.rewards"), emptyMap(),
+      """{"program":{"program":${programJson.replace("%CONNECTED%", connected)},"totals":$totals},"conn":{"configured":$configured,"connection":null,"attention":[]}}""",
+    )
 
   /** A fields block as the person reads it: the rows that show, label and value. */
   private fun ScreenModel.rows(block: String): List<Pair<String, String>> =
@@ -48,6 +51,23 @@ class LoyaltySpecsTest : SpecTestBase() {
     )
     assertEquals(listOf("Rewards program saved"), listOf(model.form("program").success))
     assertEquals(null, model.shownNotice("unavailable"))
+    // The sentence the console's card opens with, over the rates it holds.
+    assertEquals(
+      "Customers earn points on every order, online and at the register, and spend them like store credit. Today a member gets back 5% of what they spend.",
+      ScreenValues.render(model.block("rate").string("text")!!, model.context),
+    )
+    val tenth = rewards(programJson = program.replace("\"earnPointsPerDollar\":5", "\"earnPointsPerDollar\":3").replace("\"pointsPerDollar\":100", "\"pointsPerDollar\":120"))
+    assertTrue(ScreenValues.render(tenth.block("rate").string("text")!!, tenth.context).endsWith("gets back 2.5% of what they spend."))
+  }
+
+  @Test
+  fun theMembersAreAlwaysOneStepOnAndTheAccountOnlyWhereTheDeploymentCanConnectOne() {
+    val links = { model: ScreenModel ->
+      model.block("more").raw.jsonObject["items"]!!.jsonArray.map { it.jsonObject }
+        .filter { ScreenValues.condition((it["when"] as? JsonPrimitive)?.content, model.context) }.map { (it["screen"] as JsonPrimitive).content }
+    }
+    assertEquals(listOf("loyalty.connection", "loyalty.members"), links(rewards()))
+    assertEquals(listOf("loyalty.members"), links(rewards(configured = false)), "the console draws no account card where it cannot connect one")
   }
 
   private fun ScreenModel.shownNotice(id: String) = if (id in shown()) id else null
@@ -97,7 +117,7 @@ class LoyaltySpecsTest : SpecTestBase() {
       listOf("enabled", "earnPointsPerDollar", "pointsPerDollar", "minRedeemPoints", "emails"),
       model.fieldsShown("program", """{"referralsEnabled":true}""").map { it.key },
     )
-    assertTrue("connected" in model.shown())
+    assertTrue("connected" in model.shown() && "rate" !in model.shown())
     assertEquals(
       "The points are kept in your Smile.io account; these rates decide what each order earns and what points are worth here.",
       ScreenValues.render(model.block("connected").string("text")!!, model.context),
@@ -114,6 +134,7 @@ class LoyaltySpecsTest : SpecTestBase() {
   fun aProgramThatCannotBeReadSaysSoAndNumbersTheRouteCouldNotAddAreNotZeros() {
     val model = screen(spec("loyalty", "loyalty.rewards"), emptyMap(), """{}""")
     assertTrue("unavailable" in model.shown())
+    assertEquals("Rewards are not available for this site", ScreenValues.render(model.block("unavailable").string("text")!!, model.context), "the route's own sentence")
     assertTrue("program" !in model.shown())
     val blind = rewards(totals = """{"members":null,"outstandingPoints":null,"outstandingPointsCents":null,"outstandingCreditCents":null}""")
     assertEquals(
@@ -358,9 +379,15 @@ class LoyaltySpecsTest : SpecTestBase() {
   }
 
   @Test
-  fun theProgramAccountAndMembersOpenFromCommercePromotions() {
-    for (id in listOf("loyalty.rewards", "loyalty.connection", "loyalty.members")) assertEquals(listOf("commercePromotions"), spec("loyalty", id).zones, id)
+  fun theProgramListsItselfInPromotionsOnlyWhereItHasSomethingToSayAndTheOrderWidgetLikewise() {
+    assertEquals(listOf("commercePromotions"), spec("loyalty", "loyalty.rewards").zones)
+    assertEquals("data.program.program", spec("loyalty", "loyalty.rewards").showWhen)
+    for (id in listOf("loyalty.connection", "loyalty.members", "loyalty.member")) assertEquals(emptyList(), spec("loyalty", id).zones, id)
     assertEquals(listOf("orderDetail"), spec("loyalty", "loyalty.order").zones)
-    assertEquals(emptyList(), spec("loyalty", "loyalty.member").zones)
+    val untouched = screen(spec("loyalty", "loyalty.order"), mapOf("orderId" to "o"), """{"view":{"order":{"earnedPoints":0,"spentCents":0,"entries":[]}}}""")
+    assertTrue(!ScreenValues.condition(untouched.spec.showWhen, untouched.context), "an order rewards never touched leaves no row")
+    val earned = screen(spec("loyalty", "loyalty.order"), mapOf("orderId" to "o"), """{"view":{"order":{"earnedPoints":30,"spentCents":0,"entries":[]}}}""")
+    assertTrue(ScreenValues.condition(earned.spec.showWhen, earned.context))
+    assertTrue(!ScreenValues.condition(spec("loyalty", "loyalty.rewards").showWhen, screen(spec("loyalty", "loyalty.rewards"), emptyMap(), "{}").context), "no program, no row")
   }
 }

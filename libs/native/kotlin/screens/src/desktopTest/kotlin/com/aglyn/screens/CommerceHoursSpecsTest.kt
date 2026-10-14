@@ -1,5 +1,7 @@
 package com.aglyn.screens
 
+import com.aglyn.contracts.WeeklyHoursInterval
+import com.aglyn.contracts.weeklyHoursFromText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -15,8 +17,8 @@ class CommerceHoursSpecsTest : SpecTestBase() {
     val hours = pickup.prompt.first { it.key == "hours" }
     assertEquals("hours", hours.kind)
     assertEquals("Mo-Fr 09:00-17:00", ScreenValues.render(hours.initial!!, model.row("data.locations.items", 0)))
-    val week = WeeklyHours.fromText("Mo-Fr 09:00-17:00").first
-    assertEquals(listOf(HoursInterval(540, 1020)), week[1])
+    val week = weeklyHoursFromText("Mo-Fr 09:00-17:00").hours
+    assertEquals(listOf(WeeklyHoursInterval(540, 1020)), week[1])
     assertEquals(emptyList(), week[0], "Sunday is closed")
   }
 

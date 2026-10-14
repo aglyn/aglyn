@@ -261,10 +261,10 @@ export const AI_SITE_FORM_DATASET_FIELDS_MAX = 12
 /** The field types a planned `Name:type` may name, as the data plugin's writer takes them. */
 const FORM_DATASET_FIELD_TYPES = ['text', 'number', 'integer', 'boolean', 'list'] as const
 
-/** A planned field as a person reads it: `fullName` and `full_name` are "Full name". */
+/** A planned field as a person reads it: `fullName` and `full_name` are "Full name", `fechaDeÚltimaVisita` "Fecha de última visita". */
 export function aiSiteDatasetFieldName(planned: string): string {
   const words = planned
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2')
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

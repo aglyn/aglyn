@@ -441,7 +441,7 @@ export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
   if (outputs.some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)) {
     return []
   }
-  const proposal = aiSiteSeoProposalForInputs(job.inputs)
+  const proposal = aiSiteSeoProposalForInputs(job.inputs, job.plan?.language)
   if (!proposal) return []
   return [
     {

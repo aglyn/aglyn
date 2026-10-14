@@ -95,12 +95,17 @@ export function aiJobUsesLayoutLanguage(job: Pick<AiJob, 'inputs'>): boolean {
 
 /**
  * How the language doors think (AGL-3660): adaptively, at an effort named
- * rather than left to the model's default. Zach, 2026-10-07: quality first —
- * a page and a site's frame are designed, not transcribed, and the caching
- * work pays for the thinking. Medium is where Claude Sonnet 5.5, the balanced
- * default, is tuned to start for multistep design work.
+ * rather than left to the model's default — a page and a site's frame are
+ * designed, not transcribed.
+ *
+ * Low since AGL-3781. The live round of 2026-10-14 built the layout-language
+ * briefs (`ai-job-layout-language-live.spec.ts`) at medium and at low: low
+ * built 39 of 39 pages and 13 of 13 frames, 64 of 65 answers held their rules
+ * on the first ask, and none was cut off at its ceiling. The ceilings keep
+ * the thinking room sized at medium (`AI_LAYOUT_PAGE_THINKING_TOKENS`,
+ * `AI_LAYOUT_FRAME_THINKING_TOKENS`), so a page that thinks longer still fits.
  */
-export const AI_LAYOUT_LANGUAGE_THINKING = { thinking: 'adaptive', effort: 'medium' } as const
+export const AI_LAYOUT_LANGUAGE_THINKING = { thinking: 'adaptive', effort: 'low' } as const
 
 /**
  * Room for the thinking a page's answer does before it writes, inside the

@@ -25,7 +25,7 @@ import { Container } from '@aglyn/shared-ui-jsx/components/container'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useHostBrand } from '../app/[host]/host-brand.context'
-import { siteStatusCopy, type SiteStatusCopy } from '../utils/site-status-copy'
+import { siteStatusCopy, siteStatusLanguage, type SiteStatusCopy } from '../utils/site-status-copy'
 
 export interface SiteStatusScreenProps {
   /** Status code, rendered as the eyebrow — `'404'`, `'500'`. */
@@ -353,8 +353,7 @@ SiteStatusScreen.displayName = 'SiteStatusScreen'
  */
 export function useSiteStatusCopy(): SiteStatusCopy {
   const { language } = useHostBrand()
-  const documentLanguage = typeof document === 'undefined' ? '' : document.documentElement.lang
-  return siteStatusCopy(language || documentLanguage)
+  return siteStatusCopy(siteStatusLanguage(language))
 }
 
 export default SiteStatusScreen

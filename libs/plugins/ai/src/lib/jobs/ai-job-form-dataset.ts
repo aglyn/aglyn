@@ -71,12 +71,18 @@ export interface AiFormDataset {
   fields: AiFormDatasetField[]
 }
 
-/** A field name as two spellings of it compare: `fullName`, `full_name` and "Full name" are one. */
+/**
+ * A field name as two spellings of it compare: `fullName`, `full_name` and
+ * "Full name" are one, and so are `telefono` and "Teléfono" (AGL-3791). Its
+ * letters are any script's, so "Имя" and "Телефон" are two fields rather
+ * than two empty keys that match nothing.
+ */
 export function aiFormFieldKey(name: string): string {
   return name
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
 const NUMBER_TYPES = new Set(['float', 'int32', 'int64', 'number', 'integer'])
