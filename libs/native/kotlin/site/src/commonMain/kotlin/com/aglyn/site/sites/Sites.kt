@@ -170,13 +170,19 @@ fun suggestSubdomain(name: String): String = name.lowercase()
   .take(30)
   .trimEnd('-')
 
+/**
+ * What Create site sends. `start: "starter"` is the console's own "Create the
+ * starter site" answer: the site is born with the starter website in the same
+ * request. Without it the server may create the site empty to offer the guided
+ * AI start (`guidedStart` in its answer), and the app has no such start to
+ * land on, which would leave an empty site.
+ */
+fun createSiteBody(orgId: String, name: String, subdomain: String): JsonObject =
+  jsonBody("displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter")
+
 /** `POST /api/hosts/create`, the console's own Create site. */
 suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String): CreateSiteResult = try {
-  val answer = api.request(
-    "/api/hosts/create",
-    ApiMethod.POST,
-    jsonBody("displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId),
-  )
+  val answer = api.request("/api/hosts/create", ApiMethod.POST, createSiteBody(orgId, name, subdomain))
   CreateSiteResult.Created(answer.field("hostId").orEmpty(), answer.field("subdomain") ?: subdomain)
 } catch (error: ConsoleApiError) {
   if (error.status == 0) throw error
