@@ -110,6 +110,7 @@ import {
   aiSiteDatasetPlacedPhotos,
   aiSiteDatasetRefusal,
   aiSitePlanDatasets,
+  aiSiteReusedDatasetListings,
   aiSiteRecordTemplateOf,
   runAiSiteDatasetUnit,
 } from './ai-job-site-datasets'
@@ -768,6 +769,8 @@ export function aiSiteUnitJob(
       // The events this start drafted, in the section that names them (AGL-3755).
       ...aiSiteEventListings({ outputs: job.outputs ?? [], items: aiSitePlanEvents(plan), screens: merged.screens }),
     )
+    // And the workspace's own datasets the plan reuses, in the sections that name them (AGL-3771).
+    listings.push(...aiSiteReusedDatasetListings({ plan, screens: merged.screens, listed: listings }))
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
     // A paid store's header links its account beside the cart, and its footer
     // its account and policies (AGL-3676), by path: they are written after.
