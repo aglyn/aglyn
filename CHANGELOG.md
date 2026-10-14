@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **legal:** v15 — Privacy and Subprocessors: hashed email matching for Aglyn's own ads ([AGL-3780](https://linear.app/aglyn/issue/AGL-3780))
 - **ai:** serve the fast tier from Haiku 5.5, retire Haiku 4.5 and Sonnet 5 ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **ai:** bill the fast tier at the platform's 1.5x markup ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **native:** pick setup and cover images on apple
