@@ -36,7 +36,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 import type { ConsoleHostScreensZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { act } from '@testing-library/react'
+import { AI_SITE_BUILD_IN_FLIGHT_COPY } from '../model/ai-job-activity'
 import AiDescribePageButton from './ai-describe-page.component'
+import { publishAiJob, resetAiJobsStoreForTests } from './ai-jobs-store'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -165,5 +168,43 @@ describe('the brief it sends', () => {
     fireEvent.change(screen.getByLabelText('What is the page for?'), { target: { value: '   ' } })
     expect(screen.getByRole('button', { name: 'Plan the page' }).hasAttribute('disabled')).toBe(true)
     expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('another page already being built on this site (AGL-3765)', () => {
+  beforeEach(() => resetAiJobsStoreForTests())
+
+  const building = (patch: Record<string, unknown> = {}) => ({
+    ...pageJob('job-building'),
+    steps: [
+      { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 33, error: null },
+      { name: 'generate', status: 'running', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    ],
+    ...patch,
+  })
+
+  it('warns from the list the console already holds, asks nothing, and still plans the page', async () => {
+    render(<AiDescribePageButton {...zoneProps()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    expect(screen.queryByText(AI_SITE_BUILD_IN_FLIGHT_COPY)).toBeNull()
+    // The indicator's read hands the running job in.
+    act(() => publishAiJob(building() as never))
+    expect(screen.getByText(AI_SITE_BUILD_IN_FLIGHT_COPY)).toBeTruthy()
+    expect(mockFetch).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('What is the page for?'), { target: { value: 'A booking page' } })
+    mockFetch.mockResolvedValueOnce(json({ job: pageJob('job-3') }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan the page' }))
+    await screen.findByText(/The page is being planned/)
+    // The first request is the brief's own: the warning asked for nothing.
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/ai/jobs')
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toMatchObject({ kind: 'page', hostId: 'host-1', brief: 'A booking page' })
+  })
+
+  it('says nothing of a build on another site', () => {
+    render(<AiDescribePageButton {...zoneProps()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }))
+    act(() => publishAiJob(building({ hostId: 'host-2' }) as never))
+    expect(screen.queryByText(AI_SITE_BUILD_IN_FLIGHT_COPY)).toBeNull()
   })
 })

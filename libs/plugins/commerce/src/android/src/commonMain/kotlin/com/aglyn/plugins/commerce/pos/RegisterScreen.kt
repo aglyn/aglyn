@@ -137,6 +137,7 @@ fun RegisterScreen(context: NativePluginContext) {
       peripherals = context.peripherals,
       scope = scope,
       opsApi = ConsolePosOpsApi(context.api, hostId),
+      returnsApi = ConsolePosReturnsApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
