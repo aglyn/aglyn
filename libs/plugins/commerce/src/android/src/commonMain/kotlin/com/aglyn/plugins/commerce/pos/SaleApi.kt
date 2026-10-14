@@ -81,6 +81,11 @@ data class PosContext(
   val ops: PosOpsSettings = PosOpsSettings(),
   /** Store credit other plugins keep, taken as a tender. */
   val credits: List<PosCreditProvider> = emptyList(),
+  /**
+   * The site's Stripe publishable key, which the card form is loaded with. Empty when the deployment has none:
+   * the console offers "Type card" only with one.
+   */
+  val publishableKey: String = "",
 )
 
 data class PosSalePayment(
@@ -180,6 +185,7 @@ fun readPosContext(body: JsonElement?): PosContext {
       val id = credit["providerId"].str() ?: return@mapNotNull null
       PosCreditProvider(id, credit["label"].str() ?: "Store credit", credit["lookup"].bool())
     },
+    publishableKey = record["publishableKey"].str() ?: "",
   )
 }
 
@@ -259,6 +265,9 @@ sealed class SaleStep(val action: String, val startsPayment: Boolean) {
 
   /** The QR payment page: the customer pays on their phone. */
   data class CardLink(val amountCents: Long, val tipCents: Long) : SaleStep("card-link", true)
+
+  /** A card typed into Stripe's own card form (card not present); the server makes the intent and hands back its secret. */
+  data class CardKeyed(val amountCents: Long, val tipCents: Long) : SaleStep("card-keyed", true)
   data class Status(val paymentId: String) : SaleStep("status", false)
   data class Cancel(val paymentId: String) : SaleStep("cancel", false)
 
@@ -305,6 +314,10 @@ sealed class SaleStep(val action: String, val startsPayment: Boolean) {
         step.amountCents?.takeIf { it > 0 }?.let { put("amountCents", it) }
       }
       is CardLink -> {
+        put("amountCents", step.amountCents)
+        put("tipCents", step.tipCents)
+      }
+      is CardKeyed -> {
         put("amountCents", step.amountCents)
         put("tipCents", step.tipCents)
       }

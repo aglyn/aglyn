@@ -83,7 +83,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "delivery-apps",
-      contributes: ["screens": ["delivery-apps.match", "delivery-apps.service", "delivery-apps.store"]],
+      contributes: ["screens": ["delivery-apps.match", "delivery-apps.service", "delivery-apps.store"], "widgets": ["delivery-apps.pos-orders"]],
       register: AglynDeliveryAppsPlugin.registerDeliveryAppsNative
     ),
     NativePluginManifestEntry(

@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url'
 import {
   aliasTable,
   domAccess,
+  evaluateCardSdkPlacement,
   evaluateNativeToWeb,
   evaluateWebToNative,
   importSpecifiers,
@@ -218,4 +219,61 @@ test('native walk: a Swift or Kotlin file outside the native trees is misplaced'
     'misplaced libs/plugins/shop/src/lib/x.swift .swift',
     'misplaced tools/y.kt .kt',
   ])
+})
+
+/* Stripe's card-entry SDK belongs to Aglyn POS alone. */
+
+const project = (aglynLinks, posLinks) => {
+  const dep = (id, name) => `\t\t${id} /* ${name} */ = {isa = XCSwiftPackageProductDependency; package = 0A1B2C3D4E5F60718293A4B5; productName = ${name};};`
+  const target = (name, ids) =>
+    `\t\t${name === 'Aglyn' ? 'AAAAAAAAAAAAAAAAAAAAAAAA' : 'BBBBBBBBBBBBBBBBBBBBBBBB'} /* ${name} */ = {isa = PBXNativeTarget; name = ${name}; packageProductDependencies = (${ids
+      .map((id) => `${id} /* x */, `)
+      .join('')}); productName = ${name};};`
+  return [
+    dep('1111111111111111111111AA', 'AglynUI'),
+    dep('2222222222222222222222BB', 'StripePaymentSheet'),
+    target('Aglyn', aglynLinks),
+    target('AglynPOS', posLinks),
+  ].join('\n')
+}
+
+test('card SDK: linked to Aglyn POS alone passes', () => {
+  const t = native({
+    'apps/ios/Aglyn.xcodeproj/project.pbxproj': project(['1111111111111111111111AA'], ['1111111111111111111111AA', '2222222222222222222222BB']),
+    'apps/ios/AglynPOS/StripeKeyedCardEntry.swift': 'import StripePaymentSheet',
+    'apps/android/pos/build.gradle.kts': 'implementation(libs.stripe.paymentsheet)',
+    'apps/android/gradle/libs.versions.toml': 'stripe-paymentsheet = { module = "com.stripe:paymentsheet", version.ref = "stripe-android" }',
+    'apps/ios/Aglyn.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved': '{ "identity" : "stripe-ios-spm" }',
+    'libs/native/apple/Sources/AglynHardware/KeyedCardEntry.swift': "// Stripe's card SDK is Aglyn POS's alone; the seam never names it.",
+    'libs/plugins/commerce/src/ios/Sources/AglynCommercePlugin/POS/StripeTerminalCollector.swift': 'import StripeTerminal',
+  })
+  assert.deepEqual(reasons(evaluateCardSdkPlacement(t)), [])
+})
+
+test('card SDK: the Aglyn app target, a kit, a plugin or another module naming it is red', () => {
+  const t = native({
+    'apps/ios/Aglyn.xcodeproj/project.pbxproj': project(['2222222222222222222222BB'], ['2222222222222222222222BB']),
+    'apps/ios/Aglyn/HomeView.swift': 'import StripePaymentSheet',
+    'libs/native/apple/Package.swift': '.package(url: "https://github.com/stripe/stripe-ios-spm", exact: "1.0.0")',
+    'libs/plugins/commerce/src/android/build.gradle.kts': 'implementation("com.stripe:paymentsheet:23.0.0")',
+    'apps/android/app/build.gradle.kts': 'implementation(libs.stripe.paymentsheet)',
+    'libs/plugins/bookings/src/android/src/commonMain/kotlin/X.kt': 'import com.stripe.android.paymentsheet.PaymentSheet',
+  })
+  assert.deepEqual(reasons(evaluateCardSdkPlacement(t)).sort(), [
+    'sdk-placement apps/android/app/build.gradle.kts stripe.paymentsheet',
+    'sdk-placement apps/ios/Aglyn.xcodeproj/project.pbxproj StripePaymentSheet in Aglyn',
+    'sdk-placement apps/ios/Aglyn/HomeView.swift StripePaymentSheet',
+    'sdk-placement libs/native/apple/Package.swift stripe-ios-spm',
+    'sdk-placement libs/plugins/bookings/src/android/src/commonMain/kotlin/X.kt com.stripe.android.paymentsheet',
+    'sdk-placement libs/plugins/commerce/src/android/build.gradle.kts com.stripe:paymentsheet',
+  ])
+})
+
+test('card SDK: the Stripe Terminal SDK is a different SDK and is not held to this rule', () => {
+  const t = native({
+    'libs/plugins/commerce/src/ios/Package.swift': '.package(url: "https://github.com/stripe/stripe-terminal-ios", exact: "6.0.0")',
+    'apps/android/pos/src/main/kotlin/Y.kt': 'import com.stripe.stripeterminal.Terminal',
+    'apps/android/gradle/libs.versions.toml': 'stripe-terminal = { module = "com.stripe:stripeterminal", version.ref = "stripe-terminal" }',
+  })
+  assert.deepEqual(reasons(evaluateCardSdkPlacement(t)), [])
 })

@@ -81,6 +81,9 @@ dependencies {
   // Card-on-device: Tap to Pay and Bluetooth readers (Aglyn POS only, never the Aglyn app).
   implementation(libs.stripe.terminal)
   implementation(libs.stripe.terminal.taptopay)
+  // Card-not-present: Stripe's own card form takes a card typed in at the register, so the number never
+  // touches our code (Aglyn POS only, never the Aglyn app).
+  implementation(libs.stripe.paymentsheet)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
 }

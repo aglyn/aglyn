@@ -1,6 +1,8 @@
-// The DeliveryApps plugin's native screens (Android + JVM desktop), drawn by
-// :native-screens from screens/delivery-apps.screens.json, the spec the plugin's Apple
-// package reads too. Reached only through the generated native plugin manifest.
+// The DeliveryApps plugin's native code (Android + JVM desktop): its settings
+// screens, drawn by :native-screens from screens/delivery-apps.screens.json (the
+// spec the plugin's Apple package reads too), and the register's delivery-order
+// queue, a widget in the Aglyn POS register's posOrders zone. Reached only through
+// the generated native plugin manifest; the app shells never import it.
 plugins {
   alias(libs.plugins.kotlin.multiplatform)
   alias(libs.plugins.android.kmp.library)
@@ -55,10 +57,15 @@ kotlin {
       dependencies {
         implementation(project(":native-plugin-host"))
         implementation(project(":native-screens"))
+        implementation(project(":native-ui"))
+        implementation(project(":native-contracts"))
+        implementation(libs.kotlinx.serialization.json)
       }
     }
     commonTest.dependencies {
       implementation(kotlin("test"))
+      implementation(libs.kotlinx.coroutines.test)
+      implementation(libs.ktor.client.mock)
     }
   }
 }

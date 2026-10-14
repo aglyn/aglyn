@@ -720,6 +720,11 @@ With React Native gone, the guard's TypeScript rules for `libs/mobile` and
 plugin `src/mobile` go with it. `mobile-pure-modules.json` stays: it is now
 the list of pure modules the native generators (§5) may read.
 
+One SDK is placed by the same guard: Stripe's card-entry SDK (PaymentSheet) may be
+linked, imported or declared only by Aglyn POS (`apps/ios/AglynPOS`, the AglynPOS
+Xcode target, `apps/android/pos`, and the version catalog line that pins it). A
+kit, a plugin or the Aglyn app that names it is red (§10).
+
 The only sanctioned crossings are the generated files of §3 and §5–§7. Their
 generators read the pure modules. Native code reads only their outputs. Specs
 for each rule live in `tools/scripts/lib/mobile-isolation.test.mjs`.
@@ -739,14 +744,45 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   another plugin keeps (`credits` in the context, found by `credit-lookup`),
   a room charge to a checked-in stay (`reservations` asked for by status), and
   the QR payment page (`card-link`), drawn as a QR code on the device and never
-  sent anywhere. A split pays part of the balance; a declined reader payment
-  can be retried and, in test mode, tapped with a test card. The one console
-  tender the apps do not take is the typed card: it needs Stripe's card-entry
-  SDK, which neither app carries.
+  sent anywhere, and the typed card ("Type card", `card-keyed`). A split pays
+  part of the balance; a declined reader payment can be retried and, in test
+  mode, tapped with a test card.
+- **Typed card:** the console loads Stripe's Payment Element on the
+  PaymentIntent the server made (`card-keyed`), then reads the payment back
+  (`status`); closing it without paying runs `cancel`. The apps do the same
+  with Stripe's own card form (PaymentSheet) on that intent: the number is typed
+  into Stripe's fields and goes to Stripe, never through our code, so our PCI
+  scope does not change. The intent, its metadata, the idempotency key and the
+  receipt are the server's, exactly as for the console; the device only shows
+  the form and reports how it closed (`KeyedCardEntry` in the hardware kit:
+  confirmed, canceled or failed), and the server re-reads Stripe before it
+  records anything. The button shows when the register's context carries the
+  site's publishable key (as the console's does) and the app has the form.
+  That is **Aglyn POS on iPhone, iPad and Android only**: Stripe has no card
+  SDK for native macOS (the iOS SDK is UIKit, and Aglyn POS is not a Mac
+  Catalyst app) or for the JVM, so the Mac and desktop registers take cards on
+  smart readers and the QR payment page, and do not offer "Type card".
+- **The card SDK stays in Aglyn POS.** On Apple it is the `StripePaymentSheet`
+  product of `stripe-ios-spm`, pinned exact in `Aglyn.xcodeproj` and linked to
+  the AglynPOS target only, filtered to iOS; on Android it is
+  `com.stripe:paymentsheet`, pinned in the version catalog and used by `:pos`
+  only. The shared kits and every plugin see only the `KeyedCardEntry` seam, and
+  `check-mobile-isolation` fails if the Aglyn app target, a kit, a plugin or a
+  web tree names the SDK. Tests for the tender run against a fake form.
 - **Tips** and **receipts by email or text**, through the routes the web
-  register uses; **Print receipt** goes to the register's cloud printer (and
-  on Kotlin its direct printer), and a store whose receipt default is print
-  prints it as soon as the sale is paid.
+  register uses. **Print receipt** goes where the console's does: the
+  register's cloud printer when it has one (the server queue the printer
+  polls), else the device's own print sheet, which is what the console's
+  `window.print()` is (AirPrint on an iPhone or iPad, the print panel on a Mac,
+  Android's print service, the desktop's dialog). The console has no path that
+  talks to a printer's own address, so neither do the apps; a Kotlin desktop
+  register can also name a network printer in its build settings. A **gift
+  receipt** prints on the sheet with no prices. A store whose receipt default
+  is print prints as soon as the sale is paid.
+- **Delivery-app orders:** the delivery-apps plugin's own native package puts
+  the console's queue (accept or reject, ready, picked up) in the register's
+  `posOrders` zone, which the commerce plugin hosts and fills by registry, never
+  by name.
 - **Booking payments:** the bookings plugin contributes a `.pos` screen.
 
 Card readers by platform:

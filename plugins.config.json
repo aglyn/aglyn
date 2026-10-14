@@ -3781,7 +3781,7 @@
     {
       "id": "delivery-apps",
       "mobile": {
-        "$comment": "AGL-3652: delivery apps natively (DoorDash, Uber Eats, Grubhub): linking a store, auto-accept and prep time, sending the menu and matching items to products, from the spec in src/android/screens/delivery-apps.screens.json. It sits in Commerce settings' commerceSettings zone. The register's delivery queue belongs to the POS register lane.",
+        "$comment": "AGL-3652: delivery apps natively (DoorDash, Uber Eats, Grubhub): linking a store, auto-accept and prep time, sending the menu and matching items to products, from the spec in src/android/screens/delivery-apps.screens.json. It sits in Commerce settings' commerceSettings zone. AGL-3651/AGL-3652: the register's delivery-order queue, a widget in the Aglyn POS register's posOrders zone (the commerce plugin hosts the zone and names no plugin): each open DoorDash, Uber Eats or Grubhub order with the one next step, through delivery-apps/queue and delivery-apps/order-action as the signed-in member.",
         "ios": {
           "module": "AglynDeliveryAppsPlugin",
           "register": "registerDeliveryAppsNative"
@@ -3795,6 +3795,9 @@
             "delivery-apps.service",
             "delivery-apps.store",
             "delivery-apps.match"
+          ],
+          "widgets": [
+            "delivery-apps.pos-orders"
           ]
         }
       },

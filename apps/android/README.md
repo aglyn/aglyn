@@ -26,6 +26,7 @@ pinned in the catalog:
 | dependency | used by | license |
 | -- | -- | -- |
 | Stripe Terminal Android SDK (`stripeterminal`, `stripeterminal-taptopay`) | `:pos` only: Tap to Pay and Bluetooth readers | MIT |
+| Stripe Android SDK (`com.stripe:paymentsheet`, approved 2026-10-14) | `:pos` only: the card form for a card typed in at the register | MIT |
 | CameraX (`camera-camera2`, `camera-lifecycle`, `camera-view`) | `:native-camera`, Android only | Apache-2.0 |
 | ML Kit barcode scanning (bundled model) | `:native-camera`, Android only | ML Kit Terms of Service |
 | JNA | desktop: Windows Credential Manager, WebView2 over COM | Apache-2.0 / LGPL-2.1 |
@@ -137,6 +138,14 @@ Every build uses the SDK's **simulated** readers until live readers are
 switched on with `-Paglyn.terminalLiveReaders=true` on a release build, which
 needs Stripe Terminal live mode. Tap to Pay's PIN screens run in the SDK's
 `:stripetaptopay` process, where the app does nothing on start.
+
+A card typed in at the register ("Type card", offered when the site has a Stripe
+publishable key) goes into Stripe's own PaymentSheet (`com.stripe:paymentsheet`,
+`:pos` only): the number is typed into Stripe's fields and never reaches our
+code. The server makes the PaymentIntent (`card-keyed`) and reads the payment back
+from Stripe; the sheet is built by `MainActivity` in `onCreate` and bound through
+the hardware kit's `KeyedCardEntry`. The Aglyn app and the desktop shell do not
+carry the SDK.
 
 The register's camera button scans barcodes with CameraX and ML Kit's bundled
 model (`libs/native/kotlin/camera`, provided to the kit's `BarcodeScanSheet`

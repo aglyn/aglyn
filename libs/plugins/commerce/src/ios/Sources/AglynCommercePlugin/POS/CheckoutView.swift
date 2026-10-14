@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynHardware
 import AglynUI
 import SwiftUI
 
@@ -128,6 +129,10 @@ struct CheckoutView: View {
         tenderButton("Card · \(reader.label)", systemImage: reader.kind == .smart ? "creditcard.and.123" : "wave.3.right") {
           Task { await checkout.payCard(reader) }
         }
+      }
+      if let keyed = model.keyedCard {
+        tenderButton(keyed.label, systemImage: "creditcard") { Task { await checkout.payCard(keyed) } }
+          .accessibilityIdentifier("tender-keyed-card")
       }
       tenderButton("Cash", systemImage: "banknote") { checkout.go(to: .cash) }
       tenderButton("Gift card", systemImage: "giftcard") { checkout.go(to: .giftCard) }
@@ -364,16 +369,16 @@ struct CheckoutView: View {
 
   private func card(_ label: String) -> some View {
     VStack(spacing: AglynSpace.two) {
-      Image(systemName: "wave.3.right.circle")
+      Image(systemName: model.cardService(labeled: label)?.kind == .keyed ? "creditcard.circle" : "wave.3.right.circle")
         .font(.system(size: 64))
         .foregroundStyle(AglynColor.tint)
         .symbolEffect(.pulse)
-      Text(model.readers.first(where: { $0.label == label })?.prompt ?? "Present the card on \(label)")
+      Text(model.cardService(labeled: label)?.prompt ?? "Present the card on \(label)")
         .font(AglynFont.title2).multilineTextAlignment(.center)
       Text(model.money(checkout.amountCents + checkout.tipCents)).font(AglynFont.figure).monospacedDigit()
       Button("Cancel payment", role: .destructive) {
         Task {
-          if let reader = model.readers.first(where: { $0.label == label }) { await checkout.cancelCard(reader) }
+          if let reader = model.cardService(labeled: label) { await checkout.cancelCard(reader) }
         }
       }
       .buttonStyle(.bordered)
@@ -394,6 +399,16 @@ struct CheckoutView: View {
       if model.display.asking == .receipt {
         AglynNotice("The customer is choosing a receipt on the display…", tone: .info)
       }
+      if let data = model.receipt {
+        ScrollView(.horizontal, showsIndicators: false) {
+          Text(renderText(layoutReceipt(data, ReceiptLayoutOptions(columns: PaperColumns.mm58 + 8))).trimmingCharacters(in: .newlines))
+            .font(AglynFont.caption.monospaced())
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(AglynSpace.one)
+        }
+        .aglynCardSurface()
+        .accessibilityIdentifier("receipt-preview")
+      }
       TextField(model.context?.smsReceipts == true ? "Email or phone" : "Email", text: $receiptTo)
         .textFieldStyle(.roundedBorder)
         .autocorrectionDisabled()
@@ -402,10 +417,11 @@ struct CheckoutView: View {
           .keyboardType(.emailAddress)
         #endif
         .onAppear { if receiptTo.isEmpty { receiptTo = model.cart.customerEmail } }
+        .task { model.watchReceipt(orderID: checkout.opened.orderID) }
         .task {
           await model.askReceiptOnDisplay(checkout)
-          await model.printReceiptByDefault(checkout)
         }
+        .task(id: model.receipt != nil) { await model.printReceiptByDefault(checkout) }
       HStack {
         Button(checkout.printed ? "New sale" : "No receipt") {
           // The cashier answers for the customer: the display's prompt ends with a thank-you.
@@ -414,13 +430,19 @@ struct CheckoutView: View {
         }
           .buttonStyle(.bordered)
           .accessibilityIdentifier("receipt-none")
-        if model.lastReceipt.hasPrinter {
+        if model.canPrintReceipt {
           Button("Print receipt") {
             model.display.cancelAsk()
-            Task { if await checkout.printToCloud() { model.finished() } }
+            Task {
+              switch await model.printReceipt(checkout) {
+              case .printed: model.finished()
+              case .canceled: break
+              case .failed(let words): model.toast = CheckoutNotice(tone: .error, message: words)
+              }
+            }
           }
           .buttonStyle(.bordered)
-          .disabled(checkout.busy)
+          .disabled(checkout.busy || (!model.lastReceipt.hasPrinter && model.receipt == nil))
           .accessibilityIdentifier("receipt-print")
         }
         Spacer()
@@ -432,6 +454,19 @@ struct CheckoutView: View {
         .buttonStyle(.borderedProminent)
         .disabled(
           !(isReceiptEmail(receiptTo) || (model.context?.smsReceipts == true && isReceiptPhone(receiptTo))) || checkout.busy)
+      }
+      if SystemPrinter.isAvailable, model.receipt != nil {
+        // The items and the barcode a recipient returns with, and no price: printed on this device's sheet.
+        Button("Gift receipt", systemImage: "gift") {
+          model.display.cancelAsk()
+          Task {
+            if case .failed(let words) = await model.printReceipt(checkout, gift: true) {
+              model.toast = CheckoutNotice(tone: .error, message: words)
+            }
+          }
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("receipt-gift")
       }
     }
   }

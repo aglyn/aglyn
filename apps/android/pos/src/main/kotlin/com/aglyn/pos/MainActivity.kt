@@ -45,6 +45,8 @@ class MainActivity : ComponentActivity() {
     val app = application as AglynPosApplication
     val services = app.services
     app.permissionGate = readerGate
+    // Stripe's card form registers for its result now, before this activity starts.
+    app.keyedCards.attach(this)
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.
     val autoSignIn = BuildConfig.DEBUG && intent.getBooleanExtra("autoSignIn", false)
     AglynMessagingService.ensureChannel(this)
@@ -62,6 +64,7 @@ class MainActivity : ComponentActivity() {
   override fun onDestroy() {
     val app = application as AglynPosApplication
     if (app.permissionGate === readerGate) app.permissionGate = null
+    app.keyedCards.detach()
     pendingReaderAsk?.complete(false)
     super.onDestroy()
   }

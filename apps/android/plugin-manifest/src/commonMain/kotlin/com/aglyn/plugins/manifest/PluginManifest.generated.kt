@@ -85,7 +85,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "delivery-apps",
-            contributes = mapOf("screens" to listOf("delivery-apps.match", "delivery-apps.service", "delivery-apps.store")),
+            contributes = mapOf("screens" to listOf("delivery-apps.match", "delivery-apps.service", "delivery-apps.store"), "widgets" to listOf("delivery-apps.pos-orders")),
             register = ::registerDeliveryAppsNative,
         ),
         NativePluginManifestEntry(

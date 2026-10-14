@@ -44,7 +44,12 @@ object DesktopShell {
         val port = address.substringAfterLast(':', "").toIntOrNull() ?: com.aglyn.hardware.NetworkReceiptPrinter.DEFAULT_PORT
         com.aglyn.hardware.NetworkReceiptPrinter("Receipt printer", host, port)
       }
-    return com.aglyn.hardware.StaticPeripherals(printers = listOfNotNull(printer), hidScanner = com.aglyn.hardware.HidBurstDetector())
+    return com.aglyn.hardware.StaticPeripherals(
+      printers = listOfNotNull(printer),
+      hidScanner = com.aglyn.hardware.HidBurstDetector(),
+      // A receipt with no printer of its own goes to the desktop's print dialog, as the console's goes to the browser's.
+      systemPrinter = com.aglyn.hardware.AwtSystemPrinter(),
+    )
   }
 
   fun envFromSystem(): AglynEnv {
