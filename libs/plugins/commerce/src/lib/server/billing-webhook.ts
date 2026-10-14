@@ -79,6 +79,7 @@ import { storefrontTaxModeOf } from './storefront-tax'
 import { taxEngineStampFromMetadata } from '../model/commerce-tax-engine'
 import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
+import { routeCartOrderToSuppliers } from './supplier-routing'
 import { notifyOrderBuyer, onlineReceiptExtras } from './order-notifications'
 import { ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '../model/order-events'
 import {
@@ -4055,6 +4056,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ? `, from ${object.customer_details.email}.`
               : '.'),
           link: `/${hostId}/products`,
+        })
+        // Dropship routing for cart orders (AGL-3773): each supplier on the
+        // order is told about its own lines. Behind the `created` guard
+        // above; never throws.
+        await routeCartOrderToSuppliers({
+          firestore,
+          hostId: String(hostId),
+          orderId: String(object.id),
+          orderLabel: cartOrderLabel,
+          lineItems,
+          session: object,
+          requestHost: String(requestHost),
         })
         await recordCapturedContact({
           orgId: '',
