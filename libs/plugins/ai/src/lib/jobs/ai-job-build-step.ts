@@ -89,7 +89,7 @@ import {
 } from './ai-job-plugin-drafts'
 import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
-import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiJobUsesLayoutLanguage, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiDatasetListingsOf } from './ai-job-site-datasets'
 import { AI_SITE_EVENT_OP, aiEventsListings } from './ai-job-site-events'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
@@ -839,7 +839,13 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         page !== undefined &&
         (await aiSitePageWritten(
           firestore,
-          { hostId: job.hostId, unitJobId: derived.$id, screen: unit.screen, draftId: page.id },
+          {
+            hostId: job.hostId,
+            unitJobId: derived.$id,
+            screen: unit.screen,
+            draftId: page.id,
+            layoutLanguage: aiJobUsesLayoutLanguage(derived),
+          },
           readNodes,
         ))
       if (!written) {

@@ -36,7 +36,7 @@ import type {
   AiLayoutPage,
   AiLayoutTargets,
 } from '../layout-language/ai-layout-links'
-import { aiLayoutCopyCheck } from '../layout-language/ai-layout-gaps'
+import { aiLayoutCopyCheck, aiLayoutWithoutSections } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
@@ -476,6 +476,39 @@ export function aiLayoutShownItems(
   return itemIds.map((ids) => ids.filter((id) => storedIds[id] !== undefined && storedIds[id] in nodes).length)
 }
 
+/** The plan indices of the sections that show fewer of their planned items than they must (AGL-3660). */
+export function aiLayoutShortItemSections(
+  screen: Pick<AiBuildPlanScreen, 'sections'>,
+  items: readonly number[],
+  quotesOnly: readonly number[] = [],
+): number[] {
+  return screen.sections.flatMap((section, index) => {
+    if (quotesOnly.includes(index)) return []
+    const least = leastItems(section.items)
+    return least && (items[index] ?? 0) < least ? [index] : []
+  })
+}
+
+/**
+ * What a page built in the layout language says about the planned sections
+ * it was published without (AGL-3771): each one the last answer could not
+ * fill, or left with only its heading once its gaps were taken out, rather
+ * than the page refused. `null` when every section is shown.
+ */
+export function aiLayoutLeftOutNote(
+  screen: Pick<AiBuildPlanScreen, 'sections'>,
+  sectionIds: readonly string[],
+  nodes: Readonly<Record<string, unknown>>,
+): string | null {
+  const names = screen.sections.flatMap((section, index) =>
+    index > 0 && sectionIds[index] && !(sectionIds[index] in nodes) ? [`“${section.name}”`] : [],
+  )
+  if (!names.length) return null
+  return names.length === 1
+    ? `Left out: the section ${names[0]}, which could not be built well enough to publish. Add it in the Besigner when you are ready.`
+    : `Left out: the sections ${names.join(', ')}, which could not be built well enough to publish. Add them in the Besigner when you are ready.`
+}
+
 /**
  * The sections a page planned with repeated items — cards, steps, a list —
  * that show none, or too few, once the page is built (AGL-3660). A heading
@@ -487,13 +520,13 @@ export function aiLayoutEmptyItemSections(
   items: readonly number[],
   /** Sections whose only items were customer quotes, which no answer may give (AGL-3676). */
   quotesOnly: readonly number[] = [],
+  /** Sections the page no longer shows (AGL-3771), which ask for nothing. */
+  emptied: readonly number[] = [],
 ): AiDoctrineViolation[] {
+  const short = aiLayoutShortItemSections(screen, items, quotesOnly)
   return screen.sections.flatMap((section, index): AiDoctrineViolation[] => {
-    if (quotesOnly.includes(index)) return []
-    const least = leastItems(section.items)
-    if (!least) return []
+    if (!short.includes(index) || emptied.includes(index)) return []
     const shown = items[index] ?? 0
-    if (shown >= least) return []
     return [
       {
         rule: null,
@@ -600,10 +633,10 @@ export function aiLayoutPageCheck(
       },
       last,
     )
-    const { dropped } = copy
+    const dropped = [...copy.dropped]
     // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660),
     // and a link sent home for nothing is sent to the form or left out (AGL-3729).
-    const nodes = aiSettleUnrelatedScreenLinks(
+    let nodes = aiSettleUnrelatedScreenLinks(
       aiSettleMechanicalRules(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
         'page',
@@ -611,6 +644,29 @@ export function aiLayoutPageCheck(
       'page',
       { ...context, ownScreenIds: input.targets.pageId ? [input.targets.pageId] : [] },
     ).nodes as unknown as typeof copy.nodes
+    // Each section's items as they are stored, after anything the gaps took out.
+    const items = aiLayoutShownItems(compiled.itemIds, stored.storedIds, nodes as unknown as Record<string, unknown>)
+    // The last answer's sections that still show none of their planned items
+    // are taken out rather than the whole page refused (AGL-3771): a site
+    // start's home refused for one such section published a site with
+    // nothing at its address. The page's first section heads it, and is
+    // never taken out.
+    const emptied = last
+      ? aiLayoutShortItemSections(input.screen, items, compiled.quotesOnly).filter((index) => index > 0 && !!input.sectionIds[index])
+      : []
+    if (emptied.length) {
+      const without = aiLayoutWithoutSections(
+        nodes,
+        CANVAS_ROOT_ELEMENT_ID,
+        emptied.map((index) => ({
+          id: input.sectionIds[index],
+          name: input.screen.sections[index].name,
+          why: `planned with ${input.screen.sections[index].items} items and showing ${items[index] || 'none'}`,
+        })),
+      )
+      nodes = without.nodes as typeof nodes
+      dropped.push(...without.dropped)
+    }
     const report = validateAiDoctrineTree(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',
@@ -621,15 +677,13 @@ export function aiLayoutPageCheck(
         repeatsCompiled: true,
       },
     )
-    // Each section's items as they are stored, after anything the gaps took out.
-    const items = aiLayoutShownItems(compiled.itemIds, stored.storedIds, nodes as unknown as Record<string, unknown>)
     // A street address or opening hours the job was never given is invented
     // (rule 14, AGL-3596), the same check a layout is held to; a phone number
     // or an email the compiler already writes as its gap.
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
       ...copy.violations,
-      ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly),
+      ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly, emptied),
       ...aiLayoutInventedContactViolations(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,
