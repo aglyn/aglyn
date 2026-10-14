@@ -158,7 +158,7 @@ export function CarrierAccountsCard(props: ShippingSettingsWidgetProps) {
     <CardDisplay
       header="Carrier accounts"
       subheader="Every site in this workspace ships with these accounts."
-      help={pluginDocsHelp('shipping', {
+      help={pluginDocsHelp('carrierAccounts', {
         anchor: '#carrier-accounts',
         title: 'Carrier accounts',
         excerpt:

@@ -266,9 +266,19 @@ const PLUGIN_TOPICS = {
   // PLUGIN_UNLISTED_TOPICS.
   connectQuickbooksOnline: '/commerce-and-bookings/commerce/connect-quickbooks-online',
   connectXero: '/commerce-and-bookings/commerce/connect-xero',
-  // The Shipping labels and Carrier accounts cards under the store's
-  // Settings (AGL-3612).
+  // A Codat connection's Accounting cards (AGL-3776), unlisted with the other
+  // two ledger guides.
+  connectOtherAccounting: '/commerce-and-bookings/commerce/connect-other-accounting-software',
+  // The shipping settings card under the store's Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
+  // The Carrier accounts, Your shipping accounts and Shipping labels cards,
+  // which draw nothing until the deployment holds a carrier provider
+  // (AGL-3777); the guide is unlisted until then.
+  carrierAccounts: '/commerce-and-bookings/commerce/carrier-accounts-and-labels',
+  // The Discounts and Coupons cards under Promotions (AGL-3714).
+  discountsAndCoupons: '/commerce-and-bookings/commerce/discounts-and-coupons',
+  // The Dropship suppliers card under the store's Settings (AGL-3714).
+  dropshipSuppliers: '/commerce-and-bookings/commerce/dropship-suppliers',
   // The Trustpilot and Yotpo Reviews cards under the store's Settings and
   // the order dialog's Review invitations section (AGL-3699).
   reviewPlatforms: '/commerce-and-bookings/commerce/review-platforms',
@@ -320,6 +330,12 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // two guides wait on (AGL-3614).
   'connectQuickbooksOnline',
   'connectXero',
+  'connectOtherAccounting',
+  // The Carrier accounts, Your shipping accounts and Shipping labels cards
+  // draw nothing until the deployment holds SHIPPO_API_TOKEN or
+  // EASYPOST_API_KEY with SHIPPING_TOKEN_KEY, the gate the guide waits on
+  // (AGL-3777).
+  'carrierAccounts',
   // The Couriers card, the order's Courier section and the queue's "Send a
   // courier" draw nothing until the console holds COURIERS_TOKEN_KEY, the gate
   // the guide waits on (AGL-3695).
@@ -400,7 +416,7 @@ function readDocPage(absPath) {
     if (slug && !seen.has(slug)) {
       seen.add(slug)
       anchors.push(`#${slug}`)
-      const section = readSection(source, match)
+      const section = readSection(body, match)
       if (section) sections.set(`#${slug}`, section)
     }
   }
