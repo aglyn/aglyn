@@ -27,8 +27,9 @@ extra cost.
 
 ## Connect a platform {#connect}
 
-1. Open the site, then **Setup**. Scroll to **Email platforms**.
-2. On the platform's card, select **Connect**.
+1. Open the site, then **Setup → Integrations**. The **Email platforms** card
+   lists each platform on a row of its own.
+2. On the platform's row, select **Connect**.
 3. Paste your API key, then **Check and connect**. Aglyn checks the key with
    the platform before it saves it, and stores it encrypted; it is never shown
    again.
@@ -44,7 +45,7 @@ extra cost.
 The first sync starts within 15 minutes. **Sync now** runs it straight away.
 
 Only a site admin can connect, change or disconnect a platform; editors can see
-the card and its log.
+the card and each platform's sync log.
 
 ## Who is sent, and as what {#who-is-sent}
 
@@ -88,8 +89,9 @@ does not lift the site's unsubscribe.
 
 ## The sync log, and when something goes wrong {#sync-log}
 
-Each connected platform has a **sync log** under its card: what each run sent
-and read back, and every error, newest first.
+Each connected platform has a **sync log**: select **Sync log** on its row to
+open it. It lists what each run sent and read back, and every error, newest
+first.
 
 - **Syncing** — working normally; it runs about every 15 minutes.
 - **Stopped** — the platform failed many times in a row (it was retried with

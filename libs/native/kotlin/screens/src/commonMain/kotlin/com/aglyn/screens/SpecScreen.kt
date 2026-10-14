@@ -207,6 +207,20 @@ private fun SpecBody(
       session.openHostedPage(if (rendered.startsWith("/")) session.origin + rendered else rendered)
       return
     }
+    // A route is asked first what the action would do; its answer is `preview` in the confirmation.
+    action.check?.let { check ->
+      if (ScreenValues.lookup("preview", actionScope) == null) {
+        running = action.id
+        val checked = model.run(check, actionScope)
+        running = null
+        when (checked) {
+          is ActionOutcome.Done -> confirming = Pending(action, ScreenContext.with(actionScope, "preview", checked.response ?: JsonObject(emptyMap())))
+          is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, checked.message)
+          is ActionOutcome.Failed -> show(checked.message, StatusTone.ERROR)
+        }
+        return
+      }
+    }
     running = action.id
     val outcome = model.run(action, actionScope)
     running = null
@@ -215,9 +229,11 @@ private fun SpecBody(
       is ActionOutcome.Failed -> show(outcome.message, StatusTone.ERROR)
       is ActionOutcome.Done -> {
         val after = ScreenContext.with(actionScope, "response", outcome.response)
-        val instead = action.instead?.takeIf { ScreenValues.condition(it.str("when"), after) }
+        val instead = action.insteadEntry(after)
         if (instead != null) {
           revealed = (instead.str("title")?.let { ScreenValues.render(it, after) } ?: action.label) to ScreenValues.render(instead.str("text") ?: "", after)
+          // The entry may also open a page the route named (an invoice the bank has to confirm).
+          instead.str("open")?.let { key -> (ScreenValues.lookup(key, outcome.response ?: JsonNull) as? JsonPrimitive)?.content?.let(session.openHostedPage) }
         } else {
           outcome.message?.takeIf { it.isNotEmpty() }?.let { show(it, StatusTone.SUCCESS) }
         }
@@ -232,7 +248,7 @@ private fun SpecBody(
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
       action.inputs.isNotEmpty() -> prompting = Pending(action, actionScope)
-      action.confirm != null && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
+      action.asksConfirmation && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
   }
@@ -298,7 +314,7 @@ private fun SpecBody(
           items(blocks, key = { it.id }) { block ->
             Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
               Block(
-                block, model, context, selection, running,
+                block, plugin, model, context, selection, running,
                 open = ::open,
                 trigger = ::trigger,
                 copy = { clipboard.setText(AnnotatedString(it)); show("Copied", StatusTone.SUCCESS) },
@@ -312,7 +328,7 @@ private fun SpecBody(
 
   confirming?.let { pending ->
     ActionDialog(
-      title = ScreenValues.render(pending.action.confirm ?: pending.action.label, pending.scope),
+      title = pending.action.confirmText(pending.scope) ?: ScreenValues.render(pending.action.label, pending.scope),
       confirmLabel = ScreenValues.render(pending.action.label, pending.scope),
       destructive = pending.action.destructive,
       dismissLabel = "Cancel",
@@ -386,7 +402,7 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
   val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)), pending.scope) }
   ActionDialog(
     title = ScreenValues.render(pending.action.label, pending.scope),
-    body = pending.action.confirm?.let { ScreenValues.render(it, pending.scope) },
+    body = pending.action.confirmText(pending.scope),
     confirmLabel = ScreenValues.render(pending.action.label, pending.scope),
     destructive = pending.action.destructive,
     confirmEnabled = !missing,
@@ -406,6 +422,7 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
 @Composable
 private fun Block(
   block: BlockSpec,
+  plugin: NativePluginContext,
   model: ScreenModel,
   context: JsonElement,
   selection: Selection?,
@@ -421,21 +438,31 @@ private fun Block(
     "list" -> ListBlock(block, title, footer, model, context, selection, open, trigger)
     "zone" -> {
       // A core screen's zone: whatever plugin screens contribute to it, never named here.
-      val contributions = ScreenCatalog.zone(block.string("name").orEmpty()).filter { ScreenValues.condition(it.requires, context) }
-      if (contributions.isNotEmpty()) {
-        SectionCard(title) {
-          Column(Modifier.fillMaxWidth()) {
-            contributions.forEachIndexed { index, spec ->
-              if (index > 0) HorizontalDivider()
-              AglynListItem(
-                title = spec.label,
-                supporting = spec.subtitle,
-                icon = AglynIcons.named(spec.icon),
-                trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
-                onClick = { open(spec.id, renderParams(block["params"], context)) },
-                modifier = Modifier.testTag("zone-${spec.id}"),
-              )
+      val name = block.string("name").orEmpty()
+      val contributions = ScreenCatalog.zone(name).filter { ScreenValues.condition(it.requires, context) }
+      // Native widgets other plugins put in the same slot sit beside the spec screens.
+      val widgets = plugin.slotWidgets(name)
+      if (contributions.isNotEmpty() || widgets.isNotEmpty()) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
+          if (contributions.isNotEmpty()) {
+            SectionCard(title) {
+              Column(Modifier.fillMaxWidth()) {
+                contributions.forEachIndexed { index, spec ->
+                  if (index > 0) HorizontalDivider()
+                  AglynListItem(
+                    title = spec.label,
+                    supporting = spec.subtitle,
+                    icon = AglynIcons.named(spec.icon),
+                    trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+                    onClick = { open(spec.id, renderParams(block["params"], context)) },
+                    modifier = Modifier.testTag("zone-${spec.id}"),
+                  )
+                }
+              }
             }
+          }
+          widgets.forEach { widget ->
+            Box(Modifier.fillMaxWidth().testTag("zone-widget-${widget.id}")) { widget.content(plugin) }
           }
         }
       }
