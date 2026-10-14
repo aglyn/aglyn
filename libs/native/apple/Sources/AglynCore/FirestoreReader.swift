@@ -83,6 +83,16 @@ public enum FirestoreSentinel: Sendable {
 /// writes a timestamp and `FirestoreSentinel.delete` removes its field.
 public protocol FirestoreWriter: Sendable {
   func merge(_ path: [String], _ data: [String: Any]) async throws
+  /// Deletes a document (the web SDK's `deleteDoc`); a writer that cannot, throws.
+  func delete(_ path: [String]) async throws
+}
+
+extension FirestoreWriter {
+  public func delete(_ path: [String]) async throws { throw FirestoreWriteUnavailable() }
+}
+
+struct FirestoreWriteUnavailable: LocalizedError {
+  var errorDescription: String? { "Deleting is not available here." }
 }
 
 /// The writer over a reader's own merge write.
@@ -91,6 +101,9 @@ public struct ReaderMergeWriter: FirestoreWriter {
   public init(_ reader: FirestoreReader) { self.reader = reader }
   public func merge(_ path: [String], _ data: [String: Any]) async throws {
     try await reader.setDocument(path, data, merge: true)
+  }
+  public func delete(_ path: [String]) async throws {
+    try await reader.deleteDocument(path)
   }
 }
 

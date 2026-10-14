@@ -242,6 +242,8 @@ class ScreenModel(
         val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
         @Suppress("UNCHECKED_CAST")
         target.merge(ScreenValues.render(doc, scope), (plain(fields) as? Map<String, Any?>) ?: emptyMap())
+        // `siteWide`: the write changes every page of the site, so its cached pages are dropped as the console does.
+        if (write.isTrue("siteWide")) api?.let { com.aglyn.core.publishSiteWideChange(it, target, ScreenValues.render("{site.id}", scope)) }
         ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)
       } catch (error: CancellationException) {
         throw error

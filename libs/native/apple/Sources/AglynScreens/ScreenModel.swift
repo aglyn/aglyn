@@ -291,6 +291,10 @@ public final class ScreenModel {
         let fields = ScreenValues.resolveBody(write["fields"] ?? [:], in: scope)
         try await writer.merge(
           FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(fields) as? [String: Any] ?? [:])
+        // `siteWide`: the write changes every page of the site, so its cached pages are dropped as the console does.
+        if write["siteWide"] == .bool(true), let api {
+          await publishSiteWide(api: api, writer: writer, hostID: ScreenValues.render("{site.id}", in: scope))
+        }
         return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
       } catch {
         return .failed(error.localizedDescription)
@@ -319,4 +323,20 @@ public final class ScreenModel {
     let words = [error.body?["error"], error.body?["code"], error.body?["reason"]].compactMap { $0?.stringValue }
     return words.contains { ["reauth-required", "recent-login-required", "requires-recent-login"].contains($0) }
   }
+}
+
+/// The console's `writeSiteWideChange` after a write: a `publishOutbox` entry so the drain re-renders the site if
+/// this run cannot, a revalidate request to do it now, and the entry retired when that worked. Like the console, a
+/// refused entry is not an error: the revalidate still runs.
+func publishSiteWide(api: ConsoleAPIClient, writer: FirestoreWriter, hostID: String) async {
+  let path = ["publishOutbox", newResourceID()]
+  var staged = false
+  do {
+    try await writer.merge(
+      path, ["hostId": hostID, "paths": ["/"], "createdAt": FirestoreSentinel.serverTimestamp, "attempts": 0, "entireHost": true])
+    staged = true
+  } catch {}
+  let answer = try? await api.request(
+    "/api/screens/revalidate", method: .post, body: ["hostId": .string(hostID), "entireHost": .bool(true)])
+  if staged, answer?["reason"]?.stringValue == "ok" { try? await writer.delete(path) }
 }

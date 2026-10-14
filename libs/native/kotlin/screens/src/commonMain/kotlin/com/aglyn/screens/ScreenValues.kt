@@ -455,7 +455,7 @@ object ScreenValues {
       } ?: text(value)
       "dollars" -> number(value)?.let { formatOrderMoney(round(it * 100), "USD") } ?: text(value)
       // Whole cents as a plain amount a money field starts with: 1250 -> 12.50 (nothing for no amount).
-      "amount" -> number(value)?.let { cents -> val whole = round(cents); "${whole / 100}.${(abs(whole) % 100).toString().padStart(2, '0')}" } ?: ""
+      "amount" -> number(value)?.let { cents -> val whole = round(cents).toLong(); "${whole / 100}.${(abs(whole) % 100).toString().padStart(2, '0')}" } ?: ""
       "bytes" -> number(value)?.let { bytesText(it) } ?: text(value)
       "number" -> number(value)?.let { grouped(it, 2) } ?: text(value)
       "percent" -> number(value)?.let { "${grouped(it * 100, 1)}%" } ?: text(value)
