@@ -118,7 +118,7 @@ async function handler(request: Request): Promise<Response> {
     }
     const { accounts } = await readAdAudienceAccounts({
       firestore,
-      listUsers: listUsersAcrossPools,
+      listUserPage: listUsersAcrossPools,
       bannedEmails: (emails) => accountBannedRecipients(emails, firestore),
       now,
     })

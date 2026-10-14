@@ -387,7 +387,7 @@ describe('reading the accounts', () => {
     ]
     const { accounts } = await readAdAudienceAccounts({
       firestore,
-      listUsers: async (_size, token) => (token ? pages[1] : pages[0]),
+      listUserPage: async (_size, token) => (token ? pages[1] : pages[0]),
       bannedEmails: async (emails) => new Set(emails.filter((email) => email === 'E@x.com').map((e) => e.toLowerCase())),
       now,
     })

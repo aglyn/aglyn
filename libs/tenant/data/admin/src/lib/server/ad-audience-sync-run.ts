@@ -86,7 +86,7 @@ export type ListUsersPage = (
 
 export interface AdAudienceReadDeps {
   firestore: FirebaseFirestore.Firestore
-  listUsers: ListUsersPage
+  listUserPage: ListUsersPage
   /** The account-ban list's answer for these addresses, lowercased. */
   bannedEmails: (emails: readonly string[]) => Promise<Set<string>>
   now: number
@@ -153,7 +153,7 @@ export async function readAdAudienceAccounts(
   const accounts: AdAudienceAccount[] = []
   let pageToken: string | undefined
   for (let page = 0; page < MAX_AUTH_PAGES; page += 1) {
-    const listed = await deps.listUsers(1000, pageToken)
+    const listed = await deps.listUserPage(1000, pageToken)
     for (const { record } of listed.users) {
       accounts.push({
         uid: record.uid,
