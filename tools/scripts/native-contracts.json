@@ -598,15 +598,6 @@
         "POS_TENDER_LABELS"
       ]
     },
-    "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {
-      "types": [
-        "ReturnReason"
-      ],
-      "values": [
-        "RETURN_REASONS",
-        "RETURN_REASON_LABELS"
-      ]
-    },
     "libs/plugins/data/src/lib/model/dataset-model-core.ts": {
       "types": [
         "DatasetModel",
@@ -648,6 +639,36 @@
         "ARTIFACT_TYPE_LABELS",
         "INSTALL_TARGETS",
         "LISTING_CATEGORIES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/seo-audit.ts": {
+      "types": [
+        "SeoAuditReport",
+        "SeoPageReport",
+        "SeoFinding",
+        "SeoFindingCode",
+        "SeoSeverity"
+      ],
+      "values": [
+        "SEO_FINDING_LABELS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/seo-keywords.ts": {
+      "types": [
+        "SeoKeywordCoverage"
+      ],
+      "values": [
+        "SEO_MAX_KEYWORDS",
+        "SEO_KEYWORD_LINES_MAX_CHARS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-returns.ts": {
+      "types": [
+        "ReturnReason"
+      ],
+      "values": [
+        "RETURN_REASONS",
+        "RETURN_REASON_LABELS"
       ]
     }
   },
@@ -693,7 +714,9 @@
     "FunnelResult.entered",
     "FunnelResult.completed",
     "FunnelResult.journeysRead",
-    "FunnelResult.computedAt"
+    "FunnelResult.computedAt",
+    "SeoAuditReport.skipped",
+    "SeoPageReport.score"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -12203,6 +12226,136 @@
         [
           "component",
           "C"
+        ]
+      ]
+    },
+    "seoNormalizePath": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          "/"
+        ],
+        [
+          "pricing"
+        ],
+        [
+          "/pricing/"
+        ],
+        [
+          "//a//"
+        ],
+        [
+          "  /about  "
+        ],
+        [
+          "/a/b/"
+        ]
+      ]
+    },
+    "readSeoKeywordLines": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "/pricing: plans, pricing"
+        ],
+        [
+          "/pricing: plans\n/pricing: pricing, plans"
+        ],
+        [
+          "no colon here"
+        ],
+        [
+          ": noPath"
+        ],
+        [
+          "/: home, welcome\nabout: team, story, crew, staff, owners, founders"
+        ],
+        [
+          "/x: a, , A, b"
+        ],
+        [
+          "/x: ,  ,"
+        ],
+        [
+          "/a: one\n/b: two, three"
+        ]
+      ]
+    },
+    "seoKeywordSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          "a, b\nc"
+        ],
+        [
+          "a, A, b, c, d, e, f, g"
+        ],
+        [
+          [
+            "x",
+            " y ",
+            "x"
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          "  spaced   out ,word"
+        ]
+      ]
+    },
+    "seoAuditFindingCount": {
+      "module": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "args": [
+        [
+          {
+            "pages": [],
+            "site": []
+          }
+        ],
+        [
+          {
+            "pages": [
+              {
+                "findings": [
+                  {
+                    "code": "orphan"
+                  }
+                ]
+              },
+              {
+                "findings": []
+              },
+              {
+                "findings": [
+                  {
+                    "code": "orphan"
+                  },
+                  {
+                    "code": "title-missing"
+                  }
+                ]
+              }
+            ],
+            "site": [
+              {
+                "code": "search-discouraged"
+              }
+            ]
+          }
         ]
       ]
     },

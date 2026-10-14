@@ -2266,6 +2266,81 @@ data class ScreenTrafficRow(
 )
 
 @Serializable
+data class SeoAuditReport(
+    val notes: List<String>,
+    val pages: List<SeoPageReport>,
+    val score: Double,
+    val site: List<SeoFinding>,
+    val skipped: Long,
+)
+
+@Serializable
+data class SeoFinding(
+    val code: SeoFindingCode,
+    val keyword: String? = null,
+    val message: String,
+    val nodeIds: List<String>? = null,
+    val screenIds: List<String>? = null,
+    val severity: SeoSeverity,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = SeoFindingCodeSerializer::class)
+enum class SeoFindingCode(val raw: String) {
+    DESCRIPTION_DUPLICATE("description-duplicate"),
+    DESCRIPTION_MISSING("description-missing"),
+    DESCRIPTION_TOO_LONG("description-too-long"),
+    ENTITY_INCOMPLETE("entity-incomplete"),
+    H1_MISSING("h1-missing"),
+    H1_MULTIPLE("h1-multiple"),
+    H1_THIN("h1-thin"),
+    IMAGE_ALT_MISSING("image-alt-missing"),
+    KEYWORD_MISSING("keyword-missing"),
+    LLMS_GUIDANCE_MISSING("llms-guidance-missing"),
+    ORPHAN("orphan"),
+    SEARCH_DISCOURAGED("search-discouraged"),
+    TITLE_DUPLICATE("title-duplicate"),
+    TITLE_MISSING("title-missing"),
+    TITLE_TOO_LONG("title-too-long"),
+    UNKNOWN(""),
+}
+
+internal object SeoFindingCodeSerializer :
+    RawEnumSerializer<SeoFindingCode>("com.aglyn.contracts.SeoFindingCode", SeoFindingCode.entries, SeoFindingCode.UNKNOWN, { it.raw })
+
+@Serializable
+data class SeoKeywordCoverage(
+    val inBody: Boolean,
+    val inDescription: Boolean,
+    val inH1: Boolean,
+    val inTitle: Boolean,
+    val keyword: String,
+)
+
+@Serializable
+data class SeoPageReport(
+    val findings: List<SeoFinding>,
+    val keywords: List<SeoKeywordCoverage>,
+    val name: String,
+    val path: String,
+    val score: Long,
+    val screenId: String,
+    val versionId: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = SeoSeveritySerializer::class)
+enum class SeoSeverity(val raw: String) {
+    HIGH("high"),
+    LOW("low"),
+    MEDIUM("medium"),
+    UNKNOWN(""),
+}
+
+internal object SeoSeveritySerializer :
+    RawEnumSerializer<SeoSeverity>("com.aglyn.contracts.SeoSeverity", SeoSeverity.entries, SeoSeverity.UNKNOWN, { it.raw })
+
+@Serializable
 data class SiteFilterOptions(
     val hasCustomDomain: List<SiteFilterOptionsHasCustomDomainItem>,
 )
@@ -2529,6 +2604,9 @@ internal data class ContractValuesPart4(
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
     @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
     @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
+    @SerialName("SEO_FINDING_LABELS") val seoFindingLabels: Map<String, String>,
+    @SerialName("SEO_KEYWORD_LINES_MAX_CHARS") val seoKeywordLinesMaxChars: Long,
+    @SerialName("SEO_MAX_KEYWORDS") val seoMaxKeywords: Long,
     @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
     @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
     @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
@@ -2538,13 +2616,13 @@ internal data class ContractValuesPart4(
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
     @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
-    @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
-    @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
-    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
+    @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
+    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
@@ -2744,6 +2822,9 @@ class ContractValues internal constructor(
     val scopedSearchJoin: String get() = part4.scopedSearchJoin
     val searchEngineVerificationLabels: Map<String, String> get() = part4.searchEngineVerificationLabels
     val searchEngineVerificationMetaNames: Map<String, String> get() = part4.searchEngineVerificationMetaNames
+    val seoFindingLabels: Map<String, String> get() = part4.seoFindingLabels
+    val seoKeywordLinesMaxChars: Long get() = part4.seoKeywordLinesMaxChars
+    val seoMaxKeywords: Long get() = part4.seoMaxKeywords
     val siteCardsPageSize: Long get() = part4.siteCardsPageSize
     val siteFilterHeaders: Map<String, String> get() = part4.siteFilterHeaders
     val siteFilterOptions: SiteFilterOptions get() = part4.siteFilterOptions
@@ -2753,9 +2834,9 @@ class ContractValues internal constructor(
     val submissionFilterHeaders: Map<String, String> get() = part4.submissionFilterHeaders
     val submissionListQuery: ListQueryDeclaration get() = part4.submissionListQuery
     val submissionReadOptions: List<ListFilterOption> get() = part4.submissionReadOptions
-    val suppressionListQuery: ListQueryDeclaration get() = part4.suppressionListQuery
-    val taskListDeclaration: ListQueryDeclaration get() = part4.taskListDeclaration
-    val templateKindOptions: List<ListFilterOption> get() = part4.templateKindOptions
+    val suppressionListQuery: ListQueryDeclaration get() = part5.suppressionListQuery
+    val taskListDeclaration: ListQueryDeclaration get() = part5.taskListDeclaration
+    val templateKindOptions: List<ListFilterOption> get() = part5.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part5.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part5.templateListQuery
     val tenantEmailCollection: String get() = part5.tenantEmailCollection
