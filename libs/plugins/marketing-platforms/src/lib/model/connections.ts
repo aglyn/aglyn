@@ -33,6 +33,12 @@ export interface MarketingProviderInfo {
   listNoun: 'audience' | 'list' | null
   /** Whether order and checkout events are sent for the provider's flows. */
   events: boolean
+  /**
+   * Whether the connection's tag reaches the provider (AGL-3775): Mailchimp
+   * and Omnisend add it as a tag, Klaviyo as a profile property. Attentive's
+   * subscription API has nowhere to put it, so its card offers no Tag field.
+   */
+  tags: boolean
 }
 
 export const MARKETING_PROVIDERS: Readonly<Record<MarketingProviderId, MarketingProviderInfo>> = {
@@ -45,6 +51,7 @@ export const MARKETING_PROVIDERS: Readonly<Record<MarketingProviderId, Marketing
     },
     listNoun: 'audience',
     events: false,
+    tags: true,
   },
   klaviyo: {
     id: 'klaviyo',
@@ -55,6 +62,7 @@ export const MARKETING_PROVIDERS: Readonly<Record<MarketingProviderId, Marketing
     },
     listNoun: 'list',
     events: true,
+    tags: true,
   },
   omnisend: {
     id: 'omnisend',
@@ -65,6 +73,7 @@ export const MARKETING_PROVIDERS: Readonly<Record<MarketingProviderId, Marketing
     },
     listNoun: null,
     events: true,
+    tags: true,
   },
   attentive: {
     id: 'attentive',
@@ -72,6 +81,7 @@ export const MARKETING_PROVIDERS: Readonly<Record<MarketingProviderId, Marketing
     apiKey: null,
     listNoun: null,
     events: true,
+    tags: false,
   },
 }
 
