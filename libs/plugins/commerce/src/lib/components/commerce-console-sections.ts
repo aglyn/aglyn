@@ -66,18 +66,8 @@ export const COMMERCE_SETTINGS_PAGE_ZONES: Readonly<
   integrations: 'commerceSettings',
 }
 
-const settingsPage = (
-  id: CommerceSettingsSectionId,
-  label: string,
-  zoneOnly = false,
-): ConsoleNavSection => ({
-  id,
-  label,
-  group: COMMERCE_SETTINGS_GROUP,
-  // A page that is nothing but other plugins' cards is left out of the rail
-  // while none of them has anything to draw (AGL-3713).
-  ...(zoneOnly ? { onlyWithZones: [COMMERCE_SETTINGS_PAGE_ZONES[id]] } : {}),
-})
+/** Under the "Settings" subheader (AGL-3713). */
+const SETTINGS = COMMERCE_SETTINGS_GROUP
 
 /**
  * The commerce console's sections, in rail order (AGL-2501).
@@ -105,14 +95,26 @@ export const COMMERCE_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'promotions', label: 'Promotions' },
   { id: 'reservations', label: 'Reservations' },
   { id: 'analytics', label: 'Analytics' },
-  settingsPage('payments', 'Payments'),
-  settingsPage('checkout', 'Checkout'),
-  settingsPage('taxes', 'Taxes'),
-  settingsPage('shipping', 'Shipping & delivery'),
-  settingsPage('notifications', 'Notifications'),
-  settingsPage('pos', 'Point of sale'),
-  settingsPage('channels', 'Sales channels', true),
-  settingsPage('integrations', 'Integrations', true),
+  { id: 'payments', label: 'Payments', group: SETTINGS },
+  { id: 'checkout', label: 'Checkout', group: SETTINGS },
+  { id: 'taxes', label: 'Taxes', group: SETTINGS },
+  { id: 'shipping', label: 'Shipping & delivery', group: SETTINGS },
+  { id: 'notifications', label: 'Notifications', group: SETTINGS },
+  { id: 'pos', label: 'Point of sale', group: SETTINGS },
+  // Nothing but other plugins' cards, so each is left out of the rail while
+  // none of them has anything to draw (`onlyWithZones`).
+  {
+    id: 'channels',
+    label: 'Sales channels',
+    group: SETTINGS,
+    onlyWithZones: [COMMERCE_SETTINGS_PAGE_ZONES.channels],
+  },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    group: SETTINGS,
+    onlyWithZones: [COMMERCE_SETTINGS_PAGE_ZONES.integrations],
+  },
 ]
 
 /**
