@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolvePageLocale } from '@aglyn/aglyn/app-utils/seo-locale'
 import type { HostUid, ScreenUid } from '@aglyn/aglyn/server'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import type { Metadata } from 'next'
@@ -24,6 +25,7 @@ import {
   hostSeoTitleParts,
   resolveNotFoundTitle,
 } from '../../../utils/not-found-title'
+import { siteStatusCopy } from '../../../utils/site-status-copy'
 import { getHostCached } from '../host-data'
 
 /**
@@ -140,6 +142,8 @@ async function resolveHostNotFoundTitle(hostParam: string): Promise<string> {
     return resolveNotFoundTitle({
       designedTitle: screen?.seo?.title,
       ...hostSeoTitleParts(host),
+      // In the language the 404's heading is in (AGL-3791), resolved as the layout publishes it.
+      pageName: siteStatusCopy(resolvePageLocale({ host })).notFoundPageName,
     })
   } catch (error) {
     console.error('not-found title lookup failed:', error)

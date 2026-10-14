@@ -174,6 +174,10 @@ describe('the helpers', () => {
   it('names a file from the description’s first words, by its type', () => {
     expect(aiImageFileName('A red barn, at dawn!', 1, 'image/png')).toBe('ai-a-red-barn-at-dawn-2.png')
     expect(aiImageFileName('???', 0, 'image/svg+xml')).toBe('ai-image-1.svg')
+    // An accent comes off its letter rather than splitting the word (AGL-3791).
+    expect(aiImageFileName('Pâtisserie y café de la panadería', 0, 'image/png')).toBe(
+      'ai-patisserie-y-cafe-de-la-panaderia-1.png',
+    )
   })
 })
 

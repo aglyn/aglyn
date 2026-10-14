@@ -24,6 +24,9 @@ public struct ScreenSpec: Identifiable, Sendable {
   public let label: String
   /// A `when` condition the session must meet to open the screen.
   public let requires: String?
+  /// For a screen that sits in a zone: a condition over the screen's own loads. The zone reads those loads and lists the row only
+  /// while the condition holds, as a console widget that draws nothing for a store it has nothing to say to.
+  public let showWhen: String?
   public let links: [String]
   /// Core screens' zones this plugin screen contributes to (`orgMember`, `staffOrg`, …).
   public let zones: [String]
@@ -48,6 +51,7 @@ public struct ScreenSpec: Identifiable, Sendable {
     self.subtitle = json["subtitle"]?.stringValue
     self.label = json["label"]?.stringValue ?? (title.contains("{") ? "Details" : title)
     self.requires = json["requires"]?.stringValue
+    self.showWhen = json["showWhen"]?.stringValue
     self.links = json["links"].arrayOfStrings
     self.zones = json["zones"].arrayOfStrings
     self.cardSlot = json["cardSlot"]?.stringValue
@@ -90,6 +94,10 @@ public struct LoadSpec: Sendable, Hashable {
   public let entitlement: String?
   /// An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship.
   public let orderZone: String?
+  /// A value worked out from other loads once they have answered, not read from anywhere: `shippingCoverage`, from the
+  /// shipping settings the `from` path (a path under `data`) finds.
+  public let derive: String?
+  public let from: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -105,6 +113,8 @@ public struct LoadSpec: Sendable, Hashable {
       self.switchboard = nil
       self.entitlement = nil
       self.orderZone = nil
+      self.derive = nil
+      self.from = nil
       self.method = .get
       self.body = nil
       self.optional = false
@@ -120,6 +130,8 @@ public struct LoadSpec: Sendable, Hashable {
       self.switchboard = json["switchboard"]?.stringValue
       self.entitlement = json["entitlement"]?.stringValue
       self.orderZone = json["orderZone"]?.stringValue
+      self.derive = json["derive"]?.stringValue
+      self.from = json["from"]?.stringValue
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)

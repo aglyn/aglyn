@@ -101,6 +101,9 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.widget("commerce.sales-trend", title: "Last 7 days", order: 110, size: .full, requiresSite: true) { context in
     SalesTrendWidget(context: context)
   }
+  r.widget("commerce.glance", title: "At a glance", order: 120, size: .full, requiresSite: true) { context in
+    GlanceWidget(context: context)
+  }
   r.quickAction(
     "commerce.orders-to-ship", title: "Ship orders", icon: "shippingbox", order: 100, screen: commerceOrdersScreen,
     params: ["filter": OrderFilter.unfulfilled.rawValue], requiresSite: true)

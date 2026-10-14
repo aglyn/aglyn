@@ -345,3 +345,75 @@ describe('a listing reads as one sentence, not pasted answers (AGL-3660)', () =>
     expect(aiSiteSeoEmbedded('Austin dog owners', ['Austin'])).toBe('Austin dog owners')
   })
 })
+
+describe('every word of an answer whole, in any script (AGL-3791)', () => {
+  it('never cuts a phrase inside a word that starts like an English joiner', () => {
+    // Read with `\b`, "forêt", "força" and "soñar" began with "for" and "so".
+    expect(aiSiteSeoTitle({ subject: 'Pâtisserie de la forêt enchantée' })).toBe('Pâtisserie de la forêt enchantée')
+    expect(aiSiteSeoTitle({ name: 'Studio Força', subject: 'Academia de força funcional' })).toBe(
+      'Studio Força — Academia de força funcional',
+    )
+    expect(aiSiteSeoTitle({ subject: 'Sala para soñar despiertos con café y libros' })).toBe(
+      'Sala para soñar despiertos con café y libros',
+    )
+    // An English joiner is still a boundary.
+    expect(aiSiteSeoTitle({ name: 'Waggle', subject: 'Dog groomer for nervous dogs, senior dogs and puppies meeting the clippers' })).toBe(
+      'Waggle — Dog groomer',
+    )
+  })
+
+  it('takes an article off the front only where it is a word of its own', () => {
+    expect(values({ about: 'Año Nuevo bakery' })?.['seo.title']).toBe('Año Nuevo bakery')
+    expect(values({ about: 'a crêperie' })?.['seo.title']).toBe('Crêperie')
+  })
+
+  it('writes "an" before an accented vowel and lowers an accented capital that began an answer', () => {
+    expect(values({ siteName: 'Maison Blanche', about: 'éclair bakery' })?.['seo.description']).toBe(
+      'Maison Blanche is an éclair bakery.',
+    )
+    expect(aiSiteSeoEmbedded('Éclair lovers in Austin')).toBe('éclair lovers in Austin')
+    expect(aiSiteSeoEmbedded('Ángel Café regulars')).toBe('Ángel Café regulars')
+  })
+})
+
+describe('a listing in the site’s own language (AGL-3792)', () => {
+  /** The live Spanish guided start's answers (job 4v-nRPeKDH). */
+  const PANADERIA = {
+    businessName: 'Panadería Flor de Oaxaca',
+    businessType:
+      'Una panadería familiar de San Antonio con pan dulce, conchas y pasteles de tres leches al estilo de Oaxaca',
+    audience:
+      'Familias de San Antonio que buscan pan fresco cada mañana y pasteles para cumpleaños, bodas y quinceañeras',
+    city: '',
+  }
+
+  it('sets no English around a Spanish site’s answers', () => {
+    // Composed as English it read "Panadería Flor de Oaxaca is an una panadería familiar…".
+    expect(aiSiteSeoProposalForInputs(PANADERIA, 'es')?.values).toEqual({
+      'seo.title': 'Panadería Flor de Oaxaca',
+      'seo.description':
+        'Una panadería familiar de San Antonio con pan dulce, conchas y pasteles de tres leches al estilo de Oaxaca.',
+    })
+  })
+
+  it('adds no "in" before the city, and holds a long answer to its length at a word, in any language but English', () => {
+    expect(values({ about: 'Une pâtisserie de quartier', siteName: 'Chez Marie', city: 'Lyon', language: 'fr' })).toEqual({
+      'seo.title': 'Chez Marie — Une pâtisserie de quartier',
+      'seo.description': 'Une pâtisserie de quartier.',
+    })
+    const long = values({
+      about: `Uma padaria e confeitaria de bairro com ${'pão de queijo fresquinho, '.repeat(8)}e café`,
+      language: 'pt-BR',
+    })
+    expect(long?.['seo.description'].length).toBeLessThanOrEqual(AI_SITE_SEO_LIMITS.description)
+    expect(long?.['seo.description']).toMatch(/^Uma padaria e confeitaria de bairro com pão de queijo/)
+    expect(long?.['seo.description']).not.toMatch(/ for | is an? /)
+  })
+
+  it('keeps English as it was for a site in English, or with no language at all', () => {
+    expect(values({ ...ANSWERS, siteName: 'Waggle', language: 'en-US' })).toEqual(values({ ...ANSWERS, siteName: 'Waggle' }))
+    expect(aiSiteSeoProposalForInputs({ businessType: ANSWERS.about, audience: ANSWERS.audience }, null)?.values).toEqual(
+      values(ANSWERS),
+    )
+  })
+})

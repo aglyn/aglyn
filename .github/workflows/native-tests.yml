@@ -37,13 +37,13 @@ name: Native tests
 #   the runner image. A run on `main` saves it under its own sha: a push, or
 #   the dispatch auto-merge-green.yml sends after it merges (a merge made with
 #   GITHUB_TOKEN starts no push run). A PR restores main's newest, so it
-#   recompiles only what differs from that commit. A PR saves its own entry
-#   only when nothing was restored, because a PR's entry is readable by that PR
-#   alone and per-PR entries would evict main's (the repository has 10 GB of
-#   cache). For a restored build to be reusable, every tracked file is first
-#   stamped with a modification time derived from its content
-#   (`native-swift-tests.mjs mtimes`): a fresh checkout otherwise dates every
-#   file "now", and both build systems would recompile everything.
+#   recompiles only what differs from that commit. A PR never saves: its entry
+#   is readable by that PR alone, and on 2026-10-14 five PR entries filled the
+#   repository's 10 GB of cache within an hour and evicted the rest, the
+#   entries PRs restore included. For a restored build to be reusable, every
+#   tracked file is first stamped with a modification time derived from its
+#   content (`native-swift-tests.mjs mtimes`): a fresh checkout otherwise dates
+#   every file "now", and both build systems would recompile everything.
 
 on:
   pull_request:
@@ -228,33 +228,48 @@ jobs:
           --scratch "$RUNNER_TEMP/spm-scratch"
           --build-system "$SPM_BUILD_SYSTEM"
 
+      # The full log goes to a file. What is printed: how many tasks of each
+      # kind ran (a warm build should compile next to nothing, so this is
+      # where a cache that stopped working shows), the timing summary, every
+      # distinct error and warning, and on failure the end of the log.
       - name: xcodebuild Aglyn and AglynPOS (macOS)
         if: env.RUN == 'true'
         run: |
           set -euo pipefail
           for scheme in Aglyn AglynPOS; do
             echo "::group::xcodebuild $scheme"
+            log="$RUNNER_TEMP/xcodebuild-$scheme.log"
+            status=0
             xcodebuild build \
               -project apps/ios/Aglyn.xcodeproj \
               -scheme "$scheme" \
               -destination 'platform=macOS' \
               -derivedDataPath "$RUNNER_TEMP/DerivedData" \
               -skipPackagePluginValidation \
+              -showBuildTimingSummary \
               CODE_SIGNING_ALLOWED=NO \
               COMPILER_INDEX_STORE_ENABLE=NO \
-              -quiet
+              > "$log" 2>&1 || status=$?
+            echo "tasks run:"
+            grep -oE '^(SwiftCompile|SwiftEmitModule|SwiftDriver|CompileC|Ld|Libtool|ProcessXCFramework|CopySwiftLibs|PhaseScriptExecution|ScanDependencies|PrecompileModule) ' "$log" | sort | uniq -c || true
+            sed -n '/Build Timing Summary/,$p' "$log" | head -40
+            grep -E ': (error|warning): ' "$log" | sort -u | head -300 || true
             echo "::endgroup::"
+            if [ "$status" != 0 ]; then
+              tail -80 "$log"
+              echo "::error::xcodebuild $scheme failed (exit $status)"
+              exit "$status"
+            fi
           done
 
-      # A run on a branch saves (each under its own sha; the oldest are
-      # evicted first). A PR saves only when it restored nothing at all. The
-      # git mirrors are left out: the checkouts beside them are what a build
-      # reads.
+      # Only a run on a branch saves, each under its own sha (the oldest are
+      # evicted first); see the header for why a PR never does. The git
+      # mirrors are left out: the checkouts beside them are what a build reads.
       - name: Trim the Swift build for the cache
         id: save
         if: >-
           ${{ !cancelled() && env.RUN == 'true' && steps.swift-cache.outcome == 'success'
-          && (github.event_name != 'pull_request' || steps.swift-cache.outputs.cache-matched-key == '') }}
+          && github.event_name != 'pull_request' }}
         run: |
           rm -rf "$RUNNER_TEMP/spm-scratch/repositories" "$RUNNER_TEMP/DerivedData/SourcePackages/repositories" "$RUNNER_TEMP/DerivedData/Logs"
           du -sh "$RUNNER_TEMP/spm-scratch" "$RUNNER_TEMP/DerivedData" || true

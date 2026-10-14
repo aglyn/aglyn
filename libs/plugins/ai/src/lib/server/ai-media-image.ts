@@ -161,11 +161,16 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   'image/svg+xml': 'svg',
 }
 
-/** A file name from the description's first words: `ai-a-red-barn-2.png`. */
+/**
+ * A file name from the description's first words: `ai-a-red-barn-2.png`. An
+ * accent is taken off its letter rather than left to split the word, so
+ * "panadería" is `panaderia`, not `panaderi-a` (AGL-3791).
+ */
 export function aiImageFileName(prompt: string, index: number, mimeType: string): string {
   const words = prompt
     .toLowerCase()
     .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
     .replace(/[^a-z0-9\s-]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)

@@ -967,7 +967,9 @@ A field of kind `hours` is a week of opening hours chosen by touch, as the conso
 for each day and, for an open day, a From and a To time from a menu, with another interval on request. It reads and
 writes the stored text lines (`Mo-Fr 09:00-17:00`), so nobody types them; its `hours` option is `{ noun, sameDay, start,
 end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets, in minutes).
-`libs/native/screens/weekly-hours-cases.json` holds the Swift and Kotlin conversions to the console's own.
+The picker and the conversion are the contracts' and the plugin host's (`WeeklyHours` in AglynContracts, `OpeningHoursPicker` in
+AglynPluginHost and the UI kit), one model and one picker for every screen that picks hours; the contracts' generated function
+cases hold the conversions to the console's own.
 
 A form or prompt can list fields from the data: an entry
 `{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
@@ -1006,10 +1008,14 @@ epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": 
 More formats: `amount` (whole cents as `12.50`, what a money field starts with), `code`
 (a coupon code as stored; `code/40` cuts it at 40), `token` (the search token of typed
 words), `sum` and `sumcents` (a list of numbers added up), `ahead` (how many of a list of
-times are still to come). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
+times are still to come), `percentof/other.path` (this as a percentage of the number at the path, to one decimal, `0` where
+there is nothing to divide by). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
 first value that is present at all (`false` and `0` count). A path `rows.*.field` also
 reads an object's values in key order, and a comparison against a list holds when any of
-its values does (`item.holds.*.expiresAtMs > @now.ms`). A number field takes `min` and
+its values does (`item.holds.*.expiresAtMs > @now.ms`). `rows[?item.rate && !item.own]` keeps the rows its condition holds for
+(`item` is the row), so a count, a sum or a list can be taken over just those. A screen that sits in a zone may name a `showWhen`
+condition over its own loads: the zone reads those loads and lists the row only while it holds, as a console widget that draws
+nothing for a store it has nothing to say to. A number field takes `min` and
 `max`, and a field a screen hid by its `when` is not sent.
 
 A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with
@@ -1023,7 +1029,11 @@ and no row is read: the answer is `data.<key>.count` and `.sum`, left out where 
 cannot ask (show "Unavailable", never a zero). `{ "entitlement": "giftCards" }` reads the
 workspace document and answers `data.<key>.carried` and `.label`, the plan that includes the
 feature, so a card the console locks behind a plan shows its notice instead of failing
-(the features are the generated `NATIVE_PLAN_FEATURES`).
+(the features are the generated `NATIVE_PLAN_FEATURES`). A load that is not read from anywhere but worked out from the others once they answer is
+`{ "derive": "shippingCoverage", "from": "store.shipping" }`: the `from` path (under `data`) finds the shipping settings, and
+`data.<key>` holds what the console's Coverage block says of them (`served`, `unserved`, `headline`, `detail`, `note`, `asks`, …), a port
+of the console's resolver replayed from the contracts' `function-cases.generated.json` (`summarizeShippingCoverage`,
+`describeShippingCoverage`, `resolveCheckoutShippingOptions`).
 
 ### The plugin switchboard
 
