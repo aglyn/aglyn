@@ -152,7 +152,7 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
       HeaderProps={{
         action: <TransferHeaderActions resource={COMMERCE_COUPONS_TRANSFER} hostId={hostId} />,
       }}
-      help={pluginDocsHelp('commerce', { anchor: '#coupons' })}
+      help={pluginDocsHelp('discountsAndCoupons', { anchor: '#coupons' })}
       contentGutterX
       contentGutterY
     >

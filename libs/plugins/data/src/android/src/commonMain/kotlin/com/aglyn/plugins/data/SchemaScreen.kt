@@ -389,15 +389,25 @@ private fun FieldEditor(
         supportingText = { Text("What this field is for — shown as a hint wherever the field appears") },
         modifier = Modifier.fillMaxWidth(),
       )
-      if (definition.customType != null) {
-        NoticeBanner("A ${definition.customType} field: its type is set by the plugin that declares it.", StatusTone.NEUTRAL)
-      } else {
+      ChoiceField(
+        "Type",
+        datasetTypeSelection(definition),
+        types.map { InputChoice(it.raw, Contracts.datasetFieldTypeLabels[it.raw] ?: it.raw) } +
+          DATASET_CUSTOM_TYPES.map { InputChoice("custom:${it.name}", "${it.label} (${it.pluginId})") },
+        { selection -> update(applyDatasetTypeSelection(selection, definition)) },
+        allowEmpty = false,
+      )
+      if (definition.customType == RECORD_ADDRESS_FIELD_TYPE) {
+        // A page address fills in from another text field once, and stays put when the record is renamed.
         ChoiceField(
-          "Type",
-          definition.type?.raw ?: "text",
-          types.map { InputChoice(it.raw, Contracts.datasetFieldTypeLabels[it.raw] ?: it.raw) },
-          { raw -> DatasetFieldType.entries.firstOrNull { it.raw == raw }?.let { update(definition.copy(type = it)) } },
-          allowEmpty = false,
+          "Fill in from",
+          definition.slugFrom.orEmpty(),
+          model.orderedFields()
+            .filter { (id, field) -> id != draft.fieldId && field.type == DatasetFieldType.TEXT && field.customType != RECORD_ADDRESS_FIELD_TYPE }
+            .map { (id, field) -> InputChoice(id, field.label(id)) },
+          { update(definition.copy(slugFrom = it.ifEmpty { null })) },
+          supporting = "An empty address fills in from this field once, and stays put when the record is renamed",
+          emptyLabel = "Nothing — type each address",
         )
       }
       if (definition.type == DatasetFieldType.REFERENCE) {

@@ -436,6 +436,67 @@ export async function aiDraftAllowanceRefusal(
 }
 
 /**
+ * A stored instant in milliseconds, whatever wrote it: a Firestore
+ * `Timestamp`, a `Date`, a number or an ISO string. `null` when unreadable.
+ */
+export function aiDraftInstantMs(value: unknown): number | null {
+  if (value == null) return null
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  const toMillis = (value as { toMillis?: unknown }).toMillis
+  return typeof toMillis === 'function' ? (toMillis.call(value) as number) : null
+}
+
+/**
+ * Whether the band refuses the kind only because of drafts made after
+ * `sinceMs` (AGL-3765): the rows refuse now, and the rows made at or before
+ * then would not. A job whose plan was confirmed while the site had room, and
+ * that another build or a member filled before the job's own write, stopped
+ * on something it could not have known when it was confirmed. A row whose
+ * `createdAt` cannot be read counts as made before, so a refusal this cannot
+ * date stays the workspace's own limit.
+ */
+export function aiDraftBandTakenSince(
+  kind: AiDraftKind,
+  rows: ReadonlyArray<Pick<SiblingRow, 'id' | 'kind' | 'sourceType' | 'deletedAt'> & { createdAt?: unknown }>,
+  org: Partial<AglynOrgBilling> | null,
+  sinceMs: number | null,
+  routingMap?: RoutingMap,
+): boolean {
+  if (sinceMs === null || !aiDraftBandRefusal(kind, rows, org, routingMap)) return false
+  const before = rows.filter((row) => {
+    const at = aiDraftInstantMs(row.createdAt)
+    return at === null || at <= sinceMs
+  })
+  return aiDraftBandRefusal(kind, before, org, routingMap) === null
+}
+
+/** {@link aiDraftBandTakenSince}, over the site's rows of the kind as they are now. */
+export async function readAiDraftBandTakenSince(
+  firestore: Firestore,
+  input: { kind: AiDraftKind; hostId: string; org: Partial<AglynOrgBilling> | null; since: unknown },
+): Promise<boolean> {
+  const sinceMs = aiDraftInstantMs(input.since)
+  if (sinceMs === null) return false
+  const [snapshot, host] = await Promise.all([
+    draftCollection(firestore, input.hostId, input.kind).select('kind', 'source.type', 'deletedAt', 'createdAt').get(),
+    input.kind === 'screen' ? firestore.collection('hosts').doc(input.hostId).get() : Promise.resolve(null),
+  ])
+  const rows = snapshot.docs.map((doc) => ({
+    id: doc.id,
+    kind: doc.get('kind'),
+    sourceType: doc.get('source.type'),
+    deletedAt: doc.get('deletedAt'),
+    createdAt: doc.get('createdAt'),
+  }))
+  return aiDraftBandTakenSince(input.kind, rows, input.org, sinceMs, host?.get('screens') as RoutingMap)
+}
+
+/**
  * A draft screen's one-segment address: the one asked for, else one from its
  * name, never a reserved segment, and never an address a live screen keeps
  * or the routing map already serves — so the member's publish at it later
