@@ -14,6 +14,8 @@ import com.aglyn.hardware.CardCollectorState
 import com.aglyn.hardware.CardReaderSessionSource
 import com.aglyn.hardware.EscPosEncoder
 import com.aglyn.hardware.Peripherals
+import com.aglyn.hardware.SystemPrintResult
+import com.aglyn.hardware.renderText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -602,36 +604,51 @@ class RegisterModel(
     val done = when (answer.receiptChannel) {
       com.aglyn.contracts.PosReceiptChannel.EMAIL -> paid.sendReceipt("email", answer.email ?: return, answer.marketingOptIn == true)
       com.aglyn.contracts.PosReceiptChannel.SMS -> paid.sendReceipt("sms", answer.phone ?: return)
-      com.aglyn.contracts.PosReceiptChannel.PRINT -> printReceipt(paid) == null
+      com.aglyn.contracts.PosReceiptChannel.PRINT -> if (canPrintReceipt) printReceipt(paid) == SystemPrintResult.Printed else paid.sendReceipt("print")
       else -> paid.sendReceipt("none")
     }
     if (done && checkout === paid) finished()
   }
 
+  /** Whether the receipt can go anywhere this register prints: its direct or cloud printer, or this device's print sheet. */
+  val canPrintReceipt: Boolean get() = peripherals.printers.isNotEmpty() || lastReceipt.hasPrinter || peripherals.systemPrinter != null
+
   /**
-   * Prints the paid sale's receipt where this register prints: its direct printer, else its cloud printer; with
-   * neither, the choice is only recorded. Null when it went, the words when it did not.
+   * Prints the paid sale's receipt where this register prints, as the console does: its direct printer, else its cloud
+   * printer, else this device's print sheet (the console's `window.print()`); with none of them, the choice is only
+   * recorded. A gift receipt drops every price and is only ever printed by this device (the cloud queue prints the
+   * customer's receipt). A person closing the sheet is not a failure.
    */
-  suspend fun printReceipt(paid: Checkout): String? {
+  suspend fun printReceipt(paid: Checkout, gift: Boolean = false): SystemPrintResult {
+    val data = receipt
+    val loading = SystemPrintResult.Failed("The receipt is still loading. Try again in a moment.")
+    val cash = paid.state.value.sale.payments.any { it.method == "cash" && it.status == "succeeded" }
     if (peripherals.printers.isNotEmpty()) {
-      val data = receipt ?: return "The receipt is still loading. Try again in a moment."
-      val cash = paid.state.value.sale.payments.any { it.method == "cash" && it.status == "succeeded" }
-      print(data, openDrawer = cash)?.let { return it }
-      paid.markPrinted()
-      return null
+      data ?: return loading
+      print(data, openDrawer = cash && !gift, gift = gift)?.let { return SystemPrintResult.Failed(it) }
+      if (!gift) paid.markPrinted()
+      return SystemPrintResult.Printed
     }
-    if (lastReceipt.hasPrinter) return paid.printToCloud()
+    if (lastReceipt.hasPrinter && !gift) return paid.printToCloud()?.let { SystemPrintResult.Failed(it) } ?: SystemPrintResult.Printed
+    val sheet = peripherals.systemPrinter
+    if (sheet != null) {
+      data ?: return loading
+      val text = renderText(layoutReceipt(data, ReceiptLayoutOptions(columns = 48, gift = gift)))
+      val result = sheet.printText(text, "${if (gift) "Gift receipt" else "Receipt"} ${data.orderNumber}")
+      if (result == SystemPrintResult.Printed && !gift) paid.markPrinted()
+      return result
+    }
+    if (gift) return SystemPrintResult.Failed("No printer is set up on this register.")
     paid.sendReceipt("print")
-    return null
+    return SystemPrintResult.Printed
   }
 
   /** A store that always prints: the receipt goes to the register's printer as soon as the sale is paid, once. */
   suspend fun printReceiptByDefault(paid: Checkout) {
-    if (context?.settings?.receiptDefault != ReceiptDefault.PRINT || paid.state.value.printed) return
-    // A direct printer prints from the stored sale, so it waits for that read.
-    if (peripherals.printers.isEmpty() && !lastReceipt.hasPrinter) return
-    if (peripherals.printers.isNotEmpty() && receipt == null) return
-    printReceipt(paid)?.let { toast = Notice(NoticeTone.ERROR, it) }
+    if (context?.settings?.receiptDefault != ReceiptDefault.PRINT || paid.state.value.printed || !canPrintReceipt) return
+    // A direct printer and this device's print sheet print from the stored sale, so they wait for that read.
+    if (!lastReceipt.hasPrinter && receipt == null) return
+    (printReceipt(paid) as? SystemPrintResult.Failed)?.let { toast = Notice(NoticeTone.ERROR, it.message) }
   }
 
   /** The sale was voided: back to the basket, which is kept for another try. */

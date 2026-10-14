@@ -744,9 +744,19 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   tender the apps do not take is the typed card: it needs Stripe's card-entry
   SDK, which neither app carries.
 - **Tips** and **receipts by email or text**, through the routes the web
-  register uses; **Print receipt** goes to the register's cloud printer (and
-  on Kotlin its direct printer), and a store whose receipt default is print
-  prints it as soon as the sale is paid.
+  register uses. **Print receipt** goes where the console's does: the
+  register's cloud printer when it has one (the server queue the printer
+  polls), else the device's own print sheet, which is what the console's
+  `window.print()` is (AirPrint on an iPhone or iPad, the print panel on a Mac,
+  Android's print service, the desktop's dialog). The console has no path that
+  talks to a printer's own address, so neither do the apps; a Kotlin desktop
+  register can also name a network printer in its build settings. A **gift
+  receipt** prints on the sheet with no prices. A store whose receipt default
+  is print prints as soon as the sale is paid.
+- **Delivery-app orders:** the delivery-apps plugin's own native package puts
+  the console's queue (accept or reject, ready, picked up) in the register's
+  `posOrders` zone, which the commerce plugin hosts and fills by registry, never
+  by name.
 - **Booking payments:** the bookings plugin contributes a `.pos` screen.
 
 Card readers by platform:

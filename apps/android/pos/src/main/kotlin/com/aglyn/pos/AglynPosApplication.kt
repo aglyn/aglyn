@@ -2,6 +2,7 @@ package com.aglyn.pos
 
 import android.app.Application
 import com.aglyn.core.AglynEnv
+import com.aglyn.hardware.AndroidSystemPrinter
 import com.aglyn.hardware.StaticPeripherals
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.plugins.manifest.NativePluginManifest
@@ -50,6 +51,8 @@ class AglynPosApplication : Application() {
       // on for a build (TERMINAL_LIVE_READERS), which needs Stripe live mode.
       peripherals = StaticPeripherals(
         cardCollector = StripeTerminalCollector(this, simulated = !BuildConfig.TERMINAL_LIVE_READERS, permissions = { permissionGate }),
+        // A receipt with no printer of its own goes to Android's print sheet, as the console's goes to the browser's.
+        systemPrinter = AndroidSystemPrinter(this),
       ),
     )
   }

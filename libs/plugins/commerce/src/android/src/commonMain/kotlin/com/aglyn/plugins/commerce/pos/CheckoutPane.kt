@@ -47,6 +47,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aglyn.hardware.SystemPrintResult
 import com.aglyn.hardware.renderText
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AmountRow
@@ -573,21 +574,39 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
   var printProblem by remember { mutableStateOf<String?>(null) }
   printProblem?.let { NoticeBanner(it, StatusTone.ERROR) }
   Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-    if (model.peripherals.printers.isNotEmpty() || model.lastReceipt.hasPrinter) {
+    if (model.canPrintReceipt) {
       OutlinedButton(
         onClick = {
           model.display.cancelAsk()
           model.act {
-            printProblem = model.printReceipt(checkout)
-            if (printProblem == null) model.finished()
+            when (val result = model.printReceipt(checkout)) {
+              SystemPrintResult.Printed -> model.finished()
+              SystemPrintResult.Canceled -> printProblem = null
+              is SystemPrintResult.Failed -> printProblem = result.message
+            }
           }
         },
-        enabled = (model.receipt != null || model.peripherals.printers.isEmpty()) && !state.busy,
+        enabled = (model.receipt != null || (model.peripherals.printers.isEmpty() && model.lastReceipt.hasPrinter)) && !state.busy,
         modifier = Modifier.heightIn(min = 52.dp).testTag("pos-print-receipt"),
       ) {
         Icon(AglynIcons.named("print"), null)
         Spacer(Modifier.width(space(0.5f)))
         Text("Print")
+      }
+    }
+    if (model.peripherals.printers.isNotEmpty() || model.peripherals.systemPrinter != null) {
+      // The items and the barcode a recipient returns with, and no price.
+      OutlinedButton(
+        onClick = {
+          model.display.cancelAsk()
+          model.act { (model.printReceipt(checkout, gift = true) as? SystemPrintResult.Failed)?.let { printProblem = it.message } }
+        },
+        enabled = model.receipt != null && !state.busy,
+        modifier = Modifier.heightIn(min = 52.dp).testTag("pos-gift-receipt"),
+      ) {
+        Icon(AglynIcons.named("card_giftcard"), null)
+        Spacer(Modifier.width(space(0.5f)))
+        Text("Gift receipt")
       }
     }
     Button(

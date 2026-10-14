@@ -241,7 +241,7 @@ func posItem(from product: PosKioskProduct) -> PosItem {
 }
 
 extension String {
-  fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
+  var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 /// The lowest price a product sells at, for its tile.
