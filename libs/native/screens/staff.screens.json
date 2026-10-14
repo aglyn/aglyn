@@ -535,7 +535,7 @@
           "optional": true
         },
         "usage": {
-          "url": "/api/admin/org-usage?orgId={params.orgId}",
+          "url": "/api/admin/org-usage?orgId={params.orgId}&view=prepared",
           "optional": true
         },
         "hosts": {
@@ -884,10 +884,19 @@
           "type": "list",
           "title": "Usage by month",
           "items": "data.usage.months",
-          "primary": "{item.month}",
-          "secondary": "{item.pageViews:number} views · {item.storageBytes:bytes}",
+          "primary": "{item.view.month}",
+          "secondary": "{item.view.views} views · {item.view.storage} · {item.view.cost}",
+          "tertiary": "{item.view.metered}",
+          "icon": "chart.bar|bar_chart",
+          "open": {
+            "screen": "core.staff.orgUsage",
+            "params": {
+              "orgId": "{params.orgId}",
+              "month": "{item.month}"
+            }
+          },
           "count": false,
-          "empty": "No usage recorded."
+          "empty": "No usage rollups recorded for this organization yet."
         },
         {
           "type": "list",
@@ -1843,6 +1852,74 @@
           }
         ]
       }
+    },
+    {
+      "id": "core.staff.orgUsage",
+      "title": "Usage {params.month}",
+      "label": "Usage",
+      "icon": "chart.bar|bar_chart",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "usage": "/api/admin/org-usage?orgId={params.orgId}&view=prepared"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.usage.months[month=params.month]",
+          "rows": [
+            {
+              "label": "Page views",
+              "value": "{item.view.views}"
+            },
+            {
+              "label": "Storage",
+              "value": "{item.view.storage}"
+            },
+            {
+              "label": "Metered",
+              "value": "{item.view.metered}",
+              "when": "item.view.metered"
+            },
+            {
+              "label": "Cost",
+              "value": "{item.view.cost}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Recorded, not priced",
+          "object": "data.usage.months[month=params.month]",
+          "rows": [
+            {
+              "label": "Meters",
+              "value": "{item.view.recorded.meters}",
+              "when": "item.view.recorded.meters"
+            },
+            {
+              "label": "Money",
+              "value": "{item.view.recorded.money}",
+              "when": "item.view.recorded.money"
+            },
+            {
+              "label": "Overages",
+              "value": "{item.view.recorded.gates}",
+              "when": "item.view.recorded.gates"
+            },
+            {
+              "label": "Site size",
+              "value": "{item.view.recorded.site}",
+              "when": "item.view.recorded.site"
+            },
+            {
+              "label": "Nothing more",
+              "value": "{item.view.recorded.none}",
+              "when": "item.view.recorded.none"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "core.staff.sites",
