@@ -71,6 +71,13 @@ export interface HubSectionVerdicts {
    * hides the section rather than offering it.
    */
   permission?: PermissionAnswers
+  /**
+   * The zones that have a widget for this reader, from `useFilledZones`
+   * (AGL-3713). A section that declares `onlyWithZones` is offered only
+   * when one of its zones is in here. Omitted, every such section is
+   * hidden: an unanswered zone is not a filled one.
+   */
+  filledZones?: ReadonlySet<string>
 }
 
 /**
@@ -104,7 +111,8 @@ export function resolveHubSections(
   verdicts: HubSectionVerdicts,
 ): readonly ResolvedConsoleNavSection[] | undefined {
   if (!sections?.length || !basePath) return undefined
-  const { flags, isStaff, org, orgReady, featureFlag, permission } = verdicts
+  const { flags, isStaff, org, orgReady, featureFlag, permission, filledZones } =
+    verdicts
   const surface = resolveExtensionEntitlement(featureFlag, org, orgReady)
   const answers: PermissionAnswers = permission ?? {
     can: () => false,
@@ -128,11 +136,19 @@ export function resolveHubSections(
       section.permission ? [section.permission] : [],
       answers,
     )
+    /*
+     * A section that is nothing but plugin zones (AGL-3713) has nothing to
+     * show while none of them has a widget, and is left out like a section
+     * the release hides — not locked, because there is nothing to buy.
+     */
+    const hasContent =
+      !section.onlyWithZones?.length ||
+      section.onlyWithZones.some((zone) => filledZones?.has(zone) === true)
     return {
       id: section.id,
       label: section.label,
       href: `${basePath}/${section.id}`,
-      visible: released && permitted === 'granted',
+      visible: released && permitted === 'granted' && hasContent,
       locked:
         composeExtensionEntitlements(
           surface,
@@ -140,6 +156,7 @@ export function resolveHubSections(
         ) === 'blocked',
       refused: permitted === 'refused',
       landsOnQuery: section.landsOnQuery,
+      ...(section.group ? { group: section.group } : {}),
     }
   })
 }

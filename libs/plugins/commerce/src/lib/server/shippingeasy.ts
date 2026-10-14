@@ -508,7 +508,7 @@ export async function deliverOrderEventToShippingEasy(
       type: 'content.order',
       title: 'An order could not be sent to ShippingEasy',
       body: `An order on {site} never reached ShippingEasy after ${envelope.attempt} attempts (${error.message}).`,
-      link: `/${envelope.hostId}/products/settings`,
+      link: `/${envelope.hostId}/products/shipping`,
     }).catch(() => undefined)
     return { result: 'failed', message }
   }

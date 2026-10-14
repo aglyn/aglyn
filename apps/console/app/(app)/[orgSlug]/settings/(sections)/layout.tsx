@@ -55,11 +55,22 @@ export default function SettingsSectionsLayout({
   const canManage = canManageOrg(currentOrg?.role)
   const isOwner = currentOrg?.role === 'owner'
   const transferHubVisible = useTransferHubVisible()
-  const section = (route: Route, label: string, visible?: boolean) => ({
+  const section = (
+    route: Route,
+    label: string,
+    visible?: boolean,
+    group?: string,
+  ) => ({
     href: buildRoute(route as never, { orgSlug } as never),
     label,
     visible,
+    group,
   })
+  // Rail groups (AGL-3713): the workspace's setup, then what it holds about
+  // people, then the owner's irreversible steps — a divider and a subheader
+  // between each, so eleven sections read as three short lists.
+  const DATA = 'Data & compliance'
+  const OWNER = 'Danger zone'
 
   /*
    * One list, read twice — by the rail and by the breadcrumb. Hoisted so
@@ -80,17 +91,17 @@ export default function SettingsSectionsLayout({
     section(Route.ORG_SETTINGS_SSO, 'Single sign-on', canManage),
     // The workspace's privacy obligations (AGL-2839): exporting the people
     // it holds and erasing one. Outside the CRM, so every plan has them.
-    section(Route.ORG_SETTINGS_PRIVACY, 'Privacy', canManage),
+    section(Route.ORG_SETTINGS_PRIVACY, 'Privacy', canManage, DATA),
     // Everything held, flagged or locked on the workspace, and the way to
     // request a review (AGL-3368). Owners and admins: it is who is told.
-    section(Route.ORG_SETTINGS_HOLDS, 'Holds & reviews', canManage),
+    section(Route.ORG_SETTINGS_HOLDS, 'Holds & reviews', canManage, DATA),
     // Import & export (AGL-3535): offered to whoever may export something
     // (AGL-3554) — `data.manage`, or a resource that lets the person read
     // its records on a plan that moves them; the page offers each button
     // only where its route takes it.
-    section(Route.ORG_SETTINGS_DATA, 'Import & export', transferHubVisible),
-    section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
-    section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
+    section(Route.ORG_SETTINGS_DATA, 'Import & export', transferHubVisible, DATA),
+    section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner, OWNER),
+    section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner, OWNER),
   ]
   const active = useActiveSection(sections)
 

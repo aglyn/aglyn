@@ -20,6 +20,10 @@ import {
   registerPluginZone,
 } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { BUNDLE_ID } from '../../constants/bundle-common'
+import {
+  COMMERCE_SETTINGS_PAGE_ZONES,
+  type CommerceSettingsSectionId,
+} from '../commerce-console-sections'
 
 /**
  * Two more zones the store's console hosts (AGL-3612): `ordersBulk`, beside
@@ -48,8 +52,43 @@ export interface ConsoleCommerceSettingsZoneProps {
 
 export const ORDERS_BULK_ZONE = definePluginZone<ConsoleOrdersBulkZoneProps>('ordersBulk')
 
+/**
+ * The Integrations page's zone (AGL-3713): every store-settings widget named
+ * it before the settings were split into pages, and a widget that names no
+ * page still does — so it lands on Integrations rather than nowhere.
+ */
 export const COMMERCE_SETTINGS_ZONE =
   definePluginZone<ConsoleCommerceSettingsZoneProps>('commerceSettings')
+
+/**
+ * One zone per settings page (AGL-3713), drawn at the foot of that page: a
+ * plugin chooses its page by the zone it names. Same props as
+ * `commerceSettings`. Ids from `COMMERCE_SETTINGS_PAGE_ZONES`, the list the
+ * rail and the pages read, so a page and its zone cannot disagree.
+ */
+export const COMMERCE_SETTINGS_PAGE_ZONE_DEFS = (
+  Object.keys(COMMERCE_SETTINGS_PAGE_ZONES) as CommerceSettingsSectionId[]
+)
+  .filter((page) => page !== 'integrations')
+  .map((page) => ({
+    page,
+    zone: definePluginZone<ConsoleCommerceSettingsZoneProps>(
+      COMMERCE_SETTINGS_PAGE_ZONES[page],
+    ),
+  }))
+
+/** The settings page each page zone sits on, by name (AGL-3713). */
+const PAGE_NAMES: Readonly<
+  Record<Exclude<CommerceSettingsSectionId, 'integrations'>, string>
+> = {
+  payments: 'Payments',
+  checkout: 'Checkout',
+  taxes: 'Taxes',
+  shipping: 'Shipping & delivery',
+  notifications: 'Notifications',
+  pos: 'Point of sale',
+  channels: 'Sales channels',
+}
 
 /** What `commercePromotions` hands a widget: the site (AGL-3640). */
 export type ConsoleCommercePromotionsZoneProps = ConsoleCommerceSettingsZoneProps
@@ -88,11 +127,23 @@ export function registerCommerceStoreZones(): void {
   registerPluginZone(
     {
       zone: COMMERCE_SETTINGS_ZONE,
-      label: 'Store settings',
+      label: 'Store integrations',
       surface: 'console',
       description:
-        'At the foot of the store’s Settings. A widget here keeps settings of its own beside the store’s; it writes none of the store’s.',
+        'The store’s Integrations settings page, and where a store-settings widget that names no other page lands. A widget here keeps settings of its own beside the store’s; it writes none of the store’s.',
     },
     owner,
   )
+  for (const { page, zone } of COMMERCE_SETTINGS_PAGE_ZONE_DEFS) {
+    const name = PAGE_NAMES[page as Exclude<CommerceSettingsSectionId, 'integrations'>]
+    registerPluginZone(
+      {
+        zone,
+        label: `Store settings: ${name}`,
+        surface: 'console',
+        description: `At the foot of the store’s ${name} settings page. A widget here keeps settings of its own beside the store’s; it writes none of the store’s.`,
+      },
+      owner,
+    )
+  }
 }

@@ -170,14 +170,14 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'shipping',
     apiPrefixes: ["shipping"],
     register: {"console":"registerShippingConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail","returnDetail","ordersBulk","productEditor","orgBillingUsage"]}},
+    contributes: {"console":{"slots":["commerceSettingsShipping","orderDetail","returnDetail","ordersBulk","productEditor","orgBillingUsage"]}},
     load: () => import('@aglyn/plugins-shipping'),
   },
   {
     id: 'post-purchase',
     apiPrefixes: ["post-purchase"],
     register: {"console":"registerPostPurchaseConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    contributes: {"console":{"slots":["commerceSettingsShipping","orderDetail"]}},
     load: () => import('@aglyn/plugins-post-purchase'),
   },
   {
@@ -198,7 +198,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'tax-engines',
     apiPrefixes: ["tax-engines"],
     register: {"console":"registerTaxEnginesConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail","productEditor"]}},
+    contributes: {"console":{"slots":["commerceSettingsTaxes","orderDetail","productEditor"]}},
     load: () => import('@aglyn/plugins-tax-engines'),
   },
   {
@@ -226,7 +226,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'fulfillment-networks',
     apiPrefixes: ["fulfillment-networks"],
     register: {"console":"registerFulfillmentNetworksConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    contributes: {"console":{"slots":["commerceSettingsShipping","orderDetail"]}},
     load: () => import('@aglyn/plugins-fulfillment-networks'),
   },
   {
@@ -240,7 +240,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketplaces',
     apiPrefixes: ["marketplaces"],
     register: {"console":"registerMarketplacesConsole"},
-    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    contributes: {"console":{"slots":["commerceSettingsChannels","orderDetail"]}},
     load: () => import('@aglyn/plugins-marketplaces'),
   },
   {
@@ -268,7 +268,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'sales-channels',
     apiPrefixes: ["sales-channels"],
     register: {"console":"registerSalesChannelsConsole"},
-    contributes: {"console":{"slots":["commerceSettings","productEditor"]}},
+    contributes: {"console":{"slots":["commerceSettingsChannels","productEditor"]}},
     load: () => import('@aglyn/plugins-sales-channels'),
   },
   {
