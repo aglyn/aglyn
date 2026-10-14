@@ -101,7 +101,7 @@ export function ContactKnownByCard(props: ContactKnownByCardProps) {
   return (
     <CardDisplay
       header={'Known by'}
-      help={pluginDocsHelp('contacts', { anchor: '#at-the-organization-level' })}
+      help={pluginDocsHelp('contacts', { anchor: '#known-by' })}
       contentGutterX
       contentGutterY
     >

@@ -457,6 +457,21 @@ The **Preview** beside the editor shows each email as it would reach a sample
 contact, with the real footer, and the editor lists anything that stops the
 sequence from being saved beside the field it is about.
 
+#### Who it sends to, and when {#sequence-sending-settings}
+
+The editor's **Who it sends to, and when** card sets the countries a sequence may reach,
+whether customers are included, and its own sending hours when its mailbox's should not
+apply.
+
+**Countries** offers only those both the sequence and your organization
+[allow](#allowed-countries). **Sending hours of its own** sets the days and the hours
+it sends.
+
+The same card carries **Count link clicks**, **Count opens** and **Add a mail-client
+unsubscribe button**, each off until you turn it on, with what it costs written under
+the switch. With **Include customers** off, enrolling refuses a customer, and a person
+who becomes one later is stopped before their next email.
+
 ### Count opens {#count-opens}
 
 A sequence email is plain text, the way an email you type to one person is,
@@ -747,9 +762,10 @@ to see the people who followed it.
 
 ## See one person's history {#person-history}
 
-Select a person's row — or focus it and press **Enter** — to open their page.
-Its address is theirs alone, so you can paste it into a comment or a message to
-point a teammate at one person. The page has three parts:
+Select a person's row on a sequence's **Enrollments** tab — or focus it and press
+**Enter** — to open their page, which shows where they are in the sequence and
+everything it has done to them. Its address is theirs alone, so you can paste it into
+a comment or a message to point a teammate at one person. The page has three parts:
 
 - **The header** — their name and address, a **Lead** or **Contact** chip that
   opens their CRM record, their status, the step they're on and when the next
@@ -759,23 +775,35 @@ point a teammate at one person. The page has three parts:
   links followed, scanner clicks (which aren't counted) and replies — and, on a
   sequence that [counts opens](#count-opens), their opens, with the machine
   opens that weren't counted beside them.
-- **Activity** — everything that happened to them, newest first: when they were
-  enrolled and by whom, each email with its subject as sent (and whether it was
-  their [curated](#curate) copy), each link they followed with the full address
-  and the email it came from, scanner visits with why they were read as a
-  scanner, each open and each machine open with why it wasn't counted,
-  replies, bounces with what the receiving server said, holds,
-  pauses, resumes and stops with who did it and why. **Open thread in Gmail**
-  opens the conversation in the sending mailbox.
-- **Details** — closed until you open it: the personal line, the attestations,
-  the mailbox, the campaigns, what your mail has met at their domain, each
-  curated email in full, the Gmail threads and the enrollment's id.
+- **Activity** — everything that happened to them; see
+  [Their activity](#person-activity).
+- **Details** — the record behind the enrollment; see
+  [Their enrollment's details](#person-details).
+
+### Their activity {#person-activity}
+
+The **Activity** card lists everything the sequence did to one person, newest first,
+and **Open thread in Gmail** opens the conversation in the sending mailbox.
+
+It holds when they were enrolled and by whom, each email with its subject as sent (and
+whether it was their [curated](#curate) copy), each link they followed with the full
+address and the email it came from, scanner visits with why they were read as a
+scanner, each open and each machine open with why it wasn't counted, replies, bounces
+with what the receiving server said, holds, pauses, resumes and stops with who did it
+and why.
 
 Clicks are listed one at a time from the release that added this page. Clicks
 before it were kept only as a count, the times of the first and last, and the
 last link followed, so the page shows them as one line saying exactly that
 rather than guessing at the rest. Someone enrolled but not yet emailed shows *Nothing
 yet* and when their first step sends.
+
+### Their enrollment's details {#person-details}
+
+The **Details** card is closed until you open it, and holds what the enrollment was
+made with: the personal line, the attestations, the mailbox, the campaigns, what your
+mail has met at their domain, each curated email in full, the Gmail threads and the
+enrollment's id.
 
 ## Curate a send for one person {#curate}
 

@@ -45,6 +45,9 @@
  *                "replyTo": "support@acme.com" } }
  * ```
  *
+ * `bcc` — a list — is present only when the message carries blind copies
+ * (AGL-3699), and is delivered without appearing on the message's headers.
+ *
  * Answer `2xx` once the message is accepted — with `{ "id": "…" }` if the
  * relay has an id for it, which the delivery log keys on. Answer `429`, with
  * `Retry-After` in seconds, to ask for a slower pace: the message is kept
@@ -106,6 +109,7 @@ export function mailWebhookBody(
         : {}),
       ...(message.tags?.length ? { tags: message.tags } : {}),
       ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+      ...(message.bcc?.length ? { bcc: message.bcc } : {}),
     },
   }
 }

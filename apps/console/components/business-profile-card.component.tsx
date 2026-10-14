@@ -136,12 +136,16 @@ function profileSchema(
         level === 'site'
           ? `What this business does and how it speaks. ${aiAddonName()} reads it on every job for this site, and never replaces what you write here.`
           : 'What every site in this workspace starts from. A site’s own profile wins wherever it says something.',
-      help: docsHelp('businessProfile', {
-        excerpt:
-          level === 'site'
-            ? `The services, area, audience and tone ${aiAddonName()} writes for. Contact details come only from your site settings.`
-            : 'Defaults a site inherits where its own business profile is empty.',
-      }),
+      help:
+        level === 'site'
+          ? docsHelp('businessProfile', {
+              anchor: '#the-business-profile-card',
+              excerpt: `The services, area, audience and tone ${aiAddonName()} writes for. Contact details come only from your site settings.`,
+            })
+          : docsHelp('businessProfile', {
+              anchor: '#workspace-defaults',
+              excerpt: 'Defaults a site inherits where its own business profile is empty. Only managers can change them.',
+            }),
     },
     fields: [
       {

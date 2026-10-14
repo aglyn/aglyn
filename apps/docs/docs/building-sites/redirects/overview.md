@@ -118,6 +118,23 @@ you first, and you choose whether to keep the edit or undo it.
 Imported rules go live within about thirty seconds, like rules saved by hand, and the
 list updates on its own.
 
+## Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask [Aglyn Assist](../../ai/assist-builds.md) for a redirect in plain words, such
+as *redirect /old-menu to /menu*, *send /shop to my store page* or *stop redirecting
+/promo*. The plan card lists each one, and **Confirm plan** saves it.
+
+- A redirect Aglyn AI makes is checked exactly as one you save: the same publishing role,
+  plan and limit, the same loop and duplicate checks, and the same review of an off-site
+  destination. It also never sends visitors into a loop other rules already make.
+- It works as soon as it is saved, like one you save yourself. It is 302 unless you say
+  the move is permanent.
+- It never redirects the address of a published page unless you ask for that page to send
+  visitors elsewhere.
+- To change or stop a redirect, name its address. Stopping one deletes it, as **Delete**
+  does on this page.
+- It costs no AI credits.
+
 ## Metrics
 
 Each rule tracks **hit metrics** (sampled), so you can see which redirects are actually

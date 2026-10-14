@@ -80,7 +80,7 @@ const PROPOSAL = aiSiteSeoProposalForInputs({
 })
 
 const TITLE = 'Neighborhood dog groomer'
-const DESCRIPTION = 'Neighborhood dog groomer, for local dog owners.'
+const DESCRIPTION = 'Neighborhood dog groomer for local dog owners.'
 
 /** A `site` job for this site carrying the listing its answers imply. */
 const siteJob = (patch: Record<string, unknown> = {}) => ({

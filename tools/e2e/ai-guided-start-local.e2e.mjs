@@ -714,7 +714,9 @@ async function runOnce(context, index) {
   const runStart = Date.now()
   let pump = null
   try {
-    // 2. Sites → Create site.
+    // 2. Sites → Create site, which opens straight on the start (AGL-3761):
+    // the site's name and address are asked on its first step, and nothing
+    // is created until Plan my site.
     await page.goto(`${consoleUrl}/${run.orgSlug}/hosts`, {
       waitUntil: 'domcontentloaded',
       timeout: 120_000,
@@ -723,38 +725,27 @@ async function runOnce(context, index) {
       .getByRole('button', { name: 'Create site' })
       .first()
       .click({ timeout: 120_000 })
-    const dialog = page.getByRole('dialog', { name: 'Create a new site' })
+    const dialog = page.getByRole('dialog', { name: 'Start your site' })
     await dialog.getByLabel('Site name').fill(siteName)
     await dialog.getByLabel('Subdomain').fill(run.subdomain)
+    const startWithAi = dialog.getByRole('button', { name: /Start with AI/ })
+    await startWithAi.waitFor({ timeout: 120_000 })
     await shot(page, '01-create-site')
-    await dialog.getByRole('button', { name: 'Create site' }).click()
-    await page.waitForURL((url) => url.searchParams.get('start') === 'site', {
-      timeout: 120_000,
-    })
-
-    const hostSnapshot = await firestore
-      .collection('hosts')
-      .where('subdomain', '==', run.subdomain)
-      .limit(1)
-      .get()
-    record(run, { hostId: hostSnapshot.docs[0]?.id ?? null })
-    if (!run.hostId)
-      throw new Error(`no host document for subdomain ${run.subdomain}`)
-    const born = await readHost(firestore, run.hostId)
-    const bornScreens = born.screens.filter(
-      (screen) => screen.data.deletedAt == null,
-    )
+    const findHost = async () =>
+      (
+        await firestore
+          .collection('hosts')
+          .where('subdomain', '==', run.subdomain)
+          .limit(1)
+          .get()
+      ).docs[0]?.id ?? null
     check(
-      'site empty at creation',
-      bornScreens.length === 0 &&
-        born.layouts.length === 0 &&
-        Object.keys(born.data?.screens ?? {}).length === 0,
-      `${bornScreens.length} page(s), ${born.layouts.length} layout(s), ${born.forms.length} form(s), routes ${JSON.stringify(born.data?.screens ?? {})}`,
+      'no site before the start is answered',
+      (await findHost()) === null,
+      `a host for ${run.subdomain} existed before Plan my site`,
     )
 
     // 3. Start with AI, and the answers.
-    const startWithAi = page.getByRole('button', { name: /Start with AI/ })
-    await startWithAi.waitFor({ timeout: 120_000 })
     await shot(page, '02-start-choice')
     await startWithAi.click()
     await page
@@ -789,7 +780,28 @@ async function runOnce(context, index) {
     await page.waitForTimeout(600)
     await shot(page, '03-answers', { fullPage: true })
 
-    // 4. The beat runs from here on, as the scheduler would.
+    // 4. Plan my site creates the site, empty, and starts its job. The beat
+    // is not running yet, so the site is read as it was born.
+    await page.getByRole('button', { name: 'Plan my site' }).click()
+    await page.waitForURL((url) => /\/ai-jobs\/[^/]+$/.test(url.pathname), {
+      timeout: 180_000,
+    })
+    record(run, { hostId: await findHost() })
+    if (!run.hostId)
+      throw new Error(`no host document for subdomain ${run.subdomain}`)
+    const born = await readHost(firestore, run.hostId)
+    const bornScreens = born.screens.filter(
+      (screen) => screen.data.deletedAt == null,
+    )
+    check(
+      'site empty at creation',
+      bornScreens.length === 0 &&
+        born.layouts.length === 0 &&
+        Object.keys(born.data?.screens ?? {}).length === 0,
+      `${bornScreens.length} page(s), ${born.layouts.length} layout(s), ${born.forms.length} form(s), routes ${JSON.stringify(born.data?.screens ?? {})}`,
+    )
+
+    // The beat runs from here on, as the scheduler would.
     pump = startAiJobsBeatPump({
       origin: consoleUrl,
       secret: LOCAL_CRON_SECRET,
@@ -797,11 +809,6 @@ async function runOnce(context, index) {
       due: () => countDueAiJobs(firestore),
       log: (line) =>
         context.beatLog.write(`${new Date().toISOString()} ${line}\n`),
-    })
-
-    await page.getByRole('button', { name: 'Plan my site' }).click()
-    await page.waitForURL((url) => /\/ai-jobs\/[^/]+$/.test(url.pathname), {
-      timeout: 180_000,
     })
     record(run, {
       jobId: decodeURIComponent(new URL(page.url()).pathname.split('/').pop()),
@@ -1268,18 +1275,24 @@ async function checkFirstContent({ context, run, runDir, check, browser, firesto
         }
       }
       check('the home and the shop list the products', gridOn.some((line) => line.startsWith('/ ')) && gridOn.length >= 2, gridOn.join('; ') || 'none')
-      const soon = store.filter((one) => one.visible.includes('Price coming soon')).map((one) => one.path)
-      check('cards say “Price coming soon”', soon.length > 0, soon.join(', ') || 'none')
+      // A start's products carry the store's default price (AGL-3676), never "coming soon".
+      const priced = store.filter((one) => /\$\s?25(?:\.00)?\b/.test(one.visible)).map((one) => one.path)
+      check('cards show the starting price', priced.length > 0, priced.join(', ') || 'none')
       const pdps = []
       for (const [index, link] of [...productLinks].entries()) {
         const pdp = await visit(link, index === 0 ? '34-product-page' : null)
-        pdps.push(`${link} ${pdp.status}${pdp.visible.includes('Price coming soon') ? '' : ' (no coming-soon)'}${/Add to cart/.test(pdp.visible) ? ' (Add to cart shown)' : ''}`)
+        pdps.push(`${link} ${pdp.status}${pdp.visible.includes('Price coming soon') ? ' (coming soon)' : ''}${/Add to cart/.test(pdp.visible) ? '' : ' (no Add to cart)'}`)
       }
-      check('every product page answers, coming soon, with nothing to buy', pdps.length > 0 && pdps.every((line) => / 200$/.test(line)), pdps.join('; ') || 'none')
+      check('every product page answers, priced, with Add to cart', pdps.length > 0 && pdps.every((line) => / 200$/.test(line)), pdps.join('; ') || 'none')
       const named = products.filter((product) => pageTexts.some((one) => one.text.includes(product.name))).map((product) => product.name)
       check('pages feature the real product names', named.length > 0, `${named.length} of ${products.length} names on a page: ${named.join(', ') || 'none'}`)
-      const prices = pageTexts.flatMap((one) => (one.visible.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? []).map((price) => `${one.path} ${price}`))
-      check('no page states a price', prices.length === 0, prices.join('; ') || 'none')
+      // The Product grid prints the products' own starting price; any other price is the model's words.
+      const prices = pageTexts.flatMap((one) =>
+        (one.visible.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? [])
+          .filter((price) => !/^\$\s?25(?:\.00)?$/.test(price))
+          .map((price) => `${one.path} ${price}`),
+      )
+      check('no page states a price of its own', prices.length === 0, prices.join('; ') || 'none')
     }
   } finally {
     await visitor.close().catch(() => undefined)

@@ -156,7 +156,9 @@ export function AiLogicCreateButton({
   upgrade,
 }: ConsoleHostLogicZoneProps & ConsoleWidgetEntitlementProps) {
   const copy = AI_LOGIC_COPY
-  const help = pluginDocsHelp('aiLogic')
+  const help = pluginDocsHelp('aiLogic', {
+    anchor: kind === 'variable' ? '#variable' : '#function',
+  })
   const { data: user } = useUser()
   const run = useAiJobRun(user, copy.failed)
   const { reset } = run
@@ -210,7 +212,7 @@ export function AiLogicCreateButton({
                 />
                 <Typography variant="body2" color="text.secondary">
                   {copy.next[kind]}{' '}
-                  <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+                  <Link href={help.href} target="_blank" rel="noopener" title={help.excerptText}>
                     {'How it works'}
                   </Link>
                 </Typography>
@@ -287,7 +289,7 @@ export function AiLogicFunctionTools({ hostId, orgId, target, propose }: Console
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
             {copy.changeIntro}{' '}
-            <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+            <Link href={help.href} target="_blank" rel="noopener" title={help.excerptText}>
               {'How it works'}
             </Link>
           </Typography>

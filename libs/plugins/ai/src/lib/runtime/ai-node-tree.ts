@@ -599,6 +599,33 @@ function withNodeCapabilities(entry: AiPaletteEntry): AiPaletteEntry {
   return merged
 }
 
+/**
+ * Plugins whose elements play audio (AGL-3716): the Music player. A model
+ * never sources a recording and never vouches for one, so on their elements
+ * `rightsConfirmed` is always dropped and `src` is kept only as a reference
+ * to a file in the site's own library (which the asset check grounds) or a
+ * binding. Named by plugin id, as the listings name their elements: a plugin
+ * never imports another.
+ */
+export const AI_OWNER_AUDIO_PLUGIN_IDS: ReadonlySet<string> = new Set(['music'])
+
+/** Why an audio element's prop a model wrote is dropped, or null to keep it. */
+export function aiOwnerAudioRefusal(
+  pluginId: string | undefined,
+  name: string,
+  value: unknown,
+  bindingTokens: ReadonlySet<string> | null = null,
+): string | null {
+  if (!pluginId || !AI_OWNER_AUDIO_PLUGIN_IDS.has(pluginId)) return null
+  if (name === 'rightsConfirmed') {
+    return 'only the site owner can confirm they hold the rights to a recording'
+  }
+  if (name !== 'src') return null
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text || parseMediaRef(text) || bindingTokens?.has(text)) return null
+  return 'a player plays only audio from the owner’s own media library, never a recording from elsewhere'
+}
+
 function sanitizeProps(
   nodeId: string,
   paletteEntry: AiPaletteEntry,
@@ -616,6 +643,12 @@ function sanitizeProps(
     // `sx` is read off the node instead; a model that put it here meant the
     // same thing, and the caller has already moved it.
     if (name === 'sx' || value === undefined || value === null) continue
+    // Audio is the owner's own, always (AGL-3716).
+    const audioRefusal = aiOwnerAudioRefusal(entry.pluginId, name, value, bindingTokens)
+    if (audioRefusal) {
+      repairs.push(`${nodeId}.${name}: ${audioRefusal}; dropped`)
+      continue
+    }
     const schema = declared[name]
     if (!schema) {
       repairs.push(
@@ -701,6 +734,9 @@ const INSTANCE_SURFACES: ReadonlySet<AiSurface> = new Set([
 ])
 
 const FORM_COMPONENT_ID = 'form'
+
+/** The prop a repeat over a dataset is stored under (the data plugin's `repeatDataset`). Persisted — never rename. */
+export const AI_REPEAT_DATASET_PROP = 'repeatDataset'
 
 /** The instance prop naming the component it places; stored on every instance node. */
 export const AI_INSTANCE_REF_PROP = 'refId'
@@ -801,6 +837,20 @@ function sanitizeReferenceProps(
 ): { props: Record<string, unknown>; kept: Record<string, unknown> } | { refusal: string } {
   const rest: Record<string, unknown> = { ...props }
   const kept: Record<string, unknown> = {}
+  // A repeat over one of the site's datasets (AGL-3616), on any element: the
+  // platform's own repeat, admitted against the datasets the caller supplies,
+  // as a Form's dataset binding is. The palette leaves it off, since from a
+  // description alone a model can only invent a dataset's id.
+  if (AI_REPEAT_DATASET_PROP in rest) {
+    const raw = rest[AI_REPEAT_DATASET_PROP]
+    delete rest[AI_REPEAT_DATASET_PROP]
+    const id = typeof raw === 'string' ? raw.trim() : ''
+    if (id && refs.datasetIds?.has(id)) {
+      kept[AI_REPEAT_DATASET_PROP] = id
+    } else if (raw !== undefined && raw !== null && raw !== '') {
+      repairs.push(`${nodeId}.${AI_REPEAT_DATASET_PROP} names a dataset this site does not have; dropped`)
+    }
+  }
   if (componentId === REUSABLE_INSTANCE_COMPONENT_ID) {
     const refId = typeof rest[AI_INSTANCE_REF_PROP] === 'string' ? String(rest[AI_INSTANCE_REF_PROP]).trim() : ''
     delete rest[AI_INSTANCE_REF_PROP]

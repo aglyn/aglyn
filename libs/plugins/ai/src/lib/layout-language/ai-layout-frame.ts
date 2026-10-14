@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { AiStoreFrameLinks } from '../model/ai-site-store-pages'
 import { AI_ICON_LIBRARY } from '../runtime/ai-icon-library'
 import {
   AI_LAYOUT_MAX_IMAGES,
@@ -26,6 +27,7 @@ import {
   type SectionScope,
 } from './ai-layout-compiler'
 import { aiLayoutFitText } from './ai-layout-copy'
+import { aiLayoutRepairFrameHollows } from './ai-layout-frame-hollows'
 import { AI_LAYOUT_CART_ELEMENT } from './ai-layout-listings'
 import {
   AI_LAYOUT_MAX_ITEMS,
@@ -34,6 +36,7 @@ import {
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from './ai-layout-language'
+import { AI_LAYOUT_LABELS_EN, aiLayoutLabel } from './ai-layout-labels'
 import {
   aiLayoutRenamedLabel,
   aiLayoutResolveLink,
@@ -76,7 +79,33 @@ export interface AiLayoutFramePlan {
    * from every page — beside the navigation.
    */
   cart?: boolean
+  /**
+   * A selling store's Shop page (AGL-3676), by its id. Its header is a
+   * storefront's: the cart beside the navigation and no call-to-action button
+   * repeating a link the navigation already has, and a thin announcement bar
+   * above it — the line the design gave its header as a note, else one that
+   * opens the shop — linking the Shop page.
+   */
+  shopId?: string | null
+  /**
+   * A store's own pages (AGL-3676), by path: the header links the account
+   * beside the cart, and the footer the account and the store's policies
+   * under the site's pages. They are written after the layout, so they are
+   * linked by their addresses, as the blog is.
+   */
+  storeLinks?: AiStoreFrameLinks | null
+  /** The site's language (AGL-3760): the frame's own words are in it where `ai-layout-labels.ts` lists it. */
+  language?: string
 }
+
+/** What the header's link to a store's account page says (AGL-3676), in English. */
+export const AI_LAYOUT_ACCOUNT_LINK = AI_LAYOUT_LABELS_EN.account
+
+/** What a store's announcement bar says where its design gave it no line (AGL-3676): true of every store. */
+export const AI_LAYOUT_STORE_ANNOUNCEMENT = AI_LAYOUT_LABELS_EN.storeAnnouncement
+
+/** The way into the shop beside the design's own announcement (AGL-3676). */
+export const AI_LAYOUT_STORE_ANNOUNCEMENT_LINK = AI_LAYOUT_LABELS_EN.shopNow
 
 export interface AiLayoutCompiledFrame {
   tree: AiLayoutRawTree
@@ -153,12 +182,19 @@ export function aiCompileLayoutFrame(
   targets: AiLayoutTargets,
 ): AiLayoutCompiledFrame {
   const tree = new AiLayoutTreeBuilder('lf')
+  // A store's own pages are destinations the footer's list links by path (AGL-3676).
+  const storePages: AiLayoutPage[] = (plan.storeLinks?.footer ?? []).map((link) => ({
+    id: `store:${link.href}`,
+    label: link.label,
+    slug: link.href,
+    href: link.href,
+  }))
   const page: PageScope = {
     tree,
     plan: { title: plan.siteName, sections: [] },
-    targets: { ...targets, pageId: null },
+    targets: { ...targets, pages: [...targets.pages, ...storePages], pageId: null },
     // A footer is drawn compact: its lines are lines, never blocks rule 1 would ask to share.
-    options: { reusableComponents: true },
+    options: { reusableComponents: true, ...(plan.language ? { language: plan.language } : {}) },
     settled: [],
     scrollTo: {},
     // A frame's lines are its own, never a page section's items.
@@ -259,22 +295,37 @@ export function aiCompileLayoutFrame(
     : null
   // The design's call to action: its first button, where it goes somewhere.
   const ctaBlock = header.blocks.find((block) => block.kind === 'button')
+  // A store's announcement: the first short line the design gave its header (AGL-3676).
+  const store = !!plan.shopId
+  const noteBlock = store ? header.blocks.find((block) => block.kind === 'note' || block.kind === 'text' || block.kind === 'lede') : undefined
   for (const block of header.blocks) {
-    if (block !== ctaBlock)
+    if (block !== ctaBlock && block !== noteBlock)
       page.settled.push({
         at: 'header',
         what: `a ${block.kind} in the header; left out`,
       })
   }
   const ctaLabel = ctaBlock ? aiLayoutFitText(ctaBlock.text, 'label') : ''
-  const ctaTo =
+  const ctaResolved =
     ctaBlock && ctaLabel
       ? aiLayoutResolveLink(ctaBlock.to, ctaLabel, scope.link, page.targets)
       : null
-  if (ctaBlock && !ctaTo)
+  if (ctaBlock && !ctaResolved)
     page.settled.push({
       at: 'header',
       what: `the button "${ctaLabel}" has nowhere to go; left out`,
+    })
+  // A storefront's header is its navigation and its cart (AGL-3676): the
+  // live Willow Wick header's "Shop candles" button repeated its nav's Shop.
+  // A store's button that only repeats a page the navigation links is left
+  // out, and a store that sells carries its cart in that place instead.
+  const repeatsNav =
+    ctaResolved?.kind === 'page' && pages.some((entry) => !entry.href && entry.id === ctaResolved.screenId)
+  const ctaTo = ctaResolved && store && (plan.cart || repeatsNav) ? null : ctaResolved
+  if (ctaResolved && !ctaTo)
+    page.settled.push({
+      at: 'header',
+      what: `the button "${ctaLabel}" left out: a store's header carries its ${plan.cart ? 'cart' : 'navigation'}, not a button repeating it`,
     })
   const ctaProps = ctaTo
     ? {
@@ -298,6 +349,19 @@ export function aiCompileLayoutFrame(
         'cta',
       )
     : null
+  // A store's account, beside its cart and in the phone's menu (AGL-3676).
+  const accountPath = plan.storeLinks?.account ?? null
+  const accountLink = (role: string, interactions?: unknown[], sx?: Record<string, unknown>) => {
+    const id = tree.add(
+      'muiScreenLink',
+      { children: aiLayoutLabel('account', plan.language), href: accountPath, renderAs: 'link', color: 'inherit' },
+      { textDecoration: 'none', whiteSpace: 'nowrap', ...sx },
+      null,
+      role,
+    )
+    if (interactions) tree.nodes[id].interactions = interactions
+    return id
+  }
   // A phone's menu: the platform's Drawer, opened by its Menu Button; a link
   // followed from it closes it.
   const close = [AI_LAYOUT_CLOSE_DRAWER]
@@ -319,6 +383,7 @@ export function aiCompileLayoutFrame(
             },
             [
               ...pages.map((entry) => navLink(entry, 'menuLink', close)),
+              accountPath ? accountLink('menuAccount', close) : null,
               ctaProps
                 ? tree.add(
                     'muiButton',
@@ -358,12 +423,14 @@ export function aiCompileLayoutFrame(
   const cart = plan.cart
     ? tree.add(AI_LAYOUT_CART_ELEMENT, { variant: 'button' }, { flexShrink: 0 }, null, 'cart')
     : null
+  // On a phone the account is in the menu, and the cart stays in the bar.
+  const account = accountPath ? accountLink('account', undefined, { display: { xs: 'none', md: 'inline-flex' }, flexShrink: 0 }) : null
   // The row lives in a Container inside the Toolbar Content, which may only sit in an App Bar.
   const row = tree.add(
     'muiContainer',
     { maxWidth: 'lg' },
     { display: 'flex', alignItems: 'center', columnGap: 3 },
-    [brand, middle, cta, cart, toggle, drawer],
+    [brand, middle, cta, account, cart, toggle, drawer],
     'headerRow',
   )
   const toolbar = tree.add(
@@ -387,6 +454,37 @@ export function aiCompileLayoutFrame(
     [toolbar],
     'header',
   )
+  // A selling store's announcement bar, above the header, linking its shop (AGL-3676).
+  const announcement =
+    store && plan.cart && plan.shopId
+      ? (() => {
+          const said = aiLayoutFitText(noteBlock?.text, 'note')
+          if (noteBlock && !said) page.settled.push({ at: 'header', what: 'an announcement with no words left; the shop’s own line instead' })
+          // The design's line, then the way into the shop; else the way in alone.
+          const link = tree.add(
+            'muiScreenLink',
+            {
+              children: aiLayoutLabel(said ? 'shopNow' : 'storeAnnouncement', plan.language),
+              screenId: plan.shopId,
+              renderAs: 'link',
+              color: 'inherit',
+            },
+            { fontWeight: 700 },
+            null,
+            'announcementLink',
+          )
+          const words = said
+            ? tree.add('muiTypography', { children: said, variant: 'body2', component: 'p' }, null, null, 'announcementText')
+            : null
+          return tree.add(
+            'muiStack',
+            { direction: 'row', spacing: '1.5', justifyContent: 'center', alignItems: 'baseline', useFlexGap: true, flexWrap: 'wrap' },
+            { bgcolor: 'primary.main', color: 'primary.contrastText', typography: 'body2', py: 1, px: 2 },
+            [words, link],
+            'announcement',
+          )
+        })()
+      : null
   // The page grows into the room the window leaves, so a short page keeps
   // its footer at the bottom.
   const slot = tree.add(
@@ -397,16 +495,56 @@ export function aiCompileLayoutFrame(
     'slot',
   )
   const footer = compileFooter(page, frame.footer, plan, name)
+  // No heading with nothing under it, no column of only a heading, columns
+  // top-aligned (AGL-3735): a list under a heading can compile to nothing.
+  if (aiLayoutRepairFrameHollows(tree.nodes as unknown as Record<string, unknown>)) {
+    page.settled.push({ at: 'footer', what: 'a heading with nothing under it taken out, and its column with it' })
+  }
   const column = tree.add(
     'muiStack',
     null,
     { minHeight: '100vh' },
-    [bar, slot, footer],
+    [announcement, bar, slot, footer],
     'frame',
   )
   tree.prune(column, new Set([slot]))
   const rootId = tree.add('div', null, null, [column], 'layout')
   return { tree: { rootId, nodes: tree.nodes }, settled: page.settled }
+}
+
+/** What a store's own column of account and policy links is headed where the footer design gave no store heading (AGL-3735). */
+export const AI_LAYOUT_STORE_FOOTER_HEADING = AI_LAYOUT_LABELS_EN.customerCare
+
+/** A footer heading a store's account and policies belong under (AGL-3735). */
+const STORE_HEADING = /\b(?:shop|store|shopping|help|customer|care|support|service|orders?|account|policies|policy|legal|info|information|shipping|returns)\b/i
+
+/**
+ * The footer heading a store's account and policy links go under
+ * (AGL-3735): a heading of the design's that names the store or its help
+ * ("Our shop", "Help", "Customer care"), the first with nothing under it
+ * before one with words or links of its own. Never the heading over the
+ * site's pages, whose list is the site's navigation. `end` is where the
+ * links go: the end of what that heading heads.
+ */
+export function aiLayoutFooterStoreHeading(
+  columns: readonly AiLayoutBlock[][],
+  navItems: readonly { to: string }[],
+): { column: AiLayoutBlock[]; end: number; heading: string } | null {
+  const navTo = new Set(navItems.map((item) => item.to))
+  const candidates: Array<{ column: AiLayoutBlock[]; end: number; heading: string; empty: boolean }> = []
+  for (const column of columns) {
+    column.forEach((block, at) => {
+      if (block.kind !== 'heading' || !STORE_HEADING.test(block.text ?? '')) return
+      let end = at + 1
+      while (end < column.length && column[end].kind !== 'heading') end += 1
+      const under = column.slice(at + 1, end)
+      const site = under.some((one) => one.kind === 'list' && (one.items ?? []).some((item) => navTo.has(item.to ?? '')))
+      if (site) return
+      candidates.push({ column: column as AiLayoutBlock[], end, heading: String(block.text), empty: under.length === 0 })
+    })
+  }
+  const pick = candidates.find((one) => one.empty) ?? candidates[0]
+  return pick ? { column: pick.column, end: pick.end, heading: pick.heading } : null
 }
 
 /** A link followed from the phone menu closes it. */
@@ -492,12 +630,29 @@ function compileFooter(
     ])
     weights.push(1)
   }
+  // A store's account and policies (AGL-3676): under the store heading the
+  // design already wrote ("Our shop", "Help"…), never as a column with no
+  // heading beside a heading with nothing under it (AGL-3735); where the
+  // design wrote none, a column of their own, headed.
+  const storeLinks = plan.storeLinks?.footer ?? []
+  if (storeLinks.length) {
+    const list: AiLayoutBlock = { kind: 'list', items: storeLinks.map((link) => ({ title: link.label, text: '', to: `page:store:${link.href}` })) }
+    const home = aiLayoutFooterStoreHeading(columns, navItems)
+    if (home) {
+      home.column.splice(home.end, 0, list)
+      page.settled.push({ at: 'footer', what: `the store's account and policy links under "${home.heading}"` })
+    } else {
+      columns.push([{ kind: 'heading', text: aiLayoutLabel('customerCare', plan.language) }, list])
+      weights.push(1)
+    }
+  }
   const filled = columns
     .map((column, position) => ({ column, weight: weights[position] ?? 1 }))
     .filter((entry) => entry.column.length)
+  // A footer's columns are top-aligned: each starts at its heading (AGL-3735).
   const top =
     filled.length > 1
-      ? compileRow(scope, filled)
+      ? compileRow(scope, filled, 'flex-start')
       : filled.length === 1
         ? compileFlow(scope, filled[0].column, 'full')
         : null

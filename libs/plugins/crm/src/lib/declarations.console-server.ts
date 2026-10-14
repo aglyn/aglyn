@@ -28,7 +28,19 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
 import { registerPluginPersonRecordsEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import {
+  registerPluginResourceDraftWriter,
+  type PluginResourceDraftWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { BUNDLE_ID } from './constants/bundle-common'
+import {
+  checkCrmFieldSetup,
+  checkCrmPipelineSetup,
+  CRM_FIELD_SETUP_RESOURCE,
+  CRM_PIPELINE_SETUP_RESOURCE,
+} from './model/crm-setup-content'
+import { checkCrmPicklistValuesSetup, CRM_PICKLIST_VALUES_SETUP_RESOURCE } from './model/crm-picklist-setup-content'
+import { registerCrmSetupAiCapabilities } from './server/crm-setup-ai-capabilities'
 import { crmTransferPlanGate, registerCrmTransferResources } from './transfer/register'
 import {
   CRM_EMAIL_TEMPLATE_PACKAGE_RULES,
@@ -37,6 +49,52 @@ import {
   remapCrmEmailTemplateIds,
   type CrmEmailTemplatePackageContent,
 } from './transfer/email-templates-package'
+
+type CrmSetupWriters = typeof import('./server/crm-setup-writers.server')
+let setupLoading: Promise<CrmSetupWriters> | null = null
+
+/** The CRM's setup writers over the Admin SDK (AGL-3746), loaded on their first read or write. */
+function setupWriters(): Promise<CrmSetupWriters> {
+  setupLoading ??= import('./server/crm-setup-writers.server').catch((error: unknown) => {
+    setupLoading = null
+    throw error
+  })
+  return setupLoading
+}
+
+/**
+ * A setup writer as boot registers it: the check is pure and answers at once;
+ * the hooks that read or write load the Admin SDK half on first use.
+ */
+function lazySetupWriter(
+  check: (content: Readonly<Record<string, unknown>>) => ReturnType<PluginResourceDraftWriter['check']>,
+  writer: (module: CrmSetupWriters) => PluginResourceDraftWriter,
+): PluginResourceDraftWriter {
+  return {
+    check: (content) => check(content),
+    refusal: async (context) => writer(await setupWriters()).refusal(context),
+    read: async (context) => writer(await setupWriters()).read(context),
+    write: async (request) => writer(await setupWriters()).write(request),
+  }
+}
+
+/** The `crm-pipeline` writer as boot registers it. */
+export const lazyCrmPipelineSetupWriter = lazySetupWriter(
+  checkCrmPipelineSetup,
+  (module) => module.crmPipelineSetupWriter,
+)
+
+/** The `crm-field` writer as boot registers it. */
+export const lazyCrmFieldSetupWriter = lazySetupWriter(
+  checkCrmFieldSetup,
+  (module) => module.crmFieldSetupWriter,
+)
+
+/** The `crm-picklist-values` writer as boot registers it (AGL-3756). */
+export const lazyCrmPicklistValuesSetupWriter = lazySetupWriter(
+  checkCrmPicklistValuesSetup,
+  (module) => module.crmPicklistValuesSetupWriter,
+)
 
 /** The email templates package's server half (AGL-3535), loaded when an import or export first asks. */
 const templatesPackage = async () =>
@@ -147,6 +205,15 @@ export function registerCrmConsoleServerDeclarations(): void {
     async (ctx) => (await import('./server/api-v1/usage')).crmUsageFigures(ctx),
     { pluginId: BUNDLE_ID },
   )
+  // The CRM's setup an AI build asks for (AGL-3746): a pipeline and a custom
+  // field, saved by these writers under the CRM's rules, and the operations
+  // the build plans for them. The console runs AI jobs (AGL-3026).
+  registerPluginResourceDraftWriter(CRM_PIPELINE_SETUP_RESOURCE, lazyCrmPipelineSetupWriter, { pluginId: BUNDLE_ID })
+  registerPluginResourceDraftWriter(CRM_FIELD_SETUP_RESOURCE, lazyCrmFieldSetupWriter, { pluginId: BUNDLE_ID })
+  registerPluginResourceDraftWriter(CRM_PICKLIST_VALUES_SETUP_RESOURCE, lazyCrmPicklistValuesSetupWriter, {
+    pluginId: BUNDLE_ID,
+  })
+  registerCrmSetupAiCapabilities()
   // What the CRM imports and exports (AGL-3527): each resource's module
   // loads with the first transfer that asks for it.
   registerCrmTransferResources(BUNDLE_ID)

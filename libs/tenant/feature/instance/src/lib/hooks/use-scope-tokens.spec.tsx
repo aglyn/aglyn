@@ -42,9 +42,20 @@ jest.mock('./firebase/firebase-services', () => ({
 
 /** The member document each read will answer, once released. */
 let pending: Array<(value: unknown) => void> = []
+/** What the local cache answers for a stalled read; `null` = never held. */
+let cached: Record<string, unknown> | null = null
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }),
   getDoc: () => new Promise((resolve) => pending.push(resolve)),
+  getDocFromCache: () =>
+    cached === null
+      ? Promise.reject(new Error('not cached'))
+      : Promise.resolve(member(cached)),
+}))
+const mockRecover = jest.fn(async () => 'recovered')
+jest.mock('./firebase/firestore-stall-recovery', () => ({
+  ...jest.requireActual('./firebase/firestore-stall-recovery'),
+  recoverStalledFirestore: () => mockRecover(),
 }))
 
 const member = (data: Record<string, unknown> | null) => ({
@@ -54,6 +65,8 @@ const member = (data: Record<string, unknown> | null) => ({
 
 beforeEach(() => {
   pending = []
+  cached = null
+  mockRecover.mockClear()
 })
 
 const release = async (data: Record<string, unknown> | null) => {
@@ -91,5 +104,32 @@ describe('useScopeTokens', () => {
     const { result } = renderHook(() => useScopeTokens('org-1'))
     await release({ role: 'owner', allHosts: true })
     expect(result.current).toMatchObject({ loaded: true, orgWide: true })
+  })
+
+  describe('a member read the server never answers (AGL-3660)', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('settles from the cache and asks the client to recover', async () => {
+      cached = { role: 'editor', allHosts: false, hostAccess: { 'site-a': true } }
+      const { result } = renderHook(() => useScopeTokens('org-1'))
+      expect(result.current.loaded).toBe(false)
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(8_000)
+      })
+      expect(mockRecover).toHaveBeenCalled()
+      expect(result.current).toMatchObject({ loaded: true, orgWide: false })
+      // …and the server's answer, when it finally lands, replaces it.
+      await release({ role: 'owner', allHosts: true })
+      expect(result.current).toMatchObject({ loaded: true, orgWide: true })
+    })
+
+    it('still settles with nothing cached, instead of holding every list forever', async () => {
+      const { result } = renderHook(() => useScopeTokens('org-1'))
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(8_000)
+      })
+      expect(result.current.loaded).toBe(true)
+    })
   })
 })

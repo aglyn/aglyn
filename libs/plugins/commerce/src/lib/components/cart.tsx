@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { advertisingConsentField } from '@aglyn/aglyn/app-utils/advertising-consent'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   buildBeginCheckoutParams,
@@ -66,6 +67,7 @@ const StorefrontPaymentElement = lazy(() =>
   })),
 )
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { CART_UPDATED_EVENT } from '../constants/cart-events'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
 
@@ -73,7 +75,7 @@ import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-eve
 export const ID: Aglyn.ComponentId = 'cart'
 
 /** Blocks dispatch this after mutating the cart so badges refresh. */
-export const CART_UPDATED_EVENT = 'aglyn:cart-updated'
+export { CART_UPDATED_EVENT }
 
 export interface CartProps {
   /** 'button' = app-bar icon + drawer; 'inline' = full cart in place. */
@@ -295,6 +297,9 @@ function CartLines(props: {
           ...(extras.chosenIds.length ? { extras: extras.chosenIds } : {}),
           // Where and when, never the fee: the server decides it again.
           ...(fulfillment.request ? { fulfillment: fulfillment.request } : {}),
+          // The visitor's advertising consent and the vendors' browser ids, only
+          // where that consent grants advertising (AGL-3694); absent otherwise.
+          ...advertisingConsentField(hostId),
         }),
       })
       const payload = await response.json().catch(() => ({}))

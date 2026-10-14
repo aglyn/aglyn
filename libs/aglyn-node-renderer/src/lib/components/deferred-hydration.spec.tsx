@@ -22,6 +22,7 @@
  * the server's content on screen, and has its component run in the browser.
  */
 import * as Aglyn from '@aglyn/aglyn'
+import { createTheme, ThemeProvider, useTheme } from '@aglyn/shared-ui-theme'
 import { act } from '@testing-library/react'
 import { type ReactNode, useEffect, useRef } from 'react'
 import { hydrateRoot, type Root } from 'react-dom/client'
@@ -78,6 +79,11 @@ function Copy({ children, sx: _sx, ...rest }: Record<string, any>): ReactNode {
       {children}
     </p>
   )
+}
+
+/** Prints the scheme it rendered in, as the colors of a real section would. */
+function Scheme({ sx: _sx, ...rest }: Record<string, any>): ReactNode {
+  return <span {...rest}>{useTheme().palette.mode}</span>
 }
 
 const node = (id: string, componentId: string, children: unknown[] = []) => ({
@@ -141,6 +147,11 @@ beforeEach(() => {
     pluginId: 'test',
     flags: STATIC,
   } as never)
+  Aglyn.components.registerComponent(Scheme as never, {
+    $id: 'scheme',
+    pluginId: 'test',
+    flags: STATIC,
+  } as never)
   // Interactive: declares nothing.
   Aglyn.components.registerComponent(Copy as never, {
     $id: 'toggle',
@@ -156,7 +167,7 @@ afterEach(() => {
   container.remove()
   jest.restoreAllMocks()
   delete (globalThis as any).IntersectionObserver
-  for (const id of ['box', 'copy', 'toggle']) {
+  for (const id of ['box', 'copy', 'toggle', 'scheme']) {
     Aglyn.components.unregisterComponent(id)
   }
 })
@@ -211,5 +222,30 @@ describe('where it never holds', () => {
     await act(async () => root!.render(site()))
     expect(text()?.textContent).toBe('Every page, one place')
     expect(text()?.dataset['live']).toBe('yes')
+  })
+})
+
+describe('a scheme that changes after the hydration', () => {
+  const themed = (mode: 'light' | 'dark') => () => (
+    <ThemeProvider theme={createTheme({ palette: { mode } })}>
+      {site(PAGE('scheme'))}
+    </ThemeProvider>
+  )
+
+  it('releases the held subtree to render in the new scheme', async () => {
+    // A dark device with no color-scheme hint: the server renders light, and
+    // the device's preference only resolves once React has hydrated.
+    await load(themed('light'))
+    expect(text()?.textContent).toBe('light')
+
+    await act(async () => root!.render(themed('dark')()))
+
+    // Still far from the viewport, but no longer the server's light markup.
+    expect(text()?.textContent).toBe('dark')
+    expect(recoverable).toEqual([])
+
+    // Never held again, even back in the scheme it was hydrated in.
+    await act(async () => root!.render(themed('light')()))
+    expect(text()?.textContent).toBe('light')
   })
 })

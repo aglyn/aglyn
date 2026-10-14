@@ -70,6 +70,7 @@ jest.mock('../constants/console-plugin-loader', () => ({
   pluginDeclarationsReady: Promise.resolve(),
 }))
 jest.mock('../utils/realm-plugins.client', () => ({
+  prefetchOrgRealmInstalls: () => undefined,
   loadOrgRealmPlugins: jest.fn(async () => []),
 }))
 

@@ -19,7 +19,7 @@
 import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import {
   mdiDeleteOutline,
-  mdiEyeOutline,
+  mdiPageNextOutline,
   mdiPencilOutline,
 } from '@aglyn/shared-data-mdi'
 import {
@@ -443,7 +443,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
       {
         key: 'details',
         label: 'Open details',
-        icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+        icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
         href: page ?? undefined,
         disabled: !page,
         disabledReason: unlinkedReason,
@@ -577,7 +577,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
   return (
     <CardDisplay
       header={'Templates'}
-      help={pluginDocsHelp('designedEmails', { anchor: '#find-a-template' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#organization-emails-page' })}
       contentGutterX
       contentGutterY
       HeaderProps={{

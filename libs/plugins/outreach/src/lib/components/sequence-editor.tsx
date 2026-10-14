@@ -550,11 +550,7 @@ const SequenceSendingCard = memo(function SequenceSendingCard(
   return (
     <CardDisplay
       header="Who it sends to, and when"
-      help={pluginDocsHelp('sequences', {
-        anchor: '#build-a-sequence',
-        excerpt:
-          'A sequence sends only to the countries both it and your organization allow, and in its mailbox’s sending hours unless it has its own.',
-      })}
+      help={pluginDocsHelp('sequences', { anchor: '#sequence-sending-settings' })}
       contentGutterX
       contentGutterY
     >

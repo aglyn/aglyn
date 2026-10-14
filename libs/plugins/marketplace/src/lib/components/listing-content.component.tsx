@@ -277,7 +277,7 @@ function ListingChangelog({
     <CardDisplay
       header={'Changelog'}
       help={pluginDocsHelp('publisherHandbook', {
-        anchor: '#versioning--updates',
+        anchor: '#listing-changelog',
       })}
       contentGutterX
       contentGutterY
@@ -1623,8 +1623,8 @@ export function MarketplaceListingContent({
                           Here it leads the sidebar. */}
                       <CardDisplay
                         header={'Install'}
-                        help={pluginDocsHelp('installYourFirstPlugin', {
-                          anchor: '#step-4-targeting',
+                        help={pluginDocsHelp('publisherHandbook', {
+                          anchor: '#install-card',
                         })}
                         contentGutterX
                         contentGutterY
@@ -2064,8 +2064,8 @@ export function MarketplaceListingContent({
                       </CardDisplay>
                       <CardDisplay
                         header={'Publisher'}
-                        help={pluginDocsHelp('publisherHandbook', {
-                          anchor: '#before-your-first-publish',
+                        help={pluginDocsHelp('publishAPlugin', {
+                          anchor: '#listing-publisher-card',
                         })}
                         contentGutterX
                         contentGutterY
@@ -2233,7 +2233,7 @@ export function MarketplaceListingContent({
                         <CardDisplay
                           header={'Links'}
                           help={pluginDocsHelp('publisherHandbook', {
-                            anchor: '#authoring-your-listing',
+                            anchor: '#listing-links',
                           })}
                           contentGutterX
                           contentGutterY
@@ -2273,7 +2273,7 @@ export function MarketplaceListingContent({
                       <CardDisplay
                         header={'Version history'}
                         help={pluginDocsHelp('publisherHandbook', {
-                          anchor: '#shipping-a-new-version',
+                          anchor: '#version-history',
                         })}
                         contentGutterX
                         contentGutterY

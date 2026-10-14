@@ -63,6 +63,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
+import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
 import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
@@ -359,6 +360,8 @@ function ComponentBesignerPage(props) {
   const clearCanvas = useClearCanvasCallback('component')
   const repairDocument = useRepairDocumentCallback('component')
   const {
+    discardChanges,
+    canDiscard,
     saveAvailable,
     remoteChanged,
     draft,
@@ -860,6 +863,18 @@ function ComponentBesignerPage(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
+  // File ▸ Discard changes… (AGL-3723): back to the stored document, drafts dropped.
+  const discardMenuItem = useDiscardChangesMenuItem({
+    noun: 'component',
+    live: editingLiveVersion,
+    canDiscard: canDiscard || draftPending,
+    discardChanges,
+    onDiscarded: useCallback(() => {
+      clearMirrorRef.current?.()
+      setDraftPending(false)
+    }, []),
+  })
+
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
       <ScreenLinkContext.Provider value={screenLinks}>
@@ -969,6 +984,7 @@ function ComponentBesignerPage(props) {
                             onClick: () => setPropsDialogOpen(true),
                             ListItemTextProps: { inset: true },
                           },
+                          discardMenuItem,
                           {
                             id: 'center-nav-file-close',
                             children: 'Close',

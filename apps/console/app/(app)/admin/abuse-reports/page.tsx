@@ -1228,7 +1228,7 @@ function AdminAbuseReports() {
           href: buildRoute(Route.ADMIN_ABUSE_REPORTS),
         },
       ]}
-      help="abuseReports"
+      help={{ topic: 'abuseReports', anchor: '#abuse-queue-page' }}
       header={{
         children: 'Abuse reports',
         icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
@@ -1462,9 +1462,7 @@ function AdminAbuseReports() {
                     </Stack>
                   }
                   help={docsHelp('abuseReports', {
-                    excerpt:
-                      'One report, with its severity, its status, and — on copyright ' +
-                      'reports only — the §512(i) strike count for the account.',
+                    anchor: '#reading-a-report',
                   })}
                   subheader={
                     report.reference
@@ -2239,9 +2237,7 @@ function AdminAbuseReports() {
                     </Stack>
                   }
                   help={docsHelp('abuseReports', {
-                    excerpt:
-                      'A counter-notice to a takedown, and the statutory clock it starts. ' +
-                      'Past the deadline, the content goes back up.',
+                    anchor: '#counter-notice-steps',
                   })}
                   contentGutterX
                   contentGutterY

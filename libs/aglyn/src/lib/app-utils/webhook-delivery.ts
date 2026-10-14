@@ -118,6 +118,8 @@ export const REQUIRED_WEBHOOK_EVENTS: readonly string[] = [
   // Fraud signals to staff (AGL-3356).
   'radar.early_fraud_warning.created',
   'review.opened',
+  // A workspace's own failed charge, read for fraud (AGL-3767).
+  'charge.failed',
   // Register card readers (AGL-3607).
   'terminal.reader.action_succeeded',
   'terminal.reader.action_failed',

@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { invalidOpeningHoursLines } from '@aglyn/aglyn/app-utils/local-business'
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { OpeningHoursPicker } from '@aglyn/shared-ui-jsx/components/weekly-hours-picker.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -171,7 +172,9 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
   return (
     <CardDisplay
       header={'Local delivery'}
-      help={pluginDocsHelp('commerce', { anchor: '#pickup-and-local-delivery' })}
+      help={pluginDocsHelp('pickupAndDelivery', {
+        anchor: '#set-up-local-delivery',
+      })}
       HeaderProps={{
         action: (
           <Button variant="contained" size="small" disabled={!draft || badWindowLines.length > 0} onClick={handleSave}>
@@ -325,21 +328,13 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
         ) : null}
 
         <Divider />
-        <Typography variant="subtitle2">{'Delivery times'}</Typography>
-        <TextField
+        <OpeningHoursPicker
           label="Delivery windows"
           value={current.windows ?? ''}
-          onChange={(event) => update({ windows: event.target.value })}
-          multiline
-          minRows={2}
-          size="small"
-          placeholder={'Mo-Fr 09:00-12:00\nMo-Fr 13:00-17:00'}
-          error={badWindowLines.length > 0}
-          helperText={
-            badWindowLines.length
-              ? `Line ${badWindowLines.join(', ')} does not read as days and times, like Mo-Fr 09:00-12:00.`
-              : 'One window per line. Each line is offered on each of its days.'
-          }
+          onChange={(windows) => update({ windows })}
+          intervalNoun="window"
+          defaultInterval={{ start: 9 * 60, end: 12 * 60 }}
+          helperText="Switch on each day you deliver, then pick its windows. Each window is offered on its day."
         />
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField

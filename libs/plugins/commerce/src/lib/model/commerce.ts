@@ -51,6 +51,21 @@ import type { PickupLocationSettings } from './order-local-fulfillment'
 /** Product price ceiling (whole USD). */
 export const COMMERCE_MAX_PRICE_USD = 10000
 
+/**
+ * The price a new product starts with (AGL-3676), in the store's currency —
+ * USD, the only one a catalog prices in (`priceUsd`). Zach, 2026-10-08:
+ * "product without price is ok, but default a price". So every create path
+ * (the editor's New product, an accepted AI proposal, a guided start's
+ * products) fills this in, where nothing states one, for the owner to
+ * change; an owner may still clear it on purpose, and the storefront then
+ * says "Price coming soon" and sells it nowhere (`variantHasPrice`).
+ *
+ * $25: a plain round number in the middle of what small shops list a
+ * typical item at, above every payment method's floor but Affirm's ($50),
+ * and never $0 — a default of nothing would sell the product for free.
+ */
+export const COMMERCE_DEFAULT_PRICE_USD = 25
+
 export type ProductType = 'physical' | 'digital' | 'service'
 export type ProductStatus = 'draft' | 'active' | 'archived'
 
@@ -611,8 +626,8 @@ function optionAxesOf(
 /**
  * Whether a variant has a price a sale can charge (AGL-2916).
  *
- * A product proposed by AI is created with every price left empty for the
- * merchant to set, so a stored variant can lack one. `Number(undefined)` is
+ * A product may be stored with a price left empty on purpose (an owner who
+ * clears it, or a writer asked for none), so a stored variant can lack one. `Number(undefined)` is
  * no price, and neither is `null`, which `Number` reads as zero: a sale door
  * that priced either would charge nothing, or fail at the processor.
  */
@@ -779,6 +794,38 @@ export function unpricedProductDraft(
     createdAtMs: nowMs,
     updatedAtMs: nowMs,
   }
+}
+
+/**
+ * A proposed product as a new product is created from it (AGL-3676): the
+ * draft `unpricedProductDraft` builds, with `priceUsd` on every variant —
+ * the default price unless the caller states one — and the search keys
+ * worked out again for that price. `null` leaves it unpriced on purpose.
+ */
+export function defaultPricedProductDraft(
+  proposal: ProposedProduct,
+  takenSlugs: ReadonlySet<string>,
+  nowMs: number,
+  priceUsd: number | null = COMMERCE_DEFAULT_PRICE_USD,
+): UnpricedProductDraft | HostProduct {
+  const draft = unpricedProductDraft(proposal, takenSlugs, nowMs)
+  if (priceUsd === null) return draft
+  const variants = draft.variants.map((variant) => ({ ...variant, priceUsd })) as ProductVariant[]
+  return { ...draft, ...productSearchFields({ name: draft.name, variants }), variants }
+}
+
+/**
+ * The price a proposed product is created at (Zach, 2026-10-12): a price an
+ * AI proposal suggests for what the product is, when it is a real one — a
+ * finite amount above $0, at most `COMMERCE_MAX_PRICE_USD`, rounded to whole
+ * cents — else the default price (`COMMERCE_DEFAULT_PRICE_USD`). Never $0,
+ * negative or past the ceiling, whatever a proposal carries; the owner
+ * changes it like any price.
+ */
+export function proposedProductPriceUsd(suggested: unknown): number {
+  if (typeof suggested !== 'number' || !Number.isFinite(suggested)) return COMMERCE_DEFAULT_PRICE_USD
+  const cents = Math.round(suggested * 100)
+  return cents > 0 && cents <= COMMERCE_MAX_PRICE_USD * 100 ? cents / 100 : COMMERCE_DEFAULT_PRICE_USD
 }
 
 /** Variant whose option selections match exactly; undefined if none. */
@@ -1316,8 +1363,15 @@ export function validateProduct(product: HostProduct): string | null {
     if (!variant.id) return 'Variants need stable ids'
     if (ids.has(variant.id)) return 'Variant ids must be unique'
     ids.add(variant.id)
+    // A variant with no price is storable (AGL-3676): the owner may list a
+    // product before pricing it, the storefront says "Price coming soon",
+    // and no sale door sells it (`variantHasPrice`).
     if (variant.priceUsd === undefined || variant.priceUsd === null) {
-      return 'Set a price for every variant'
+      if (variant.sku) {
+        if (skus.has(variant.sku)) return 'Variant SKUs must be unique'
+        skus.add(variant.sku)
+      }
+      continue
     }
     const price = Number(variant.priceUsd)
     if (!Number.isFinite(price) || price < 0) {

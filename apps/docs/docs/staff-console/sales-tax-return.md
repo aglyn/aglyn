@@ -11,6 +11,12 @@ This page lives at **Staff → Sales tax** and requires a staff claim. It is rea
 it computes and exports, it never files. Filing happens at the Comptroller's Webfile.
 :::
 
+## The tax return page {#tax-return-page}
+
+**Staff → Sales tax** turns a period's paid invoices into the figures the sales tax
+return asks for: pick the period, clear the rows that need attention, read the
+figures, and export the working papers for the filing session.
+
 Aglyn's Texas registration declares a **first taxable sales date of 2026-09-01** — the
 public beta date — so from that day there is a Texas sales tax collection obligation on
 Aglyn's own revenue. The billing webhook records one `platformRevenue` row per paid
@@ -212,6 +218,8 @@ While a blocking finding stands, the figures render dimmed with a warning beneat
 They are still shown — you need them to investigate — but they must not read as ready
 to type in.
 
+### Period bounds {#period-bounds}
+
 **Period bounds** echoes the exact UTC window swept, so a return filed today can be
 reproduced from the same bounds a year from now.
 
@@ -276,6 +284,13 @@ cannot answer a question about what Aglyn facilitated for its merchants. For tha
 read **Facilitated sales by buyer state** below. The two are different taxpayers'
 money and are never summed.
 :::
+
+## Sales from plugins {#plugin-sales}
+
+Each plugin that sells through the platform — the storefront, the marketplace — adds
+its own card with what it sold in the period, attributed the way that plugin measures
+it. A plugin card that says its sales **could not be read** means none of them are in
+any figure on the page: do not file until it reads.
 
 ## Facilitated sales by buyer state
 

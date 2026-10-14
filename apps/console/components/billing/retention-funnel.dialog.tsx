@@ -492,18 +492,8 @@ export function RetentionFunnelDialog({
               topic="downgradingAndCanceling"
               anchor={
                 surface === 'account_delete'
-                  ? '#deleting-your-organization'
+                  ? '#confirm-deletion'
                   : '#canceling-your-subscription'
-              }
-              title={
-                surface === 'account_delete'
-                  ? 'What deleting removes — and the hold before it does'
-                  : 'What canceling changes, and when'
-              }
-              excerpt={
-                surface === 'account_delete'
-                  ? 'Deletion is the only thing that removes your data, and there is a hold period during which you can cancel the request and fully restore.'
-                  : 'Your plan runs to the end of the period you already paid for, then the organization resolves to Free. Nothing is deleted, and you can resume before it ends.'
               }
             />
           </DialogTitle>

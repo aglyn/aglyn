@@ -86,6 +86,7 @@ const icon = inTier('icon')
 const list = viaTier('list')
 const listItem = viaTier('listItem')
 const listItemText = viaTier('listItemText')
+const formControls = viaTier('formControls')
 const blocks = viaTier('blocks')
 const dataTable = viaTier('dataTable')
 const collectionEntries = viaTier('collectionEntries')
@@ -229,6 +230,63 @@ export const MUI_COMPONENT_SOURCES: Readonly<
     component: 'default',
     schema: 'schema',
     presets: 'presets',
+  },
+  // MUI's form elements, one element each (form-controls.tsx).
+  muiFormControl: {
+    module: formControls,
+    component: 'AglynFormControl',
+    schema: 'formControlSchema',
+    presets: 'formControlPresets',
+  },
+  muiFormLabel: {
+    module: formControls,
+    component: 'AglynFormLabel',
+    schema: 'formLabelSchema',
+  },
+  muiInput: {
+    module: formControls,
+    component: 'AglynInput',
+    schema: 'inputSchema',
+  },
+  muiFormHelperText: {
+    module: formControls,
+    component: 'AglynFormHelperText',
+    schema: 'formHelperTextSchema',
+  },
+  muiSelect: {
+    module: formControls,
+    component: 'AglynSelect',
+    schema: 'selectSchema',
+  },
+  muiSelectOption: {
+    module: formControls,
+    component: 'AglynSelectOption',
+    schema: 'selectOptionSchema',
+  },
+  muiCheckbox: {
+    module: formControls,
+    component: 'AglynCheckbox',
+    schema: 'checkboxSchema',
+  },
+  muiRadioGroup: {
+    module: formControls,
+    component: 'AglynRadioGroup',
+    schema: 'radioGroupSchema',
+  },
+  muiRadio: {
+    module: formControls,
+    component: 'AglynRadio',
+    schema: 'radioSchema',
+  },
+  muiFormControlLabel: {
+    module: formControls,
+    component: 'AglynChoiceLabel',
+    schema: 'choiceLabelSchema',
+  },
+  muiRating: {
+    module: formControls,
+    component: 'AglynRating',
+    schema: 'ratingSchema',
   },
   // form, formField moved to @aglyn/plugins-forms (AGL-395).
   videoEmbed: {

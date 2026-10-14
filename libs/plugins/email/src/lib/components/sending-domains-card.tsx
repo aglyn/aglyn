@@ -676,14 +676,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                 {'Senders'}
               </Typography>
               <HelpTip
-                {...pluginDocsHelp('emailCampaigns', {
-                  anchor: '#senders',
-                  title: 'Senders',
-                  excerpt:
-                    'The addresses this site may send as — a mailbox, a name ' +
-                    'and a reply address each. A campaign picks one; the ' +
-                    'default is what an email that names no other goes out as.',
-                })}
+                {...pluginDocsHelp('emailCampaigns', { anchor: '#senders' })}
               />
             </Stack>
             <Typography variant="body2" color="text.secondary">

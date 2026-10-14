@@ -26,9 +26,11 @@
 import {
   LOCALE_X_DEFAULT,
   PLATFORM_DEFAULT_LOCALE,
+  SITE_LANGUAGE_CODE_PATTERN,
   normalizeLocaleTag,
   openGraphAlternateLocales,
   resolvePageLocale,
+  siteLanguageCode,
   toOpenGraphLocale,
 } from './seo-locale'
 
@@ -135,5 +137,48 @@ describe('openGraphAlternateLocales', () => {
   it('returns nothing for a page with no variants', () => {
     expect(openGraphAlternateLocales([], 'en')).toEqual([])
     expect(openGraphAlternateLocales(undefined, 'en')).toEqual([])
+  })
+})
+
+describe('siteLanguageCode', () => {
+  it('keeps a two-letter language', () => {
+    expect(siteLanguageCode('en')).toBe('en')
+    expect(siteLanguageCode('es')).toBe('es')
+  })
+
+  it('keeps one region or one script subtag', () => {
+    expect(siteLanguageCode('pt-BR')).toBe('pt-BR')
+    expect(siteLanguageCode('en-GB')).toBe('en-GB')
+    expect(siteLanguageCode('zh-Hant')).toBe('zh-Hant')
+  })
+
+  it('returns the canonical casing, reads `_` as `-` and drops surrounding space', () => {
+    expect(siteLanguageCode('ES')).toBe('es')
+    expect(siteLanguageCode('pt_br')).toBe('pt-BR')
+    expect(siteLanguageCode('ZH-hant')).toBe('zh-Hant')
+    expect(siteLanguageCode(' fr ')).toBe('fr')
+  })
+
+  it('rejects what the Languages card would not store', () => {
+    expect(siteLanguageCode('Spanish')).toBeNull()
+    expect(siteLanguageCode('spa')).toBeNull()
+    expect(siteLanguageCode('es-419')).toBeNull()
+    expect(siteLanguageCode('zh-Hant-TW')).toBeNull()
+    expect(siteLanguageCode('en-')).toBeNull()
+    expect(siteLanguageCode('')).toBeNull()
+    expect(siteLanguageCode('   ')).toBeNull()
+  })
+
+  it('rejects anything that is not a string', () => {
+    expect(siteLanguageCode(3)).toBeNull()
+    expect(siteLanguageCode(null)).toBeNull()
+    expect(siteLanguageCode(undefined)).toBeNull()
+    expect(siteLanguageCode({ code: 'en' })).toBeNull()
+  })
+
+  it('only ever returns a code the pattern accepts', () => {
+    for (const value of ['EN', 'pt_br', 'zh-HANT', 'de-at']) {
+      expect(SITE_LANGUAGE_CODE_PATTERN.test(siteLanguageCode(value) ?? '')).toBe(true)
+    }
   })
 })

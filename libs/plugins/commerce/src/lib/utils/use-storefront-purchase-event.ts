@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { merchantAdvertisingTagsResident } from '@aglyn/aglyn/app-utils/advertising-events'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import { useEffect } from 'react'
@@ -149,8 +150,13 @@ export function useStorefrontPurchaseEvent(
 
       // `trackEvent` no-ops when `window.gtag` is absent and never queues, so
       // waiting for the tag IS the delivery mechanism here.
+      //
+      // A site's own advertising tags count as a destination too (AGL-3694):
+      // a store running a Meta, TikTok or Pinterest tag and no Google tag
+      // still reports its purchase, through the same call, which hands it to
+      // whichever of them the visitor's consent let load.
       for (let attempt = 0; attempt < GTAG_ATTEMPTS && active; attempt += 1) {
-        if (typeof (window as any).gtag === 'function') {
+        if (typeof (window as any).gtag === 'function' || merchantAdvertisingTagsResident()) {
           trackEvent('purchase', purchase)
           markReported(sessionId)
           return

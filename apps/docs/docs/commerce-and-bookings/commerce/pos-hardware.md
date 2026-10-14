@@ -66,8 +66,8 @@ only register a reader to the Stripe account that ordered it.
    show where each setting is, including the admin passcode the reader's
    **Settings** asks for.
 3. On the reader, open **Settings** and generate a pairing code.
-4. In the console, add the reader under **Commerce → Settings → POS
-   devices → Add card reader** with that code. The steps are in
+4. In the console, add the reader on the **POS devices** card in the
+   store's settings (**Add card reader**) with that code. The steps are in
    [Card readers](pos-and-reservations.md#card-readers).
 
 **Network notes**
@@ -95,7 +95,7 @@ Both come built into the models above.
 
 ### Add a printer
 
-1. Go to **Commerce → Settings**. Each register has a **Hardware** card.
+1. Open the store's settings. Each register has a **Hardware** card.
 2. Select **Add printer** on the register's card and choose the brand.
 3. Enter the model, a name such as *Counter printer*, and the printer's identity:
    - **Star:** the printer's **MAC address**. Hold the **FEED** button while you
@@ -252,7 +252,7 @@ For a counter that runs all day:
   customers cannot leave the display page.
 - Add the display page to the home screen or bookmark it, so it can be
   reopened quickly after a restart. A paired display stays paired until
-  you sign it out under **Commerce → Settings → POS devices**, remove its
+  you sign it out on the **POS devices** card in the store's settings, remove its
   register, or clear the tablet browser's data for the console.
 
 

@@ -580,11 +580,8 @@ export function PluginReviewDetail({
               {/* Status first: a reviewer needs to know what state they
                   are acting on before they read a word of the manifest. */}
               <CardDisplay header="Status"
-                help={pluginDocsHelp('publisherHandbook', {
-                  anchor: '#review-what-happens-after-you-publish',
-                  excerpt:
-                    'Where this version stands: submitted, listed, verified, or ' +
-                    'rejected — and what each state lets a customer do.',
+                help={pluginDocsHelp('manifestAndEnvs', {
+                  anchor: '#submission-status',
                 })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   <Stack
@@ -688,10 +685,8 @@ export function PluginReviewDetail({
               </CardDisplay>
 
               <CardDisplay header="Overview"
-                help={pluginDocsHelp('publisherHandbook', {
-                  excerpt:
-                    'The listing as a customer sees it — name, description, media and ' +
-                    'links, all publisher-supplied.',
+                help={pluginDocsHelp('manifestAndEnvs', {
+                  anchor: '#review-overview',
                 })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   <Typography variant="body2">
@@ -797,9 +792,7 @@ export function PluginReviewDetail({
                   whether this code may run in the app realm. */}
               <CardDisplay header="Security"
                 help={pluginDocsHelp('sandboxSecurity', {
-                  excerpt:
-                    'What the bundle asked for, against what the sandbox enforces ' +
-                    'regardless of what it asked for.',
+                  anchor: '#what-a-reviewer-checks',
                 })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   {/* The version under review, not the latest one: the
@@ -1109,11 +1102,8 @@ export function PluginReviewDetail({
                     (item) => detail.checklist?.[item.id],
                   ).length
                 }/${PLUGIN_REVIEW_CHECKLIST.length})`}
-                help={pluginDocsHelp('publisherHandbook', {
-                  anchor: '#review-what-happens-after-you-publish',
-                  excerpt:
-                    'The checklist a reviewer works through. Re-earned per version — a ' +
-                    'new release starts with none of it ticked.',
+                help={pluginDocsHelp('manifestAndEnvs', {
+                  anchor: '#review-checklist',
                 })}
                 contentGutterX
                 contentGutterY
@@ -1256,9 +1246,7 @@ export function PluginReviewDetail({
                 contentGutterX
                 contentGutterY
                 help={pluginDocsHelp('manifestAndEnvs', {
-                  anchor: '#review--trust-lifecycle',
-                  excerpt:
-                    'Move this submission through the review lifecycle — list, verify, or reject with a reason.',
+                  anchor: '#review-verdict',
                 })}
               >
                 <Stack spacing={2}>
@@ -1727,11 +1715,8 @@ export function PluginReviewDetail({
               </CardDisplay>
 
               <CardDisplay header="Versions"
-                help={pluginDocsHelp('publisherHandbook', {
-                  anchor: '#versioning--updates',
-                  excerpt:
-                    'Every version this publisher has submitted. Review lives on the ' +
-                    'VERSION, so each one is judged on its own.',
+                help={pluginDocsHelp('manifestAndEnvs', {
+                  anchor: '#review-versions',
                 })} contentGutterX contentGutterY>
                 <Stack spacing={1}>
                   <Typography variant="body2" color="text.secondary">
@@ -1872,11 +1857,8 @@ export function PluginReviewDetail({
               {/* Separated on purpose: this is the only control here that
                   reaches code already running in customers' workspaces. */}
               <CardDisplay header="Danger zone"
-                help={pluginDocsHelp('publisherHandbook', {
-                  anchor: '#review-what-happens-after-you-publish',
-                  excerpt:
-                    'Rejecting a version is not a kill switch — it stops new installs ' +
-                    'and leaves existing ones running.',
+                help={pluginDocsHelp('manifestAndEnvs', {
+                  anchor: '#take-down',
                 })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   <Typography variant="body2" color="text.secondary">

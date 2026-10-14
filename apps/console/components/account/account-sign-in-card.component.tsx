@@ -177,11 +177,7 @@ export function AccountSignInCard() {
   return (
     <CardDisplay
       header={'Account'}
-      help={docsHelp('account', {
-        excerpt:
-          'The email you sign in with and the providers linked to your ' +
-          'account.',
-      })}
+      help={docsHelp('manageAccount', { anchor: '#account' })}
       contentGutterX
       contentGutterY
     >

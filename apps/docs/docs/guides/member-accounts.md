@@ -168,6 +168,13 @@ so. Each filter in force shows as a chip above the table; see
 **Open in CRM** — the member's contact, found by the address they signed up
 with.
 
+### The Users page {#the-users-page}
+
+A site's **Users** page is where you see everyone who has an account with that site:
+**Site users**, the visitors who signed up on it, and **Users**, the teammates who can
+work on it in the console. Open a site user to see their purchases and to suspend them;
+add teammates from the Users card with a role.
+
 ![The console Users page with the Site users card listing members, their join dates and Active status chips, under the table's Columns, Filters, Export and Search controls](/img/guides/members-users-tab.png)
 
 Click a member to open the **member drawer**:

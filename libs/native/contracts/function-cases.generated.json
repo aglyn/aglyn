@@ -3454,6 +3454,194 @@
         }
       ]
     },
+    "describeRestockCheck": {
+      "module": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": true,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "2 units may need restocking after this refund."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": true,
+              "units": 1,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "1 unit may need restocking after this refund."
+        },
+        {
+          "args": [
+            {
+              "kind": "chargeback",
+              "fullyReversed": true,
+              "units": 1,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "1 unit may need restocking after this chargeback. The shopper kept the goods unless they actually came back."
+        },
+        {
+          "args": [
+            {
+              "kind": "chargeback",
+              "fullyReversed": false,
+              "units": 3,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {
+              "refundedLineItemIds": [
+                0
+              ]
+            }
+          ],
+          "result": "3 units may need restocking after this chargeback. The shopper kept the goods unless they actually came back. Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "2 units may need restocking after this refund. Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 1,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {
+              "refundedLineItemIds": [
+                0
+              ]
+            }
+          ],
+          "result": "1 unit may need restocking after this refund. Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                },
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 1
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {
+              "refundedLineItemIds": [
+                0
+              ]
+            }
+          ],
+          "result": "2 units may need restocking after this refund. Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "2 units may need restocking after this refund. Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+        }
+      ]
+    },
     "describeScope": {
       "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "cases": [
@@ -5114,6 +5302,1660 @@
             }
           ],
           "result": null
+        }
+      ]
+    },
+    "expandVariantMatrix": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": [
+            {}
+          ]
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": [
+            {}
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M",
+                  "L"
+                ]
+              }
+            ]
+          ],
+          "result": [
+            {
+              "Size": "S"
+            },
+            {
+              "Size": "M"
+            },
+            {
+              "Size": "L"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue",
+                  "Green"
+                ]
+              }
+            ]
+          ],
+          "result": [
+            {
+              "Color": "Red",
+              "Size": "S"
+            },
+            {
+              "Color": "Blue",
+              "Size": "S"
+            },
+            {
+              "Color": "Green",
+              "Size": "S"
+            },
+            {
+              "Color": "Red",
+              "Size": "M"
+            },
+            {
+              "Color": "Blue",
+              "Size": "M"
+            },
+            {
+              "Color": "Green",
+              "Size": "M"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              },
+              {
+                "name": "Fit",
+                "values": [
+                  "Slim",
+                  "Regular"
+                ]
+              }
+            ]
+          ],
+          "result": [
+            {
+              "Color": "Red",
+              "Fit": "Slim",
+              "Size": "S"
+            },
+            {
+              "Color": "Red",
+              "Fit": "Regular",
+              "Size": "S"
+            },
+            {
+              "Color": "Blue",
+              "Fit": "Slim",
+              "Size": "S"
+            },
+            {
+              "Color": "Blue",
+              "Fit": "Regular",
+              "Size": "S"
+            },
+            {
+              "Color": "Red",
+              "Fit": "Slim",
+              "Size": "M"
+            },
+            {
+              "Color": "Red",
+              "Fit": "Regular",
+              "Size": "M"
+            },
+            {
+              "Color": "Blue",
+              "Fit": "Slim",
+              "Size": "M"
+            },
+            {
+              "Color": "Blue",
+              "Fit": "Regular",
+              "Size": "M"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "",
+                "values": [
+                  "x"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": []
+              },
+              {
+                "name": "Fit",
+                "values": [
+                  "Slim"
+                ]
+              }
+            ]
+          ],
+          "result": [
+            {
+              "Fit": "Slim",
+              "Size": "S"
+            },
+            {
+              "Fit": "Slim",
+              "Size": "M"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "A",
+                "values": [
+                  "a1",
+                  "a2",
+                  "a3",
+                  "a4",
+                  "a5"
+                ]
+              },
+              {
+                "name": "B",
+                "values": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5"
+                ]
+              },
+              {
+                "name": "C",
+                "values": [
+                  "c1",
+                  "c2",
+                  "c3",
+                  "c4",
+                  "c5"
+                ]
+              }
+            ]
+          ],
+          "result": [
+            {
+              "A": "a1",
+              "B": "b1",
+              "C": "c1"
+            },
+            {
+              "A": "a1",
+              "B": "b1",
+              "C": "c2"
+            },
+            {
+              "A": "a1",
+              "B": "b1",
+              "C": "c3"
+            },
+            {
+              "A": "a1",
+              "B": "b1",
+              "C": "c4"
+            },
+            {
+              "A": "a1",
+              "B": "b1",
+              "C": "c5"
+            },
+            {
+              "A": "a1",
+              "B": "b2",
+              "C": "c1"
+            },
+            {
+              "A": "a1",
+              "B": "b2",
+              "C": "c2"
+            },
+            {
+              "A": "a1",
+              "B": "b2",
+              "C": "c3"
+            },
+            {
+              "A": "a1",
+              "B": "b2",
+              "C": "c4"
+            },
+            {
+              "A": "a1",
+              "B": "b2",
+              "C": "c5"
+            },
+            {
+              "A": "a1",
+              "B": "b3",
+              "C": "c1"
+            },
+            {
+              "A": "a1",
+              "B": "b3",
+              "C": "c2"
+            },
+            {
+              "A": "a1",
+              "B": "b3",
+              "C": "c3"
+            },
+            {
+              "A": "a1",
+              "B": "b3",
+              "C": "c4"
+            },
+            {
+              "A": "a1",
+              "B": "b3",
+              "C": "c5"
+            },
+            {
+              "A": "a1",
+              "B": "b4",
+              "C": "c1"
+            },
+            {
+              "A": "a1",
+              "B": "b4",
+              "C": "c2"
+            },
+            {
+              "A": "a1",
+              "B": "b4",
+              "C": "c3"
+            },
+            {
+              "A": "a1",
+              "B": "b4",
+              "C": "c4"
+            },
+            {
+              "A": "a1",
+              "B": "b4",
+              "C": "c5"
+            },
+            {
+              "A": "a1",
+              "B": "b5",
+              "C": "c1"
+            },
+            {
+              "A": "a1",
+              "B": "b5",
+              "C": "c2"
+            },
+            {
+              "A": "a1",
+              "B": "b5",
+              "C": "c3"
+            },
+            {
+              "A": "a1",
+              "B": "b5",
+              "C": "c4"
+            },
+            {
+              "A": "a1",
+              "B": "b5",
+              "C": "c5"
+            },
+            {
+              "A": "a2",
+              "B": "b1",
+              "C": "c1"
+            },
+            {
+              "A": "a2",
+              "B": "b1",
+              "C": "c2"
+            },
+            {
+              "A": "a2",
+              "B": "b1",
+              "C": "c3"
+            },
+            {
+              "A": "a2",
+              "B": "b1",
+              "C": "c4"
+            },
+            {
+              "A": "a2",
+              "B": "b1",
+              "C": "c5"
+            },
+            {
+              "A": "a2",
+              "B": "b2",
+              "C": "c1"
+            },
+            {
+              "A": "a2",
+              "B": "b2",
+              "C": "c2"
+            },
+            {
+              "A": "a2",
+              "B": "b2",
+              "C": "c3"
+            },
+            {
+              "A": "a2",
+              "B": "b2",
+              "C": "c4"
+            },
+            {
+              "A": "a2",
+              "B": "b2",
+              "C": "c5"
+            },
+            {
+              "A": "a2",
+              "B": "b3",
+              "C": "c1"
+            },
+            {
+              "A": "a2",
+              "B": "b3",
+              "C": "c2"
+            },
+            {
+              "A": "a2",
+              "B": "b3",
+              "C": "c3"
+            },
+            {
+              "A": "a2",
+              "B": "b3",
+              "C": "c4"
+            },
+            {
+              "A": "a2",
+              "B": "b3",
+              "C": "c5"
+            },
+            {
+              "A": "a2",
+              "B": "b4",
+              "C": "c1"
+            },
+            {
+              "A": "a2",
+              "B": "b4",
+              "C": "c2"
+            },
+            {
+              "A": "a2",
+              "B": "b4",
+              "C": "c3"
+            },
+            {
+              "A": "a2",
+              "B": "b4",
+              "C": "c4"
+            },
+            {
+              "A": "a2",
+              "B": "b4",
+              "C": "c5"
+            },
+            {
+              "A": "a2",
+              "B": "b5",
+              "C": "c1"
+            },
+            {
+              "A": "a2",
+              "B": "b5",
+              "C": "c2"
+            },
+            {
+              "A": "a2",
+              "B": "b5",
+              "C": "c3"
+            },
+            {
+              "A": "a2",
+              "B": "b5",
+              "C": "c4"
+            },
+            {
+              "A": "a2",
+              "B": "b5",
+              "C": "c5"
+            },
+            {
+              "A": "a3",
+              "B": "b1",
+              "C": "c1"
+            },
+            {
+              "A": "a3",
+              "B": "b1",
+              "C": "c2"
+            },
+            {
+              "A": "a3",
+              "B": "b1",
+              "C": "c3"
+            },
+            {
+              "A": "a3",
+              "B": "b1",
+              "C": "c4"
+            },
+            {
+              "A": "a3",
+              "B": "b1",
+              "C": "c5"
+            },
+            {
+              "A": "a3",
+              "B": "b2",
+              "C": "c1"
+            },
+            {
+              "A": "a3",
+              "B": "b2",
+              "C": "c2"
+            },
+            {
+              "A": "a3",
+              "B": "b2",
+              "C": "c3"
+            },
+            {
+              "A": "a3",
+              "B": "b2",
+              "C": "c4"
+            },
+            {
+              "A": "a3",
+              "B": "b2",
+              "C": "c5"
+            },
+            {
+              "A": "a3",
+              "B": "b3",
+              "C": "c1"
+            },
+            {
+              "A": "a3",
+              "B": "b3",
+              "C": "c2"
+            },
+            {
+              "A": "a3",
+              "B": "b3",
+              "C": "c3"
+            },
+            {
+              "A": "a3",
+              "B": "b3",
+              "C": "c4"
+            },
+            {
+              "A": "a3",
+              "B": "b3",
+              "C": "c5"
+            },
+            {
+              "A": "a3",
+              "B": "b4",
+              "C": "c1"
+            },
+            {
+              "A": "a3",
+              "B": "b4",
+              "C": "c2"
+            },
+            {
+              "A": "a3",
+              "B": "b4",
+              "C": "c3"
+            },
+            {
+              "A": "a3",
+              "B": "b4",
+              "C": "c4"
+            },
+            {
+              "A": "a3",
+              "B": "b4",
+              "C": "c5"
+            },
+            {
+              "A": "a3",
+              "B": "b5",
+              "C": "c1"
+            },
+            {
+              "A": "a3",
+              "B": "b5",
+              "C": "c2"
+            },
+            {
+              "A": "a3",
+              "B": "b5",
+              "C": "c3"
+            },
+            {
+              "A": "a3",
+              "B": "b5",
+              "C": "c4"
+            },
+            {
+              "A": "a3",
+              "B": "b5",
+              "C": "c5"
+            },
+            {
+              "A": "a4",
+              "B": "b1",
+              "C": "c1"
+            },
+            {
+              "A": "a4",
+              "B": "b1",
+              "C": "c2"
+            },
+            {
+              "A": "a4",
+              "B": "b1",
+              "C": "c3"
+            },
+            {
+              "A": "a4",
+              "B": "b1",
+              "C": "c4"
+            },
+            {
+              "A": "a4",
+              "B": "b1",
+              "C": "c5"
+            },
+            {
+              "A": "a4",
+              "B": "b2",
+              "C": "c1"
+            },
+            {
+              "A": "a4",
+              "B": "b2",
+              "C": "c2"
+            },
+            {
+              "A": "a4",
+              "B": "b2",
+              "C": "c3"
+            },
+            {
+              "A": "a4",
+              "B": "b2",
+              "C": "c4"
+            },
+            {
+              "A": "a4",
+              "B": "b2",
+              "C": "c5"
+            },
+            {
+              "A": "a4",
+              "B": "b3",
+              "C": "c1"
+            },
+            {
+              "A": "a4",
+              "B": "b3",
+              "C": "c2"
+            },
+            {
+              "A": "a4",
+              "B": "b3",
+              "C": "c3"
+            },
+            {
+              "A": "a4",
+              "B": "b3",
+              "C": "c4"
+            },
+            {
+              "A": "a4",
+              "B": "b3",
+              "C": "c5"
+            },
+            {
+              "A": "a4",
+              "B": "b4",
+              "C": "c1"
+            },
+            {
+              "A": "a4",
+              "B": "b4",
+              "C": "c2"
+            },
+            {
+              "A": "a4",
+              "B": "b4",
+              "C": "c3"
+            },
+            {
+              "A": "a4",
+              "B": "b4",
+              "C": "c4"
+            },
+            {
+              "A": "a4",
+              "B": "b4",
+              "C": "c5"
+            },
+            {
+              "A": "a4",
+              "B": "b5",
+              "C": "c1"
+            },
+            {
+              "A": "a4",
+              "B": "b5",
+              "C": "c2"
+            },
+            {
+              "A": "a4",
+              "B": "b5",
+              "C": "c3"
+            },
+            {
+              "A": "a4",
+              "B": "b5",
+              "C": "c4"
+            },
+            {
+              "A": "a4",
+              "B": "b5",
+              "C": "c5"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "A",
+                "values": [
+                  "a1",
+                  "a2",
+                  "a3",
+                  "a4",
+                  "a5",
+                  "a6",
+                  "a7",
+                  "a8",
+                  "a9",
+                  "a10",
+                  "a11",
+                  "a12",
+                  "a13",
+                  "a14",
+                  "a15",
+                  "a16",
+                  "a17",
+                  "a18",
+                  "a19",
+                  "a20",
+                  "a21",
+                  "a22",
+                  "a23",
+                  "a24",
+                  "a25"
+                ]
+              },
+              {
+                "name": "B",
+                "values": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4",
+                  "b5",
+                  "b6",
+                  "b7",
+                  "b8",
+                  "b9",
+                  "b10",
+                  "b11",
+                  "b12",
+                  "b13",
+                  "b14",
+                  "b15",
+                  "b16",
+                  "b17",
+                  "b18",
+                  "b19",
+                  "b20",
+                  "b21",
+                  "b22",
+                  "b23",
+                  "b24",
+                  "b25"
+                ]
+              }
+            ]
+          ],
+          "result": [
+            {
+              "A": "a1",
+              "B": "b1"
+            },
+            {
+              "A": "a1",
+              "B": "b2"
+            },
+            {
+              "A": "a1",
+              "B": "b3"
+            },
+            {
+              "A": "a1",
+              "B": "b4"
+            },
+            {
+              "A": "a1",
+              "B": "b5"
+            },
+            {
+              "A": "a1",
+              "B": "b6"
+            },
+            {
+              "A": "a1",
+              "B": "b7"
+            },
+            {
+              "A": "a1",
+              "B": "b8"
+            },
+            {
+              "A": "a1",
+              "B": "b9"
+            },
+            {
+              "A": "a1",
+              "B": "b10"
+            },
+            {
+              "A": "a1",
+              "B": "b11"
+            },
+            {
+              "A": "a1",
+              "B": "b12"
+            },
+            {
+              "A": "a1",
+              "B": "b13"
+            },
+            {
+              "A": "a1",
+              "B": "b14"
+            },
+            {
+              "A": "a1",
+              "B": "b15"
+            },
+            {
+              "A": "a1",
+              "B": "b16"
+            },
+            {
+              "A": "a1",
+              "B": "b17"
+            },
+            {
+              "A": "a1",
+              "B": "b18"
+            },
+            {
+              "A": "a1",
+              "B": "b19"
+            },
+            {
+              "A": "a1",
+              "B": "b20"
+            },
+            {
+              "A": "a1",
+              "B": "b21"
+            },
+            {
+              "A": "a1",
+              "B": "b22"
+            },
+            {
+              "A": "a1",
+              "B": "b23"
+            },
+            {
+              "A": "a1",
+              "B": "b24"
+            },
+            {
+              "A": "a1",
+              "B": "b25"
+            },
+            {
+              "A": "a2",
+              "B": "b1"
+            },
+            {
+              "A": "a2",
+              "B": "b2"
+            },
+            {
+              "A": "a2",
+              "B": "b3"
+            },
+            {
+              "A": "a2",
+              "B": "b4"
+            },
+            {
+              "A": "a2",
+              "B": "b5"
+            },
+            {
+              "A": "a2",
+              "B": "b6"
+            },
+            {
+              "A": "a2",
+              "B": "b7"
+            },
+            {
+              "A": "a2",
+              "B": "b8"
+            },
+            {
+              "A": "a2",
+              "B": "b9"
+            },
+            {
+              "A": "a2",
+              "B": "b10"
+            },
+            {
+              "A": "a2",
+              "B": "b11"
+            },
+            {
+              "A": "a2",
+              "B": "b12"
+            },
+            {
+              "A": "a2",
+              "B": "b13"
+            },
+            {
+              "A": "a2",
+              "B": "b14"
+            },
+            {
+              "A": "a2",
+              "B": "b15"
+            },
+            {
+              "A": "a2",
+              "B": "b16"
+            },
+            {
+              "A": "a2",
+              "B": "b17"
+            },
+            {
+              "A": "a2",
+              "B": "b18"
+            },
+            {
+              "A": "a2",
+              "B": "b19"
+            },
+            {
+              "A": "a2",
+              "B": "b20"
+            },
+            {
+              "A": "a2",
+              "B": "b21"
+            },
+            {
+              "A": "a2",
+              "B": "b22"
+            },
+            {
+              "A": "a2",
+              "B": "b23"
+            },
+            {
+              "A": "a2",
+              "B": "b24"
+            },
+            {
+              "A": "a2",
+              "B": "b25"
+            },
+            {
+              "A": "a3",
+              "B": "b1"
+            },
+            {
+              "A": "a3",
+              "B": "b2"
+            },
+            {
+              "A": "a3",
+              "B": "b3"
+            },
+            {
+              "A": "a3",
+              "B": "b4"
+            },
+            {
+              "A": "a3",
+              "B": "b5"
+            },
+            {
+              "A": "a3",
+              "B": "b6"
+            },
+            {
+              "A": "a3",
+              "B": "b7"
+            },
+            {
+              "A": "a3",
+              "B": "b8"
+            },
+            {
+              "A": "a3",
+              "B": "b9"
+            },
+            {
+              "A": "a3",
+              "B": "b10"
+            },
+            {
+              "A": "a3",
+              "B": "b11"
+            },
+            {
+              "A": "a3",
+              "B": "b12"
+            },
+            {
+              "A": "a3",
+              "B": "b13"
+            },
+            {
+              "A": "a3",
+              "B": "b14"
+            },
+            {
+              "A": "a3",
+              "B": "b15"
+            },
+            {
+              "A": "a3",
+              "B": "b16"
+            },
+            {
+              "A": "a3",
+              "B": "b17"
+            },
+            {
+              "A": "a3",
+              "B": "b18"
+            },
+            {
+              "A": "a3",
+              "B": "b19"
+            },
+            {
+              "A": "a3",
+              "B": "b20"
+            },
+            {
+              "A": "a3",
+              "B": "b21"
+            },
+            {
+              "A": "a3",
+              "B": "b22"
+            },
+            {
+              "A": "a3",
+              "B": "b23"
+            },
+            {
+              "A": "a3",
+              "B": "b24"
+            },
+            {
+              "A": "a3",
+              "B": "b25"
+            },
+            {
+              "A": "a4",
+              "B": "b1"
+            },
+            {
+              "A": "a4",
+              "B": "b2"
+            },
+            {
+              "A": "a4",
+              "B": "b3"
+            },
+            {
+              "A": "a4",
+              "B": "b4"
+            },
+            {
+              "A": "a4",
+              "B": "b5"
+            },
+            {
+              "A": "a4",
+              "B": "b6"
+            },
+            {
+              "A": "a4",
+              "B": "b7"
+            },
+            {
+              "A": "a4",
+              "B": "b8"
+            },
+            {
+              "A": "a4",
+              "B": "b9"
+            },
+            {
+              "A": "a4",
+              "B": "b10"
+            },
+            {
+              "A": "a4",
+              "B": "b11"
+            },
+            {
+              "A": "a4",
+              "B": "b12"
+            },
+            {
+              "A": "a4",
+              "B": "b13"
+            },
+            {
+              "A": "a4",
+              "B": "b14"
+            },
+            {
+              "A": "a4",
+              "B": "b15"
+            },
+            {
+              "A": "a4",
+              "B": "b16"
+            },
+            {
+              "A": "a4",
+              "B": "b17"
+            },
+            {
+              "A": "a4",
+              "B": "b18"
+            },
+            {
+              "A": "a4",
+              "B": "b19"
+            },
+            {
+              "A": "a4",
+              "B": "b20"
+            },
+            {
+              "A": "a4",
+              "B": "b21"
+            },
+            {
+              "A": "a4",
+              "B": "b22"
+            },
+            {
+              "A": "a4",
+              "B": "b23"
+            },
+            {
+              "A": "a4",
+              "B": "b24"
+            },
+            {
+              "A": "a4",
+              "B": "b25"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "A",
+                "values": [
+                  "a1",
+                  "a2",
+                  "a3",
+                  "a4",
+                  "a5",
+                  "a6",
+                  "a7",
+                  "a8",
+                  "a9",
+                  "a10",
+                  "a11",
+                  "a12",
+                  "a13",
+                  "a14",
+                  "a15",
+                  "a16",
+                  "a17",
+                  "a18",
+                  "a19",
+                  "a20",
+                  "a21",
+                  "a22",
+                  "a23",
+                  "a24",
+                  "a25"
+                ]
+              },
+              {
+                "name": "B",
+                "values": [
+                  "b1",
+                  "b2",
+                  "b3",
+                  "b4"
+                ]
+              }
+            ]
+          ],
+          "result": [
+            {
+              "A": "a1",
+              "B": "b1"
+            },
+            {
+              "A": "a1",
+              "B": "b2"
+            },
+            {
+              "A": "a1",
+              "B": "b3"
+            },
+            {
+              "A": "a1",
+              "B": "b4"
+            },
+            {
+              "A": "a2",
+              "B": "b1"
+            },
+            {
+              "A": "a2",
+              "B": "b2"
+            },
+            {
+              "A": "a2",
+              "B": "b3"
+            },
+            {
+              "A": "a2",
+              "B": "b4"
+            },
+            {
+              "A": "a3",
+              "B": "b1"
+            },
+            {
+              "A": "a3",
+              "B": "b2"
+            },
+            {
+              "A": "a3",
+              "B": "b3"
+            },
+            {
+              "A": "a3",
+              "B": "b4"
+            },
+            {
+              "A": "a4",
+              "B": "b1"
+            },
+            {
+              "A": "a4",
+              "B": "b2"
+            },
+            {
+              "A": "a4",
+              "B": "b3"
+            },
+            {
+              "A": "a4",
+              "B": "b4"
+            },
+            {
+              "A": "a5",
+              "B": "b1"
+            },
+            {
+              "A": "a5",
+              "B": "b2"
+            },
+            {
+              "A": "a5",
+              "B": "b3"
+            },
+            {
+              "A": "a5",
+              "B": "b4"
+            },
+            {
+              "A": "a6",
+              "B": "b1"
+            },
+            {
+              "A": "a6",
+              "B": "b2"
+            },
+            {
+              "A": "a6",
+              "B": "b3"
+            },
+            {
+              "A": "a6",
+              "B": "b4"
+            },
+            {
+              "A": "a7",
+              "B": "b1"
+            },
+            {
+              "A": "a7",
+              "B": "b2"
+            },
+            {
+              "A": "a7",
+              "B": "b3"
+            },
+            {
+              "A": "a7",
+              "B": "b4"
+            },
+            {
+              "A": "a8",
+              "B": "b1"
+            },
+            {
+              "A": "a8",
+              "B": "b2"
+            },
+            {
+              "A": "a8",
+              "B": "b3"
+            },
+            {
+              "A": "a8",
+              "B": "b4"
+            },
+            {
+              "A": "a9",
+              "B": "b1"
+            },
+            {
+              "A": "a9",
+              "B": "b2"
+            },
+            {
+              "A": "a9",
+              "B": "b3"
+            },
+            {
+              "A": "a9",
+              "B": "b4"
+            },
+            {
+              "A": "a10",
+              "B": "b1"
+            },
+            {
+              "A": "a10",
+              "B": "b2"
+            },
+            {
+              "A": "a10",
+              "B": "b3"
+            },
+            {
+              "A": "a10",
+              "B": "b4"
+            },
+            {
+              "A": "a11",
+              "B": "b1"
+            },
+            {
+              "A": "a11",
+              "B": "b2"
+            },
+            {
+              "A": "a11",
+              "B": "b3"
+            },
+            {
+              "A": "a11",
+              "B": "b4"
+            },
+            {
+              "A": "a12",
+              "B": "b1"
+            },
+            {
+              "A": "a12",
+              "B": "b2"
+            },
+            {
+              "A": "a12",
+              "B": "b3"
+            },
+            {
+              "A": "a12",
+              "B": "b4"
+            },
+            {
+              "A": "a13",
+              "B": "b1"
+            },
+            {
+              "A": "a13",
+              "B": "b2"
+            },
+            {
+              "A": "a13",
+              "B": "b3"
+            },
+            {
+              "A": "a13",
+              "B": "b4"
+            },
+            {
+              "A": "a14",
+              "B": "b1"
+            },
+            {
+              "A": "a14",
+              "B": "b2"
+            },
+            {
+              "A": "a14",
+              "B": "b3"
+            },
+            {
+              "A": "a14",
+              "B": "b4"
+            },
+            {
+              "A": "a15",
+              "B": "b1"
+            },
+            {
+              "A": "a15",
+              "B": "b2"
+            },
+            {
+              "A": "a15",
+              "B": "b3"
+            },
+            {
+              "A": "a15",
+              "B": "b4"
+            },
+            {
+              "A": "a16",
+              "B": "b1"
+            },
+            {
+              "A": "a16",
+              "B": "b2"
+            },
+            {
+              "A": "a16",
+              "B": "b3"
+            },
+            {
+              "A": "a16",
+              "B": "b4"
+            },
+            {
+              "A": "a17",
+              "B": "b1"
+            },
+            {
+              "A": "a17",
+              "B": "b2"
+            },
+            {
+              "A": "a17",
+              "B": "b3"
+            },
+            {
+              "A": "a17",
+              "B": "b4"
+            },
+            {
+              "A": "a18",
+              "B": "b1"
+            },
+            {
+              "A": "a18",
+              "B": "b2"
+            },
+            {
+              "A": "a18",
+              "B": "b3"
+            },
+            {
+              "A": "a18",
+              "B": "b4"
+            },
+            {
+              "A": "a19",
+              "B": "b1"
+            },
+            {
+              "A": "a19",
+              "B": "b2"
+            },
+            {
+              "A": "a19",
+              "B": "b3"
+            },
+            {
+              "A": "a19",
+              "B": "b4"
+            },
+            {
+              "A": "a20",
+              "B": "b1"
+            },
+            {
+              "A": "a20",
+              "B": "b2"
+            },
+            {
+              "A": "a20",
+              "B": "b3"
+            },
+            {
+              "A": "a20",
+              "B": "b4"
+            },
+            {
+              "A": "a21",
+              "B": "b1"
+            },
+            {
+              "A": "a21",
+              "B": "b2"
+            },
+            {
+              "A": "a21",
+              "B": "b3"
+            },
+            {
+              "A": "a21",
+              "B": "b4"
+            },
+            {
+              "A": "a22",
+              "B": "b1"
+            },
+            {
+              "A": "a22",
+              "B": "b2"
+            },
+            {
+              "A": "a22",
+              "B": "b3"
+            },
+            {
+              "A": "a22",
+              "B": "b4"
+            },
+            {
+              "A": "a23",
+              "B": "b1"
+            },
+            {
+              "A": "a23",
+              "B": "b2"
+            },
+            {
+              "A": "a23",
+              "B": "b3"
+            },
+            {
+              "A": "a23",
+              "B": "b4"
+            },
+            {
+              "A": "a24",
+              "B": "b1"
+            },
+            {
+              "A": "a24",
+              "B": "b2"
+            },
+            {
+              "A": "a24",
+              "B": "b3"
+            },
+            {
+              "A": "a24",
+              "B": "b4"
+            },
+            {
+              "A": "a25",
+              "B": "b1"
+            },
+            {
+              "A": "a25",
+              "B": "b2"
+            },
+            {
+              "A": "a25",
+              "B": "b3"
+            },
+            {
+              "A": "a25",
+              "B": "b4"
+            }
+          ]
         }
       ]
     },
@@ -13809,6 +15651,46 @@
         }
       ]
     },
+    "posCashVarianceCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "cases": [
+        {
+          "args": [
+            21240,
+            21240
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            20000,
+            21240
+          ],
+          "result": -1240
+        },
+        {
+          "args": [
+            22000,
+            21240
+          ],
+          "result": 760
+        },
+        {
+          "args": [
+            0,
+            0
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            100.4,
+            200.6
+          ],
+          "result": -101
+        }
+      ]
+    },
     "posOfflineChangeCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
@@ -14040,6 +15922,95 @@
             "adjusted": true,
             "atMs": 1800000000000
           }
+        }
+      ]
+    },
+    "posPinProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "cases": [
+        {
+          "args": [
+            "4821"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "1234"
+          ],
+          "result": "Pick a PIN that is not a straight run like 1234."
+        },
+        {
+          "args": [
+            "4321"
+          ],
+          "result": "Pick a PIN that is not a straight run like 1234."
+        },
+        {
+          "args": [
+            "1111"
+          ],
+          "result": "Pick a PIN that is not one digit repeated."
+        },
+        {
+          "args": [
+            "123"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            "1234567"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            "12a4"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            "735190"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "9876"
+          ],
+          "result": "Pick a PIN that is not a straight run like 1234."
+        },
+        {
+          "args": [
+            "246810"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "0000"
+          ],
+          "result": "Pick a PIN that is not one digit repeated."
+        },
+        {
+          "args": [
+            "abcd"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "A PIN is 4 to 6 digits."
         }
       ]
     },
@@ -14396,6 +16367,884 @@
         }
       ]
     },
+    "renameProductOptions": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S",
+                    "M"
+                  ]
+                },
+                {
+                  "name": "Color",
+                  "values": [
+                    "Red",
+                    "Blue"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "v1",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 10,
+                  "sku": "TS-SR",
+                  "inventory": 4
+                },
+                {
+                  "id": "v2",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 10,
+                  "inventory": 0
+                },
+                {
+                  "id": "v3",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 12,
+                  "compareAtPriceUsd": 15
+                },
+                {
+                  "id": "v4",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 12
+                }
+              ]
+            },
+            [
+              "Size",
+              "Colour"
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Colour",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "inventory": 4,
+                "options": {
+                  "Colour": "Red",
+                  "Size": "S"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR"
+              },
+              {
+                "id": "v2",
+                "inventory": 0,
+                "options": {
+                  "Colour": "Blue",
+                  "Size": "S"
+                },
+                "priceUsd": 10
+              },
+              {
+                "compareAtPriceUsd": 15,
+                "id": "v3",
+                "options": {
+                  "Colour": "Red",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Colour": "Blue",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S",
+                    "M"
+                  ]
+                },
+                {
+                  "name": "Color",
+                  "values": [
+                    "Red",
+                    "Blue"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "v1",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 10,
+                  "sku": "TS-SR",
+                  "inventory": 4
+                },
+                {
+                  "id": "v2",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 10,
+                  "inventory": 0
+                },
+                {
+                  "id": "v3",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 12,
+                  "compareAtPriceUsd": 15
+                },
+                {
+                  "id": "v4",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 12
+                }
+              ]
+            },
+            [
+              "Fit",
+              "Colour"
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Fit",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Colour",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "inventory": 4,
+                "options": {
+                  "Colour": "Red",
+                  "Fit": "S"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR"
+              },
+              {
+                "id": "v2",
+                "inventory": 0,
+                "options": {
+                  "Colour": "Blue",
+                  "Fit": "S"
+                },
+                "priceUsd": 10
+              },
+              {
+                "compareAtPriceUsd": 15,
+                "id": "v3",
+                "options": {
+                  "Colour": "Red",
+                  "Fit": "M"
+                },
+                "priceUsd": 12
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Colour": "Blue",
+                  "Fit": "M"
+                },
+                "priceUsd": 12
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S",
+                    "M"
+                  ]
+                },
+                {
+                  "name": "Color",
+                  "values": [
+                    "Red",
+                    "Blue"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "v1",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 10,
+                  "sku": "TS-SR",
+                  "inventory": 4
+                },
+                {
+                  "id": "v2",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 10,
+                  "inventory": 0
+                },
+                {
+                  "id": "v3",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 12,
+                  "compareAtPriceUsd": 15
+                },
+                {
+                  "id": "v4",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 12
+                }
+              ]
+            },
+            [
+              "Size",
+              null
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "inventory": 4,
+                "options": {
+                  "Color": "Red",
+                  "Size": "S"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR"
+              },
+              {
+                "id": "v2",
+                "inventory": 0,
+                "options": {
+                  "Color": "Blue",
+                  "Size": "S"
+                },
+                "priceUsd": 10
+              },
+              {
+                "compareAtPriceUsd": 15,
+                "id": "v3",
+                "options": {
+                  "Color": "Red",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Color": "Blue",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S",
+                    "M"
+                  ]
+                },
+                {
+                  "name": "Color",
+                  "values": [
+                    "Red",
+                    "Blue"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "v1",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 10,
+                  "sku": "TS-SR",
+                  "inventory": 4
+                },
+                {
+                  "id": "v2",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 10,
+                  "inventory": 0
+                },
+                {
+                  "id": "v3",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 12,
+                  "compareAtPriceUsd": 15
+                },
+                {
+                  "id": "v4",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 12
+                }
+              ]
+            },
+            [
+              "Size",
+              "Size"
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Size",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "inventory": 4,
+                "options": {
+                  "Color": "Red",
+                  "Size": "S"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR"
+              },
+              {
+                "id": "v2",
+                "inventory": 0,
+                "options": {
+                  "Color": "Blue",
+                  "Size": "S"
+                },
+                "priceUsd": 10
+              },
+              {
+                "compareAtPriceUsd": 15,
+                "id": "v3",
+                "options": {
+                  "Color": "Red",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Color": "Blue",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S",
+                    "M"
+                  ]
+                },
+                {
+                  "name": "Color",
+                  "values": [
+                    "Red",
+                    "Blue"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "v1",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 10,
+                  "sku": "TS-SR",
+                  "inventory": 4
+                },
+                {
+                  "id": "v2",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 10,
+                  "inventory": 0
+                },
+                {
+                  "id": "v3",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 12,
+                  "compareAtPriceUsd": 15
+                },
+                {
+                  "id": "v4",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 12
+                }
+              ]
+            },
+            [
+              null,
+              null
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "inventory": 4,
+                "options": {
+                  "Color": "Red",
+                  "Size": "S"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR"
+              },
+              {
+                "id": "v2",
+                "inventory": 0,
+                "options": {
+                  "Color": "Blue",
+                  "Size": "S"
+                },
+                "priceUsd": 10
+              },
+              {
+                "compareAtPriceUsd": 15,
+                "id": "v3",
+                "options": {
+                  "Color": "Red",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Color": "Blue",
+                  "Size": "M"
+                },
+                "priceUsd": 12
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S",
+                    "M"
+                  ]
+                },
+                {
+                  "name": "Color",
+                  "values": [
+                    "Red",
+                    "Blue"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "v1",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 10,
+                  "sku": "TS-SR",
+                  "inventory": 4
+                },
+                {
+                  "id": "v2",
+                  "options": {
+                    "Size": "S",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 10,
+                  "inventory": 0
+                },
+                {
+                  "id": "v3",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Red"
+                  },
+                  "priceUsd": 12,
+                  "compareAtPriceUsd": 15
+                },
+                {
+                  "id": "v4",
+                  "options": {
+                    "Size": "M",
+                    "Color": "Blue"
+                  },
+                  "priceUsd": 12
+                }
+              ]
+            },
+            [
+              "Fit"
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Fit",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "inventory": 4,
+                "options": {
+                  "Color": "Red",
+                  "Fit": "S"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR"
+              },
+              {
+                "id": "v2",
+                "inventory": 0,
+                "options": {
+                  "Color": "Blue",
+                  "Fit": "S"
+                },
+                "priceUsd": 10
+              },
+              {
+                "compareAtPriceUsd": 15,
+                "id": "v3",
+                "options": {
+                  "Color": "Red",
+                  "Fit": "M"
+                },
+                "priceUsd": 12
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Color": "Blue",
+                  "Fit": "M"
+                },
+                "priceUsd": 12
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S",
+                    "M"
+                  ]
+                },
+                {
+                  "name": "Color",
+                  "values": [
+                    "Red",
+                    "Blue"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "v1",
+                  "options": {
+                    "Size": "S",
+                    "Colour": "Red"
+                  },
+                  "priceUsd": 10
+                },
+                {
+                  "id": "v2",
+                  "options": {
+                    "Colour": "Blue",
+                    "Size": "M"
+                  },
+                  "priceUsd": 10
+                }
+              ]
+            },
+            [
+              "Size",
+              "Color"
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Color": "Red",
+                  "Size": "S"
+                },
+                "priceUsd": 10
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Color": "Blue",
+                  "Size": "M"
+                },
+                "priceUsd": 10
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [
+                {
+                  "name": "Size",
+                  "values": [
+                    "S"
+                  ]
+                }
+              ],
+              "variants": [
+                {
+                  "id": "d",
+                  "options": null,
+                  "priceUsd": 5
+                },
+                {
+                  "id": "e",
+                  "priceUsd": 6
+                }
+              ]
+            },
+            [
+              "Fit"
+            ]
+          ],
+          "result": {
+            "options": [
+              {
+                "name": "Fit",
+                "values": [
+                  "S"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "d",
+                "options": null,
+                "priceUsd": 5
+              },
+              {
+                "id": "e",
+                "priceUsd": 6
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "options": [],
+              "variants": [
+                {
+                  "id": "d",
+                  "options": {},
+                  "priceUsd": 5
+                }
+              ]
+            },
+            []
+          ],
+          "result": {
+            "options": [],
+            "variants": [
+              {
+                "id": "d",
+                "options": {},
+                "priceUsd": 5
+              }
+            ]
+          }
+        }
+      ]
+    },
     "rescheduleRefusal": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "cases": [
@@ -14678,7 +17527,14 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "live-chat",
+            "review-platforms",
+            "weglot",
+            "music",
+            "ad-conversions"
           ]
         },
         {
@@ -14717,7 +17573,14 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "live-chat",
+            "review-platforms",
+            "weglot",
+            "music",
+            "ad-conversions"
           ]
         },
         {
@@ -14743,7 +17606,13 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "live-chat",
+            "review-platforms",
+            "music",
+            "ad-conversions"
           ]
         },
         {
@@ -14774,6 +17643,12 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "lightbox",
+            "live-chat",
+            "review-platforms",
+            "music",
+            "ad-conversions",
             "crm",
             "commerce"
           ]
@@ -14806,6 +17681,12 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "lightbox",
+            "live-chat",
+            "review-platforms",
+            "music",
+            "ad-conversions",
             "accounts",
             "commerce",
             "bookings"
@@ -14852,7 +17733,12 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "ad-conversions"
           ]
         },
         {
@@ -14884,6 +17770,11 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "ad-conversions",
             "commerce",
             "crm"
           ]
@@ -14921,6 +17812,11 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "ad-conversions",
             "commerce",
             "accounts",
             "crm"
@@ -14963,6 +17859,11 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "ad-conversions",
             "commerce",
             "accounts"
           ]
@@ -15010,7 +17911,12 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "ad-conversions"
           ]
         }
       ]
@@ -15637,6 +18543,106 @@
             "commerce"
           ],
           "result": "runs-here"
+        }
+      ]
+    },
+    "resolveStaffRoleGate": {
+      "module": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": false,
+            "ready": false
+          }
+        },
+        {
+          "args": [
+            "super",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": true,
+            "blocked": false,
+            "ready": true
+          }
+        },
+        {
+          "args": [
+            "support",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "billing",
+            [
+              "super",
+              "billing"
+            ]
+          ],
+          "result": {
+            "admitted": true,
+            "blocked": false,
+            "ready": true
+          }
+        },
+        {
+          "args": [
+            "support",
+            [
+              "super",
+              "billing"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super or billing staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "super",
+            []
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the  staff role. Ask someone who holds it."
+          }
         }
       ]
     },

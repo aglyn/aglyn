@@ -540,10 +540,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       <CardDisplay
         header={'Public profile'}
         help={pluginDocsHelp('publisherHandbook', {
-          anchor: '#before-your-first-publish',
-          excerpt:
-            'Your public publisher identity — handle, name, and bio shown ' +
-            'on everything you publish to the marketplace.',
+          anchor: '#public-profile',
         })}
         contentGutterX
         contentGutterY
@@ -742,12 +739,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     listings: (
       <CardDisplay
         header={'Your listings'}
-        help={pluginDocsHelp('publisherHandbook', {
-          anchor: '#authoring-your-listing',
-          excerpt:
-            'Everything you have published, with preview images and ' +
-            'per-listing unpublish/republish.',
-        })}
+        help={pluginDocsHelp('publisherHandbook', { anchor: '#your-listings' })}
         contentGutterX
         contentGutterY
       >
@@ -825,7 +817,11 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                     columns jump between rows — the action count varies by
                     artifact type — while putting Unpublish at the end of the
                     row, the easiest place to hit by mistake. */}
-                <AppLink href={listingHref(listing)}>
+                <AppLink
+                  href={listingHref(listing)}
+                  newTab
+                  aria-label={`View ${listing.displayName}`}
+                >
                   <Button size="small" color="primary" component="span">
                     {'View'}
                   </Button>
@@ -921,10 +917,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       <CardDisplay
         header={'Payouts'}
         help={pluginDocsHelp('publisherHandbook', {
-          anchor: '#getting-paid',
-          excerpt:
-            'Connect Stripe to receive payouts for paid listings. Platform ' +
-            'fee: 20% per sale, 30% on the Free plan.',
+          anchor: '#set-up-payouts',
         })}
         contentGutterX
         contentGutterY

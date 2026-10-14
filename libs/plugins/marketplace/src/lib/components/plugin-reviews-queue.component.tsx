@@ -341,11 +341,8 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                 {visibleVerification.length ? (
                   <CardDisplay
                     header={`Verification requested (${total.verification}${more.verification ? '+' : ''})`}
-                    help={pluginDocsHelp('publisherHandbook', {
-                      anchor: '#asking-to-be-verified',
-                      excerpt:
-                        'Publishers who asked to be VERIFIED — a claim about who they are, ' +
-                        'separate from reviewing any one version.',
+                    help={pluginDocsHelp('manifestAndEnvs', {
+                      anchor: '#verification-requests',
                     })}
                     contentGutterX
                     contentGutterY
@@ -393,9 +390,7 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
                 <CardDisplay
                   header={`Awaiting review (${total.queue}${more.queue ? '+' : ''})`}
                   help={pluginDocsHelp('manifestAndEnvs', {
-                    anchor: '#review--trust-lifecycle',
-                    excerpt:
-                      'Submissions waiting on a staff verdict. Open one to read its manifest, verifier findings and act.',
+                    anchor: '#review-queue',
                   })}
                   contentGutterX
                   contentGutterY
@@ -463,11 +458,8 @@ export function PluginReviewsQueue({ basePath }: { basePath: string }) {
 
                 <CardDisplay
                   header={`Listed plugins (${total.listed}${more.listed ? '+' : ''})`}
-                  help={pluginDocsHelp('publisherHandbook', {
-                    anchor: '#review-what-happens-after-you-publish',
-                    excerpt:
-                      'Listings already installable. Listing is the step that makes a ' +
-                      'version reachable from Browse.',
+                  help={pluginDocsHelp('manifestAndEnvs', {
+                    anchor: '#listed-plugins',
                   })}
                   contentGutterX
                   contentGutterY

@@ -25,6 +25,7 @@ import {
   ICON_VARIANT_HOST_GROUP,
   ICON_VARIANT_ORGANIZATION,
 } from '@aglyn/shared-data-enums'
+import { mdiPin, mdiPinOutline } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
   CardDisplay,
@@ -32,20 +33,28 @@ import {
   GridItems,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListFilterToolbar from '@aglyn/shared-ui-jsx/components/list-filter-toolbar.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {
   Alert,
   Box,
   Button,
   CircularProgress,
+  IconButton,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import CreateHostDialog from '../../../components/create-host-dialog.component'
+import {
+  SITE_CREATE_PARAM,
+  SITE_CREATE_VALUE,
+} from '../../../components/create-host-dialog.component'
 import CreateOrgDialog from '../../../components/create-org-dialog.component'
 import EmptyState from '../../../components/empty-state.component'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -53,7 +62,9 @@ import PlatformMarketingConsentPrompt from '../../../components/marketing-consen
 import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import { useOrgPlans } from '../../../hooks/use-org-plans'
 import { useOrgScope } from '../../../hooks/use-org-scope'
+import { usePinnedOrgs } from '../../../hooks/use-pinned-orgs'
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
@@ -64,15 +75,44 @@ import {
 } from '../../../utils/signup-workspace'
 import {
   holdSignUpLanding,
+  isLeavingConsole,
   releaseSignUpLanding,
 } from '../../../utils/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
+import { currentConsoleLandingHref } from '../../../utils/console-landing'
+import { createFirstSiteWorkspace } from '../../../utils/first-site-workspace'
+import {
+  arrangeWorkspaces,
+  needsWorkspacePlans,
+  WORKSPACE_FILTER_FIELDS,
+  WORKSPACE_FILTER_HEADERS,
+  WORKSPACE_FILTER_OPTIONS,
+  type WorkspaceRow,
+} from '../../../utils/workspace-list'
 
 
 /** The landing hold the workspace provisioning takes (AGL-3690). */
 const PROVISION_HOLD_KEY = 'home:provision-sign-up-workspace'
 /** Longer than a slow create: the hold's own timer is only the backstop. */
 const PROVISION_HOLD_MAX_MS = 60_000
+/** What the picker pages while its list is still settling. */
+const NO_WORKSPACES: WorkspaceRow[] = []
+
+/**
+ * Reads each workspace's plan for the Plan filter (AGL-3762) and hands the
+ * answers up. A component rather than a hook call in the page so it is
+ * MOUNTED only while that filter is in force: the reads are one per
+ * workspace, and a reader who never filters by plan pays none of them.
+ */
+function WorkspacePlansReader(props: {
+  orgIds: string[]
+  onPlans: (plans: Record<string, string>) => void
+}) {
+  const { orgIds, onPlans } = props
+  const plans = useOrgPlans(orgIds)
+  useEffect(() => onPlans(plans), [plans, onPlans])
+  return null
+}
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -80,7 +120,8 @@ const PROVISION_HOLD_MAX_MS = 60_000
  * precedence guess. Lives in the `(app)` group so it wears the console chrome,
  * and frames its content in DashboardLayout (AGL-631). A single-org member
  * skips straight to their sites; a first-time member with no org creates their
- * first site (which auto-provisions the workspace).
+ * first site, which sets up the workspace first and then asks, in it, how the
+ * site should start (AGL-3761).
  */
 function OrgJump() {
   const {
@@ -92,18 +133,82 @@ function OrgJump() {
     error: orgsError,
     retry: retryOrgs,
   } = useOrgScope()
-  // The picker pages on the console's own footer (AGL-2501); the membership
-  // window still grows underneath when the reader walks to its end.
+  /*
+   * THE WHOLE MEMBERSHIP SET, BEFORE ANY ORDER (AGL-3762).
+   *
+   * The picker sorts by name, pins, searches and filters in memory, which is
+   * only honest over every row: sorting a 50-row window would put "Zed" last
+   * on one page and then move it when the window grew. The set is the
+   * reader's own memberships — one small row per organization they belong to
+   * — so the window is grown until the listen says it is complete, and
+   * nothing is arranged before then. One growth per arrival of rows, so it
+   * cannot outrun the listen.
+   */
+  useEffect(() => {
+    if (hasMoreOrgs) loadMoreOrgs()
+  }, [hasMoreOrgs, loadMoreOrgs, orgs.length])
+  const orgsComplete = !hasMoreOrgs
+  const [orgClauses, setOrgClauses] = useState<ListFilterClause[]>([])
+  const [orgSearch, setOrgSearch] = useState<string[]>([])
+  const { pinned: pinnedOrgIds, toggle: togglePinnedOrg } = usePinnedOrgs()
+  /*
+   * The plan is the ORG document's, not the membership row's, so the Plan
+   * filter reads each workspace's plan — only while that filter is in force —
+   * and lists nothing until every plan has answered: a workspace whose plan
+   * is still in flight is never mistaken for one that does not match.
+   */
+  const planFilter = needsWorkspacePlans(orgClauses)
+  const orgIds = useMemo(() => orgs.map((org) => org.$id), [orgs])
+  const [orgPlans, setOrgPlans] = useState<Record<string, string>>({})
+  const plansPending = planFilter && orgIds.some((orgId) => !orgPlans[orgId])
+  const orgListSettling = !orgsComplete || plansPending
+  const arrangedOrgs = useMemo(
+    () =>
+      orgListSettling
+        ? NO_WORKSPACES
+        : arrangeWorkspaces(orgs, {
+            pinned: pinnedOrgIds,
+            plans: orgPlans,
+            clauses: orgClauses,
+            search: orgSearch,
+          }),
+    [orgListSettling, orgs, pinnedOrgIds, orgPlans, orgClauses, orgSearch],
+  )
+  // The picker pages on the console's own footer (AGL-2501), over the
+  // arranged list, so a page holds the same five workspaces every render.
   const {
     visible: visibleOrgs,
     page: orgPage,
     setPage: setOrgPage,
     pageSize: orgPageSize,
     hasMore: hasMoreOrgPages,
-  } = useWorkspacePage(orgs, {
+  } = useWorkspacePage(arrangedOrgs, {
     hasMoreRows: hasMoreOrgs,
     loadMoreRows: loadMoreOrgs,
   })
+  // A list that shrank under the page (an unpin under a Pinned filter took
+  // the last card away) steps back to its new last page.
+  useEffect(() => {
+    if (orgListSettling || orgPage === 0) return
+    if (orgPage * orgPageSize < arrangedOrgs.length) return
+    setOrgPage(Math.max(0, Math.ceil(arrangedOrgs.length / orgPageSize) - 1))
+  }, [arrangedOrgs.length, orgListSettling, orgPage, orgPageSize, setOrgPage])
+  // A new search or filter is a new list, read from its first page.
+  const onOrgClauses = useCallback(
+    (next: ListFilterClause[]) => {
+      setOrgClauses(next)
+      setOrgPage(0)
+    },
+    [setOrgPage],
+  )
+  const onOrgSearch = useCallback(
+    (next: string[]) => {
+      setOrgSearch(next)
+      setOrgPage(0)
+    },
+    [setOrgPage],
+  )
+  const orgFiltering = orgClauses.length > 0 || orgSearch.length > 0
   /**
    * `useOrgScope` has said all along that an errored membership listen "says
    * nothing about what orgs exist" (AGL-1260), and this page read `orgs`
@@ -120,7 +225,18 @@ function OrgJump() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [creatingOrg, setCreatingOrg] = useState(false)
-  const [creatingSite, setCreatingSite] = useState(false)
+  /**
+   * "Create site" with no workspace: the workspace being made for it
+   * (AGL-3761), then the sites page with the start open.
+   */
+  const [startingSite, setStartingSite] = useState(false)
+  const [startSiteError, setStartSiteError] = useState<string | null>(null)
+  /**
+   * The workspace for a first site was just created from this page
+   * (AGL-3742, AGL-3761), and the page is already leaving for its start. The
+   * single-org redirect below must not race it to the sites list.
+   */
+  const siteCreatedRef = useRef(false)
   /**
    * A workspace this page tried to create for a sign-up, and could not
    * (AGL-1523).
@@ -210,6 +326,38 @@ function OrgJump() {
   )
 
   /**
+   * "Create site" for an account with no workspace (AGL-3761).
+   *
+   * How a site starts is asked inside a workspace — its plan decides what is
+   * offered — so the workspace is made first and the site is not: the person
+   * lands in the new workspace's sites with "Create site" open, and the site
+   * is created there only once they choose how it starts. A visit carrying a
+   * plan lands on billing with it instead (AGL-1117), where the workspace is
+   * what the plan is bought for.
+   *
+   * Hard, like the sign-up provisioning above: the whole chrome resolves
+   * against a workspace that did not exist when this page rendered. And on
+   * the auth host, to the console host, which serves the path (AGL-3742).
+   */
+  const startFirstSite = useCallback(async () => {
+    if (startingSite || !user) return
+    setStartingSite(true)
+    setStartSiteError(null)
+    siteCreatedRef.current = true
+    const outcome = await createFirstSiteWorkspace(user, user)
+    if ('slug' in outcome) {
+      const target = intent
+        ? enterOrg(outcome.slug)
+        : `${buildRoute(Route.HOST_LIST, { orgSlug: outcome.slug })}?${SITE_CREATE_PARAM}=${SITE_CREATE_VALUE}`
+      hardNavigate(currentConsoleLandingHref(target))
+      return
+    }
+    siteCreatedRef.current = false
+    setStartSiteError(outcome.error)
+    setStartingSite(false)
+  }, [enterOrg, intent, startingSite, user])
+
+  /**
    * THE WORKSPACE THE SIGN-UP ASKED FOR, CREATED ON THE FIRST VERIFIED
    * SESSION (AGL-2590).
    *
@@ -246,6 +394,10 @@ function OrgJump() {
     // read once and destructively — starting before it answers would drop it.
     if (storedIntent === undefined) return
     if (provisionedForRef.current === uid) return
+    // The editor-hint bounce is already leaving (AGL-3690). The claim clears
+    // the held name, so starting it now would lose the name with the page.
+    // The page this bounce returns to provisions instead.
+    if (isLeavingConsole()) return
     provisionedForRef.current = uid
     let active = true
     /**
@@ -323,6 +475,7 @@ function OrgJump() {
   // undo — and the chooser they wanted is exactly what it navigates away from.
   useEffect(() => {
     if (loading || !confirmed || orgs.length !== 1) return
+    if (siteCreatedRef.current) return
     // The remembered intent has not been answered yet (AGL-1535) — hold. The
     // ordinary jump below is the one that drops it.
     if (storedIntent === undefined) return
@@ -337,7 +490,13 @@ function OrgJump() {
     // Failing that, the intent the ACCOUNT remembers from signup: this is the
     // landing the email-verification bounce discards, and it arrives here as a
     // bare `/` with nothing to read off the URL (AGL-1535).
-    router.replace(enterOrg(slug))
+    //
+    // Under the auth host the org lives on another origin (AGL-3724): a
+    // client-side replace there asks `auth.` for a page it refuses with a 404.
+    const destination = enterOrg(slug)
+    const landing = currentConsoleLandingHref(destination)
+    if (landing !== destination) return void hardNavigate(landing)
+    router.replace(destination)
   }, [loading, confirmed, orgs, router, storedIntent, enterOrg])
 
   return (
@@ -352,7 +511,16 @@ function OrgJump() {
       // The one page in the console with no help affordance (AGL-2486), and
       // the first page a new member sees: it is where "what IS a workspace,
       // and why am I picking one" is asked.
-      help={{ topic: 'consoleTour', anchor: '#workspace-settings--notifications' }}
+      help={{
+        topic: 'consoleTour',
+        anchor: '#choose-a-workspace',
+        title: 'Workspaces',
+        excerpt:
+          'A workspace is your organization: its sites, team, billing and ' +
+          'plan live together. Open one to see its sites, and pin the ones ' +
+          'you use most to keep them first. The switcher in the app bar ' +
+          'moves between them later.',
+      }}
       // The primary action belongs in the header, like every other list page
       // (sites, screens, layouts) — at the foot of the list it sat below the
       // fold once you had more than a couple of workspaces. The zero-org
@@ -369,6 +537,9 @@ function OrgJump() {
         ) : null
       }
     >
+      {planFilter && orgsComplete ? (
+        <WorkspacePlansReader orgIds={orgIds} onPlans={setOrgPlans} />
+      ) : null}
       {loading || provisioning || orgs.length === 1 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
@@ -418,18 +589,15 @@ function OrgJump() {
                   </Typography>
                 </Box>
                 <OrgInvitesBanner />
+                {startSiteError ? <Alert severity="error">{startSiteError}</Alert> : null}
                 <Button
                   variant="text"
                   sx={{ alignSelf: 'flex-start' }}
-                  onClick={() => setCreatingSite(true)}
+                  disabled={startingSite}
+                  onClick={() => void startFirstSite()}
                 >
-                  {'Create my own site instead'}
+                  {startingSite ? 'Setting up your workspace…' : 'Create my own site instead'}
                 </Button>
-                <CreateHostDialog
-                  open={creatingSite}
-                  onClose={() => setCreatingSite(false)}
-                  destination={intent ? enterOrg : undefined}
-                />
               </Stack>
             ) : (
               <>
@@ -448,9 +616,10 @@ function OrgJump() {
                       <Button
                         variant="contained"
                         color="primary"
-                        onClick={() => setCreatingSite(true)}
+                        disabled={startingSite}
+                        onClick={() => void startFirstSite()}
                       >
-                        {'Create site'}
+                        {startingSite ? 'Setting up your workspace…' : 'Create site'}
                       </Button>
                       <Button
                         variant="text"
@@ -461,17 +630,16 @@ function OrgJump() {
                     </Stack>
                   }
                 />
-                {/* The first site provisions the workspace, so this is the
-                    whole of the zero-org buyer's path: someone arriving from
-                    a plan CTA with no workspace at all has no picker and no
-                    create-workspace dialog to carry the intent for them. The
-                    prop is passed only when there IS an intent, so an
-                    ordinary first site still lands on its Setup page. */}
-                <CreateHostDialog
-                  open={creatingSite}
-                  onClose={() => setCreatingSite(false)}
-                  destination={intent ? enterOrg : undefined}
-                />
+                {/* The first site's workspace is the whole of the zero-org
+                    buyer's path: someone arriving from a plan CTA with no
+                    workspace at all has no picker and no create-workspace
+                    dialog to carry the intent for them, so `startFirstSite`
+                    lands a visit with a plan on billing. */}
+                {startSiteError ? (
+                  <Alert severity="error" sx={{ mt: 2 }}>
+                    {startSiteError}
+                  </Alert>
+                ) : null}
               </>
             )
           ) : (
@@ -493,6 +661,36 @@ function OrgJump() {
                     : 'You belong to several organizations — pick one to manage.'}
                 </Typography>
               </Box>
+              <Stack spacing={1}>
+                <ListFilterToolbar
+                  fields={WORKSPACE_FILTER_FIELDS}
+                  headers={WORKSPACE_FILTER_HEADERS}
+                  options={WORKSPACE_FILTER_OPTIONS}
+                  clauses={orgClauses}
+                  onChange={onOrgClauses}
+                  search={{
+                    words: orgSearch,
+                    onChange: onOrgSearch,
+                    placeholder: 'Search by name or slug',
+                  }}
+                />
+                <ListFilterChips
+                  fields={WORKSPACE_FILTER_FIELDS}
+                  headers={WORKSPACE_FILTER_HEADERS}
+                  options={WORKSPACE_FILTER_OPTIONS}
+                  clauses={orgClauses}
+                  onChange={onOrgClauses}
+                />
+              </Stack>
+              {orgListSettling ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress aria-label="Loading workspaces" />
+                </Box>
+              ) : !arrangedOrgs.length && orgFiltering ? (
+                <Typography color="text.secondary">
+                  {'No workspaces match this search and these filters.'}
+                </Typography>
+              ) : null}
               <GridItems
                 // A gallery of workspace tiles, each the same shape. Rows are the point.
                 masonry={false}
@@ -510,6 +708,22 @@ function OrgJump() {
                             fontSize="large"
                             path={ICON_VARIANT_ORGANIZATION.path}
                           />
+                        ),
+                        // The card's own action sits in its header: a pinned
+                        // workspace leads the list, on every device.
+                        action: (
+                          <Tooltip title={org.pinned ? 'Unpin' : 'Pin to top'}>
+                            <IconButton
+                              aria-label={`${org.pinned ? 'Unpin' : 'Pin'} ${org.orgName ?? org.slug ?? org.$id}`}
+                              aria-pressed={org.pinned}
+                              color={org.pinned ? 'primary' : 'default'}
+                              onClick={() => togglePinnedOrg(org.$id)}
+                            >
+                              <MdiIcon
+                                path={org.pinned ? mdiPin.path : mdiPinOutline.path}
+                              />
+                            </IconButton>
+                          </Tooltip>
                         ),
                       }}
                       header={org.orgName ?? org.slug ?? org.$id}
@@ -568,16 +782,18 @@ function OrgJump() {
                   The footer states the position instead: "1–5 of more than 5"
                   while another page is known to exist, the real total once it
                   is not. */}
-              <ListPagination
-                page={orgPage}
-                pageSize={orgPageSize}
-                rowCount={visibleOrgs.length}
-                hasMore={hasMoreOrgPages}
-                onPageChange={setOrgPage}
-                labelDisplayedRows={({ from, to, count }) =>
-                  `${from}–${to} of ${count === -1 ? 'more than ' + to : count} workspaces`
-                }
-              />
+              {orgListSettling || !arrangedOrgs.length ? null : (
+                <ListPagination
+                  page={orgPage}
+                  pageSize={orgPageSize}
+                  rowCount={visibleOrgs.length}
+                  hasMore={hasMoreOrgPages}
+                  onPageChange={setOrgPage}
+                  labelDisplayedRows={({ from, to, count }) =>
+                    `${from}–${to} of ${count === -1 ? 'more than ' + to : count} workspaces`
+                  }
+                />
+              )}
             </Stack>
           )}
           <CreateOrgDialog

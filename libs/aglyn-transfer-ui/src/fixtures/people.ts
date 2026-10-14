@@ -46,6 +46,15 @@ export const PEOPLE_CSV = [
   'New Again,new@example.com,,,,,',
 ].join('\n')
 
+/**
+ * The fixture's clock: the moment the in-memory client stamps on every job
+ * (so a job is applied at this instant). Anything that judges those stamps,
+ * such as the wizard's undo window, must read this same clock rather than
+ * the wall clock, or the spec expires seven days after this date.
+ */
+export const PEOPLE_NOW = Date.UTC(2026, 9, 5)
+export const peopleNow = () => PEOPLE_NOW
+
 export function peopleOptions(
   overrides: Partial<MemoryTransferClientOptions> = {},
 ): MemoryTransferClientOptions {
@@ -141,7 +150,7 @@ export function peopleOptions(
     },
     recordLabel: (record) => String(record.values['name'] ?? record.id),
     canCreateCustomField: true,
-    now: () => Date.UTC(2026, 9, 5),
+    now: peopleNow,
     ...overrides,
   }
 }

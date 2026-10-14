@@ -24,12 +24,15 @@
       "accessActions": [
         "org.ai-viewed",
         "user.ai-usage-viewed",
-        "org.ai-conversations-viewed"
+        "org.ai-conversations-viewed",
+        "user.ai-requests-viewed"
       ]
     }
   ],
   "accessActions": [
     "email.message-viewed",
+    "media.library-viewed",
+    "media.asset-viewed",
     "user.acquisition-viewed",
     "org.acquisition-viewed"
   ],

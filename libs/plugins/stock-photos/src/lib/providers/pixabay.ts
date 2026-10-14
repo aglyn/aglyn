@@ -76,8 +76,14 @@ export const PIXABAY_LICENSE = {
 /** The longer edge of `largeImageURL`, the copy downloaded. */
 export const PIXABAY_LARGE_EDGE = 1280
 
-/** Hits asked per search: enough to pick among, few enough to cache whole. */
-export const PIXABAY_PER_PAGE = 20
+/**
+ * Hits asked per search: enough to pick among, few enough to cache whole.
+ * Pixabay's `q` matches any tag loosely (a robin tagged "food bowl" answers
+ * "serving bowl"), and the caller now REJECTS every hit that does not show
+ * the thing (AGL-3660), so it asks for twice what it used to keep the
+ * accepted few in reach. Still one request.
+ */
+export const PIXABAY_PER_PAGE = 40
 
 /** Requests kept in hand before the window resets, for other instances. */
 export const PIXABAY_RATE_MARGIN = 5
@@ -102,14 +108,23 @@ export function pixabayApiKeyFromEnv(): string {
 }
 
 /** A request's canonical form: what is sent, and what the cache keys on. */
-export function pixabaySearchParams(request: StockPhotoSearchRequest): URLSearchParams {
-  const query = request.query.replace(/\s+/g, ' ').trim().toLowerCase().slice(0, STOCK_PHOTO_QUERY_MAX_CHARS).trim()
+export function pixabaySearchParams(
+  request: StockPhotoSearchRequest,
+): URLSearchParams {
+  const query = request.query
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .slice(0, STOCK_PHOTO_QUERY_MAX_CHARS)
+    .trim()
   const params = new URLSearchParams()
   params.set('q', query)
   params.set('image_type', 'photo')
   params.set(
     'orientation',
-    request.orientation === 'horizontal' || request.orientation === 'vertical' ? request.orientation : 'all',
+    request.orientation === 'horizontal' || request.orientation === 'vertical'
+      ? request.orientation
+      : 'all',
   )
   const minWidth = Math.max(0, Math.floor(request.minWidth ?? 0))
   const minHeight = Math.max(0, Math.floor(request.minHeight ?? 0))
@@ -123,11 +138,17 @@ export function pixabaySearchParams(request: StockPhotoSearchRequest): URLSearch
 }
 
 /** `largeImageURL`'s size: the original scaled so its longer edge is at most 1280. */
-export function pixabayLargeSize(width: number, height: number): { width: number; height: number } {
+export function pixabayLargeSize(
+  width: number,
+  height: number,
+): { width: number; height: number } {
   const longer = Math.max(width, height)
   if (!longer || longer <= PIXABAY_LARGE_EDGE) return { width, height }
   const scale = PIXABAY_LARGE_EDGE / longer
-  return { width: Math.round(width * scale), height: Math.round(height * scale) }
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale),
+  }
 }
 
 /** Whether `value` is an https address on one of Pixabay's image hosts. */
@@ -135,14 +156,21 @@ export function isPixabayImageUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' && !url.username && !url.password && PIXABAY_IMAGE_HOSTS.has(url.hostname)
+    return (
+      url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
+      PIXABAY_IMAGE_HOSTS.has(url.hostname)
+    )
   } catch {
     return false
   }
 }
 
 const text = (value: unknown, max: number): string =>
-  typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : ''
+  typeof value === 'string'
+    ? value.replace(/\s+/g, ' ').trim().slice(0, max)
+    : ''
 
 /**
  * The hits of an answer, each checked: an id, a download address on
@@ -175,7 +203,9 @@ export function parsePixabayAnswer(body: unknown): PixabayPhoto[] {
       pageUrl,
       photographer: user || 'A Pixabay contributor',
       ...(user && Number.isSafeInteger(userId) && userId > 0
-        ? { photographerUrl: `https://pixabay.com/users/${encodeURIComponent(user)}-${userId}/` }
+        ? {
+            photographerUrl: `https://pixabay.com/users/${encodeURIComponent(user)}-${userId}/`,
+          }
         : {}),
       tags: text(hit['tags'], 300)
         .split(',')
@@ -208,16 +238,26 @@ export interface PixabayClientOptions {
 export interface PixabayClient {
   configured(): boolean
   /** The hits, or `null` when no request was made or it failed. */
-  search(request: StockPhotoSearchRequest, signal?: AbortSignal): Promise<PixabayPhoto[] | null>
-  download(url: string, options: { maxBytes: number; signal?: AbortSignal }): Promise<StockPhotoDownload | null>
+  search(
+    request: StockPhotoSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<PixabayPhoto[] | null>
+  download(
+    url: string,
+    options: { maxBytes: number; signal?: AbortSignal },
+  ): Promise<StockPhotoDownload | null>
   /** Whether a search would be made now; for the caller's log. */
   rateLimited(): boolean
 }
 
 const withTimeout = (ms: number, signal?: AbortSignal): AbortSignal =>
-  signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms)
+  signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(ms)])
+    : AbortSignal.timeout(ms)
 
-export function createPixabayClient(options: PixabayClientOptions = {}): PixabayClient {
+export function createPixabayClient(
+  options: PixabayClientOptions = {},
+): PixabayClient {
   const apiKey = options.apiKey ?? pixabayApiKeyFromEnv
   const doFetch = options.fetch ?? ((input, init) => fetch(input, init))
   const now = options.now ?? Date.now
@@ -227,7 +267,11 @@ export function createPixabayClient(options: PixabayClientOptions = {}): Pixabay
     const at = now()
     rate.recent = rate.recent.filter((time) => at - time < 60_000)
     if (rate.recent.length >= PIXABAY_LOCAL_PER_MINUTE) return true
-    return rate.remaining !== null && rate.remaining <= PIXABAY_RATE_MARGIN && at < rate.resetAtMs
+    return (
+      rate.remaining !== null &&
+      rate.remaining <= PIXABAY_RATE_MARGIN &&
+      at < rate.resetAtMs
+    )
   }
 
   const readRate = (response: Response) => {
@@ -235,12 +279,17 @@ export function createPixabayClient(options: PixabayClientOptions = {}): Pixabay
     const reset = Number(response.headers.get('x-ratelimit-reset'))
     if (response.status === 429) {
       rate.remaining = 0
-      rate.resetAtMs = now() + (Number.isFinite(reset) && reset > 0 ? reset : 60) * 1000
+      rate.resetAtMs =
+        now() + (Number.isFinite(reset) && reset > 0 ? reset : 60) * 1000
       return
     }
-    if (response.headers.has('x-ratelimit-remaining') && Number.isFinite(remaining)) {
+    if (
+      response.headers.has('x-ratelimit-remaining') &&
+      Number.isFinite(remaining)
+    ) {
       rate.remaining = remaining
-      rate.resetAtMs = now() + (Number.isFinite(reset) && reset > 0 ? reset : 60) * 1000
+      rate.resetAtMs =
+        now() + (Number.isFinite(reset) && reset > 0 ? reset : 60) * 1000
     }
   }
 
@@ -270,7 +319,9 @@ export function createPixabayClient(options: PixabayClientOptions = {}): Pixabay
       }
       readRate(response)
       if (!response.ok) {
-        console.warn('pixabay: the search was refused', { status: response.status })
+        console.warn('pixabay: the search was refused', {
+          status: response.status,
+        })
         return null
       }
       try {
@@ -287,7 +338,11 @@ export function createPixabayClient(options: PixabayClientOptions = {}): Pixabay
         if (!isPixabayImageUrl(url)) return null
         let response: Response
         try {
-          response = await doFetch(url, { method: 'GET', redirect: 'manual', signal: deadline })
+          response = await doFetch(url, {
+            method: 'GET',
+            redirect: 'manual',
+            signal: deadline,
+          })
         } catch {
           return null
         }

@@ -103,7 +103,7 @@ class OrdersListModel(
 }
 
 /** The dialogs an order's screen opens, one at a time. */
-enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT }
+enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT, NOTE }
 
 /**
  * One order's actions: which dialog is open, whether its call is running,
@@ -139,6 +139,32 @@ class OrderActionsModel(
 
   fun close() {
     if (!busy) dialog = null
+  }
+
+  /**
+   * Answers the order's open restock question. The route re-reads the order,
+   * so an answer someone else already gave, or a newer question, is said so
+   * and nothing is written (the console's words for each).
+   */
+  fun answerRestock(orderId: String, choice: RestockAnswerChoice, flaggedAtMs: Double) {
+    if (busy) return
+    busy = true
+    error = null
+    scope.launch {
+      try {
+        done = when (api.answerRestock(orderId, choice, flaggedAtMs)) {
+          "answered" -> "This restock question was already answered — nothing changed."
+          "changed" -> "The restock question changed since this screen loaded — nothing was written. Reload the order to see the current one."
+          else -> choice.recorded
+        }
+      } catch (failure: Throwable) {
+        if (failure is CancellationException) throw failure
+        error = (failure as? ConsoleApiError)?.message ?: "That did not go through. Check the connection and try again."
+        done = null
+      } finally {
+        busy = false
+      }
+    }
   }
 
   /** Runs [call]; on success closes the dialog and says [success], else keeps it open with the reason. */

@@ -234,12 +234,18 @@ export async function resolveMarketplacePluginVersion(
 /**
  * SECURITY-RELEVANT TTL (AGL-1302): the join drops revoked and taken-down
  * versions, so this cache bounds how long a killed plugin keeps loading on
- * published sites — 60s, on par with the page ISR window that already
- * bounded it. Only the HOST-scoped call (the tenant render path) is cached;
- * the console's org-scoped call stays fresh so an install shows up in the
- * workspace the moment it lands.
+ * published sites when nothing announces the kill. Every write that changes
+ * the answer announces itself through `tenant-data:{hostId}`: a takedown or
+ * a revoked version through `dropCachesForListing`, an install or uninstall
+ * through the marketplace's `announcePinChange` (AGL-3741). So this is the
+ * backstop for a fan-out that failed or was capped, not the propagation —
+ * five minutes, where it was one, because at one minute it re-read every
+ * site's pins, listings, versions and revocations sixty times an hour. Only
+ * the HOST-scoped call (the tenant render path) is cached; the console's
+ * org-scoped call stays fresh so an install shows up in the workspace the
+ * moment it lands.
  */
-const REALM_PLUGIN_INSTALLS_TTL_SECONDS = 60
+const REALM_PLUGIN_INSTALLS_TTL_SECONDS = 300
 
 export async function getRealmPluginInstalls(options: {
   orgId?: string

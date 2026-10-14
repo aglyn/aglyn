@@ -114,11 +114,26 @@ const DOCUMENT_MAX_BYTES = 25 * MB
  */
 const PRESENTATION_MAX_BYTES = 50 * MB
 
+/**
+ * Audio ceiling (AGL-3716): a track for the Music player. 50 MB holds a
+ * long lossless WAV of a single song and any MP3 album track several times
+ * over; a whole album is many tracks, never one file.
+ */
+const AUDIO_MAX_BYTES = 50 * MB
+
 export const UPLOAD_TYPES: readonly UploadTypeSpec[] = [
   // Video (AGL-167).
   { contentType: 'video/mp4', extensions: ['.mp4'], signedMaxBytes: 200 * MB, directMaxBytes: 25 * MB, label: 'mp4' },
   { contentType: 'video/webm', extensions: ['.webm'], signedMaxBytes: 200 * MB, directMaxBytes: 25 * MB, label: 'webm' },
   { contentType: 'video/quicktime', extensions: ['.mov'], signedMaxBytes: 200 * MB, directMaxBytes: 25 * MB, label: 'quicktime video' },
+
+  // Audio (AGL-3716), for the Music player. Every row needs the uploader's
+  // rights confirmation (`media-audio-rights.ts`), on every ingress route.
+  { contentType: 'audio/mpeg', extensions: ['.mp3'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'MP3' },
+  { contentType: 'audio/mp4', extensions: ['.m4a'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'M4A' },
+  { contentType: 'audio/aac', extensions: ['.aac'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'AAC' },
+  { contentType: 'audio/ogg', extensions: ['.ogg', '.oga'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'OGG' },
+  { contentType: 'audio/wav', extensions: ['.wav'], signedMaxBytes: AUDIO_MAX_BYTES, directMaxBytes: 25 * MB, label: 'WAV' },
 
   // PDF and archives (AGL-162, AGL-1317).
   { contentType: 'application/pdf', extensions: ['.pdf'], signedMaxBytes: DOCUMENT_MAX_BYTES, directMaxBytes: 10 * MB, label: 'PDF' },
@@ -179,6 +194,34 @@ export const VIDEO_TYPES = new Set(
   ),
 )
 
+export const AUDIO_TYPES = new Set(
+  UPLOAD_TYPES.filter((spec) => spec.contentType.startsWith('audio/')).map(
+    (spec) => spec.contentType,
+  ),
+)
+
+/**
+ * The other names browsers and operating systems give the five audio types
+ * (AGL-3716), folded to the one stored type so one format is one family row:
+ * Safari reports `.m4a` as `audio/x-m4a`, Windows `.wav` as `audio/x-wav`,
+ * Chrome `.mp3` as `audio/mp3` on some systems.
+ */
+const AUDIO_ALIAS_TYPES: Readonly<Record<string, string>> = {
+  'audio/mp3': 'audio/mpeg',
+  'audio/mpeg3': 'audio/mpeg',
+  'audio/x-mpeg': 'audio/mpeg',
+  'audio/x-mp3': 'audio/mpeg',
+  'audio/x-m4a': 'audio/mp4',
+  'audio/m4a': 'audio/mp4',
+  'audio/x-aac': 'audio/aac',
+  'audio/aacp': 'audio/aac',
+  'application/ogg': 'audio/ogg',
+  'audio/vorbis': 'audio/ogg',
+  'audio/x-wav': 'audio/wav',
+  'audio/wave': 'audio/wav',
+  'audio/vnd.wave': 'audio/wav',
+}
+
 export const FONT_TYPES = new Set(
   UPLOAD_TYPES.filter((spec) => spec.contentType.startsWith('font/')).map(
     (spec) => spec.contentType,
@@ -217,6 +260,8 @@ export function normalizeUploadContentType(
   fileName?: string,
 ): string {
   if (ZIP_ALIAS_TYPES.has(contentType)) return 'application/zip'
+  const audio = AUDIO_ALIAS_TYPES[contentType.trim().toLowerCase()]
+  if (audio) return audio
   // `image/jpg`, `image/x-png`, `image/svg` and friends fold to the canonical
   // spelling, so one format is one stored type. Returns the bare type
   // unchanged for anything it does not recognise, so this cannot widen the
@@ -288,7 +333,7 @@ export function requiresFileUploadEntitlement(contentType: string): boolean {
  * replace (a corrected PDF, a re-cut MP4, a Word file reissued as a PDF);
  * swapping ACROSS one is a new asset wearing an old id.
  */
-export type MediaUploadKind = 'image' | 'video' | 'font' | 'document'
+export type MediaUploadKind = 'image' | 'video' | 'audio' | 'font' | 'document'
 
 /**
  * Which family an accepted content type belongs to, or `undefined` for a type
@@ -301,6 +346,7 @@ export function mediaUploadKind(
 ): MediaUploadKind | undefined {
   if (isImageUploadType(contentType)) return 'image'
   if (VIDEO_TYPES.has(contentType)) return 'video'
+  if (AUDIO_TYPES.has(contentType)) return 'audio'
   if (FONT_TYPES.has(contentType)) return 'font'
   return UPLOAD_TYPES_BY_CONTENT_TYPE.has(contentType) ? 'document' : undefined
 }
@@ -311,6 +357,7 @@ export const MEDIA_UPLOAD_KIND_LABELS: Readonly<
 > = {
   image: 'an image',
   video: 'a video',
+  audio: 'an audio file',
   font: 'a font',
   document: 'a document',
 }
@@ -353,6 +400,11 @@ export function directUploadMaxBytes(contentType: string): number | undefined {
  * not delivery.
  */
 export const VIDEO_UPLOADS_RELEASE_FLAG = 'release_video_uploads' as const
+
+/** Whether an accepted content type is audio (AGL-3716). */
+export function isAudioUploadType(contentType: string): boolean {
+  return AUDIO_TYPES.has(contentType)
+}
 
 /** The `code` on every refusal of a paused video, console and `/v1` alike. */
 export const VIDEO_UPLOADS_PAUSED_CODE = 'video_uploads_paused'
@@ -447,7 +499,7 @@ export function mediaPickerKindOf(
   contentType: string,
 ): MediaPickerKind | undefined {
   const family = mediaUploadKind(contentType)
-  if (family === 'image' || family === 'video') return family
+  if (family === 'image' || family === 'video' || family === 'audio') return family
   return family === 'document' && contentType === PDF_CONTENT_TYPE
     ? 'pdf'
     : undefined
@@ -472,7 +524,8 @@ export function uploadAcceptForPickerKind(
 
 /** Every family but video, as the "supported uploads" sentence names them. */
 const NON_VIDEO_UPLOADS_LABEL =
-  'PDF, ZIP, Word, Excel, PowerPoint, CSV, text, Markdown, JSON and WOFF2 fonts'
+  'MP3/M4A/AAC/OGG/WAV audio, PDF, ZIP, Word, Excel, PowerPoint, CSV, text, ' +
+  'Markdown, JSON and WOFF2 fonts'
 
 /**
  * The "supported uploads" sentence. `video: false` stops naming video as a

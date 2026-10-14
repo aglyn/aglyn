@@ -82,21 +82,9 @@ import {
   useCampaignSendApi,
 } from './use-campaign-send-api'
 
-const previewDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#the-campaign-report',
-  excerpt:
-    'The email as an inbox receives it, drawn by the same renderer the send ' +
-    'path uses. Merge tokens are left standing — a real send fills them from ' +
-    'each recipient.',
-})
+const previewDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#email-preview' })
 
-const emailDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#the-campaign-report',
-  excerpt:
-    'One email: what it looked like, who it went to, what was delivered, ' +
-    'and which links were followed — each rate over the population it is ' +
-    'measured against.',
-})
+const emailDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#email-page' })
 
 export interface EmailDetailProps {
   /** The site, or `null` on the organization's Emails page. */

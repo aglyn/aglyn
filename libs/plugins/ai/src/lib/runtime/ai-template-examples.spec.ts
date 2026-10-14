@@ -74,7 +74,7 @@ describe('the starter template examples (AGL-2909)', () => {
       stack: {
         componentId: 'muiStack',
         props: { spacing: 2, notAProp: 'dropped' },
-        nodes: ['title', 'subtitle', 'heading', 'picture', 'form', 'touch', 'work'],
+        nodes: ['title', 'subtitle', 'heading', 'picture', 'form', 'signup', 'touch', 'work'],
       },
       title: { componentId: 'muiTypography', props: { variant: 'h2', children: 'Our story' } },
       subtitle: { componentId: 'muiTypography', props: { variant: 'h6', children: 'Since 1998' } },
@@ -82,6 +82,12 @@ describe('the starter template examples (AGL-2909)', () => {
       picture: { componentId: 'image', props: { alt: 'The shop', height: '220px', objectFit: 'cover' } },
       form: { componentId: 'form', props: { formName: 'Contact' }, nodes: ['field'] },
       field: { componentId: 'formField', props: { fieldName: 'email' } },
+      // A field drawn from MUI's separate form elements, loose on the page: left
+      // out whole, rather than hiding the page for elements its surface lacks.
+      signup: { componentId: 'muiFormControl', nodes: ['signupLabel', 'signupInput', 'signupHelp'] },
+      signupLabel: { componentId: 'muiFormLabel', props: { children: 'Email' } },
+      signupInput: { componentId: 'muiInput', props: { name: 'email', type: 'email' } },
+      signupHelp: { componentId: 'muiFormHelperText', props: { children: 'No spam.' } },
       touch: { componentId: 'muiButton', props: { variant: 'contained', children: 'Get in touch' } },
       work: { componentId: 'muiButton', props: { variant: 'outlined', children: 'See the work', href: '/work' } },
     })

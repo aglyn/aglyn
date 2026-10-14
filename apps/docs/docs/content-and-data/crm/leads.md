@@ -351,7 +351,9 @@ alone; the contact, when there is one, is assigned from its own record.
 
 ## A lead's page
 
-Click a row to open the lead.
+A lead's page is where you work one lead: set its status and owner, call or
+email the person, and **Convert** it once it is real. Click a row in the Leads
+list to open it.
 
 **Lead** holds what the team decides: the status and the owner. It also shows
 the identity the capture recorded — email and name — and the person's
@@ -363,6 +365,8 @@ header carries **Convert**, **Call** and **Log a call** beside **Send email** �
 **Open contact**, **Open company** and **Open deal** in place of **Convert**.
 Beside the status, the header names every campaign the lead is filed under.
 
+### Details {#lead-details}
+
 **Details** is the lead's **profile**, laid out as Salesforce lays out a lead:
 the salutation and the name's parts, then **Lead information** — company, job
 title, industry, rating, lead source, tags, employees and annual revenue —
@@ -372,11 +376,16 @@ under **More fields**, and free-text **notes**, all saved together by the one
 **Save** in the card's header. Once the lead converts, the profile is read-only
 here, because the contact is the record then; the notes can still be written.
 
-**Campaigns** is the filing: **Filed under campaigns** offers the site's
+### Campaigns {#lead-campaigns}
+
+**Campaigns** is your own filing of the lead under the site's campaigns:
+**Filed under campaigns** offers the site's
 campaigns by name, and **Save filing** in the card's header writes the pick. It is your own
 grouping — it never adds anyone to a send, because a campaign mails its
 lists — and it is the same picker the contact's Relationship card carries,
 so a lead and the contact it becomes are filed the same way.
+
+### Captured history {#captured-history}
 
 **Captured history** is read-only: when the person was first and last seen,
 how many times your site captured them, every source that did, and — under

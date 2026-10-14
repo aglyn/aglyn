@@ -103,4 +103,35 @@ export function collaboratorRedirect(
   return landing
 }
 
+/**
+ * Whether the sites list stays put for this scoped member, i.e. whether a
+ * link to `/[orgSlug]/hosts` ("View all sites") goes anywhere. For a member
+ * who reaches exactly one site the guard turns the list into that site, so a
+ * link that promises the list would land them back where they stood.
+ */
+export function siteListStaysPut(
+  orgSlug: string,
+  sites: readonly CollaboratorSite[],
+): boolean {
+  return (
+    collaboratorRedirect(buildRoute(Route.HOST_LIST, { orgSlug }), orgSlug, sites) ===
+    null
+  )
+}
+
+/**
+ * Whether a `hostMemberships` answer can be acted on.
+ *
+ * The listener answers from the persistent cache first, and the cache holds
+ * the rows this browser happened to read — the site last opened, through the
+ * switcher's direct read of it — not the member's reach. A cached answer of
+ * ONE row is the only one that moves anybody (skip the list of one), and it
+ * is exactly what a member of several sites gets on a cold load, so it waits
+ * for the server. Zero and two rows send nobody anywhere wrong: zero stays on
+ * the list, and two already means "more than one".
+ */
+export function reachableSitesSettled(fromCache: boolean, count: number): boolean {
+  return !fromCache || count !== 1
+}
+
 export default collaboratorRedirect

@@ -44,7 +44,9 @@ import {
 import { buildRoute, Route } from '../constants/route-links'
 import { hostDisplayDomain } from '../constants/tenant-links'
 import { useHostId, useHostSubdomain } from '../components/host-id-provider'
+import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import { siteListStaysPut } from '../utils/collaborator-navigation'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import CreateHostDialog from './create-host-dialog.component'
 import HostIcon from './host-icon.component'
@@ -74,6 +76,14 @@ export function HostSwitcherNavComponent() {
   const orgSlug = useOrgSlug()
   const uid = user?.uid
   const orgId = currentOrg?.$id
+  // A member scoped to exactly one site is sent from the sites list into
+  // that site (AGL-1032), so "View all sites" would only bring them back
+  // here. The same reads the guard makes, deduplicated by the SDK.
+  const { orgWide, ready: reachReady } = useOrgReach()
+  const scoped = reachReady && !orgWide
+  const { sites: reachable, ready: reachableReady } = useReachableSites(scoped)
+  const showAllSites =
+    !scoped || !reachableReady || siteListStaysPut(orgSlug, reachable)
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
@@ -264,6 +274,7 @@ export function HostSwitcherNavComponent() {
           </ListItemIcon>
           <ListItemText primary="Create site" />
         </MenuItem>
+        {showAllSites ? (
         <MenuItem
           onClick={close}
           component={AppLink as any}
@@ -279,6 +290,7 @@ export function HostSwitcherNavComponent() {
             slotProps={{ primary: { color: 'primary' } }}
           />
         </MenuItem>
+        ) : null}
       </Menu>
       <CreateHostDialog open={creating} onClose={() => setCreating(false)} />
     </>

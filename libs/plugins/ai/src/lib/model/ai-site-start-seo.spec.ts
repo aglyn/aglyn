@@ -27,6 +27,8 @@ import {
   AI_SITE_SEO_FORM_FIELDS,
   AI_SITE_SEO_LIMITS,
   AI_SITE_SEO_PROPOSAL_KIND,
+  aiSiteSeoEmbedded,
+  aiSiteSeoNounPhrase,
   aiSiteSeoProposal,
   aiSiteSeoProposalForInputs,
   aiSiteSeoProposalOf,
@@ -244,13 +246,102 @@ describe('a description is never cut mid-phrase (AGL-3596)', () => {
 
   it('keeps the whole sentence where it fits, and the subject alone where nothing else does', () => {
     expect(values({ about: 'a dog groomer', audience: 'dog owners who want a calm, gentle groom' })?.['seo.description']).toBe(
-      'Dog groomer, for dog owners who want a calm, gentle groom.',
+      'Dog groomer for dog owners who want a calm, gentle groom.',
     )
     const long = 'x'.repeat(10)
     const description =
       values({ about: `a dog groomer with ${Array.from({ length: 30 }, () => long).join(' ')}`, audience: 'dog owners' })?.[
         'seo.description'
       ] ?? ''
-    expect(description).toBe('Dog groomer, for dog owners.')
+    expect(description).toBe('Dog groomer for dog owners.')
+  })
+})
+
+/*
+ * The 2026-10-08 production guided start (AGL-3660), whose description went
+ * out as "Eastside Book Circle is A neighborhood book club: monthly meetups,
+ * the current read, past picks, and a way to join, for Neighbors on the east
+ * side." — the answers pasted mid-sentence as typed.
+ */
+describe('a listing reads as one sentence, not pasted answers (AGL-3660)', () => {
+  const BOOK_CLUB = {
+    businessName: 'Eastside Book Circle',
+    businessType: 'A neighborhood book club: monthly meetups, the current read, past picks, and a way to join',
+    audience: 'Neighbors on the east side',
+  }
+  const listing = (inputs: Record<string, unknown>) => aiSiteSeoProposalForInputs(inputs)?.values ?? null
+
+  it('cuts what the site is at its colon and lowers what began each answer', () => {
+    expect(listing(BOOK_CLUB)).toEqual({
+      'seo.title': 'Eastside Book Circle — Neighborhood book club',
+      'seo.description': 'Eastside Book Circle is a neighborhood book club for neighbors on the east side.',
+    })
+    // Without a name, the subject leads, as a title does.
+    expect(listing({ ...BOOK_CLUB, businessName: undefined })).toEqual({
+      'seo.title': 'Neighborhood book club',
+      'seo.description': 'Neighborhood book club for neighbors on the east side.',
+    })
+  })
+
+  it('reads naturally across real-shaped answers, inside the meta-description length', () => {
+    const cases: Array<[Record<string, unknown>, string, string]> = [
+      [
+        { businessName: 'Juniper Clay', businessType: 'Pottery studio: classes, open studio and a shop', audience: 'Beginners and hobby potters in Portland' },
+        'Juniper Clay — Pottery studio',
+        'Juniper Clay is a pottery studio for beginners and hobby potters in Portland.',
+      ],
+      [
+        { businessName: 'Hillside Paws', businessType: 'Dog grooming salon', audience: 'For busy dog owners in Hillside.' },
+        'Hillside Paws — Dog grooming salon',
+        'Hillside Paws is a dog grooming salon for busy dog owners in Hillside.',
+      ],
+      [
+        { businessName: 'Stillwater Yoga', businessType: 'Yoga classes and workshops', audience: 'Adults of every level' },
+        'Stillwater Yoga — Yoga classes and workshops',
+        'Stillwater Yoga is yoga classes and workshops for adults of every level.',
+      ],
+      [
+        { businessName: 'Oak & Iron', businessType: 'an independent furniture maker', audience: 'Homeowners who want pieces that last' },
+        'Oak & Iron — Independent furniture maker',
+        'Oak & Iron is an independent furniture maker for homeowners who want pieces that last.',
+      ],
+      [
+        { businessName: 'Lone Star Plumbing', businessType: 'McKinney plumber', audience: 'NYC transplants' },
+        'Lone Star Plumbing — McKinney plumber',
+        'Lone Star Plumbing is a McKinney plumber for NYC transplants.',
+      ],
+      [
+        { businessName: 'Crumb', businessType: 'Austin bakery', audience: 'Austin families', city: 'Austin' },
+        'Crumb — Austin bakery',
+        'Crumb is an Austin bakery for Austin families.',
+      ],
+    ]
+    for (const [inputs, title, description] of cases) {
+      const values = listing(inputs)
+      expect([inputs.businessName, values?.['seo.title']]).toEqual([inputs.businessName, title])
+      expect([inputs.businessName, values?.['seo.description']]).toEqual([inputs.businessName, description])
+      expect(values?.['seo.description'].length).toBeLessThanOrEqual(AI_SITE_SEO_LIMITS.description)
+      // Never a capitalized article or a colon mid-sentence.
+      expect(values?.['seo.description']).not.toMatch(/ is (?:A|An|The) |:/)
+    }
+  })
+
+  it('keeps an answer that is only its list whole, and a phrase with clauses of its own keeps its comma', () => {
+    expect(aiSiteSeoNounPhrase(': monthly meetups')).toBe(': monthly meetups')
+    expect(aiSiteSeoNounPhrase('A book club: meetups')).toBe('A book club')
+    expect(
+      listing({ businessName: 'Waggle', businessType: 'a dog groomer with full grooms, baths and nail trims', audience: 'Local dog owners' })?.[
+        'seo.description'
+      ],
+    ).toBe('Waggle is a dog groomer with full grooms, baths and nail trims, for local dog owners.')
+  })
+
+  it('lowers only the capital that began an answer', () => {
+    expect(aiSiteSeoEmbedded('Neighbors on the east side')).toBe('neighbors on the east side')
+    expect(aiSiteSeoEmbedded('A neighborhood book club')).toBe('a neighborhood book club')
+    expect(aiSiteSeoEmbedded('Families')).toBe('families')
+    expect(aiSiteSeoEmbedded('Eastside Book Club members')).toBe('Eastside Book Club members')
+    expect(aiSiteSeoEmbedded('McKinney homeowners')).toBe('McKinney homeowners')
+    expect(aiSiteSeoEmbedded('Austin dog owners', ['Austin'])).toBe('Austin dog owners')
   })
 })

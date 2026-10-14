@@ -675,6 +675,59 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         'You’re receiving this because you started a checkout with {{host.businessName}}.',
     },
     {
+      // AGL-3736: days after fulfilment, one per order, with a single-use
+      // link per product that opens its review form pre-verified.
+      key: 'review-request',
+      name: 'Review request',
+      description:
+        'Asks a buyer to review what they bought, a set number of days after ' +
+        'the order is fulfilled. One per order; each product has its own ' +
+        'single-use link. Turn it off or change the delay in Settings → Reviews.',
+      requiresFeature: 'productReviews',
+      pluginId: 'commerce',
+      plugin: 'Commerce',
+      control: 'besigner',
+      defaultSubject: 'How was your order from {{host.businessName}}?',
+      mergeTokens: [
+        ORDER_NUMBER_TOKEN,
+        {
+          name: 'review.products',
+          description:
+            'Each product to review, one per line, with its own review link',
+          sample: 'House Blend: https://shop.example.com/products/house-blend?review=…',
+        },
+        {
+          name: 'review.url',
+          description: 'The review link for the first product',
+          sample: 'https://shop.example.com/products/house-blend?review=…',
+        },
+        {
+          name: 'review.productName',
+          description: 'The first product’s name',
+          sample: 'House Blend',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'How did we do?', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'Thanks again for your order {{order.number}} from ' +
+            '{{host.businessName}}. Would you tell other shoppers what you ' +
+            'think? Each link opens the product with a review form.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{review.products}}', variant: 'body' },
+        { block: 'button', label: 'Write a review', href: '{{review.url}}' },
+        {
+          block: 'text',
+          text: 'Each link works once, for 60 days.',
+          variant: 'caption',
+        },
+      ],
+      footerReason: ORDER_FOOTER_REASON,
+    },
+    {
       key: 'member-post',
       name: 'New member post',
       description: 'Notifies members when new members-only content is posted.',

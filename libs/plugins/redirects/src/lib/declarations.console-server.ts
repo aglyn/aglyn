@@ -22,7 +22,13 @@ import {
   type PluginTransferResource,
   type TransferRecordsHooks,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import {
+  registerPluginResourceDraftWriter,
+  type PluginResourceDraftWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { REDIRECT_DRAFT_RESOURCE, checkRedirectDraftContent } from './model/redirect-draft-content'
+import { registerRedirectAiCapability } from './server/redirect-ai-capability'
 import {
   REDIRECTS_ALIAS_DICTIONARIES,
   REDIRECTS_DEFAULT_POLICY,
@@ -35,6 +41,32 @@ import {
 /** The resource that reads and writes, loaded with the first import or export. */
 async function load(): Promise<TransferRecordsHooks> {
   return (await import('./transfer/redirects-transfer-console')).redirectsTransferResource() as TransferRecordsHooks
+}
+
+let writerLoading: Promise<PluginResourceDraftWriter> | null = null
+
+/** The `redirect` writer over the Admin SDK, loaded on its first read or write. */
+function redirectWriter(): Promise<PluginResourceDraftWriter> {
+  writerLoading ??= import('./server/redirect-ai-writer.console')
+    .then(({ redirectAiWriter }) => redirectAiWriter())
+    .catch((error: unknown) => {
+      writerLoading = null
+      throw error
+    })
+  return writerLoading
+}
+
+/**
+ * The `redirect` writer as boot registers it (AGL-3745): the check is pure
+ * and answers at once, from the content's own rules; the hooks that read or
+ * write load the Admin SDK half on first use, which checks again against the
+ * site.
+ */
+export const lazyRedirectAiWriter: PluginResourceDraftWriter = {
+  check: (content) => checkRedirectDraftContent(content),
+  refusal: async (context) => (await redirectWriter()).refusal(context),
+  read: async (context) => (await redirectWriter()).read(context),
+  write: async (request) => (await redirectWriter()).write(request),
 }
 
 /**
@@ -75,4 +107,7 @@ export function registerRedirectsConsoleServerDeclarations(): void {
     revert: async (ctx, snapshot, decisions) => (await load()).revert(ctx, snapshot, decisions),
   }
   registerPluginTransferResource(REDIRECTS_TRANSFER_KEY, resource, { pluginId: BUNDLE_ID })
+  registerPluginResourceDraftWriter(REDIRECT_DRAFT_RESOURCE, lazyRedirectAiWriter, { pluginId: BUNDLE_ID })
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerRedirectAiCapability()
 }

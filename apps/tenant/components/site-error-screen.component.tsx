@@ -17,7 +17,7 @@
 'use client'
 
 import Button from '@mui/material/Button'
-import SiteStatusScreen from './site-status-screen.component'
+import SiteStatusScreen, { useSiteStatusCopy } from './site-status-screen.component'
 
 export interface SiteErrorScreenProps {
   /** Re-runs the render that threw; supplied by the Next error boundary. */
@@ -41,17 +41,16 @@ export interface SiteErrorScreenProps {
  * thing happening.
  */
 export default function SiteErrorScreen({ onReset }: SiteErrorScreenProps) {
+  // The title, the line under it and the button, in the site's language (AGL-3771).
+  const copy = useSiteStatusCopy()
   return (
     <SiteStatusScreen
       code="500"
-      title={'Something went wrong'}
-      message={
-        'This page didn’t load properly. Trying again often fixes it — if it ' +
-        'doesn’t, the rest of the site is still available.'
-      }
+      title={copy.errorTitle}
+      message={copy.errorMessage}
       action={
         <Button variant="outlined" onClick={onReset}>
-          {'Try again'}
+          {copy.tryAgain}
         </Button>
       }
     />

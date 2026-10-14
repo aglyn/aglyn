@@ -77,6 +77,15 @@ const ALLOWED = new Map<string, string>([
     'libs/plugins/ai/src/lib/jobs/fixtures/ai-yoga-site-plan-recording.ts',
     "Verbatim recording of a live model answer (AGL-3660): a yoga studio's search description says 'a welcoming community'.",
   ],
+  // Recorded model answers (AGL-3616): the first plans a live paid guided
+  // start gave a dental practice and a food bank, copied verbatim so the
+  // dataset-cap repair replays what the model actually wrote. The food bank
+  // "serves our community" and plans "Community voices" — a nonprofit's own
+  // words, not the marketplace or the forum.
+  [
+    'libs/plugins/ai/src/lib/jobs/fixtures/ai-dataset-site-plan-recordings.ts',
+    "Verbatim recording of live model answers (AGL-3616): a food bank's copy says 'serving our community'.",
+  ],
   // A website kind the AI guided start offers (AGL-3660): "Nonprofit &
   // community" names community ORGANIZATIONS a visitor's site is for, and
   // "community" is a word a person types to describe one. Neither the
@@ -84,6 +93,18 @@ const ALLOWED = new Map<string, string>([
   [
     'libs/plugins/ai/src/lib/model/ai-site-kinds.ts',
     'The nonprofit/community-organization website kind and its search keyword — AGL-3660.',
+  ],
+  [
+    'apps/docs/docs/ai/site-looks.md',
+    'The AI site styles guide names the "Nonprofit & community" kind — AGL-3660.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/layout-language/ai-layout-storefront.ts',
+    'A storefront icon rule: the word "community" a shop owner writes in a reason to buy ("part of the community") draws the location icon — AGL-3676.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/model/ai-site-kinds.spec.ts',
+    'Table-spec briefs for that kind ("a community food bank", "a community center") — AGL-3660.',
   ],
   // ---- The forum. This is the meaning the rename exists to protect. ----
   [

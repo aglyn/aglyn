@@ -236,11 +236,7 @@ export function ThemeOverridesCard(props: {
   return (
     <CardDisplay
       header={'What you have changed'}
-      help={docsHelp('themeBuilder', {
-        excerpt:
-          'Your changes on top of the picked theme, stored separately so the ' +
-          'theme itself is never changed.',
-      })}
+      help={docsHelp('editYourTheme', { anchor: '#what-you-have-changed' })}
       contentGutterX
       contentGutterY
     >

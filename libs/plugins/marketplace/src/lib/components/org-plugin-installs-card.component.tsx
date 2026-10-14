@@ -195,7 +195,9 @@ export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) 
       // people arrive at looking for a switch, having read in Marketplace
       // that installing is done there — so it points at the step of the
       // walkthrough that explains the split.
-      help={pluginDocsHelp('installYourFirstPlugin', { anchor: '#step-7-off' })}
+      help={pluginDocsHelp('publisherHandbook', {
+        anchor: '#installed-from-the-marketplace',
+      })}
       contentGutterX
       contentGutterY
     >

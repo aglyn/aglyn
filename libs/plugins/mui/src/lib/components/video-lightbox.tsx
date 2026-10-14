@@ -20,20 +20,23 @@
  *
  * ## Why this is its own module
  *
- * This file is the ONLY place in the tenant's component graph that names
- * `@mui/material/Dialog`, and it must stay that way. `libs/shared/ui/jsx`'s
- * barrel deliberately withholds `dialog-confirm`, `loading-modal` and
- * `navigation-drawer` because the MUI Dialog/Drawer/Popper stack was measured
- * sitting in the first-load chunks of `/pricing` — a page that opens no dialog
- * (AGL-1290). `plugin.ts` imports every element eagerly, so a `Dialog` named
- * at the top of `video.tsx` would put that whole stack back on every published
- * page of every customer site, including the ones with no video on them.
+ * The dialog itself is the shared lightbox shell (AGL-3717,
+ * `@aglyn/shared-ui-jsx/components/lightbox/lightbox-dialog`), the same one
+ * the Image, the Image List gallery and the Lightbox container open. What is
+ * the Video's own is what goes inside it: the film, its controls, the hosted
+ * player frame and the play beacon.
  *
- * Split out, it is a chunk `video.tsx` reaches through `lazy(() => import())`
- * and mounts only once a visitor has actually asked to watch something. A page
- * with no video pays nothing; a page with a video pays nothing; a visitor who
- * clicks pays once. The player's controls, `video-lightbox-controls.tsx`, are
- * imported from here and from nowhere else, so they ride in the same chunk.
+ * The shell names `@mui/material/Dialog`, which must never be reached from a
+ * first paint. `libs/shared/ui/jsx`'s barrel deliberately withholds
+ * `dialog-confirm`, `loading-modal` and `navigation-drawer` because the MUI
+ * Dialog/Drawer/Popper stack was measured sitting in the first-load chunks of
+ * `/pricing` — a page that opens no dialog (AGL-1290). `plugin.ts` imports
+ * every element eagerly, so this module is a chunk `video.tsx` reaches through
+ * `lazy(() => import())` and mounts only once a visitor has actually asked to
+ * watch something. A page with no video pays nothing; a page with a video
+ * pays nothing; a visitor who clicks pays once. The player's controls,
+ * `video-lightbox-controls.tsx`, are imported from here and from nowhere
+ * else, so they ride in the same chunk.
  *
  * It is still MUI's `Dialog` and still the site's own theme. The split is
  * about WHEN the dialog arrives, not about hand-rolling a modal — and the
@@ -53,12 +56,12 @@
  */
 'use client'
 
-import { mdiClose } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import type { LightboxAppearance } from '@aglyn/shared-ui-jsx/components/lightbox/lightbox-appearance'
+import {
+  LightboxCloseButton,
+  LightboxDialog,
+} from '@aglyn/shared-ui-jsx/components/lightbox/lightbox-dialog'
 import Box from '@mui/material/Box'
-import Dialog, { type DialogProps } from '@mui/material/Dialog'
-import IconButton from '@mui/material/IconButton'
-import useMediaQuery from '@mui/material/useMediaQuery'
 import { type ReactNode, useRef } from 'react'
 import {
   controlButtonSx,
@@ -98,6 +101,11 @@ export interface VideoLightboxProps {
    * that player and never plays `src` itself.
    */
   embedSrc?: string
+  /**
+   * The author's lightbox settings (AGL-3717). Absent, the dialog is exactly
+   * the one AGL-2744 shipped: wide, black, the close control in the corner.
+   */
+  appearance?: LightboxAppearance
 }
 
 /** What a dialog is called when the author gave the video no title. */
@@ -126,6 +134,7 @@ export function VideoLightbox(props: VideoLightboxProps) {
     captions,
     playback,
     embedSrc,
+    appearance,
   } = props
   const playbackHandlers = useVideoPlaybackBeacon({
     ...playback,
@@ -134,21 +143,17 @@ export function VideoLightbox(props: VideoLightboxProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   /** The frame that goes full screen, controls and all. */
   const playerRef = useRef<HTMLDivElement>(null)
-  /**
-   * `prefers-reduced-motion` reaches the DIALOG, not the video.
+  /*
+   * `prefers-reduced-motion` reaches the DIALOG, not the video: the shared
+   * shell drops its transition to nothing (AGL-3717 moved that rule there).
    *
-   * The overlay's fade-and-grow is incidental motion a visitor did not ask
-   * for, so it is dropped to zero — MUI reads `transitionDuration` for both
-   * the backdrop and the paper, so one value covers the whole open.
-   *
-   * The FILM is deliberately left alone, and that is the more interesting
-   * half. Autoplay here is not autoplay: the visitor pressed a play button,
-   * and a play button that opens a paused video is a defect, not an
-   * accommodation. WCAG's auto-motion requirement is about motion that
-   * starts without the user, and it is satisfied anyway — the player's
-   * controls are on screen, so the video can be paused at any moment.
+   * The FILM is deliberately left alone. Autoplay here is not autoplay: the
+   * visitor pressed a play button, and a play button that opens a paused
+   * video is a defect, not an accommodation. WCAG's auto-motion requirement
+   * is about motion that starts without the user, and it is satisfied anyway
+   * — the player's controls are on screen, so the video can be paused at any
+   * moment.
    */
-  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   /**
    * Pauses before closing, so the sound stops on the press rather than when
    * the exit transition ends and the `<video>` leaves the tree.
@@ -163,18 +168,19 @@ export function VideoLightbox(props: VideoLightboxProps) {
    * this covers one that passes the key on as well, so one press never does
    * both.
    */
-  const handleClose: DialogProps['onClose'] = (_event, reason) => {
+  const interceptClose = (reason: string) => {
     const doc = playerRef.current?.ownerDocument
     if (reason === 'escapeKeyDown' && doc?.fullscreenElement) {
       void Promise.resolve(doc.exitFullscreen()).catch(() => undefined)
-      return
+      return true
     }
-    closeDialog()
+    return false
   }
   return (
-    <Dialog
+    <LightboxDialog
       open={open}
-      onClose={handleClose}
+      onClose={closeDialog}
+      interceptClose={interceptClose}
       onKeyDown={(event) =>
         handlePlayerShortcut(event, {
           video: videoRef.current,
@@ -183,28 +189,16 @@ export function VideoLightbox(props: VideoLightboxProps) {
       }
       maxWidth="lg"
       fullWidth
-      transitionDuration={reduceMotion ? 0 : undefined}
-      slotProps={{
-        paper: {
-          /**
-           * ⚠️ The label goes on the PAPER, not on `<Dialog>`.
-           *
-           * `role="dialog"` lives on the paper; props spread onto `Dialog`
-           * reach the Modal root, which is `role="presentation"`. Written
-           * there first and measured in a browser: the presentation root
-           * carried the name and the dialog itself had none, which is an
-           * unlabelled dialog announced to a screen reader — the exact
-           * failure the label was added to prevent. No `DialogTitle`,
-           * deliberately: the film is the content, and a heading above it
-           * would only push it down.
-           */
-          'aria-label': title || FALLBACK_LABEL,
-          // The paper is a frame around a video, not a sheet of content:
-          // no padding, and a black ground so a letterboxed film has
-          // something to sit on rather than a white margin.
-          sx: { overflow: 'hidden', bgcolor: 'common.black' },
-        },
-      }}
+      // No `DialogTitle`, deliberately: the film is the content, and a
+      // heading above it would only push it down. The name rides the paper.
+      label={title || FALLBACK_LABEL}
+      // The close control lives inside the frame that goes full screen.
+      closeButton={false}
+      appearance={appearance}
+      // The paper is a frame around a video, not a sheet of content: no
+      // padding, and a black ground so a letterboxed film has something to
+      // sit on rather than a white margin.
+      paperSx={{ overflow: 'hidden', bgcolor: 'common.black' }}
     >
       <Box
         ref={playerRef}
@@ -220,25 +214,17 @@ export function VideoLightbox(props: VideoLightboxProps) {
           bgcolor: 'common.black',
         }}
       >
-        <IconButton
+        <LightboxCloseButton
           onClick={closeDialog}
-          aria-label="Close video"
-          size="small"
+          label="Close video"
+          appearance={appearance}
           sx={[
             controlButtonSx,
-            (theme) => ({
-              position: 'absolute',
-              top: theme.spacing(1),
-              right: theme.spacing(1),
-              zIndex: 1,
-              // Over frames of unknown brightness, so the control carries its
-              // own ground rather than trusting the film's.
-              bgcolor: 'common.black',
-            }),
+            // Over frames of unknown brightness, so the control carries its
+            // own ground rather than trusting the film's.
+            ...(appearance?.closeStyle ? [] : [{ bgcolor: 'common.black' }]),
           ]}
-        >
-          <MdiIcon path={mdiClose.path} fontSize="small" />
-        </IconButton>
+        />
         {embedSrc ? (
           // A hosted player draws its own controls inside its frame, so the
           // dialog adds none, and its shortcuts find no film to act on.
@@ -294,7 +280,7 @@ export function VideoLightbox(props: VideoLightboxProps) {
           </>
         )}
       </Box>
-    </Dialog>
+    </LightboxDialog>
   )
 }
 VideoLightbox.displayName = 'VideoLightbox'

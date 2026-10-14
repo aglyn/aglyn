@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +41,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.COMMERCE_MAX_OPTIONS
 import com.aglyn.contracts.ProductStatus
 import com.aglyn.contracts.ProductType
 import com.aglyn.contracts.isLowStock
@@ -362,6 +364,25 @@ private fun ProductDialogs(editor: ProductEditorModel) {
             onSelect = { raw -> editor.change(draft.copy(type = ProductType.entries.first { it.raw == raw })) },
           )
         }
+        Text("Options", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
+        draft.options.forEachIndexed { index, option ->
+          Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(option.name, { editor.change(draft.withOptionName(index, it)) }, label = { Text("Option name") }, placeholder = { Text("Size") }, singleLine = true,
+              modifier = Modifier.weight(1f).testTag("option-name-$index"))
+            IconButton(onClick = { editor.change(draft.withOptionRemoved(index)) }, modifier = Modifier.testTag("option-remove-$index")) {
+              Icon(AglynIcons.named("close"), contentDescription = "Remove option ${option.name.ifBlank { index + 1 }}")
+            }
+          }
+          OutlinedTextField(option.valuesText, { editor.change(draft.withOptionValues(index, it)) }, label = { Text("Values") }, placeholder = { Text("Small, Medium, Large") },
+            supportingText = { Text("Separate values with commas.") }, modifier = Modifier.fillMaxWidth().testTag("option-values-$index"))
+        }
+        if (draft.options.size < COMMERCE_MAX_OPTIONS) {
+          OutlinedButton(onClick = { editor.change(draft.withOptionAdded()) }, Modifier.testTag("option-add")) {
+            Icon(AglynIcons.named("add"), contentDescription = null)
+            Text(if (draft.options.isEmpty()) "Add options like size or color" else "Add another option", Modifier.padding(start = space(1f)))
+          }
+        }
+        if (draft.variants.size > 1) Text("${draft.variants.size} variants", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         draft.variants.forEachIndexed { index, variant ->
           fun update(next: VariantDraft) = editor.change(draft.copy(variants = draft.variants.toMutableList().also { it[index] = next }))
           if (draft.variants.size > 1) Text(variant.label, style = MaterialTheme.typography.titleSmall)
@@ -375,7 +396,7 @@ private fun ProductDialogs(editor: ProductEditorModel) {
             OutlinedTextField(variant.sku, { update(variant.copy(sku = it)) }, label = { Text("SKU") }, singleLine = true, modifier = Modifier.weight(1f))
             OutlinedTextField(variant.barcode, { update(variant.copy(barcode = it)) }, label = { Text("Barcode") }, singleLine = true, modifier = Modifier.weight(1f))
           }
-          if (draft.create) {
+          if (draft.create || variant.fresh) {
             OutlinedTextField(variant.stock, { update(variant.copy(stock = it.filter(Char::isDigit))) }, label = { Text("Stock (optional)") },
               supportingText = { Text("Leave empty to not track stock.") }, singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), modifier = Modifier.fillMaxWidth())

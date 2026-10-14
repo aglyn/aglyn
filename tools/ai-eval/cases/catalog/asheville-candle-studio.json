@@ -10,7 +10,7 @@
       "step": null,
       "model": null,
       "effort": null,
-      "note": "A reference answer written by hand: one product for each thing the brief sells, options only where the brief gives the choices, gaps marked where a shopper needs a fact the brief does not give, and no price.",
+      "note": "A reference answer written by hand: one product for each thing the brief sells, options only where the brief gives the choices, gaps marked where a shopper needs a fact the brief does not give, no price in any text, and a suggested price for each by what it is (Zach, 2026-10-12).",
       "plan": null,
       "answer": {
         "products": [
@@ -34,7 +34,8 @@
             ],
             "seoTitle": "Cedar and smoke hand-poured soy candle",
             "seoDescription": "A soy candle hand-poured in Asheville, scented with cedar and smoke, in an 8 oz or 16 oz jar.",
-            "photo": "The cedar and smoke candle lit on a wooden table, its label facing the camera."
+            "photo": "The cedar and smoke candle lit on a wooden table, its label facing the camera.",
+            "price": 24
           },
           {
             "name": "Fig and black tea soy candle",
@@ -56,7 +57,8 @@
             ],
             "seoTitle": "Fig and black tea hand-poured soy candle",
             "seoDescription": "A soy candle hand-poured in Asheville, scented with fig and black tea, in an 8 oz or 16 oz jar.",
-            "photo": "The fig and black tea candle lit on a wooden table, its label facing the camera."
+            "photo": "The fig and black tea candle lit on a wooden table, its label facing the camera.",
+            "price": 24
           },
           {
             "name": "Wild mint soy candle",
@@ -78,7 +80,8 @@
             ],
             "seoTitle": "Wild mint hand-poured soy candle",
             "seoDescription": "A soy candle hand-poured in Asheville, scented with wild mint, in an 8 oz or 16 oz jar.",
-            "photo": "The wild mint candle lit on a wooden table, its label facing the camera."
+            "photo": "The wild mint candle lit on a wooden table, its label facing the camera.",
+            "price": 24
           },
           {
             "name": "Soy wax melts",
@@ -100,7 +103,8 @@
             ],
             "seoTitle": "Soy wax melts in three scents",
             "seoDescription": "Soy wax melts from our Asheville candle studio, in cedar and smoke, fig and black tea, or wild mint.",
-            "photo": "A pack of wax melts beside a warmer, a few pieces set out in front."
+            "photo": "A pack of wax melts beside a warmer, a few pieces set out in front.",
+            "price": 9.5
           },
           {
             "name": "Candle and melts gift set",
@@ -123,7 +127,8 @@
             ],
             "seoTitle": "Soy candle and wax melts gift set",
             "seoDescription": "A hand-poured soy candle and matching wax melts from our Asheville studio, in one of three scents.",
-            "photo": "The candle and its pack of melts together in the gift box, lid set to one side."
+            "photo": "The candle and its pack of melts together in the gift box, lid set to one side.",
+            "price": 38
           },
           {
             "name": "Logo matchbox",
@@ -136,7 +141,8 @@
             "options": [],
             "seoTitle": "Logo matchbox",
             "seoDescription": "A matchbox with the studio logo, made to sit beside a hand-poured soy candle.",
-            "photo": "A closed matchbox showing the logo, with a few matches laid beside it."
+            "photo": "A closed matchbox showing the logo, with a few matches laid beside it.",
+            "price": 4
           }
         ]
       },

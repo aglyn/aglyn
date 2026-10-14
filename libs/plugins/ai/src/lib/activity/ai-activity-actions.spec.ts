@@ -29,6 +29,7 @@ import {
   AI_ACTIVITY_ACTION_LIST,
   aiActivityActionLabel,
   aiOutputTargetType,
+  aiStaffAuditDescribe,
   isAiActivityAction,
   staffAuditActionGroup,
   staffAuditActionGroupLabel,
@@ -92,6 +93,9 @@ describe('where the feed files a job output', () => {
     for (const resource of ['form', 'emailScreen', 'campaign', 'product', 'experiment'] as const) {
       expect(aiOutputTargetType(resource)).toBe('content')
     }
+    // A build's settings (AGL-3748) and media library changes (AGL-3752) describe the site.
+    expect(aiOutputTargetType('settings')).toBe('content')
+    expect(aiOutputTargetType('media')).toBe('content')
   })
 })
 
@@ -117,5 +121,23 @@ describe('the staff audit facet groups AI', () => {
   it('names the AI group the way the feed chip does, and leaves the rest as written', () => {
     expect(staffAuditActionGroupLabel('ai')).toBe('AI')
     expect(staffAuditActionGroupLabel('billing')).toBe('billing')
+  })
+})
+
+describe('the staff audit trail reads a job output as words (AGL-3660)', () => {
+  it('names what the job made, and that it made a draft', () => {
+    expect(
+      aiStaffAuditDescribe({
+        action: 'ai.job.output',
+        after: { resource: 'screen', label: 'Home', credits: 4 },
+      }),
+    ).toEqual({ action: 'Created page Home with Aglyn AI', result: 'Draft created' })
+    expect(
+      aiStaffAuditDescribe({ action: 'ai.job.output', after: { resource: 'reusableComponent' } }),
+    ).toEqual({ action: 'Created component with Aglyn AI', result: 'Draft created' })
+  })
+
+  it('leaves every other code to its label', () => {
+    expect(aiStaffAuditDescribe({ action: 'ai.job.cancel', after: {} })).toBeUndefined()
   })
 })

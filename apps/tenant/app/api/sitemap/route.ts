@@ -57,6 +57,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-sitemap-readers'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -68,13 +69,14 @@ export const dynamic = 'force-dynamic'
 
 /**
  * The sweeps below read whole collections — crawlers plus verification traffic
- * hit these routes constantly (AGL-1302). Cached for 5 minutes under the same
+ * hit these routes constantly (AGL-1302). Cached under the same
  * `tenant-data:{hostId}` tag every publish busts, so a sitemap reflects a
  * publish IMMEDIATELY — the TTL only bounds writes that never announce
- * themselves. That keeps AGL-1160's intent (revalidation on publish) while
- * restoring cacheability.
+ * themselves, which is why it is the shared `PUBLISHED_SITE_DATA_TTL_SECONDS`
+ * rather than a five-minute re-read of every screen. That keeps AGL-1160's
+ * intent (revalidation on publish) while restoring cacheability.
  */
-const SITEMAP_TTL_SECONDS = 300
+const SITEMAP_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * How many collection documents the index will look at. A site's collections

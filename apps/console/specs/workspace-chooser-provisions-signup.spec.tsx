@@ -52,6 +52,13 @@ let mockScope: {
   confirmed: boolean
 }
 
+// The reader's workspace pins (AGL-3762) are a read of their own account
+// document; none of these assertions is about them.
+jest.mock('../hooks/use-pinned-orgs', () => ({
+  __esModule: true,
+  usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+  default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+}))
 jest.mock('next/navigation', () => {
   const router = {
     push: jest.fn(),
@@ -213,6 +220,26 @@ describe('AGL-2590 · the first verified session gets the workspace', () => {
     // about to answer itself. A redirect is not a render you can correct a
     // beat later, and neither is an empty state somebody has already read.
     expect(screen.queryByText('Create your first site')).toBeNull()
+  })
+
+  it('never claims while the page is already leaving for the editor-hint bounce (AGL-3690)', async () => {
+    // The bounce's navigation keeps this document alive until the other host
+    // answers. A claim started in that gap cleared the held name, and the
+    // create never left the page, so the canary landed on "0 workspaces".
+    const leave = require('../utils/sign-up-landing-hold')
+    mockStoredUserDoc = { pendingSignUpWorkspace: held() }
+    leave.markLeavingConsole()
+    try {
+      render(<OrgJump />)
+      await flush()
+      expect(orgCreateBodies()).toEqual([])
+      // Untouched, so the page the bounce returns to still provisions it.
+      expect(mockStoredUserDoc['pendingSignUpWorkspace']).toEqual(
+        expect.objectContaining({ name: 'Acme Inc' }),
+      )
+    } finally {
+      leave.resetLeavingConsoleForTests()
+    }
   })
 
   it('asks nothing of an account with no held workspace', async () => {

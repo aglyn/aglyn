@@ -120,8 +120,10 @@ const firestore = makeFirestore() as unknown as FirebaseFirestore.Firestore
 
 /** The org's datasets, read only through the index the data plugin publishes (AGL-3080). */
 const DATASETS = `orgs/${ORG}/datasets`
+/** The site's record templates, which the index reads to say where a dataset's records have pages (AGL-3747). */
+const RECORD_PAGES = `hosts/${HOST}/recordPages`
 /** The reads this reader makes of the site's own collections. */
-const ownReads = () => reads.filter((read) => read.path !== DATASETS)
+const ownReads = () => reads.filter((read) => read.path !== DATASETS && read.path !== RECORD_PAGES)
 
 beforeEach(() => {
   docs = new Map()
@@ -236,6 +238,20 @@ describe('readSiteInventory — what is listed', () => {
       fields: ['name', 'role'],
       visibleTo: [`host:${HOST}`],
     })
+    // A dataset whose records carry photos (AGL-3616): its Image field rides `text`.
+    docs.set(`orgs/${ORG}/datasets/ds-work`, {
+      displayName: 'Work',
+      model: {
+        order: ['title', 'image', 'slug'],
+        fields: {
+          title: { name: 'Title', type: 'text' },
+          image: { name: 'Image', type: 'text', customType: 'image' },
+          // A record page's address (AGL-3727): what a listing's card links by.
+          slug: { name: 'Page address', type: 'text', customType: 'pageAddress' },
+        },
+      },
+      visibleTo: [`host:${HOST}`],
+    })
     docs.set(`orgs/${ORG}/datasets/ds-other`, {
       displayName: 'Elsewhere',
       fields: ['x'],
@@ -262,7 +278,17 @@ describe('readSiteInventory — what is listed', () => {
       templates: [{ id: 'tpl-1', name: 'Service page', kind: 'page' }],
       forms: [{ id: 'frm-live', name: 'contact', fields: ['email', 'message'] }],
       // A v1 dataset's model is derived by the core reader, which names the fields for display.
-      datasets: [{ id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'] }],
+      datasets: [
+        { id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'] },
+        {
+          id: 'ds-work',
+          name: 'Work',
+          fields: ['Title', 'Image', 'Page address'],
+          fieldIds: ['title', 'image', 'slug'],
+          imageField: 'image',
+          addressField: 'slug',
+        },
+      ],
       collections: [{ id: 'col-blog', name: 'Blog', slug: 'blog' }],
       screens: [
         { id: 'scr-entry', name: 'Post', slug: 'post', layoutId: null, template: true },
@@ -271,6 +297,50 @@ describe('readSiteInventory — what is listed', () => {
       theme: null,
       truncated: [],
     })
+  })
+
+  /*
+   * AGL-3747: a dataset whose record page was saved before the plan was made
+   * gave the build no base to link its cards by — only a record template the
+   * same plan made did (AGL-3727).
+   */
+  it('says where the site already serves a dataset’s records pages of their own, by the address its pages use (AGL-3747)', async () => {
+    docs.set(`orgs/${ORG}/datasets/ds-team`, {
+      displayName: 'Team',
+      model: {
+        order: ['name', 'handle', 'slug'],
+        fields: {
+          name: { name: 'Name', type: 'text' },
+          handle: { name: 'Handle', type: 'text' },
+          slug: { name: 'Page address', type: 'text', customType: 'pageAddress' },
+        },
+      },
+      visibleTo: [`host:${HOST}`],
+    })
+    docs.set(`orgs/${ORG}/datasets/ds-work`, { displayName: 'Work', fields: ['title'], visibleTo: [`host:${HOST}`] })
+    docs.set(`orgs/${ORG}/datasets/ds-gone`, { displayName: 'Gone', fields: ['title'], visibleTo: [`host:${HOST}`] })
+    // Team's pages are served by its Handle, not the page-address field.
+    docs.set(`${RECORD_PAGES}/scr-person`, { datasetId: 'ds-team', base: '/people/', slugField: 'handle' })
+    // A binding whose address field the dataset no longer has links nothing.
+    docs.set(`${RECORD_PAGES}/scr-gone`, { datasetId: 'ds-gone', base: 'gone', slugField: 'missing' })
+    const { datasets } = await readSiteInventory(ORG, HOST, { firestore })
+    expect(datasets).toEqual([
+      {
+        id: 'ds-gone',
+        name: 'Gone',
+        fields: ['Title'],
+        fieldIds: ['title'],
+      },
+      {
+        id: 'ds-team',
+        name: 'Team',
+        fields: ['Name', 'Handle', 'Page address'],
+        fieldIds: ['name', 'handle', 'slug'],
+        addressField: 'handle',
+        recordBase: 'people',
+      },
+      { id: 'ds-work', name: 'Work', fields: ['Title'], fieldIds: ['title'] },
+    ])
   })
 
   it('reduces the site’s theme to its summary, its light-scheme colors and its fonts', async () => {

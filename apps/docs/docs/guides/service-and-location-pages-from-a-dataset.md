@@ -36,7 +36,7 @@ fields a service page shows. For example:
 | --- | --- | --- |
 | Name | Text | The page heading and its name in the browser tab |
 | Summary | Text | The intro paragraph, and the search description |
-| Photo | Text | The hero image (a media library image or a URL) |
+| Photo | Image | The hero image, chosen from your media library |
 | Category | Text | Grouping related services |
 | Page address | Page address | The service's own segment of its address |
 
@@ -51,7 +51,11 @@ bookmarked it.
 Already have records? The record template settings below can add the field for
 you and give every existing record an address in one step.
 
-Add a record per service. Make sure the dataset is shared with the site that
+Add a record per service. For the **Photo**, press **Choose from media** in the
+record editor and pick the picture; see
+[Image fields](../content-and-data/datasets/model-builder.md#image-fields).
+
+Make sure the dataset is shared with the site that
 will show it (**Sharing** on the dataset); a site only serves records of
 datasets shared with it.
 
@@ -59,13 +63,15 @@ datasets shared with it.
 
 Create a page for the design. Its own name and address don't matter much,
 because once it's a template it no longer answers at its own address. Design it
-like any page. Wherever a record's value belongs, write `{{item.field}}`, the
-same tokens a [repeat](../building-sites/besigner/repeat.md) uses:
+like any page. Wherever a record's value belongs, press the `{}` **insert
+binding** button in that field and pick the record's field, the same bindings a
+[repeat](../building-sites/besigner/repeat.md) uses. Each shows as a pill
+naming the field:
 
-- a heading of `{{item.name}}`
-- a paragraph of `{{item.summary}}`
-- an image whose source is `{{item.photo}}`
-- a reference goes one hop further: `{{item.crew_lead.name}}`
+- a heading bound to **Name**
+- a paragraph bound to **Summary**
+- an Image whose **Image source** is bound to **Photo**
+- a reference goes one hop further: the **Crew lead**'s **Name**
 
 A repeat on the template can list the routed record's neighbors. A Stack that
 repeats over **Services** with the filter `category == {{item.category}}` lists
@@ -104,8 +110,14 @@ records to check a long name or a missing photo.
 
 On your **Services** listing page (an ordinary page at `/services`, say),
 repeat a card over the **Services** dataset. Each repeated row carries its
-record's page as `{{item.url}}`, so a button or link with the address
-`{{item.url}}` goes to that service's page. The canvas previews the real links.
+record's page as its **url**, so a button or link whose **External URL** is
+bound to it with the `{}` button goes to that service's page. The canvas
+previews the real links.
+
+Built each service as an ordinary page instead of from a template? Give the
+dataset a **Page** field, pick each service's page in its record, and bind the
+card button's **External URL** to that field with the `{}` button; see
+[Page fields](../content-and-data/datasets/model-builder.md#page-fields).
 
 If the dataset has a field of its own called `url`, `{{item.url}}` keeps meaning
 that field.

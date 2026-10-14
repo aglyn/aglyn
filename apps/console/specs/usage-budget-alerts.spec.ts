@@ -52,6 +52,8 @@ interface SeededOrg {
   monthRollup?: { month: string; billedCents: number } | null
   /** `orgs/{id}/assistUsage/{month}.estCostUsd`. */
   assistEstCostUsd?: number
+  /** `orgs/{id}/assistUsage/{month}.returnedUsd` — credits given back (AGL-3595). */
+  assistReturnedUsd?: number
   /** `orgs/{id}/counters/media.bytes` — the org library. */
   orgLibraryBytes?: number
   usageAlerts?: Record<string, { month?: string; threshold?: number }>
@@ -66,7 +68,12 @@ interface SeededOrg {
 }
 
 let mockOrgs: SeededOrg[]
-let mockNotifications: Array<{ orgId: string; title: string; body: string }>
+let mockNotifications: Array<{
+  orgId: string
+  title: string
+  body: string
+  link?: string
+}>
 let mockStaffNotifications: Array<{ title: string; body: string }>
 let mockEmails: Array<{
   to: string[] | string
@@ -80,8 +87,16 @@ let mockPooledEmails: Record<string, string>
 let mockGuardWrites: Array<Record<string, { month: string; threshold: number }>>
 
 const mockNotifyOrgAdmins = jest.fn(
-  async (orgId: string, payload: { title: string; body: string }) => {
-    mockNotifications.push({ orgId, title: payload.title, body: payload.body })
+  async (
+    orgId: string,
+    payload: { title: string; body: string; link?: string },
+  ) => {
+    mockNotifications.push({
+      orgId,
+      title: payload.title,
+      body: payload.body,
+      link: payload.link,
+    })
   },
 )
 const mockNotifyStaff = jest.fn(
@@ -155,7 +170,12 @@ function orgSubcollection(org: SeededOrg, name: string): any {
           snapshotOf(
             org.assistEstCostUsd === undefined
               ? null
-              : { estCostUsd: org.assistEstCostUsd },
+              : {
+                  estCostUsd: org.assistEstCostUsd,
+                  ...(org.assistReturnedUsd === undefined
+                    ? {}
+                    : { returnedUsd: org.assistReturnedUsd }),
+                },
           ),
       }),
     }
@@ -325,8 +345,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // barrel (AGL-2155); a stubbed export here would fail as "not a function"
   // rather than as anything to do with this suite's subject.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/bandwidth-cap'),
-  buildRoute: () => '/acme/billing',
-  Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
+  // The usage section and the plan section apart, so a notice that links
+  // the plans page to upgrade (Free's AI credits) can be told from one that
+  // links the meters.
+  buildRoute: (route: string) =>
+    route === 'MANAGE_BILLING_USAGE' ? '/acme/billing/usage' : '/acme/billing',
+  Route: {
+    MANAGE_BILLING: 'MANAGE_BILLING',
+    MANAGE_BILLING_USAGE: 'MANAGE_BILLING_USAGE',
+  },
   ORG_BILLING_SUBCOLLECTION: 'billing',
   ORG_BILLING_DOC_ID: 'billing',
   // The BODY IS REAL (AGL-2220). It used to be a hardcoded `{}`, which was
@@ -1229,16 +1256,9 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
   })
 
   it('at the band on a plan with NO rate: AI stops until next month or an upgrade, no charge ever', async () => {
-    // A Free org handed 300 credits through the entitlements override, and
-    // Enterprise, whose band is contractual. Neither is offered a control,
-    // so neither is told about one.
+    // Enterprise, whose band is contractual, is offered no control, so it is
+    // told about none. (Free has its own words — see the Free block below.)
     for (const org of [
-      seededOrg({
-        plan: 'free',
-        rollup: null,
-        entitlements: { assistCreditsPerMonth: 300 },
-        assistEstCostUsd: credits(350),
-      }),
       seededOrg({
         plan: 'enterprise',
         rollup: null,
@@ -1274,6 +1294,45 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
         entitlements: { assistCreditsPerMonth: 0 },
         rollup: null,
         assistEstCostUsd: credits(900),
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(0)
+    expect(assistGuard()).toBeUndefined()
+  })
+
+  it('counts credits NET of those given back: the paid copy, unchanged, on the net figure', async () => {
+    // FORCED RED by reading the gross spend line: 3,300 used, not 2,900.
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: credits(3_300),
+        assistReturnedUsd: credits(400),
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    const [alert] = assistAlerts()
+    // 2,900 net — still past the 2,750 band, so the paid words stand.
+    expect(alert.title).toBe(
+      "You've used your included AI assist credits — extra credits are now billed",
+    )
+    expect(alert.body).toContain(
+      'has used 2,900 AI assist credits — more than the 2,750 your plan includes this month',
+    )
+    expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
+    expect(alert.link).toBe('/acme/billing/usage')
+    const mail = mockEmails.filter((entry) => entry.context === 'usage-alert')
+    expect(mail[0].text).toContain('See your usage and billing: ')
+  })
+
+  it('a paid workspace whose give-backs take it under the band is warned on its net figure', async () => {
+    // 3,000 gross, 1,000 returned: 2,000 net is 73% — under every threshold.
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: credits(3_000),
+        assistReturnedUsd: credits(1_000),
       }),
     ]
     await run()
@@ -1326,5 +1385,86 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
       assistCredits: { month: MONTH, threshold: 100 },
       assistCogs: { month: MONTH, threshold: 1 },
     })
+  })
+})
+
+/**
+ * FREE'S AI CREDITS ARE AN ALLOWANCE, NOT A BAND SOLD PAST.
+ *
+ * A Free workspace was told on 10/10 that it "has used 442 AI assist credits
+ * — more than the 300 your plan includes": the gross figure, when 252 of
+ * those credits had been given back (test resets, refunded job failures), and
+ * in words that read like the start of a charge Free can never incur. The
+ * notice counts what the gate counts — net of give-backs — and on Free says
+ * the credits are used for the month, when they renew, and how to get more.
+ */
+describe('Free AI credits notice: net of give-backs, never reads like billing', () => {
+  const credits = (n: number) => n / 1000
+  const freeAlerts = () =>
+    mockNotifications.filter((entry) => /AI (assist )?credits/.test(entry.title))
+  const assistGuard = () => mockGuardWrites.at(-1)?.['assistCredits']
+  /** The first of next month, as the notice names it. */
+  const renews = (() => {
+    const now = new Date()
+    return new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    ).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
+  })()
+  const freeOrg = (overrides: Partial<SeededOrg>) =>
+    seededOrg({ plan: 'free', usageBudget: undefined, rollup: null, ...overrides })
+
+  it('gross 442 with 252 returned is 190 net — no notice at all', async () => {
+    // FORCED RED by reading the gross spend line: the 10/10 notice, verbatim.
+    mockOrgs = [
+      freeOrg({ assistEstCostUsd: credits(442), assistReturnedUsd: credits(252) }),
+    ]
+    await run()
+    expect(freeAlerts()).toHaveLength(0)
+    expect(assistGuard()).toBeUndefined()
+    expect(
+      mockEmails.filter((entry) => entry.context === 'usage-alert'),
+    ).toHaveLength(0)
+  })
+
+  it('at the allowance: used for the month, when it renews, upgrade for more — no "more than"', async () => {
+    mockOrgs = [
+      freeOrg({ assistEstCostUsd: credits(442), assistReturnedUsd: credits(100) }),
+    ]
+    await run()
+    expect(freeAlerts()).toHaveLength(1)
+    const [alert] = freeAlerts()
+    expect(alert.title).toBe("You've used your free AI credits for this month")
+    expect(alert.body).toBe(
+      'The acme workspace has used its free AI credits for this month. ' +
+        `They renew on ${renews}. Upgrade for more.`,
+    )
+    expect(alert.body).not.toContain('more than')
+    expect(alert.body).not.toContain('your plan includes')
+    expect(alert.body).not.toMatch(/billed|metered|invoice/)
+    // The upgrade link: the plans page, not the meters.
+    expect(alert.link).toBe('/acme/billing')
+    const mail = mockEmails.filter((entry) => entry.context === 'usage-alert')
+    expect(mail).toHaveLength(1)
+    expect(mail[0].subject).toBe(alert.title)
+    expect(mail[0].text).toContain(alert.body)
+    expect(mail[0].text).toMatch(/Upgrade for more: \S+\/acme\/billing$/)
+    expect(assistGuard()).toEqual({ month: MONTH, threshold: 100 })
+  })
+
+  it('approaching it on net figures: nothing is charged, and when they renew', async () => {
+    // 290 gross, 40 returned: 250 net is 83%.
+    mockOrgs = [
+      freeOrg({ assistEstCostUsd: credits(290), assistReturnedUsd: credits(40) }),
+    ]
+    await run()
+    expect(freeAlerts()).toHaveLength(1)
+    const [alert] = freeAlerts()
+    expect(alert.title).toBe("You're above 80% of your free AI credits quota")
+    expect(alert.body).toContain(
+      'has used 250 of the 300 free AI credits your plan includes this month.',
+    )
+    expect(alert.body).toContain('Nothing is ever charged on Free.')
+    expect(alert.body).toContain(`renew on ${renews}`)
+    expect(alert.link).toBe('/acme/billing/usage')
   })
 })

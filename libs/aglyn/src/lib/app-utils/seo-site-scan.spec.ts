@@ -130,7 +130,11 @@ describe('scanSeoSite', () => {
       keywords: '/lamps: dimmable\n/draft: secret',
     })
     expect(scan.pages.find((entry) => entry.screenId === 'lamps')?.keywords).toEqual(['dimmable'])
-    expect(scan.notes).toEqual(['Keywords for /draft were not used: no checked page is published at that address.'])
+    expect(scan.notes).toEqual([
+      'Keywords for /draft were not used: no checked page is published at that address.',
+      // An Unlisted page is a launch left half done, so the check says so.
+      '1 published page is kept out of search and was not checked: Draft. Set its Visibility to Public to list it.',
+    ])
   })
 
   it('reads a site with no routing map as nothing to check', async () => {

@@ -18,6 +18,7 @@ export function registerPluginDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-crm/declarations')).registerCrmDeclarations()
     ;(await import('@aglyn/plugins-workflows/declarations')).registerWorkflowsDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
+    ;(await import('@aglyn/plugins-weglot/declarations')).registerWeglotDeclarations()
   })()
   return done
 }

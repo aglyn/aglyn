@@ -43,6 +43,7 @@ import {
   AI_DOCTRINE_RULES,
   AI_FREE_PAGE_WORST_CASE_CREDITS,
   AI_TYPED_LIST_MIN_ITEMS,
+  aiAsksToGetInTouch,
   aiBracketedFacts,
   aiDanglingWord,
   aiDoctrineViolationText,
@@ -88,6 +89,7 @@ import {
   detectTypedData,
   detectUnfilledInstances,
   detectUnrelatedScreenLinks,
+  aiSettleUnrelatedScreenLinks,
   detectUnresponsiveGrids,
   detectUntemplatedSimilarPages,
   estimateAiOutputLoad,
@@ -488,6 +490,28 @@ describe('rule 3 — forms are built on the Forms page, then placed', () => {
     expect(unbound).toMatchObject([{ code: 'inline-form', nodeIds: ['n2'] }])
   })
 
+  it.each([
+    ['an Input', { componentId: 'muiInput', props: { name: 'email', type: 'email' } }],
+    ['a Select', { componentId: 'muiSelect', props: { name: 'topic' } }],
+    ['a Radio Group', { componentId: 'muiRadioGroup', props: { name: 'plan' } }],
+    ['a Checkbox', { componentId: 'muiCheckbox', props: { name: 'agree', value: 'Yes' } }],
+    ['a Rating', { componentId: 'muiRating', props: { name: 'score' } }],
+  ] as const)('refuses %s of MUI’s separate form elements drawn outside any form', (_name, answer) => {
+    // A Form Control over a Form Label and the answer: the answer is what is loose.
+    const loose = detectInlineForms(
+      tree(
+        page(
+          section({
+            componentId: 'muiFormControl',
+            children: [{ componentId: 'muiFormLabel', props: { children: 'Question' } }, answer as Nested],
+          }),
+        ),
+      ),
+      'page',
+    )
+    expect(loose).toMatchObject([{ rule: 3, code: 'inline-form', nodeIds: ['n4'] }])
+  })
+
   it('refuses fields drawn inside a form placed by its id', () => {
     const shadowed = detectInlineForms(
       tree(page(section({ componentId: 'form', props: { formId: 'frm-contact' }, children: [field('email')] }))),
@@ -503,6 +527,23 @@ describe('rule 3 — forms are built on the Forms page, then placed', () => {
     expect(
       detectInlineForms(tree({ componentId: 'form', children: [field('email'), field('name')] }), 'form'),
     ).toEqual([])
+  })
+
+  it('holds a form’s own design of like fields to no rule 1: a field is one shape, and a form places no instances', () => {
+    const labelled = (label: string, name: string): Nested => ({
+      componentId: 'muiFormControl',
+      props: { fullWidth: true },
+      children: [
+        { componentId: 'muiFormLabel', props: { children: label } },
+        { componentId: 'muiInput', props: { name, fullWidth: true } },
+      ],
+    })
+    const design = tree({
+      componentId: 'form',
+      props: { formName: 'Quote request' },
+      children: [labelled('Full name', 'fullName'), labelled('Phone', 'phone'), labelled('Property address', 'address')],
+    })
+    expect(validateAiDoctrineTree(design, 'form').violations).toEqual([])
   })
 
   it('in a plan: a section that collects answers places a form', () => {
@@ -1084,6 +1125,71 @@ describe('rule 10 — a link goes to a screen that does what its words say, or i
     expect(detectUnrelatedScreenLinks(passing, 'layout', home)).toEqual([])
     expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'layout')).toEqual([])
     expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'email', home)).toEqual([])
+  })
+})
+
+/*
+ * A Free guided start's café (beta.243, 2026-10-12, job 4ctq-dfbUP): Home
+ * placed the contact and pre-order form, and the Menu page's "Request weekend
+ * pickup" was sent to Home, so the whole page was refused for one link the
+ * compiler chose. A link that asks to get in touch may go to the page placing
+ * the form, home or not, and a link that cannot is repaired in code (AGL-3729).
+ */
+describe('rule 10 — a link sent home is repaired, not refused (AGL-3729)', () => {
+  const home = { homeScreenIds: ['scr-home'] }
+  const pickup = (props: Record<string, unknown> = { screenId: 'scr-home' }): Nested => ({
+    componentId: 'muiButton',
+    props: { children: 'Request weekend pickup', variant: 'contained', ...props },
+  })
+  const menu = (...children: Nested[]) => tree(page(section(text('h1', 'Our menu', 'h1'), ...children)))
+
+  it('reads a call to action that asks to get in touch', () => {
+    for (const words of ['Request weekend pickup', 'Pre-order for Saturday', 'Book a table', 'Get a quote', 'Enquire now', 'Contact us']) {
+      expect(aiAsksToGetInTouch(words)).toBe(true)
+    }
+    for (const words of ['See the menu', 'Our story', 'Browse the gallery']) expect(aiAsksToGetInTouch(words)).toBe(false)
+  })
+
+  it('refuses "Request weekend pickup" sent home when Home is not known to hold the form, and admits it when it is', () => {
+    expect(codes(detectUnrelatedScreenLinks(menu(pickup()), 'page', home))).toEqual(['link-unrelated-screen'])
+    expect(detectUnrelatedScreenLinks(menu(pickup()), 'page', { ...home, formScreenIds: ['scr-home'] })).toEqual([])
+    // Words that do not ask for what the form does are still held to them.
+    const story = { componentId: 'muiButton', props: { children: 'Our story', screenId: 'scr-home' } }
+    expect(codes(detectUnrelatedScreenLinks(menu(story), 'page', { ...home, formScreenIds: ['scr-home'] }))).toEqual([
+      'link-unrelated-screen',
+    ])
+  })
+
+  it('repoints the link to the page that places the form, dropping any href, and the page then passes', () => {
+    const before = menu(pickup({ href: '/' }))
+    const context = { ...home, formScreenIds: ['scr-contact'], ownScreenIds: ['scr-menu'] }
+    const after = aiSettleUnrelatedScreenLinks(before, 'page', context)
+    expect(after.nodes['n3'].props).toEqual({ children: 'Request weekend pickup', variant: 'contained', screenId: 'scr-contact' })
+    expect(before.nodes['n3'].props?.['href']).toBe('/')
+    expect(detectUnrelatedScreenLinks(after, 'page', context)).toEqual([])
+  })
+
+  it('leaves the link out when the site has no page for it, and never links the page to itself', () => {
+    const story = { componentId: 'muiButton', props: { children: 'Our story', screenId: 'scr-home' } }
+    const before = menu(story, text('body1', 'Fresh every morning.'))
+    const after = aiSettleUnrelatedScreenLinks(before, 'page', { ...home, formScreenIds: ['scr-home'] })
+    expect(after.nodes['n3']).toBeUndefined()
+    expect(after.nodes['n1'].nodes).toEqual(['n2', 'n4'])
+    expect(detectUnrelatedScreenLinks(after, 'page', home)).toEqual([])
+    // The form is on this page: no page to link, so the link is left out.
+    const own = aiSettleUnrelatedScreenLinks(menu(pickup({ screenId: 'scr-home', href: '/' })), 'page', {
+      homeScreenIds: ['scr-home'],
+      formScreenIds: ['scr-menu'],
+      ownScreenIds: ['scr-menu'],
+    })
+    expect(own.nodes['n3']).toBeUndefined()
+  })
+
+  it('returns the same tree when nothing is sent home for nothing', () => {
+    const fine = menu(pickup({ screenId: 'scr-about' }))
+    expect(aiSettleUnrelatedScreenLinks(fine, 'page', home)).toBe(fine)
+    const admitted = menu(pickup())
+    expect(aiSettleUnrelatedScreenLinks(admitted, 'page', { ...home, formScreenIds: ['scr-home'] })).toBe(admitted)
   })
 })
 
@@ -2088,8 +2194,8 @@ describe('rule 17 — a measured budget for every output', () => {
     const fields = tree({
       componentId: 'form',
       children: Array.from({ length: AI_OUTPUT_BUDGETS.form.nodes }, (_, i) => ({
-        componentId: 'formField',
-        props: { fieldName: `field${i}`, fieldType: 'text' },
+        componentId: 'muiInput',
+        props: { name: `field${i}` },
       })),
     })
     const found = detectOverBudget(scoreAiOutput(fields, 'form'), 'form', fields)

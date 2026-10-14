@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { AI_JOB_CANCELED_LEDE, aiJobCanceledCreditsCopy } from './ai-job-cancel-copy'
 import { aiJobConfirmingOwnPlan, aiJobKindNoun } from './ai-job-activity'
 import { aiJobRefundCopy } from './ai-job-failure-copy'
 import { aiBuildItemRows, aiBuildOpNoun, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
@@ -241,13 +242,29 @@ function aiSiteBuildRowsOf(
     built.set(resource, left - 1)
     return true
   }
-  const stages: Array<{ id: string; label: string; resource: string; sections?: string[] }> = []
+  const stages: Array<{ id: string; label: string; resource: string; sections?: string[]; hint?: string }> = []
+  // A scaffold designs its look first on every start (AGL-3660), and writes
+  // its item ledger only with that first pass's outcome — so while the look
+  // is being designed, the job is read here, without a ledger, and the look
+  // is the stage it is on: a moving site job that has built nothing yet. A
+  // job read without its ledger that has built something and no look is one
+  // from before the look had a unit of its own, and has the stage only where
+  // it built one.
+  const moving = (phase === 'working' || paused) && job.outputs.length === 0
   for (const row of CREATION_ROWS) {
     const creation = job.plan?.create.find((entry) => entry.kind === row.kind)
-    // A job read without its item ledger is one from before the look had a
-    // unit of its own (AGL-3660): its look is a stage only where it built one.
-    if (creation || (row.resource === 'theme' && job.outputs.some((output) => output.resource === 'theme'))) {
-      stages.push({ id: row.resource, label: row.label(creation?.name ?? ''), resource: row.resource })
+    const look = row.resource === 'theme'
+    if (
+      creation ||
+      (look && job.kind !== 'build' && moving) ||
+      (look && job.outputs.some((output) => output.resource === 'theme'))
+    ) {
+      stages.push({
+        id: look ? 'look' : row.resource,
+        label: row.label(creation?.name ?? ''),
+        resource: row.resource,
+        ...(look ? { hint: AI_SITE_LOOK_HINT } : {}),
+      })
     }
   }
   const pages = job.plan?.screens ?? []
@@ -259,23 +276,27 @@ function aiSiteBuildRowsOf(
       sections: page.sections.map((section) => section.name),
     })
   })
+  // The build step's start: when the first stage after the plan began.
+  const buildStartedAt = job.steps.find((step) => step.name !== 'plan' && step.startedAt)?.startedAt ?? null
   let reached = false
   for (const stage of stages) {
     const done = phase === 'done' || take(stage.resource)
     const current = !done && !reached && planDone
     if (current) reached = true
+    const state: AiSiteBuildRowState = done
+      ? 'done'
+      : current && paused
+        ? 'paused'
+        : current && stopped
+          ? 'failed'
+          : current && phase === 'working'
+            ? 'active'
+            : 'waiting'
     rows.push({
       id: stage.id,
       label: stage.label,
-      state: done
-        ? 'done'
-        : current && paused
-          ? 'paused'
-          : current && stopped
-            ? 'failed'
-            : current && phase === 'working'
-              ? 'active'
-              : 'waiting',
+      state,
+      ...(state === 'active' && stage.hint ? { hint: stage.hint, startedAt: buildStartedAt } : {}),
       ...(stage.sections?.length ? { sections: stage.sections } : {}),
     })
   }
@@ -363,6 +384,8 @@ export function aiSiteBuildCreditsLine(
   // from the job's recorded give-back.
   const refund = phase === 'working' || phase === 'done' ? null : aiJobRefundCopy(job)
   if (refund && refunded > 0) return refund
+  // A person's cancel keeps what ran charged, and says how much (AGL-3616).
+  if (phase === 'canceled') return aiJobCanceledCreditsCopy(job)
   if (phase === 'done') return `${subject} used ${net} credits.`
   if (phase === 'working') return `Credits used so far: ${net}`
   if (refund) return `${subject} used ${net} credits. ${refund}`
@@ -448,7 +471,7 @@ export function aiJobPageCopy(
     }
   }
   if (phase === 'canceled') {
-    return { heading: generic ? 'Your AI job was canceled' : `Your ${noun} was not built`, lede: 'The job was canceled.' }
+    return { heading: generic ? 'Your AI job was canceled' : `You canceled your ${noun}`, lede: AI_JOB_CANCELED_LEDE }
   }
   return {
     heading: generic ? 'Your AI job stopped' : `Your ${noun} ${noun.endsWith('s') ? 'were' : 'was'} not built`,
@@ -523,7 +546,7 @@ function aiBuildPageCopy(
         .join(' '),
     }
   }
-  if (phase === 'canceled') return { heading: 'Your build was canceled', lede: 'The job was canceled.' }
+  if (phase === 'canceled') return { heading: 'Your build was canceled', lede: AI_JOB_CANCELED_LEDE }
   return {
     heading: 'Nothing could be built',
     lede: [job.error ?? 'Something went wrong building what you asked for.', outcome].filter(Boolean).join(' '),

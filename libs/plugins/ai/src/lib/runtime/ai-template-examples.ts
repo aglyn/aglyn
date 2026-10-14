@@ -19,6 +19,7 @@ import {
   STARTER_TEMPLATES,
   type StarterTemplate,
 } from '@aglyn/aglyn/app-utils/starter-templates'
+import { FORM_INPUT_ELEMENT_IDS } from '@aglyn/aglyn/app-utils/forms'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   validateAiDoctrineTree,
@@ -68,7 +69,16 @@ export interface AiTemplateExample {
 /** The block's ceiling: 1,500 tokens at four characters a token. */
 export const AI_TEMPLATE_EXAMPLES_MAX_CHARS = 6_000
 
-const FORM_COMPONENTS = new Set(['form', 'formField'])
+/**
+ * A form and every piece of one — the all-in-one Form Field and MUI's
+ * separate form elements — which a page never draws: it places a saved form.
+ */
+const FORM_COMPONENTS = new Set<string>([
+  'form',
+  'formField',
+  ...Object.values(FORM_INPUT_ELEMENT_IDS),
+  'muiFormHelperText',
+])
 
 /** The elements a page links with, which go where their `screenId` or `href` says. */
 const LINK_COMPONENTS = new Set(['muiButton', 'muiScreenLink'])

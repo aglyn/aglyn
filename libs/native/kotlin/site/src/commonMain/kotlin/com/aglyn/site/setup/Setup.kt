@@ -231,6 +231,32 @@ data class ThemeCatalog(
   val navHeightSm: ThemeRange,
 )
 
+/** One of the built-in themes a site can start from (`ThemePresetSummary`): its id, name, one line and swatches. */
+data class ThemePreset(val id: String, val name: String, val description: String, val swatches: List<String>)
+
+fun themePresetsOf(json: JsonElement?): List<ThemePreset> = (json as? JsonArray).orEmpty().mapNotNull { row ->
+  val id = row.str("id") ?: return@mapNotNull null
+  ThemePreset(id, row.str("name") ?: id, row.str("description").orEmpty(), row.arr("swatches").mapNotNull { (it as? JsonPrimitive)?.contentOrNull })
+}
+
+/** What the theme page loads once: the editor's controls, what they show, and the built-in themes. */
+data class ThemeEditorLoad(val catalog: ThemeCatalog, val values: ThemeValues, val presets: List<ThemePreset>)
+
+/** The font categories the browser filters by, in the order the console lists them (`HostThemeFontCategory`). */
+val FONT_CATEGORIES: List<Pair<String, String>> = listOf(
+  "sans-serif" to "Sans serif", "serif" to "Serif", "display" to "Display", "handwriting" to "Handwriting", "monospace" to "Monospace",
+)
+
+/** The fonts the browser lists: those whose name has every typed word, in the picked category (null: all). */
+fun filterFonts(fonts: List<ThemeFontOption>, search: String, category: String?): List<ThemeFontOption> {
+  val words = search.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+  return fonts.filter { font ->
+    if (category != null && font.category != category) return@filter false
+    val name = font.family.lowercase()
+    words.all { name.contains(it) }
+  }
+}
+
 /** What each control shows (`readThemeEditorValues`). */
 data class ThemeValues(
   val colors: Map<String, Map<String, String?>>,
@@ -242,10 +268,10 @@ data class ThemeValues(
   val navHeightSm: Double?,
 )
 
-private fun JsonElement?.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject
-private fun JsonElement?.arr(key: String): List<JsonElement> = ((this as? JsonObject)?.get(key) as? JsonArray).orEmpty()
-private fun JsonElement?.str(key: String): String? = ((this as? JsonObject)?.get(key) as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
-private fun JsonElement?.num(key: String): Double? = ((this as? JsonObject)?.get(key) as? JsonPrimitive)?.takeIf { it !is JsonNull }?.doubleOrNull
+internal fun JsonElement?.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject
+internal fun JsonElement?.arr(key: String): List<JsonElement> = ((this as? JsonObject)?.get(key) as? JsonArray).orEmpty()
+internal fun JsonElement?.str(key: String): String? = ((this as? JsonObject)?.get(key) as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
+internal fun JsonElement?.num(key: String): Double? = ((this as? JsonObject)?.get(key) as? JsonPrimitive)?.takeIf { it !is JsonNull }?.doubleOrNull
 
 private fun rangeOf(json: JsonElement?) = ThemeRange(json.str("label").orEmpty(), json.num("min")?.toInt() ?: 0, json.num("max")?.toInt() ?: 100)
 
@@ -333,10 +359,10 @@ class HostSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
   private suspend fun theme(body: Map<String, Any?>): JsonElement? =
     api.request("/api/hosts/theme", ApiMethod.POST, jsonValue(mapOf("hostId" to hostId) + body))
 
-  /** The editor's controls and what they show now. */
-  suspend fun themeEditor(): Pair<ThemeCatalog, ThemeValues> {
-    val answer = theme(mapOf("action" to "values"))
-    return themeCatalogOf((answer as? JsonObject)?.get("catalog")) to themeValuesOf((answer as? JsonObject)?.get("values"))
+  /** The editor's controls, what they show now and the built-in themes on offer. */
+  suspend fun themeEditor(): ThemeEditorLoad {
+    val answer = theme(mapOf("action" to "values")) as? JsonObject
+    return ThemeEditorLoad(themeCatalogOf(answer?.get("catalog")), themeValuesOf(answer?.get("values")), themePresetsOf(answer?.get("presets")))
   }
 
   /** Saves the changed controls as the site's theme edits; answers what they show now. */

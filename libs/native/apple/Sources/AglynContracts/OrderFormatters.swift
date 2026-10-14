@@ -62,6 +62,28 @@ private func usd(_ cents: Int) -> String {
   return cents < 0 ? "-\(digits)" : digits
 }
 
+/// What the order screen's restock card says about the open question: how
+/// many units may need restocking after which door, and how far to trust the
+/// number. The console's own sentence (`describeRestockCheck`).
+public func describeRestockCheck(_ restock: OrderRestockCheck, order: HostOrder) -> String {
+  let refunded = Set((order.refundedLineItemIds ?? []).map { Int($0) })
+  let named =
+    !restock.lines.isEmpty
+    && restock.lines.allSatisfy { line in line.lineIndex.map { refunded.contains(Int($0)) } ?? false }
+  let units = restock.units
+  let count = units == units.rounded() ? String(Int(units)) : String(units)
+  let door = restock.kind == .chargeback ? "chargeback" : "refund"
+  var text = "\(count) \(units == 1 ? "unit" : "units") may need restocking after this \(door)."
+  if restock.kind == .chargeback { text += " The shopper kept the goods unless they actually came back." }
+  if !restock.fullyReversed {
+    text +=
+      named
+      ? " Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back."
+      : " Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+  }
+  return text
+}
+
 /// The line under an order's total that says what was refunded, or `""` when nothing was.
 public func orderRefundSummary(_ order: HostOrder) -> String {
   let state = orderRefundState(order)

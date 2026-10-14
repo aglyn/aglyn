@@ -66,6 +66,13 @@ interface SubstituteContext {
   model?: RepeatRowsModel
   /** All host datasets keyed by id (and name) for hop resolution. */
   datasetsByKey?: Record<string, RepeatableDataset | undefined>
+  /**
+   * What a token whose field the record leaves empty becomes: `'token'` keeps
+   * it as written (the besigner's canvas, where an author edits the template),
+   * `'empty'` prints nothing (a rendered page, AGL-3616). A published page
+   * never shows a visitor `{{item.venue}}` because one record has no venue.
+   */
+  missing?: 'token' | 'empty'
 }
 
 const displayValue = (value: unknown): string =>
@@ -99,14 +106,18 @@ function substituteValue(
 ): unknown {
   const { record } = context
   if (typeof value === 'string') {
+    const unresolved = (token: string) =>
+      context.missing === 'empty' ? '' : token
     return value.replace(
       ITEM_TOKEN_PATTERN,
       (token, field: string, hop?: string) => {
         if (hop) {
           const resolved = resolveReferenceHop(context, field, hop)
-          return resolved != null ? resolved : token
+          return resolved != null ? resolved : unresolved(token)
         }
-        return record[field] != null ? displayValue(record[field]) : token
+        return record[field] != null
+          ? displayValue(record[field])
+          : unresolved(token)
       },
     )
   }
@@ -121,6 +132,27 @@ function substituteValue(
     return next
   }
   return value
+}
+
+/** A text that is nothing but `{{item.*}}` tokens: a binding, not words. */
+const WHOLE_BINDING = new RegExp(
+  `^\\s*(?:${ITEM_TOKEN_PATTERN.source}\\s*)+$`,
+)
+
+/**
+ * Whether a copy's element is a binding its record left empty (AGL-3616):
+ * its text, `children`, was only `{{item.*}}` tokens and they printed
+ * nothing. The copy leaves the element out rather than drawing an empty line
+ * (an eyebrow with no venue), and a record that fills the field draws it.
+ */
+function isEmptyBinding(
+  template: Record<string, unknown> | undefined,
+  substituted: Record<string, unknown>,
+): boolean {
+  const text = template?.['children']
+  if (typeof text !== 'string' || !WHOLE_BINDING.test(text)) return false
+  const printed = substituted['children']
+  return typeof printed === 'string' && printed.trim() === ''
 }
 
 /**
@@ -247,8 +279,9 @@ export interface PageRecordScope {
  *
  * Run AFTER {@link expandRepeatables}: a repeat inside the page has already
  * spent its own `{{item.*}}` tokens on its own rows by then, so what is left
- * is the page's. A token naming a field the record does not have stays as
- * written, exactly as in a repeat. Returns the input when there is no record.
+ * is the page's. A token naming a field the record leaves empty prints
+ * nothing, exactly as in a repeat (AGL-3616). Returns the input when there is
+ * no record.
  */
 export function substituteNodesRecordTokens<N>(
   nodes: Record<NodeId, N>,
@@ -259,7 +292,10 @@ export function substituteNodesRecordTokens<N>(
   for (const [id, node] of Object.entries(nodes) as Array<[NodeId, N]>) {
     const props = (node as { props?: unknown })?.props
     next[id] = props
-      ? ({ ...node, props: substituteValue(props, scope) } as N)
+      ? ({
+          ...node,
+          props: substituteValue(props, { ...scope, missing: 'empty' }),
+        } as N)
       : node
   }
   return next
@@ -379,7 +415,11 @@ export function repeatKeys(
  * Repeats (AGL-103, AGL-3111): any node carrying `props.repeatDataset` (a
  * dataset id or display name) renders once per record of that dataset, with
  * `{{item.field}}` tokens in the copied string props replaced by the record's
- * values (unknown fields keep the literal token, like variable bindings).
+ * values. A field the record leaves empty prints nothing — never the raw
+ * token — and an element whose whole text is such a binding is left out of
+ * that copy (AGL-3616: a tour date with no venue drew `{{ITEM.VENUE}}` as its
+ * eyebrow on a published site). The besigner's canvas keeps the tokens of
+ * the template an author edits ({@link substituteRecordTokens}).
  *
  * What is copied is the node's {@link repeatScope}:
  *
@@ -464,32 +504,41 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
     records.forEach((record, index) => {
       const prefix = `${REPEAT_NODE_ID_PREFIX}${repeatId}__${index}__`
       const prefixId = (id: NodeId) => `${prefix}${id}`
-      const cloneSubtree = (id: NodeId, clonedParentId: NodeId) => {
+      // Whether the copy drew the node: an element whose whole text is a
+      // binding this record leaves empty is left out of it (AGL-3616).
+      const cloneSubtree = (id: NodeId, clonedParentId: NodeId): boolean => {
         const node = nodes[id]
-        if (!node) return
+        if (!node) return false
+        const props = substituteValue(node.props ?? {}, {
+          record,
+          model: dataset?.model,
+          datasetsByKey: rowsByKey,
+          missing: 'empty',
+        }) as Record<string, unknown>
+        if (isEmptyBinding(node.props as Record<string, unknown>, props)) {
+          return false
+        }
         const clonedChildren = Array.isArray(node.nodes)
           ? (node.nodes as NodeId[])
           : undefined
+        const drawn = clonedChildren?.filter((childId) =>
+          cloneSubtree(childId, prefixId(id)),
+        )
         next[prefixId(id)] = withoutRepeatDirective({
           ...node,
           $id: prefixId(id),
           parentId: clonedParentId,
-          props: substituteValue(node.props ?? {}, {
-            record,
-            model: dataset?.model,
-            datasetsByKey: rowsByKey,
-          }) as any,
-          ...(clonedChildren && {
-            nodes: clonedChildren.map((childId) => prefixId(childId)),
+          props: props as any,
+          ...(drawn && {
+            nodes: drawn.map((childId) => prefixId(childId)),
           }),
         })
-        clonedChildren?.forEach((childId) =>
-          cloneSubtree(childId, prefixId(id)),
-        )
+        return true
       }
       for (const templateId of templateIds) {
-        cloneSubtree(templateId, parentId)
-        copyIds.push(prefixId(templateId))
+        if (cloneSubtree(templateId, parentId)) {
+          copyIds.push(prefixId(templateId))
+        }
       }
     })
     if (self) {

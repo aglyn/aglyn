@@ -19,16 +19,27 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { COLLECTION_ENTRIES_COMPONENT_ID } from '@aglyn/aglyn/app-utils/collection-entries'
 import { AI_PALETTE, AI_SURFACES } from '../runtime/ai-palette.generated'
-import { aiLayoutListingContext, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
+import { aiLayoutListingContext, aiLayoutListingsWithDatasets, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
 import { aiLayoutFrameCheck } from '../jobs/ai-job-layout-language'
-import { AI_LAYOUT_POST_CARD_TOKENS, aiCompileLayoutPage } from './ai-layout-compiler'
+import { aiSiteListings } from '../jobs/ai-job-site-content'
+import {
+  AI_LAYOUT_POST_CARD_TOKENS,
+  AI_LAYOUT_RECORD_LINK_LABEL,
+  AI_LAYOUT_STORE_EMPTY,
+  aiCompileLayoutPage,
+  aiLayoutRecordCardFields,
+} from './ai-layout-compiler'
 import {
   AI_LAYOUT_CART_ELEMENT,
   AI_LAYOUT_LISTING_ELEMENTS,
   AI_LAYOUT_LISTINGS_INPUT,
+  aiLayoutEventsPlacements,
   aiLayoutListingAt,
   aiLayoutListingPlacements,
   aiLayoutListingsOf,
+  aiLayoutRecordBaseOf,
+  aiLayoutRecordHref,
+  aiLayoutRecordsPlacements,
   type AiLayoutListing,
 } from './ai-layout-listings'
 import type { AiLayoutTargets } from './ai-layout-links'
@@ -145,7 +156,7 @@ describe('where a site lists its records (AGL-3676)', () => {
 
   it('reads the listings a unit carries, dropping one it cannot place', () => {
     const read = aiLayoutListingsOf({
-      [AI_LAYOUT_LISTINGS_INPUT]: [PRODUCTS, { ...POSTS, collectionSlug: '../x' }, { kind: 'events' }],
+      [AI_LAYOUT_LISTINGS_INPUT]: [PRODUCTS, { ...POSTS, collectionSlug: '../x' }, { kind: 'calendar' }],
     })
     expect(read.map((listing) => listing.kind)).toEqual(['products'])
     expect(aiLayoutListingAt(read, 'shop', 1)?.role).toBe('index')
@@ -164,7 +175,7 @@ describe('a listing is drawn with the element its plugin declares', () => {
   it('names the Product grid and the Cart by the ids, and the props, the commerce plugin persists', () => {
     const grid = commerce('product-grid.tsx')
     expect(grid).toContain(`export const ID: Aglyn.ComponentId = '${AI_LAYOUT_LISTING_ELEMENTS.products}'`)
-    for (const prop of ['source', 'sort', 'columns', 'maxItems', 'pageSize', 'cardStyle', 'emptyText']) {
+    for (const prop of ['source', 'sort', 'columns', 'maxItems', 'pageSize', 'cardStyle', 'emptyText', 'emptyTitle', 'emptyActionLabel', 'emptyActionHref', 'showSort', 'showCategories']) {
       expect(grid).toMatch(new RegExp(`\\b${prop}\\?:`))
     }
     expect(commerce('cart.tsx')).toContain(`export const ID: Aglyn.ComponentId = '${AI_LAYOUT_CART_ELEMENT}'`)
@@ -305,6 +316,91 @@ describe('a section the store’s catalog fills (AGL-3676)', () => {
   })
 })
 
+/*
+ * The live Hearth & Wick store start (job FYNasg1h0S, 2026-10-09): its
+ * products step failed, nothing was listed, and its Shop page compiled
+ * "Product range image cards" as six cards naming kinds of candle — Soy
+ * candles, Wax melts, Gift sets… — with a stock photo and a line each: no
+ * product, no price, no cart. A store's Shop page is its storefront.
+ */
+describe('a store’s Shop page is its storefront (AGL-3676)', () => {
+  const SHOP_SECTIONS = [
+    { name: 'Shop intro heading', uses: [], items: 0 },
+    { name: 'Product range image cards', uses: [], items: 6 },
+    { name: 'Care and burn tips', uses: [], items: 3 },
+    { name: 'Gift help call to action', uses: [], items: 0 },
+  ]
+  const RANGE = [
+    { title: 'Soy candles', text: 'Hand-poured in small batches.' },
+    { title: 'Wax melts', text: 'For a warmer.' },
+    { title: 'Gift sets', text: 'Boxed and ready.' },
+  ]
+  const EMPTY_STORE: AiLayoutListing = {
+    id: 'listing:products',
+    kind: 'products',
+    name: 'the shop',
+    records: [],
+    emptyAction: { label: 'Get in touch', href: '/contact' },
+    placements: aiLayoutListingPlacements('products', [
+      { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero with shop call to action', items: 0 }, { name: 'Featured range of candles, wax melts and gift sets', items: 3 }] },
+      { id: 'shop', title: 'Shop', slug: '/shop', sections: SHOP_SECTIONS },
+    ]),
+  }
+  const compileShop = (listings: AiLayoutListing[]) =>
+    aiCompileLayoutPage(
+      [
+        { blocks: [{ kind: 'heading', text: 'Shop hand-poured soy candles' }] },
+        { blocks: [{ kind: 'heading', text: 'The range' }, { kind: 'cards', items: RANGE }] },
+        { blocks: [{ kind: 'heading', text: 'Care and burn tips' }, { kind: 'list', items: [{ title: 'Trim the wick', text: 'To a quarter inch before each burn.' }] }] },
+        { blocks: [{ kind: 'heading', text: 'Need help with a gift?' }, { kind: 'button', text: 'Contact us', to: 'page:contact' }] },
+      ],
+      { title: 'Shop', sections: SHOP_SECTIONS },
+      targets('shop', listings),
+      { reusableComponents: false },
+    )
+
+  it('compiles the Shop page’s range section to the Product grid over the catalog, in place of invented cards', () => {
+    expect(EMPTY_STORE.placements).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'shop', section: 1, role: 'index' },
+    ])
+    const compiled = compileShop([EMPTY_STORE])
+    const grids = Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'product-grid')
+    expect(grids).toHaveLength(1)
+    expect(grids[0].props).toMatchObject({ source: 'all', cardStyle: 'photo', pageSize: '12', showSort: true, showCategories: true })
+    // The range drawn as cards is gone: the grid shows the store's products.
+    expect(JSON.stringify(compiled.tree.nodes)).not.toContain('Boxed and ready.')
+  })
+
+  it('says, with no products yet, that new pieces are on the way, with a way to get in touch', () => {
+    const grid = Object.values(compileShop([EMPTY_STORE]).tree.nodes).find((node) => node.componentId === 'product-grid')
+    expect(grid?.props).toMatchObject({
+      emptyTitle: 'New pieces are on the way',
+      emptyText: AI_LAYOUT_STORE_EMPTY.text,
+      emptyActionLabel: 'Get in touch',
+      emptyActionHref: '/contact',
+    })
+    const alone = Object.values(compileShop([{ ...EMPTY_STORE, emptyAction: undefined }]).tree.nodes).find((node) => node.componentId === 'product-grid')
+    expect(alone?.props).toMatchObject({ emptyTitle: 'New pieces are on the way', emptyText: AI_LAYOUT_STORE_EMPTY.textAlone })
+    expect(alone?.props?.['emptyActionHref']).toBeUndefined()
+  })
+
+  it('keeps the empty state’s action through a listing’s round trip, and only as a site path', () => {
+    const read = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [EMPTY_STORE] })
+    expect(read[0].emptyAction).toEqual({ label: 'Get in touch', href: '/contact' })
+    const unsafe = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...EMPTY_STORE, emptyAction: { label: 'Go', href: 'https://evil.example' } }] })
+    expect(unsafe[0].emptyAction).toBeUndefined()
+  })
+
+  it('lists the catalog in the shop section that names the products over a framing one', () => {
+    expect(
+      aiLayoutListingPlacements('products', [
+        { id: 'shop', title: 'Shop', slug: '/shop', sections: [{ name: 'Shop intro', items: 0 }, { name: 'Why soy', items: 4 }, { name: 'Product grid', items: 0 }] },
+      ]),
+    ).toEqual([{ screenId: 'shop', section: 2, role: 'index' }])
+  })
+})
+
 describe('a section the blog’s posts fill (AGL-3676)', () => {
   const BLOG_SCREEN = {
     ...HOME_SCREEN,
@@ -368,5 +464,528 @@ describe('a selling site’s header carries the cart (AGL-3676)', () => {
 
   it('carries no cart where the site does not sell', () => {
     expect(nodesOf(frame([]).value?.nodes).some((node) => node.componentId === 'cart')).toBe(false)
+  })
+
+  it('carries no cart for a store that lists its catalog but cannot sell yet', () => {
+    expect(nodesOf(frame([{ ...PRODUCTS, records: [], cart: false }]).value?.nodes).some((node) => node.componentId === 'cart')).toBe(false)
+  })
+})
+
+/*
+ * A music site's player (AGL-3716). A user asked Assist for "playable musics
+ * like daniel Caesar" on a music site and could only be offered a Video. A
+ * music site now places the Music player itself, EMPTY — its "add your
+ * tracks" state — for the artist to fill with their own uploads. No job
+ * sources a recording.
+ */
+const MUSIC_SCREENS = [
+  {
+    id: 'home',
+    title: 'Home',
+    slug: '/',
+    sections: [
+      { name: 'Hero', items: 0 },
+      { name: 'Latest release', items: 0 },
+      { name: 'Upcoming shows', items: 3 },
+    ],
+  },
+  {
+    id: 'music',
+    title: 'Music',
+    slug: '/music',
+    sections: [
+      { name: 'Music intro', items: 0 },
+      { name: 'Listen to the tracks', items: 0 },
+    ],
+  },
+  { id: 'booking', title: 'Booking', slug: '/booking', sections: [{ name: 'Book the band', items: 0 }] },
+]
+
+describe('a music site places an empty player for the artist’s own tracks (AGL-3716)', () => {
+  const [tracks] = aiSiteListings({ outputs: [], screens: MUSIC_SCREENS, music: true })
+
+  it('places it on the Music page, in the section about the recordings, and on a home section named for them', () => {
+    expect(tracks).toMatchObject({ id: 'listing:tracks', kind: 'tracks', records: [] })
+    expect(tracks.placements).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'music', section: 1, role: 'index' },
+    ])
+  })
+
+  it('falls back to the home, after the opening, on a site with no music page or section', () => {
+    const [only] = aiSiteListings({
+      outputs: [],
+      screens: [{ id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'About the band', items: 0 }] }],
+      music: true,
+    })
+    expect(only.placements).toEqual([{ screenId: 'home', section: 1, role: 'featured' }])
+  })
+
+  it('is placed only on a music site', () => {
+    expect(aiSiteListings({ outputs: [], screens: MUSIC_SCREENS }).some((listing) => listing.kind === 'tracks')).toBe(false)
+  })
+
+  it('round-trips with no records, whatever a unit input claims', () => {
+    const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...tracks, records: ['Get You — Daniel Caesar'] }] })
+    expect(read.kind).toBe('tracks')
+    expect(read.records).toEqual([])
+  })
+
+  it('names the Music player by the id the music plugin persists, and offers it to a model', () => {
+    const source = readFileSync(join(__dirname, '../../../../music/src/lib/components/music-player.tsx'), 'utf8')
+    expect(source).toContain(`export const MUSIC_PLAYER_ID: Aglyn.ComponentId = '${AI_LAYOUT_LISTING_ELEMENTS.tracks}'`)
+    expect(AI_PALETTE['musicPlayer']?.pluginId).toBe('music')
+    expect(AI_SURFACES.screen.allow).toEqual(expect.arrayContaining(['musicPlayer', 'musicTrack']))
+    // The rights confirmation is the owner's answer: never offered to a model.
+    expect(AI_PALETTE['musicPlayer']?.propsSchema.properties['rightsConfirmed']).toBeUndefined()
+    expect(AI_PALETTE['musicTrack']?.propsSchema.properties['rightsConfirmed']).toBeUndefined()
+  })
+
+  it('compiles the section to an empty player — no source — under the words the design gave it', () => {
+    const compiled = aiCompileLayoutPage(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our music' }] },
+        {
+          blocks: [
+            { kind: 'heading', text: 'Listen' },
+            { kind: 'cards', items: [{ title: 'Get You', text: 'Daniel Caesar' }] },
+          ],
+        },
+      ],
+      { title: 'Music', sections: MUSIC_SCREENS[1].sections.map((section) => ({ ...section, uses: [] })) },
+      targets('music', [tracks]),
+      { reusableComponents: false },
+    )
+    const nodes = nodesOf(compiled.tree.nodes)
+    const player = nodes.find((node) => node.componentId === 'musicPlayer')
+    expect(player).toBeTruthy()
+    expect(player?.props?.['src']).toBeUndefined()
+    // The cards naming another artist's song are gone.
+    expect(JSON.stringify(compiled.tree.nodes)).not.toContain('Daniel Caesar')
+    expect(JSON.stringify(compiled.tree.nodes)).toContain('Listen')
+  })
+
+  it('stores the player through the same validator every generated page passes', () => {
+    const result = homeCheck([tracks])(HOME_ANSWER)
+    expect(result.violations).toEqual([])
+    const player = nodesOf(result.value?.nodes).find((node) => node.componentId === 'musicPlayer')
+    expect(player).toBeTruthy()
+    expect(player?.props?.['src']).toBeUndefined()
+  })
+
+  it('tells the model the platform places the player, so it names no songs', () => {
+    const screen = {
+      ...HOME_SCREEN,
+      id: 'music',
+      title: 'Music',
+      slug: '/music',
+      sections: MUSIC_SCREENS[1].sections.map((section) => ({ ...section, uses: [] })),
+    }
+    const prompt = aiLayoutPagePrompt({
+      job: { $id: 'job-1', brief: 'A band site', inputs: {} },
+      plan: { reuse: [], create: [], screens: [screen] } as never,
+      screen: screen as never,
+      targets: targets('music', [tracks]),
+      reusableComponents: false,
+    })
+    expect(prompt).toContain('2. "Listen to the tracks"; the platform places a music player here for the artist\'s own tracks')
+  })
+})
+
+/*
+ * A site's datasets (AGL-3616): a menu, a team, a list of services kept as
+ * records by the data plugin and repeated by the platform in the sections
+ * that name them, never typed out by the model.
+ */
+describe('a section one of the site’s datasets fills (AGL-3616)', () => {
+  const MENU: AiLayoutListing = {
+    id: 'listing:records:ds-menu',
+    kind: 'records',
+    name: 'Menu',
+    records: ['Margherita', 'Tiramisù'],
+    datasetId: 'ds-menu',
+    fields: [
+      { id: 'dish', name: 'Dish', type: 'text' },
+      { id: 'description', name: 'Description', type: 'text' },
+      { id: 'course', name: 'Course', type: 'text' },
+      { id: 'vegetarian', name: 'Vegetarian', type: 'bool' },
+    ],
+    placements: aiLayoutRecordsPlacements({ id: 'ds-menu', name: 'Menu' }, [
+      { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'From the menu', uses: ['new:Menu'], items: 3 }] },
+      { id: 'menu', title: 'Menu', slug: '/menu', sections: [{ name: 'Intro', items: 0 }, { name: 'The menu', uses: ['ds-menu'], items: 12 }] },
+    ]),
+  }
+  const MENU_SCREEN = {
+    ...HOME_SCREEN,
+    sections: [
+      { name: 'Hero', uses: [], items: 0 },
+      { name: 'From the menu', uses: ['ds-menu'], items: 3 },
+    ],
+  }
+  const answer = {
+    sections: [
+      { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Trattoria Nonna')] },
+      { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'From the menu'), block('cards', '', [{ title: 'Margherita', text: 'Classic.' }, { title: 'Lasagne', text: 'Baked.' }])] },
+    ],
+  }
+  const check = (datasetIds: string[]) => {
+    const sectionIds = ['sec-0', 'sec-1']
+    return aiLayoutPageCheck({
+      screen: MENU_SCREEN as never,
+      sectionIds,
+      targets: { ...targets('home', [MENU]), pages: [...targets('home', [MENU]).pages, { id: 'menu', label: 'Menu', slug: '/menu' }] },
+      context: { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds, codeBuilt: true, scrollTargetIds: sectionIds },
+      reusableComponents: false,
+    })(answer)
+  }
+
+  it('places the dataset where the plan names it, featured on the home and all of it on its own page', () => {
+    expect(MENU.placements).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'menu', section: 1, role: 'index' },
+    ])
+    expect(aiLayoutListingAt([MENU], 'home', 1)?.listing.kind).toBe('records')
+  })
+
+  it('repeats one card over the dataset — its kicker, name and words bound to the record — in place of the cards the design wrote', () => {
+    const result = check(['ds-menu'])
+    expect(result.violations).toEqual([])
+    const nodes = nodesOf(result.value?.nodes)
+    const repeat = nodes.find((node) => node.props?.['repeatDataset'] === 'ds-menu')
+    expect(repeat).toMatchObject({ componentId: AI_LAYOUT_LISTING_ELEMENTS.records, props: { repeatDataset: 'ds-menu', repeatLimit: '3' } })
+    const stored = JSON.stringify(result.value?.nodes)
+    for (const token of ['{{item.dish}}', '{{item.description}}', '{{item.course}}']) expect(stored).toContain(token)
+    // The design's own cards named dishes; the records are the dataset's.
+    expect(stored).not.toContain('Lasagne')
+    // A way to the whole menu, on its own page.
+    expect(nodes.some((node) => node.props?.['children'] === 'See all')).toBe(true)
+  })
+
+  it("writes the way to the whole list in the site's language (AGL-3760)", () => {
+    // The beta.246 Panadería Sol de Oaxaca home showed "See all" under "Lo que horneamos".
+    const sectionIds = ['sec-0', 'sec-1']
+    const spanish = (language?: string) =>
+      nodesOf(
+        aiLayoutPageCheck({
+          screen: MENU_SCREEN as never,
+          sectionIds,
+          targets: { ...targets('home', [MENU]), pages: [...targets('home', [MENU]).pages, { id: 'menu', label: 'Menú', slug: '/menu' }] },
+          context: { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds: ['ds-menu'], codeBuilt: true, scrollTargetIds: sectionIds },
+          reusableComponents: false,
+          ...(language ? { language } : {}),
+        })(answer).value?.nodes,
+      ).map((node) => node.props?.['children'])
+    expect(spanish('es')).toContain('Ver todo')
+    expect(spanish('es')).not.toContain('See all')
+    expect(spanish('es-MX')).toContain('Ver todo')
+    // A language the table does not list keeps the English, as does a site with none.
+    expect(spanish('ja')).toContain('See all')
+    expect(spanish()).toContain('See all')
+  })
+
+  it('admits a repeat only over a dataset the site has, as a Form’s dataset binding is', () => {
+    const nodes = nodesOf(check([]).value?.nodes)
+    expect(nodes.some((node) => 'repeatDataset' in (node.props ?? {}))).toBe(false)
+  })
+
+  it('tells the design the platform lists the records, by name', () => {
+    const prompt = aiLayoutPagePrompt({
+      job: { brief: 'A trattoria', inputs: {}, $id: 'job-123456' },
+      plan: { reuse: [], create: [], screens: [MENU_SCREEN as never] } as never,
+      screen: MENU_SCREEN as never,
+      targets: targets('home', [MENU]),
+      reusableComponents: false,
+    })
+    expect(prompt).toContain('the platform lists the records of the dataset “Menu” (“Margherita”, “Tiramisù”) here itself, one card each')
+  })
+
+  it('keeps a dataset’s listing only where the site has the dataset, and reads its fields off the inventory where it names none', () => {
+    const inventory = { datasets: [{ id: 'ds-menu', name: 'Menu', fields: ['Dish', 'Notes'], fieldIds: ['dish', 'notes'] }] }
+    expect(aiLayoutListingsWithDatasets([MENU, PRODUCTS], { datasets: [] })).toEqual([PRODUCTS])
+    expect(aiLayoutListingsWithDatasets([{ ...MENU, fields: [] }], inventory)[0].fields).toEqual([
+      { id: 'dish', name: 'Dish', type: 'text' },
+      { id: 'notes', name: 'Notes', type: 'text' },
+    ])
+    // Read back from a unit's inputs: one listing a dataset, several datasets a site.
+    const read = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [MENU, { ...MENU, id: 'listing:records:ds-team', datasetId: 'ds-team' }, { ...MENU, datasetId: '../x' }] })
+    expect(read.map((listing) => listing.id)).toEqual(['listing:records:ds-menu', 'listing:records:ds-team'])
+  })
+
+  /*
+   * beta.239's ceramics portfolio listed "Selected work" from its dataset as
+   * text-only cards, where it had been an image-led gallery (AGL-3616).
+   */
+  describe('a dataset whose records carry photos (AGL-3616)', () => {
+    const PIECES: AiLayoutListing = {
+      ...MENU,
+      id: 'listing:records:ds-pieces',
+      name: 'Portfolio pieces',
+      records: ['Speckled serving bowl', 'Tall bud vase'],
+      datasetId: 'ds-pieces',
+      fields: [
+        { id: 'title', name: 'Title', type: 'text' },
+        { id: 'description', name: 'Description', type: 'text' },
+      ],
+      imageField: 'image',
+    }
+    const piecesCheck = (design?: { kind: string; seed: number; home: boolean }) => {
+      const sectionIds = ['sec-0', 'sec-1']
+      const listed = { ...targets('home', [PIECES]), pages: [...targets('home', [PIECES]).pages, { id: 'menu', label: 'Work', slug: '/work' }] }
+      return aiLayoutPageCheck({
+        screen: MENU_SCREEN as never,
+        sectionIds,
+        targets: listed,
+        context: { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds: ['ds-pieces'], codeBuilt: true, scrollTargetIds: sectionIds },
+        reusableComponents: false,
+        ...(design ? { design: design as never } : {}),
+      })(answer)
+    }
+    const MENU_SCREEN = {
+      ...HOME_SCREEN,
+      sections: [
+        { name: 'Hero', uses: [], items: 0 },
+        { name: 'Selected work', uses: ['ds-pieces'], items: 3 },
+      ],
+    }
+    const answer = {
+      sections: [
+        { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Juniper Clay Works')] },
+        { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'Selected work'), block('cards', '', [{ title: 'Bowl', text: 'A bowl.' }])] },
+      ],
+    }
+
+    it('leads each card with the record’s photo, bound to its photo field, its name as the alt text', () => {
+      const result = piecesCheck()
+      expect(result.violations).toEqual([])
+      const nodes = nodesOf(result.value?.nodes)
+      const repeat = nodes.find((node) => node.props?.['repeatDataset'] === 'ds-pieces')
+      expect(repeat).toBeDefined()
+      const picture = nodes.find((node) => node.componentId === 'image' && node.props?.['src'] === '{{item.image}}')
+      expect(picture?.props).toMatchObject({ src: '{{item.image}}', alt: '{{item.title}}', objectFit: 'cover', loading: 'lazy' })
+      // Not a lightbox on a kind whose galleries do not open.
+      expect(picture?.props?.['lightbox']).toBeUndefined()
+      // The photo is the card's picture; the title and words stay its words.
+      const stored = JSON.stringify(result.value?.nodes)
+      for (const token of ['{{item.title}}', '{{item.description}}']) expect(stored).toContain(token)
+      expect(nodes.filter((node) => node.props?.['children'] === '{{item.image}}')).toEqual([])
+    })
+
+    it('opens a portfolio’s pieces in a lightbox, one gallery captioned with each record’s name (AGL-3717)', () => {
+      const result = piecesCheck({ kind: 'portfolio', seed: 3, home: true })
+      expect(result.violations).toEqual([])
+      const picture = nodesOf(result.value?.nodes).find((node) => node.componentId === 'image' && node.props?.['src'] === '{{item.image}}')
+      expect(picture?.props).toMatchObject({ lightbox: true, lightboxCaption: '{{item.title}}' })
+      expect(typeof picture?.props?.['lightboxGallery']).toBe('string')
+    })
+
+    it('admits the photo token only on a page that lists the dataset', () => {
+      const here = aiLayoutListingContext({}, targets('home', [{ ...PIECES, placements: [{ screenId: 'home', section: 1, role: 'featured' }] }]))
+      expect(here.bindingTokens).toEqual(['{{item.image}}'])
+      const elsewhere = aiLayoutListingContext({}, targets('about', [{ ...PIECES, placements: [{ screenId: 'home', section: 1, role: 'featured' }] }]))
+      expect(elsewhere.bindingTokens).toBeUndefined()
+    })
+
+    it('keeps the photo field off the card’s words when read off the inventory, and round-trips it', () => {
+      const inventory = { datasets: [{ id: 'ds-pieces', name: 'Portfolio pieces', fields: ['Title', 'Image'], fieldIds: ['title', 'image'], imageField: 'image' }] }
+      expect(aiLayoutListingsWithDatasets([{ ...PIECES, fields: [], imageField: undefined }], inventory)[0]).toMatchObject({
+        fields: [{ id: 'title', name: 'Title', type: 'text' }],
+        imageField: 'image',
+      })
+      const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [PIECES] })
+      expect(read.imageField).toBe('image')
+      expect(aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...PIECES, imageField: '{{x}}' }] })[0]).not.toHaveProperty('imageField')
+    })
+  })
+
+  /*
+   * AGL-3727: a list of records whose dataset has a page per record (AGL-3475)
+   * linked none of them — "Listing cards do not link record pages" — so a
+   * visitor reading the menu could never open a dish.
+   */
+  describe('a dataset whose records have pages of their own (AGL-3727)', () => {
+    const LINKED: AiLayoutListing = { ...MENU, recordBase: 'menu', addressField: 'slug' }
+    const linkedCheck = (listing: AiLayoutListing) => {
+      const sectionIds = ['sec-0', 'sec-1']
+      const listed = { ...targets('home', [listing]), pages: [...targets('home', [listing]).pages, { id: 'menu', label: 'Menu', slug: '/menu' }] }
+      return aiLayoutPageCheck({
+        screen: MENU_SCREEN as never,
+        sectionIds,
+        targets: listed,
+        context: aiLayoutListingContext(
+          { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds: ['ds-menu'], codeBuilt: true, scrollTargetIds: sectionIds },
+          listed,
+        ),
+        reusableComponents: false,
+      })(answer)
+    }
+
+    it('reads the link off the base and the address field, and only both whole', () => {
+      expect(aiLayoutRecordHref(LINKED)).toBe('/menu/{{item.slug}}')
+      expect(aiLayoutRecordHref({ ...LINKED, recordBase: '/services/residential/' })).toBe('/services/residential/{{item.slug}}')
+      expect(aiLayoutRecordHref(MENU)).toBeNull()
+      expect(aiLayoutRecordHref({ ...LINKED, addressField: undefined })).toBeNull()
+      expect(aiLayoutRecordHref({ ...LINKED, recordBase: '../admin' })).toBeNull()
+      expect(aiLayoutRecordHref({ ...LINKED, addressField: '{{x}}' })).toBeNull()
+      expect(aiLayoutRecordHref({ ...PRODUCTS, recordBase: 'shop', addressField: 'slug' })).toBeNull()
+    })
+
+    it('finds the base on the plan’s record template, by the dataset’s id or the name it was planned under', () => {
+      const screens = [
+        { id: 'menu', title: 'Menu', slug: '/menu', sections: [{ name: 'The menu', items: 12, uses: ['new:Menu'] }] },
+        { id: 'dish', title: 'Dish', slug: '/dish', sections: [], record: { dataset: 'new:menu', base: 'menu' } },
+      ]
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Menu' }, screens)).toBe('menu')
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Dishes' }, screens)).toBeNull()
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Dishes' }, [{ ...screens[1], record: { dataset: 'ds-menu', base: 'dishes' } }])).toBe('dishes')
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Menu' }, [{ ...screens[1], record: { dataset: 'ds-menu', base: 'Not A Path!' } }])).toBeNull()
+    })
+
+    it('links every card to its record’s page, in code, whatever the design wrote', () => {
+      const result = linkedCheck(LINKED)
+      expect(result.violations).toEqual([])
+      const nodes = nodesOf(result.value?.nodes)
+      const link = nodes.find((node) => node.componentId === 'muiScreenLink' && node.props?.['href'] === '/menu/{{item.slug}}')
+      expect(link?.props).toMatchObject({ children: AI_LAYOUT_RECORD_LINK_LABEL, href: '/menu/{{item.slug}}' })
+      // The address is the card's link, never its words.
+      expect(nodes.filter((node) => node.props?.['children'] === '{{item.slug}}')).toEqual([])
+    })
+
+    it('links a card’s photo to the page too, unless the photo opens in a lightbox', () => {
+      const pictured: AiLayoutListing = { ...LINKED, imageField: 'image' }
+      const picture = nodesOf(linkedCheck(pictured).value?.nodes).find((node) => node.componentId === 'image' && node.props?.['src'] === '{{item.image}}')
+      expect(picture?.props?.['href']).toBe('/menu/{{item.slug}}')
+    })
+
+    it('draws no link where the dataset has no record page', () => {
+      const nodes = nodesOf(linkedCheck(MENU).value?.nodes)
+      expect(nodes.some((node) => node.props?.['children'] === AI_LAYOUT_RECORD_LINK_LABEL)).toBe(false)
+    })
+
+    it('admits the link only on a page that lists the dataset', () => {
+      const placed = { ...LINKED, placements: [{ screenId: 'home', section: 1, role: 'featured' as const }] }
+      expect(aiLayoutListingContext({}, targets('home', [placed])).bindingTokens).toEqual(['/menu/{{item.slug}}'])
+      expect(aiLayoutListingContext({}, targets('about', [placed])).bindingTokens).toBeUndefined()
+    })
+
+    it('round-trips the base and address through a unit’s inputs, and reads a build’s address off the inventory', () => {
+      const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [LINKED] })
+      expect(read).toMatchObject({ recordBase: 'menu', addressField: 'slug' })
+      // A build knows the base before the dataset's address field exists.
+      const [base] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...LINKED, addressField: undefined }] })
+      expect(base.recordBase).toBe('menu')
+      expect(base).not.toHaveProperty('addressField')
+      const inventory = {
+        datasets: [{ id: 'ds-menu', name: 'Menu', fields: ['Dish', 'Page address'], fieldIds: ['dish', 'slug'], addressField: 'slug' }],
+      }
+      const [filled] = aiLayoutListingsWithDatasets([{ ...base, fields: [] }], inventory)
+      expect(filled).toMatchObject({ addressField: 'slug', fields: [{ id: 'dish', name: 'Dish', type: 'text' }] })
+      expect(aiLayoutRecordHref(filled)).toBe('/menu/{{item.slug}}')
+      // No record page, no link: the address stays off the card all the same.
+      const [unlinked] = aiLayoutListingsWithDatasets([{ ...MENU, fields: [] }], inventory)
+      expect(unlinked).not.toHaveProperty('addressField')
+      expect(unlinked.fields).toEqual([{ id: 'dish', name: 'Dish', type: 'text' }])
+    })
+
+    /*
+     * AGL-3747: a dataset whose record page the site saved before the plan
+     * was made linked none of its cards — the base came only off the plan's
+     * own record template.
+     */
+    it('links the record pages the site already serves, where the plan makes none of its own (AGL-3747)', () => {
+      const inventory = {
+        datasets: [
+          { id: 'ds-menu', name: 'Menu', fields: ['Dish', 'Page address'], fieldIds: ['dish', 'slug'], addressField: 'slug', recordBase: 'dishes' },
+        ],
+      }
+      const [served] = aiLayoutListingsWithDatasets([{ ...MENU, fields: [] }], inventory)
+      expect(served).toMatchObject({ recordBase: 'dishes', addressField: 'slug', fields: [{ id: 'dish', name: 'Dish', type: 'text' }] })
+      expect(aiLayoutRecordHref(served)).toBe('/dishes/{{item.slug}}')
+      // The plan's own record template wins over the one the site had.
+      const [planned] = aiLayoutListingsWithDatasets([{ ...MENU, fields: [], recordBase: 'menu' }], inventory)
+      expect(aiLayoutRecordHref(planned)).toBe('/menu/{{item.slug}}')
+      // And the cards link it, in code, through the same compile.
+      const nodes = nodesOf(linkedCheck(served).value?.nodes)
+      expect(nodes.some((node) => node.componentId === 'muiScreenLink' && node.props?.['href'] === '/dishes/{{item.slug}}')).toBe(true)
+    })
+  })
+
+  it('draws questions and answers as a ruled list, and a card from the fields its names say', () => {
+    expect(
+      aiLayoutRecordCardFields([
+        { id: 'name', name: 'Name', type: 'text' },
+        { id: 'role', name: 'Role', type: 'text' },
+        { id: 'bio', name: 'Bio', type: 'text' },
+        { id: 'years', name: 'Years', type: 'int32' },
+      ]),
+    ).toEqual({ title: 'name', kicker: 'role', body: 'bio' })
+    expect(aiLayoutRecordCardFields([{ id: 'question', name: 'Question', type: 'text' }, { id: 'answer', name: 'Answer', type: 'text' }])).toEqual({
+      title: 'question',
+      kicker: null,
+      body: 'answer',
+    })
+  })
+})
+
+/*
+ * A site's dated events (AGL-3755): an event-led start drafts its first few
+ * through the events-calendar plugin, and the section whose plan names them
+ * lists them by that plugin's Event List, never as cards the model wrote.
+ */
+describe('a section the site’s events fill (AGL-3755)', () => {
+  const events: AiLayoutListing = {
+    id: 'listing:events',
+    kind: 'events',
+    name: 'the events',
+    records: ['Friday jazz night', 'Open mic Tuesday'],
+    placements: [{ screenId: 'home', section: 1, role: 'featured' }],
+  }
+
+  it('names the Event List by the id the events-calendar plugin persists, placed by code and never offered to a model', () => {
+    const source = readFileSync(join(__dirname, '../../../../events-calendar/src/lib/components/event-list.tsx'), 'utf8')
+    expect(source).toContain(`export const ID: Aglyn.ComponentId = '${AI_LAYOUT_LISTING_ELEMENTS.events}'`)
+    expect(AI_PALETTE['eventList']?.pluginId).toBe('events-calendar')
+    expect(AI_SURFACES.screen.codeOnly).toEqual(expect.arrayContaining(['eventList']))
+    expect(AI_SURFACES.screen.allow).not.toContain('eventList')
+  })
+
+  it('round-trips the events it names, and places them where the plan names them', () => {
+    const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [events] })
+    expect(read).toEqual(events)
+    expect(
+      aiLayoutEventsPlacements(
+        ['Friday jazz night'],
+        [
+          { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'Coming up', items: 0, uses: ['new:Friday jazz night'] }] },
+          { id: 'events', title: 'Events', slug: '/events', sections: [{ name: 'Hero', items: 0 }, { name: 'Calendar', items: 0, uses: ['NEW:friday jazz night'] }] },
+          { id: 'about', title: 'About', slug: '/about', sections: [{ name: 'Story', items: 0, uses: [] }] },
+        ],
+      ),
+    ).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'events', section: 1, role: 'index' },
+    ])
+  })
+
+  it('stores the list through the validator every generated page passes, in place of the cards the design wrote', () => {
+    const result = homeCheck([events])(HOME_ANSWER)
+    expect(result.violations).toEqual([])
+    const nodes = nodesOf(result.value?.nodes)
+    const list = nodes.find((node) => node.componentId === 'eventList')
+    expect(list?.props).toEqual({ maxItems: '3' })
+    // The design's cards are gone: the platform lists the events.
+    expect(JSON.stringify(result.value?.nodes)).not.toContain('Signature Soy Candle')
+  })
+
+  it('tells the model the platform lists the events, so it writes no dates or cards', () => {
+    const prompt = aiLayoutPagePrompt({
+      job: { $id: 'job-1', brief: 'A jazz club', inputs: {} },
+      plan: { reuse: [], create: [], screens: [HOME_SCREEN] } as never,
+      screen: HOME_SCREEN as never,
+      targets: targets('home', [events]),
+      reusableComponents: false,
+    })
+    expect(prompt).toContain(
+      '2. "Featured candles"; the platform lists the site\'s upcoming events here ("Friday jazz night", "Open mic Tuesday") with their dates, places and photos',
+    )
   })
 })

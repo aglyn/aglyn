@@ -71,6 +71,11 @@ import {
 } from '../../../../utils/server/media-embedded'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
+  AUDIO_RIGHTS_FIELD,
+  audioRightsRefusal,
+  audioRightsVerdict,
+} from '../../../../utils/media-audio-rights'
+import {
   removeAssetDeliveryCopies,
   scheduleMediaDeliveryCopies,
 } from '../../../../utils/server/media-delivery-copies'
@@ -255,6 +260,8 @@ async function handler(request: Request): Promise<Response> {
         previousType,
         org,
         orgId: scope.orgId,
+        rightsConfirmed: body?.[AUDIO_RIGHTS_FIELD],
+        uid: decoded.uid,
       })
       if (refusal) return refusal
       const sizeBytes = Number(body?.sizeBytes ?? 0)
@@ -349,6 +356,8 @@ async function handler(request: Request): Promise<Response> {
         previousType,
         org,
         orgId: scope.orgId,
+        rightsConfirmed: body?.[AUDIO_RIGHTS_FIELD],
+        uid: decoded.uid,
       })
       if (refusal) {
         await discardStaged()
@@ -452,6 +461,8 @@ async function handler(request: Request): Promise<Response> {
         previousType,
         org,
         orgId: scope.orgId,
+        rightsConfirmed: body?.[AUDIO_RIGHTS_FIELD],
+        uid: decoded.uid,
       })
       if (refusal) return refusal
 
@@ -834,6 +845,17 @@ async function handler(request: Request): Promise<Response> {
           mediaId,
           isPrivate: mediaSnapshot.get('private') === true,
         }),
+        // The confirmation the new audio arrived with (AGL-3716), or cleared:
+        // the previous file's answer does not speak for these bytes.
+        rightsConfirmation:
+          (() => {
+            const rights = audioRightsVerdict({
+              contentType,
+              confirmed: body?.[AUDIO_RIGHTS_FIELD],
+              uid: decoded.uid,
+            })
+            return rights.fields.rightsConfirmation
+          })() ?? remove,
         replacedBy: decoded.uid,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },
@@ -905,10 +927,23 @@ async function replacementRefusal(options: {
   previousType: string
   org: unknown
   orgId: string
+  /** The request's audio rights answer (AGL-3716). */
+  rightsConfirmed: unknown
+  uid: string
 }): Promise<Response | null> {
   const { contentType, previousType, org, orgId } = options
   if (!isAllowedUploadType(contentType)) {
     return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
+  }
+  // New audio under a link pages already play needs the same confirmation a
+  // first upload does (AGL-3716): replace is the second door to the player.
+  {
+    const rights = audioRightsVerdict({
+      contentType,
+      confirmed: options.rightsConfirmed,
+      uid: options.uid,
+    })
+    if (rights.refusal) return audioRightsRefusal(rights.refusal)
   }
   const kind = mediaUploadKind(contentType)
   const previousKind = mediaUploadKind(

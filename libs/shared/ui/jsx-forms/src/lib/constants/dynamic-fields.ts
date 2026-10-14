@@ -41,6 +41,7 @@ import type {
   TextareaProps,
   ThemeScaleProps,
   TimePickerProps,
+  WeeklyHoursProps,
   WizardProps,
 } from '../mapper'
 
@@ -85,6 +86,11 @@ export const FieldPresetChoice = dynamic<PresetChoiceProps>(() =>
 // Per-breakpoint span/offset editor for MUI Grid cells (AGL-2486). Not
 // `ssr: false`: it is a row of plain Selects with no popper anchor of its
 // own, so it renders on the server like the other structured fields.
+// A week of opening hours: switches and time menus, no popper anchor of its
+// own, so it renders on the server like the other structured fields.
+export const FieldWeeklyHours = dynamic<WeeklyHoursProps>(() =>
+  import('../mapper/weekly-hours').then((mod) => mod.default),
+)
 export const FieldBreakpointSpan = dynamic<BreakpointSpanProps>(() =>
   import('../mapper/breakpoint-span').then((mod) => mod.default),
 )

@@ -22,6 +22,7 @@ import {
   type TokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import type { AiFreeCreditsLeft } from '../model/ai-site-job'
 import { aiJobsActivity, type AiJobsActivity } from '../model/ai-job-activity'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 
@@ -117,6 +118,7 @@ interface Entry {
   /** Who reads it, kept current by whichever surface subscribed last. */
   user: MaybeTokenSource
   orgId: string
+  uid: string
   subscribers: number
   inflight: boolean
   timer: ReturnType<typeof setTimeout> | null
@@ -126,6 +128,25 @@ interface Entry {
 }
 
 const entries = new Map<string, Entry>()
+
+/**
+ * Who hears of a read as it starts and what a Free workspace has left when it
+ * lands (AGL-3722): the usage strip's store follows the jobs list this way
+ * rather than by import, so this module stays out of the strip's chunk.
+ */
+export interface AiJobsReadWatcher {
+  start: (uid: string, orgId: string) => void
+  done: (uid: string, orgId: string, credits: AiFreeCreditsLeft | undefined) => void
+}
+const readWatchers = new Set<AiJobsReadWatcher>()
+
+/** Listen to the jobs list's reads; returns the way to stop. */
+export function watchAiJobsReads(watcher: AiJobsReadWatcher): () => void {
+  readWatchers.add(watcher)
+  return () => {
+    readWatchers.delete(watcher)
+  }
+}
 
 const keyOf = (uid: string, orgId: string): string => `${uid}\n${orgId}`
 
@@ -153,6 +174,7 @@ function schedule(entry: Entry): void {
 async function read(entry: Entry): Promise<void> {
   if (entry.inflight || entry.closed) return
   entry.inflight = true
+  for (const watcher of readWatchers) watcher.start(entry.uid, entry.orgId)
   try {
     const response = await authorizedFetch(
       entry.user,
@@ -167,7 +189,13 @@ async function read(entry: Entry): Promise<void> {
       return
     }
     if (!response.ok) return
-    const payload = (await response.json().catch(() => null)) as { jobs?: AiJobSummary[] } | null
+    const payload = (await response.json().catch(() => null)) as {
+      jobs?: AiJobSummary[]
+      freeCredits?: AiFreeCreditsLeft
+    } | null
+    // The same read carries what a Free workspace has left, so the usage
+    // strip follows jobs that spend between chat messages (AGL-3722).
+    for (const watcher of readWatchers) watcher.done(entry.uid, entry.orgId, payload?.freeCredits)
     entry.jobs = Object.freeze((payload?.jobs ?? []).filter((job) => !isSettled(job)))
     emit(entry)
   } catch {
@@ -186,6 +214,7 @@ function entryFor(uid: string, orgId: string, user: MaybeTokenSource): Entry {
       jobs: NONE,
       user,
       orgId,
+      uid,
       subscribers: 0,
       inflight: false,
       timer: null,
@@ -211,6 +240,8 @@ export function publishAiJob(job: AiJobSummary | null | undefined): void {
     if (isSettled(job)) {
       if (index === -1) continue
       next = entry.jobs.filter((known) => known.id !== job.id)
+      // A job that just settled has just spent: read what is left (AGL-3722).
+      if (entry.subscribers > 0) void read(entry)
     } else if (index === -1) {
       next = [job, ...entry.jobs]
     } else {
@@ -231,6 +262,7 @@ export function resetAiJobsStoreForTests(): void {
   }
   entries.clear()
   openListeners.clear()
+  readWatchers.clear()
   openRequest = { seq: 0, jobId: null }
 }
 

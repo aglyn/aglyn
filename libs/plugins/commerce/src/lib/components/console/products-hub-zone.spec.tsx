@@ -24,6 +24,7 @@
 import { render } from '@testing-library/react'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import type { ConsoleProductsHubZoneProps } from './product-zones'
+import { COMMERCE_DEFAULT_PRICE_USD } from '../../model/commerce'
 
 // The card saves through `writeSiteWideChange` (AGL-3386); the double sends
 // each staged write to this spec's own `firebase/firestore` mock.
@@ -217,7 +218,7 @@ describe('proposed products, categories and discounts', () => {
     seoDescription: '',
   }
 
-  it('creates each product as an unpriced draft through the resources API, under a slug of its own', async () => {
+  it('creates each product as a draft at the default price through the resources API, under a slug of its own (AGL-3676)', async () => {
     mockCreate.mockResolvedValueOnce({ id: 'p-new-1' }).mockResolvedValueOnce({ id: 'p-new-2' })
     // The candle is in the STORE: slugs are asked of it, never of the page of
     // rows the hub shows (AGL-3321).
@@ -238,7 +239,12 @@ describe('proposed products, categories and discounts', () => {
       ['host-1', 'product', 'wild-mint-soy-candle-2', 'draft'],
       ['host-1', 'product', 'wild-mint-soy-candle-3', 'draft'],
     ])
-    expect(created.every((call) => call.data.variants.every((variant: object) => !('priceUsd' in variant)))).toBe(true)
+    expect(
+      created.every((call) =>
+        call.data.variants.every((variant: { priceUsd?: number }) => variant.priceUsd === COMMERCE_DEFAULT_PRICE_USD),
+      ),
+    ).toBe(true)
+    expect(created.map((call) => call.data.priceFromCents)).toEqual([2500, 2500])
   })
 
   it('passes over a proposal named like a product the store holds, asking the allowance only for the rest', async () => {

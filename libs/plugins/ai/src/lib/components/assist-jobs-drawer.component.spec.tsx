@@ -22,6 +22,7 @@
  * cancels through the route, and counts a job's outcome exactly once.
  */
 
+import { AI_JOB_CANCEL_CONFIRM_COPY } from '../model/ai-job-cancel-copy'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 if (typeof globalThis.TextDecoder === 'undefined') {
@@ -42,6 +43,7 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   __esModule: true,
+  HelpTip: () => null,
   AppLink: ({ href, children }: { href: string; children: unknown }) => (
     <a href={href}>{children as string}</a>
   ),
@@ -404,9 +406,16 @@ describe('cancel', () => {
     renderDrawer()
     fireEvent.click(screen.getByLabelText('Show AI jobs'))
     fireEvent.click(await screen.findByText('Cancel'))
+    // It says what canceling does before it does it (AGL-3616); keeping on sends nothing.
+    expect(await screen.findByText(AI_JOB_CANCEL_CONFIRM_COPY)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Keep building' }))
+    await waitFor(() => expect(screen.queryByText(AI_JOB_CANCEL_CONFIRM_COPY)).toBeNull())
+    expect(posts).toEqual([])
+    fireEvent.click(screen.getByText('Cancel'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel job' }))
     expect(await screen.findByText('Canceled')).toBeTruthy()
     expect(posts).toEqual([['/api/ai/jobs/job-1/cancel', { orgId: 'org-1' }]])
-    expect(screen.queryByText('Cancel')).toBeNull()
+    await waitFor(() => expect(screen.queryByText('Cancel')).toBeNull())
     // A cancel is not an outcome the funnel counts.
     expect(mockTrackEvent).not.toHaveBeenCalled()
   })
@@ -503,6 +512,15 @@ describe('aiJobOutputHref', () => {
     // opened no site at all.
     expect(aiJobOutputHref(output({ hostSubdomain: undefined }) as never, 'acme')).toBeNull()
     expect(aiJobOutputHref(output({ versionId: 'v-1' }) as never, 'acme')).not.toContain('host-1')
+  })
+
+  it('opens a dataset a site start made where the data plugin lists it, and nowhere it is not loaded (AGL-3616)', () => {
+    expect(aiJobOutputHref(output({ resource: 'draft', draftResource: 'dataset', id: 'ds-1' }) as never, 'acme')).toBeNull()
+    registerPluginRecordRoute('dataset', { list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/data`, record: () => null }, { pluginId: 'data' })
+    expect(aiJobOutputHref(output({ resource: 'draft', draftResource: 'dataset', id: 'ds-1' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/data',
+    )
+    unregisterPluginServices('data')
   })
 
   it('opens a theme proposal on the site’s Theme section (AGL-2938)', () => {

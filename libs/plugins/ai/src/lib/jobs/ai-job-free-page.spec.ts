@@ -99,6 +99,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import { isFormInputNode } from '@aglyn/aglyn/app-utils/forms'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -351,7 +352,7 @@ describe('a Free workspace builds its first page', () => {
     expect(forms).toHaveLength(1)
     expect(forms[0].props).toEqual({ formId: 'frm-consultation' })
     expect(forms[0].nodes ?? []).toEqual([])
-    expect(Object.values(page).filter((node) => node.componentId === 'formField')).toEqual([])
+    expect(Object.values(page).filter((node) => isFormInputNode(node as never))).toEqual([])
     expect(Object.values(page).filter((node) => node.componentId === 'reusableInstance')).toEqual([])
 
     // The practice areas were answered written once (AGL-3053), and the draft holds

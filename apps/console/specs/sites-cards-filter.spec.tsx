@@ -141,7 +141,10 @@ jest.mock('../components/layouts/dashboard.layout', () => ({
 }))
 jest.mock('../components/layouts/main.layout', () => passthrough)
 jest.mock('../components/layouts/authenticated.layout', () => passthrough)
-jest.mock('../components/create-host-dialog.component', () => nullComponent)
+jest.mock('../components/create-host-dialog.component', () => ({
+  ...nullComponent,
+  CreateSiteFromUrl: () => null,
+}))
 jest.mock('../components/org-invites-banner.component', () => nullComponent)
 jest.mock('../components/host-icon.component', () => nullComponent)
 jest.mock('../components/marketing-consent-prompt.component', () => nullComponent)

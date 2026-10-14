@@ -43,6 +43,7 @@ import clsx from 'clsx'
 import { usePathname } from 'next/navigation'
 import { forwardRef, type Ref, useMemo } from 'react'
 import NextLink, { type NextLinkProps } from './next-link'
+import { mergeNewTabRel, withNewTabHint } from '../utils/new-tab'
 
 export type AppLinkVariant =
   | 'naked'
@@ -55,7 +56,15 @@ export type AppLinkVariant =
   | undefined
   | never
 
-type BaseLinkProps = Omit<NextLinkProps, 'hrefTo'>
+type BaseLinkProps = Omit<NextLinkProps, 'hrefTo'> & {
+  /**
+   * Open in a new tab (AGL-3660): `target="_blank"`, `rel` gains
+   * `noopener noreferrer`, and the accessible name ends with
+   * "(opens in a new tab)". Every Preview / View / Visit link sets this —
+   * see `utils/new-tab`.
+   */
+  newTab?: boolean
+}
 export type ButtonBaseProps = MuiButtonBaseProps<any, BaseLinkProps>
 export type ButtonProps = MuiButtonProps<any, BaseLinkProps>
 export type DefaultProps = TextProps
@@ -117,7 +126,16 @@ export const appLinkClassKey = generateComponentClassKeys('AglynAppLink', [
  */
 const AppLink = forwardRef(
   <T extends AppLinkVariant>(props: AppLinkProps<T>, ref: Ref<any>) => {
-    const { className, componentVariant, href, ...rest } = props
+    const {
+      className,
+      componentVariant,
+      href,
+      newTab,
+      ...passed
+    } = props as AppLinkProps<T> & { newTab?: boolean }
+    const rest: Record<string, any> = newTab
+      ? { ...passed, ...newTabAttributes(passed as Record<string, any>) }
+      : passed
 
     const variant = componentVariant
     const pathname = usePathname() ?? ''
@@ -224,6 +242,23 @@ const AppLink = forwardRef(
   },
 )
 AppLink.displayName = 'AppLink'
+
+/**
+ * What `newTab` adds. The accessible name is the caller's `aria-label` when
+ * there is one, else the plain-text children — a button whose label is a
+ * string reads "Preview (opens in a new tab)" without every call site
+ * restating its own text.
+ */
+function newTabAttributes(props: Record<string, any>) {
+  const named: string | undefined =
+    props['aria-label'] ??
+    (typeof props['children'] === 'string' ? props['children'] : undefined)
+  return {
+    target: '_blank',
+    rel: mergeNewTabRel(props['rel']),
+    ...(named ? { 'aria-label': withNewTabHint(named) } : {}),
+  }
+}
 AppLink.aglyn = true
 
 type AppLink = typeof AppLink

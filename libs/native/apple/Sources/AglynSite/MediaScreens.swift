@@ -556,12 +556,16 @@ struct MediaDetailBody: View {
   }
 
   private var facts: String {
-    [
-      formatBytes(item.sizeBytes),
-      item.width.flatMap { width in item.height.map { "\(width) × \($0) px" } }.flatMap { $0.hasPrefix("0 ×") ? nil : $0 },
-      item.contentType.isEmpty ? nil : item.contentType,
-      item.createdAt.map { "Added \(relativeTime($0).lowercased())" },
-    ].compactMap { $0 }.joined(separator: " · ")
+    // Built step by step: the one-literal form crashed Swift 6.3's
+    // diagnostics on GitHub's macOS image (AGL-3709).
+    var parts: [String] = [formatBytes(item.sizeBytes)]
+    if let width = item.width, let height = item.height {
+      let size = "\(width) × \(height) px"
+      if !size.hasPrefix("0 ×") { parts.append(size) }
+    }
+    if !item.contentType.isEmpty { parts.append(item.contentType) }
+    if let createdAt = item.createdAt { parts.append("Added \(relativeTime(createdAt).lowercased())") }
+    return parts.joined(separator: " · ")
   }
 
   var body: some View {

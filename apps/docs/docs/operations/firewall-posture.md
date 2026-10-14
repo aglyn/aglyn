@@ -366,10 +366,9 @@ shipping apps' own servers, which run no JavaScript and send no header we
 choose, so a challenge leaves the connector importing nothing and marking
 nothing shipped.
 
-`Shipping connector bypass` is DECLARED in `tools/scripts/lib/firewall-posture.mjs`
-with two groups, and is added to the console project's live config with
-`PATCH rules.insert` before the first live test of either connector — until
-then `firewall-drift.yml` reports it missing:
+`Shipping connector bypass` is declared in `tools/scripts/lib/firewall-posture.mjs`
+with two groups and has been live in the console project's config since
+2026-10-12:
 
 | Group | Admits |
 | --- | --- |
@@ -382,7 +381,7 @@ under the merchant's API secret — and answers an unproven caller 401. Both
 keep a per-site, per-address rate limit of their own. The trailing slash in
 each prefix keeps a sibling path that merely starts the same way challenged.
 
-Check both directions the minute it goes in:
+Both directions were checked when it went in, and `check-firewall-posture` holds them:
 
 ```text
 anonymous curl  /api/commerce/shippingeasy/<hostId>  (POST, no signature)  401 from the route
