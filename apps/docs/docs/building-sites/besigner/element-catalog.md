@@ -185,6 +185,14 @@ If part of what you type can't be read, the whole value is ignored rather than h
 — a layout that silently differs from what you typed is worse than one that plainly
 doesn't work.
 
+**Fill the row when alone?** on a cell widens it to the whole row whenever it ends up by
+itself on the last row — the thirteenth card in a grid of threes, or the odd one out in a
+grid of twos — and leaves it as it is when the row comes out even. It follows the cell's
+**Span** at each screen size, so a cell that is two to a row on a tablet and three to a
+row on a desktop fills the row on whichever of them leaves it alone. Turn it on for every
+cell in a row whose cells you show and hide per page, and whichever one comes last takes
+it.
+
 ## Surface
 
 | Element | What it's for |
@@ -387,6 +395,8 @@ where the image sits, with nothing for you to do and nothing to re-save:
 - a size you gave the image itself — a pixel **Width**, or a pixel **Height** with the
   width left on auto (a logo set 56px tall is as wide as its picture is at that height),
   including different sizes per screen size;
+- a **Width** in percent of the space around it — an image at `118%` of its grid cell,
+  pulled past the edge of the page, gets a file wide enough for the 118%;
 - the layout around it — a **Grid** cell set to `xs:12 md:4` is a third of the page from
   tablet width up, an image in a grid of three equal columns is a third, the gaps
   between them come off, and a **Container** stops the slot growing past its max width.

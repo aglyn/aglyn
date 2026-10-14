@@ -1,0 +1,464 @@
+{
+  "$comment": "The Fulfillment networks plugin's native screens: the networks a site can connect (ShipBob and Amazon Multi-Channel Fulfillment by signing in, ShipMonk with its API key), each one's status, settings, stock counts and recent activity. Routes: GET /api/fulfillment-networks/connections and log, POST connect, connect-key, sync-now and webhook-secret, PATCH and DELETE connection. Signing in opens the network’s consent page in the secure browser; the server finishes the connection when the network sends the person back. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "fulfillment-networks.service",
+      "title": "Fulfillment networks",
+      "label": "Fulfillment networks",
+      "subtitle": "ShipBob, Amazon and ShipMonk warehouses",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "order": 40,
+      "zones": [
+        "commerceSettings"
+      ],
+      "links": [],
+      "load": {
+        "nets": "/api/fulfillment-networks/connections?hostId={site.id}"
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "shipbob",
+            "label": "ShipBob",
+            "auth": "oauth",
+            "summary": "Paid orders go to ShipBob’s warehouses to pick, pack and ship; shipments and tracking come back to the order."
+          },
+          {
+            "id": "amazon-mcf",
+            "label": "Amazon Multi-Channel Fulfillment",
+            "auth": "oauth",
+            "summary": "Paid orders ship from your FBA inventory in Amazon’s warehouses; shipments and tracking come back to the order."
+          },
+          {
+            "id": "shipmonk",
+            "label": "ShipMonk",
+            "auth": "api-key",
+            "summary": "Paid orders go to ShipMonk’s warehouses to pick, pack and ship; shipments and tracking come back to the order."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.nets.offered",
+          "text": "No fulfillment network is available for this site yet."
+        },
+        {
+          "type": "list",
+          "id": "networks",
+          "title": "Networks",
+          "items": "data.nets.offered",
+          "primary": "{const.providers[id=item.id].label}",
+          "secondary": "{const.providers[id=item.id].summary}",
+          "icon": "shippingbox|local_shipping",
+          "badges": [
+            {
+              "text": "{data.nets.connections[provider=item.id].status:title}",
+              "when": "data.nets.connections[provider=item.id]",
+              "tones": {
+                "Active": "success",
+                "Paused": "warning",
+                "Reconnect": "error",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Sandbox",
+              "tone": "info",
+              "when": "item.sandbox"
+            },
+            {
+              "text": "Not connected",
+              "tone": "neutral",
+              "when": "!data.nets.connections[provider=item.id]"
+            }
+          ],
+          "open": {
+            "screen": "fulfillment-networks.network",
+            "params": {
+              "provider": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fulfillment-networks.network",
+      "title": "{const.providers[id=params.provider].label|'Fulfillment network'}",
+      "label": "Fulfillment network",
+      "icon": "shippingbox|local_shipping",
+      "scope": "site",
+      "load": {
+        "nets": "/api/fulfillment-networks/connections?hostId={site.id}",
+        "log": {
+          "url": "/api/fulfillment-networks/log?hostId={site.id}&provider={params.provider}",
+          "optional": true
+        }
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "shipbob",
+            "label": "ShipBob",
+            "auth": "oauth",
+            "summary": "Paid orders go to ShipBob’s warehouses to pick, pack and ship; shipments and tracking come back to the order."
+          },
+          {
+            "id": "amazon-mcf",
+            "label": "Amazon Multi-Channel Fulfillment",
+            "auth": "oauth",
+            "summary": "Paid orders ship from your FBA inventory in Amazon’s warehouses; shipments and tracking come back to the order."
+          },
+          {
+            "id": "shipmonk",
+            "label": "ShipMonk",
+            "auth": "api-key",
+            "summary": "Paid orders go to ShipMonk’s warehouses to pick, pack and ship; shipments and tracking come back to the order."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "summary",
+          "tone": "info",
+          "text": "{const.providers[id=params.provider].summary}"
+        },
+        {
+          "type": "notice",
+          "id": "failing",
+          "tone": "error",
+          "when": "data.nets.connections[provider=params.provider].lastError",
+          "text": "{data.nets.connections[provider=params.provider].lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "reconnect",
+          "tone": "warning",
+          "when": "data.nets.connections[provider=params.provider].status == reconnect",
+          "text": "The connection was refused or revoked. Nothing moves until you connect again."
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Connection",
+          "when": "data.nets.connections[provider=params.provider]",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{data.nets.connections[provider=params.provider].status:title}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Paused": "warning",
+                "Reconnect": "error",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Account",
+              "value": "{data.nets.connections[provider=params.provider].accountName}",
+              "when": "data.nets.connections[provider=params.provider].accountName"
+            },
+            {
+              "label": "Sandbox",
+              "value": "{data.nets.connections[provider=params.provider].sandbox:yesno}"
+            },
+            {
+              "label": "Paid orders",
+              "value": "{data.nets.connections[provider=params.provider].routing:title}"
+            },
+            {
+              "label": "Sent",
+              "value": "{data.nets.connections[provider=params.provider].totals.sent:number}"
+            },
+            {
+              "label": "Shipped",
+              "value": "{data.nets.connections[provider=params.provider].totals.shipped:number}"
+            },
+            {
+              "label": "Canceled",
+              "value": "{data.nets.connections[provider=params.provider].totals.canceled:number}"
+            },
+            {
+              "label": "Stock counts last read",
+              "value": "{data.nets.connections[provider=params.provider].inventory.syncedAtMs:datetime}",
+              "when": "data.nets.connections[provider=params.provider].inventory.syncedAtMs"
+            },
+            {
+              "label": "Stock read",
+              "value": "{data.nets.connections[provider=params.provider].inventory.skus:number} SKUs · {data.nets.connections[provider=params.provider].inventory.updated:number} updated",
+              "when": "data.nets.connections[provider=params.provider].inventory.syncedAtMs"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "when": "data.nets.offered[id=params.provider] || data.nets.connections[provider=params.provider]",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect {const.providers[id=params.provider].label}",
+              "icon": "link|link",
+              "when": "!data.nets.connections[provider=params.provider] && const.providers[id=params.provider].auth == oauth",
+              "url": "/api/fulfillment-networks/connect",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "connectKey",
+              "label": "Connect {const.providers[id=params.provider].label}",
+              "icon": "key|key",
+              "when": "!data.nets.connections[provider=params.provider] && const.providers[id=params.provider].auth == api-key",
+              "url": "/api/fulfillment-networks/connect-key",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "Stored encrypted. It is never shown again."
+                },
+                {
+                  "key": "storeId",
+                  "label": "Store id",
+                  "kind": "text",
+                  "required": true
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "apiKey": "{form.apiKey}",
+                "storeId": "{form.storeId}"
+              },
+              "reveal": "webhook.secret",
+              "success": "Connected. Paid orders go to it from now on."
+            },
+            {
+              "id": "reconnect",
+              "label": "Connect again",
+              "icon": "link|link",
+              "when": "data.nets.connections[provider=params.provider].status == reconnect && const.providers[id=params.provider].auth == oauth",
+              "url": "/api/fulfillment-networks/connect",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "reconnectKey",
+              "label": "Connect again with a key",
+              "icon": "key|key",
+              "when": "data.nets.connections[provider=params.provider].status == reconnect && const.providers[id=params.provider].auth == api-key",
+              "url": "/api/fulfillment-networks/connect-key",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "password",
+                  "required": true
+                },
+                {
+                  "key": "storeId",
+                  "label": "Store id",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{data.nets.connections[provider=params.provider].storeId}"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "apiKey": "{form.apiKey}",
+                "storeId": "{form.storeId}"
+              },
+              "success": "Connected again."
+            },
+            {
+              "id": "sync",
+              "label": "Sync now",
+              "icon": "arrow.triangle.2.circlepath|sync",
+              "when": "data.nets.connections[provider=params.provider].status == active",
+              "url": "/api/fulfillment-networks/sync-now",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "success": "Synced."
+            },
+            {
+              "id": "pause",
+              "label": "Pause",
+              "icon": "pause.circle|pause_circle",
+              "when": "data.nets.connections[provider=params.provider].status == active",
+              "method": "PATCH",
+              "url": "/api/fulfillment-networks/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": true
+              },
+              "success": "Paused. Paid orders are not sent."
+            },
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play.circle|play_circle",
+              "when": "data.nets.connections[provider=params.provider].status == paused",
+              "method": "PATCH",
+              "url": "/api/fulfillment-networks/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": false
+              },
+              "success": "Resumed."
+            },
+            {
+              "id": "webhook",
+              "label": "New webhook secret",
+              "icon": "key.radiowaves.forward|vpn_key",
+              "when": "data.nets.connections[provider=params.provider] && data.nets.connections[provider=params.provider].status != reconnect && const.providers[id=params.provider].auth == api-key",
+              "confirm": "The current secret stops working at once. Put the new one in the network’s webhook settings, or its updates are refused until you do; orders are still read back every 15 minutes.",
+              "url": "/api/fulfillment-networks/webhook-secret",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "reveal": "webhook.secret",
+              "success": "Webhook address: {response.webhook.url}"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.nets.connections[provider=params.provider]",
+              "confirm": "Disconnect {const.providers[id=params.provider].label}? Paid orders stop going to it, and the stored access and activity are deleted. Orders it already has stay with it: check them in your account there, and ship anything it has not shipped another way.",
+              "method": "DELETE",
+              "url": "/api/fulfillment-networks/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "back": true,
+              "success": "Disconnected."
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Settings",
+          "when": "data.nets.connections[provider=params.provider] && data.nets.connections[provider=params.provider].status != reconnect",
+          "fields": [
+            {
+              "key": "routing",
+              "label": "Paid orders",
+              "kind": "select",
+              "initial": "{data.nets.connections[provider=params.provider].routing}",
+              "options": [
+                {
+                  "value": "automatic",
+                  "label": "Sent automatically"
+                },
+                {
+                  "value": "manual",
+                  "label": "Sent when I choose"
+                }
+              ]
+            },
+            {
+              "key": "shippingMethod",
+              "label": "Shipping method",
+              "kind": "text",
+              "initial": "{data.nets.connections[provider=params.provider].shippingMethod}",
+              "when": "params.provider != amazon-mcf",
+              "help": "As named in your account there."
+            },
+            {
+              "key": "shippingSpeed",
+              "label": "Shipping speed",
+              "kind": "select",
+              "initial": "{data.nets.connections[provider=params.provider].shippingSpeed|'Standard'}",
+              "when": "params.provider == amazon-mcf",
+              "options": [
+                "Standard",
+                "Expedited",
+                "Priority"
+              ]
+            },
+            {
+              "key": "marketplaceId",
+              "label": "Marketplace",
+              "kind": "select",
+              "initial": "{data.nets.connections[provider=params.provider].marketplaceId}",
+              "when": "params.provider == amazon-mcf",
+              "optionsFrom": {
+                "items": "data.nets.connections[provider=params.provider].marketplaces",
+                "value": "{item.id}",
+                "label": "{item.name} ({item.countryCode})"
+              }
+            },
+            {
+              "key": "syncInventory",
+              "label": "Follow its stock counts",
+              "kind": "toggle",
+              "initial": "{data.nets.connections[provider=params.provider].syncInventory}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "method": "PATCH",
+            "url": "/api/fulfillment-networks/connection",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "{params.provider}",
+              "routing": "{form.routing}",
+              "shippingMethod": "{form.shippingMethod}",
+              "shippingSpeed": "{form.shippingSpeed}",
+              "marketplaceId": "{form.marketplaceId}",
+              "syncInventory": "{form.syncInventory}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "list",
+          "id": "activity",
+          "title": "Activity",
+          "when": "data.nets.connections[provider=params.provider]",
+          "items": "data.log.entries",
+          "primary": "{item.message}",
+          "secondary": "{item.atMs:datetime}",
+          "badges": [
+            {
+              "text": "{item.kind:title}",
+              "tones": {
+                "Error": "error",
+                "Shipped": "success",
+                "Sent": "info",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "Nothing has happened on this connection yet."
+        }
+      ]
+    }
+  ]
+}

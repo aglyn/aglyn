@@ -893,14 +893,21 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, confirm, confirmWhen, destructive, prompt,
-reason, success, open, navigate, back, reload, when, link, copy, reveal,
-else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+reason, success, instead, check, open, navigate, back, reload, when, link, copy,
+reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
 (Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
 Custom Tabs); `else` runs on a 404 (add a member, else invite them); `then`
 follows a success; `write` merges a document the person writes directly, as
 the console does (their own profile, the site document), under the rules.
+`confirm` is a template, or a list of `{ when, text }` segments joined in order
+so one sentence can follow the route's answer; `check` is a route call made
+first (the add-on price preview), whose answer is `preview` in the
+confirmation; `instead` is `{ when, title, text, open }` (or a list, the first
+that matches wins) shown in place of `success` when the route's answer meets
+`when`: the docs a question deflects to, a bank asking to confirm a payment
+(`open` then names the response field holding the invoice page to open).
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
 

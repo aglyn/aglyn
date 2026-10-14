@@ -326,7 +326,12 @@ jest.mock('../components/layouts/authenticated.layout', () => passthrough)
 jest.mock('../components/layouts/main.layout', () => passthrough)
 jest.mock('../components/host-activity-table.component', () => nullCard)
 jest.mock('../components/card-display-form-template', () => nullCard)
-jest.mock('../components/plugin-widget-slot.component', () => nullCard)
+// The setup rail asks the zone whether it has cards before it offers an
+// Integrations section (AGL-3711); an empty zone offers none.
+jest.mock('../components/plugin-widget-slot.component', () => ({
+  ...nullCard,
+  useSlotHasWidgets: () => ({ hasWidgets: false, ready: true }),
+}))
 jest.mock('../components/auth-screens-card.component', () => nullCard)
 jest.mock('../components/custom-domain-card.component', () => nullCard)
 jest.mock('../components/site-emails-card.component', () => nullCard)
