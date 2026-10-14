@@ -112,6 +112,17 @@ private fun orgScopeTokens(context: NativePluginContext, scope: MediaScope.Org):
   }
 }
 
+/** Resolves who may read what in a library before it loads, then shows [content] with the reader's scope clause. */
+@Composable
+internal fun MediaScopeGate(context: NativePluginContext, scope: MediaScope, content: @Composable (scopeTokens: List<String>?) -> Unit) {
+  val tokens = if (scope is MediaScope.Org) orgScopeTokens(context, scope) else Live.Ready(null)
+  when (tokens) {
+    Live.Loading -> SkeletonGrid(tiles = 9)
+    is Live.Failed -> EmptyState("Could not load this library", icon = AglynIcons.named("error"))
+    is Live.Ready -> content(tokens.value)
+  }
+}
+
 /**
  * The media library, a file's details beside the grid on wide windows: the
  * site's library and the workspace's (as this site sees it), folders,
@@ -134,7 +145,6 @@ fun MediaScreen(context: NativePluginContext, params: Map<String, String>) {
     EmptyState("Pick a workspace first", icon = AglynIcons.named("photo_library"))
     return
   }
-  val tokens = if (scope is MediaScope.Org) orgScopeTokens(context, scope) else Live.Ready(null)
   Column(Modifier.fillMaxSize()) {
     if (!orgOnly) {
       SecondaryTabRow(selectedTabIndex = tab) {
@@ -142,11 +152,7 @@ fun MediaScreen(context: NativePluginContext, params: Map<String, String>) {
         Tab(tab == 1, { tab = 1 }, text = { Text("Workspace") }, modifier = Modifier.testTag("media-tab-org"))
       }
     }
-    when (tokens) {
-      Live.Loading -> SkeletonGrid(tiles = 9)
-      is Live.Failed -> EmptyState("Could not load this library", icon = AglynIcons.named("error"))
-      is Live.Ready -> MediaLibrary(context, scope, tokens.value, params["media"])
-    }
+    MediaScopeGate(context, scope) { tokens -> MediaLibrary(context, scope, tokens, params["media"]) }
   }
 }
 
@@ -349,7 +355,7 @@ private fun FolderPicker(folder: FolderPick, folders: List<MediaFolder>, byId: M
 }
 
 @Composable
-private fun MediaTile(item: MediaItem, origin: String, selected: Boolean, onClick: () -> Unit) {
+internal fun MediaTile(item: MediaItem, origin: String, selected: Boolean, onClick: () -> Unit) {
   Surface(
     Modifier.clip(MaterialTheme.shapes.medium).clickable(onClick = onClick).testTag("media-${item.id}"),
     shape = MaterialTheme.shapes.medium,

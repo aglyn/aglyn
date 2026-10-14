@@ -24,15 +24,26 @@
 //   node tools/deploy/verify-env-isolation.mjs --deployment
 //        # ALSO: did a config change actually reach the running deployment?
 //
-// Exit codes: 0 = every secret is environment-isolated AND no non-production
-// environment is pointed at the live Stripe account — apart from the Stripe
-// key family in console/tenant development and preview, which is live by
-// owner decision 2026-10-13 and reported as a NOTE (see
-// LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE); 1 = at least one secret
-// spans production and a non-production environment, or at least one
-// non-production environment reads LIVE or UNKNOWN; 2 = the check could not be
-// performed (no token, an API error, or the evidence failed its own negative
-// control — see "This check must be able to fail").
+// ⚑ REPORT ONLY TODAY (AGL-2401). Owner decision 2026-10-13: environments are
+// not isolated for now — production and development/preview share secrets and
+// live data on purpose. While ENV_ISOLATION_ENFORCED (below) is false, every
+// probe still runs and every finding is still printed, under a "REPORT ONLY —
+// not enforced" heading and in `--json`, but findings do not fail the run.
+// A check that could not run at all still exits 2: a broken probe is not a
+// finding, and it is never waved through by the switch.
+//
+// Exit codes: 0 = the run passed — with enforcement OFF, every probe ran
+// (findings, if any, are reported, not failed); with enforcement ON, every
+// secret is environment-isolated AND no non-production environment is pointed
+// at the live Stripe account — apart from the Stripe key family in
+// console/tenant development and preview, which is live by owner decision
+// 2026-10-13 and reported as a NOTE (see
+// LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE); 1 = enforcement is ON and at
+// least one secret spans production and a non-production environment, or at
+// least one non-production environment reads LIVE or UNKNOWN; 2 = the check
+// could not be performed (no token, an API error, or the evidence failed its
+// own negative control — see "This check must be able to fail"), whatever the
+// switch says.
 //
 // ## TWO QUESTIONS, NOT ONE
 //
@@ -128,6 +139,26 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+
+/**
+ * THE ENFORCEMENT SWITCH (AGL-2401).
+ *
+ * Owner decision 2026-10-13: environments are not isolated for now; flip to
+ * true when isolation becomes a goal.
+ *
+ * `false` — REPORT ONLY. Every probe runs, both negative controls run, every
+ * sharing and mode finding is printed (and carried in `--json`), and the run
+ * exits 0. Aborts that mean the check could not run — no token, an HTTP error,
+ * an empty shared scope, a project with no per-environment split — still exit
+ * 2, because they say nothing about isolation either way.
+ *
+ * `true` — ENFORCED: the behavior this check had before the decision, exactly.
+ * Any finding exits 1. The live-Stripe exemption below applies in both modes.
+ *
+ * This is the only place the verdict reads enforcement from; see `verdictOf`.
+ * `npm run test:env-isolation` drives both values.
+ */
+const ENV_ISOLATION_ENFORCED = false
 
 const TEAM_SCOPE = 'team_JFfQodGE8VhCAZM6usYTu54M'
 const API = 'https://api.vercel.com'
@@ -261,8 +292,8 @@ const isLiveStripeByChoice = ({ key, environments, projects }) => {
 
 /**
  * Findings whose remediation is already tracked. Purely presentational — they
- * still fail the run. The point is that a reader of the output can tell a
- * known, owned item from a new one.
+ * still fail the run whenever ENV_ISOLATION_ENFORCED is on. The point is that a
+ * reader of the output can tell a known, owned item from a new one.
  */
 const KNOWN_ISSUE = {
   STRIPE_SECRET_KEY: 'AGL-2401',
@@ -692,6 +723,142 @@ function evaluateRecords({ shared, byProject }) {
   return { findings, controls, modes, exempted }
 }
 
+/**
+ * Findings → exit code, given the enforcement switch. Pure, so `--self-test`
+ * can drive both values of a switch that is a `const` in the shipped file.
+ *
+ *   isolated  — the FACT: no sharing finding and no mode finding.
+ *   ok        — the VERDICT: whether this run passes (exit 0).
+ *
+ * They coincide when enforced and part ways in report-only mode, which is the
+ * whole of the switch. Aborts never reach here — `Fatal` exits 2 upstream.
+ */
+const verdictOf = ({ findings, modes }, enforced) => {
+  const isolated = findings.length === 0 && modes.length === 0
+  const ok = isolated || !enforced
+  return { isolated, enforced, ok, exitCode: ok ? 0 : 1 }
+}
+
+const REPORT_ONLY_HEADING = 'REPORT ONLY — not enforced'
+
+/** The human-readable report. Pure, so `--self-test` can read what a run prints. */
+function renderReport({ enforced, findings, modes, accepted, exempted, deployments }) {
+  const out = []
+  const write = (text) => out.push(text)
+
+  if (!enforced) {
+    write(
+      `${REPORT_ONLY_HEADING} (AGL-2401)\n` +
+        '  Owner decision 2026-10-13: environments are not isolated for now.\n' +
+        '  Every probe ran and every finding is listed below; none fails the run.\n' +
+        '  A check that could not run at all still exits 2.\n' +
+        '  To enforce: set ENV_ISOLATION_ENFORCED = true in\n' +
+        '  tools/deploy/verify-env-isolation.mjs.\n\n',
+    )
+  }
+  if (!findings.length && !modes.length && exempted.length) {
+    write(
+      'OK — nothing outside the live-Stripe exemption (see the NOTE below) spans\n' +
+        'production and a non-production environment, or points one at live Stripe.\n',
+    )
+  } else if (!findings.length && !modes.length) {
+    write(
+      'OK — no secret spans production and a non-production environment, and no\n' +
+        'non-production environment is pointed at the live Stripe account.\n',
+    )
+  } else if (!findings.length) {
+    write('No secret spans production and a non-production environment.\n')
+  } else {
+    write(`${findings.length} secret(s) hold the SAME value in production and a non-production environment:\n\n`)
+    for (const f of findings) {
+      const owner = f.issue ? `  [${f.issue}]` : '  [UNTRACKED]'
+      write(
+        `  ${f.key}\n` +
+          `    scope        ${f.scope}\n` +
+          `    shared with  ${f.sharedWith.join(', ')}\n` +
+          `    reaches      ${f.projects.join(', ')}\n` +
+          `  ${owner}\n\n`,
+      )
+    }
+    write(
+      'Each is ONE Vercel record covering several environments, so the value is\n' +
+        'identical by construction. Split the record: keep production on its own,\n' +
+        'and give development/preview their own record with a different value.\n',
+    )
+  }
+  if (modes.length) {
+    write(
+      `\n${modes.length} non-production environment(s) are pointed at the LIVE Stripe\n` +
+        'account, or cannot be shown not to be:\n\n',
+    )
+    for (const m of modes) {
+      const owner = m.issue ? `  [${m.issue}]` : '  [UNTRACKED]'
+      write(
+        `  ${m.key}\n` +
+          `    scope        ${m.scope}\n` +
+          `    environments ${m.environments.join(', ')}\n` +
+          `    mode         ${m.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN — stored encrypted or sensitive, not readable (store it plain)'}\n` +
+          `    reaches      ${m.projects.join(', ') || '(linked to no project — inert)'}\n` +
+          `  ${owner}\n\n`,
+      )
+    }
+    write(
+      'Splitting the RECORD does not fix this — a separate development record\n' +
+        'holding the live key passes the check above and fails here, which is the\n' +
+        'whole reason this section exists. UNKNOWN is not a pass: a value this\n' +
+        'script may not read cannot be reported safe.\n',
+    )
+  }
+  if (exempted.length) {
+    const rule = LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE
+    write(
+      `\nNOTE — live Stripe outside production, exempted by ${rule.decision}\n` +
+        `(${rule.why}).\nInformational: still reported on every run, but they do not fail it.\n\n`,
+    )
+    for (const e of exempted) {
+      const detail =
+        e.kind === 'sharing'
+          ? `shares production's value with ${e.sharedWith.join(', ')}`
+          : `${e.environments.join(', ')} read ${e.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN (not stored plain)'}`
+      write(`  ${e.key}  [${e.scope}]  ${detail}  → ${e.projects.join(', ')}\n`)
+    }
+  }
+  if (accepted.length) {
+    write('\naccepted by decision, not silenced:\n')
+    for (const a of accepted) {
+      write(`  ${a.key} in ${a.environments.join(', ')} — ${a.why} (${a.who})\n`)
+    }
+  }
+  for (const d of deployments ?? []) {
+    write(`\nproduction deployment env keys — ${d.project}\n`)
+    if (d.error) {
+      write(`  ${d.error}\n`)
+      continue
+    }
+    write(
+      `  newest    ${d.newest.id}  ${d.newest.created}  ${d.newest.keys} keys\n` +
+        `  previous  ${d.previous.id}  ${d.previous.created}  ${d.previous.keys} keys\n` +
+        `  added     ${d.added.join(', ') || '(none)'}\n` +
+        `  removed   ${d.removed.join(', ') || '(none)'}\n`,
+    )
+    if (!d.added.length && !d.removed.length) {
+      write(
+        '  NOTE: identical key lists. Expected for a pure value swap — in that case\n' +
+          '        the evidence is the newest deployment ID being NEWER than the change.\n' +
+          '        If you ADDED or REMOVED a key and see nothing here, the redeploy did\n' +
+          '        not carry it.\n',
+      )
+    }
+  }
+  if (!enforced && (findings.length || modes.length)) {
+    write(
+      `\n${REPORT_ONLY_HEADING}: ${findings.length} sharing and ${modes.length} mode finding(s) above are\n` +
+        'reported, not failed (owner decision 2026-10-13, AGL-2401).\n',
+    )
+  }
+  return out.join('')
+}
+
 async function main() {
   assertEveryAllowanceHasAReason()
 
@@ -727,8 +894,12 @@ async function main() {
   // Waived sharing is REPORTED, never silent. An accepted decision that stops
   // being visible is indistinguishable from one nobody ever made.
   const accepted = Object.entries(ACCEPTED).map(([key, d]) => ({ key, ...d }))
+  const verdict = verdictOf({ findings, modes }, ENV_ISOLATION_ENFORCED)
   const result = {
-    ok: findings.length === 0 && modes.length === 0,
+    ok: verdict.ok,
+    enforced: verdict.enforced,
+    isolated: verdict.isolated,
+    ...(verdict.enforced ? {} : { reportOnly: `${REPORT_ONLY_HEADING} — owner decision 2026-10-13 (AGL-2401)` }),
     findings,
     modes,
     accepted,
@@ -740,106 +911,17 @@ async function main() {
   if (JSON_OUT) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   } else {
-    process.stdout.write('\n')
-    if (!findings.length && !modes.length && exempted.length) {
+    process.stdout.write(`\n${renderReport(result)}`)
+    // A green run's log is rarely opened, so in report-only mode the count is
+    // also raised as a run annotation, where it shows on the run page itself.
+    if (!verdict.enforced && !verdict.isolated && process.env.GITHUB_ACTIONS) {
       process.stdout.write(
-        'OK — nothing outside the live-Stripe exemption (see the NOTE below) spans\n' +
-          'production and a non-production environment, or points one at live Stripe.\n',
+        `::warning title=Env isolation (report only)::${findings.length} sharing and ${modes.length} mode finding(s); not enforced by owner decision 2026-10-13 (AGL-2401)\n`,
       )
-    } else if (!findings.length && !modes.length) {
-      process.stdout.write(
-        'OK — no secret spans production and a non-production environment, and no\n' +
-          'non-production environment is pointed at the live Stripe account.\n',
-      )
-    } else if (!findings.length) {
-      process.stdout.write('No secret spans production and a non-production environment.\n')
-    } else {
-      process.stdout.write(
-        `${findings.length} secret(s) hold the SAME value in production and a non-production environment:\n\n`,
-      )
-      for (const f of findings) {
-        const owner = f.issue ? `  [${f.issue}]` : '  [UNTRACKED]'
-        process.stdout.write(
-          `  ${f.key}\n` +
-            `    scope        ${f.scope}\n` +
-            `    shared with  ${f.sharedWith.join(', ')}\n` +
-            `    reaches      ${f.projects.join(', ')}\n` +
-            `  ${owner}\n\n`,
-        )
-      }
-      process.stdout.write(
-        'Each is ONE Vercel record covering several environments, so the value is\n' +
-          'identical by construction. Split the record: keep production on its own,\n' +
-          'and give development/preview their own record with a different value.\n',
-      )
-    }
-    if (modes.length) {
-      process.stdout.write(
-        `\n${modes.length} non-production environment(s) are pointed at the LIVE Stripe\n` +
-          'account, or cannot be shown not to be:\n\n',
-      )
-      for (const m of modes) {
-        const owner = m.issue ? `  [${m.issue}]` : '  [UNTRACKED]'
-        process.stdout.write(
-          `  ${m.key}\n` +
-            `    scope        ${m.scope}\n` +
-            `    environments ${m.environments.join(', ')}\n` +
-            `    mode         ${m.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN — stored encrypted or sensitive, not readable (store it plain)'}\n` +
-            `    reaches      ${m.projects.join(', ') || '(linked to no project — inert)'}\n` +
-            `  ${owner}\n\n`,
-        )
-      }
-      process.stdout.write(
-        'Splitting the RECORD does not fix this — a separate development record\n' +
-          'holding the live key passes the check above and fails here, which is the\n' +
-          'whole reason this section exists. UNKNOWN is not a pass: a value this\n' +
-          'script may not read cannot be reported safe.\n',
-      )
-    }
-    if (exempted.length) {
-      const rule = LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE
-      process.stdout.write(
-        `\nNOTE — live Stripe outside production, exempted by ${rule.decision}\n` +
-          `(${rule.why}).\nInformational: still reported on every run, but they do not fail it.\n\n`,
-      )
-      for (const e of exempted) {
-        const detail =
-          e.kind === 'sharing'
-            ? `shares production's value with ${e.sharedWith.join(', ')}`
-            : `${e.environments.join(', ')} read ${e.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN (not stored plain)'}`
-        process.stdout.write(`  ${e.key}  [${e.scope}]  ${detail}  → ${e.projects.join(', ')}\n`)
-      }
-    }
-    if (accepted.length) {
-      process.stdout.write('\naccepted by decision, not silenced:\n')
-      for (const a of accepted) {
-        process.stdout.write(`  ${a.key} in ${a.environments.join(', ')} — ${a.why} (${a.who})\n`)
-      }
-    }
-    for (const d of deployments ?? []) {
-      process.stdout.write(`\nproduction deployment env keys — ${d.project}\n`)
-      if (d.error) {
-        process.stdout.write(`  ${d.error}\n`)
-        continue
-      }
-      process.stdout.write(
-        `  newest    ${d.newest.id}  ${d.newest.created}  ${d.newest.keys} keys\n` +
-          `  previous  ${d.previous.id}  ${d.previous.created}  ${d.previous.keys} keys\n` +
-          `  added     ${d.added.join(', ') || '(none)'}\n` +
-          `  removed   ${d.removed.join(', ') || '(none)'}\n`,
-      )
-      if (!d.added.length && !d.removed.length) {
-        process.stdout.write(
-          '  NOTE: identical key lists. Expected for a pure value swap — in that case\n' +
-            '        the evidence is the newest deployment ID being NEWER than the change.\n' +
-            '        If you ADDED or REMOVED a key and see nothing here, the redeploy did\n' +
-            '        not carry it.\n',
-        )
-      }
     }
   }
 
-  process.exit(findings.length || modes.length ? 1 : 0)
+  process.exit(verdict.exitCode)
 }
 
 /**
@@ -1080,6 +1162,66 @@ function selfTest() {
     evaluate([stripeShared('STRIPE_SECRET_KEY', ['staging', 'production'])]).findings.length === 1,
   )
   NON_PRODUCTION.splice(0, NON_PRODUCTION.length, ...savedNonProd)
+
+  // 13. THE ENFORCEMENT SWITCH (owner decision 2026-10-13, AGL-2401). Both
+  //     values, whatever the shipped one is: report-only must still REPORT
+  //     everything and pass; enforced must be the pre-decision behavior
+  //     exactly; and neither may turn "could not check" into a pass.
+  check('the shipped switch is a boolean', typeof ENV_ISOLATION_ENFORCED === 'boolean')
+  const reportOf = (evaluated, enforced) => {
+    const verdict = verdictOf(evaluated, enforced)
+    return {
+      verdict,
+      text: renderReport({ ...evaluated, enforced, accepted: [], deployments: null }),
+    }
+  }
+  // The mode fixture is an inert (unlinked) shared record, because a project-
+  // linked one would fall inside the live-Stripe exemption — see case 12.
+  const dirty = evaluate([
+    record('CRON_SECRET', ['development', 'preview', 'production']),
+    ...probe(undefined, ['development'], { projectId: [] }),
+  ])
+  const clean = evaluate([record('CRON_SECRET', ['production'])])
+
+  const enforcedDirty = reportOf(dirty, true)
+  check('ENFORCED: a sharing finding exits 1', enforcedDirty.verdict.exitCode === 1 && !enforcedDirty.verdict.ok)
+  check(
+    'ENFORCED: a mode finding alone exits 1',
+    verdictOf({ findings: [], modes: dirty.modes }, true).exitCode === 1,
+  )
+  check('ENFORCED: clean exits 0', reportOf(clean, true).verdict.exitCode === 0)
+  check('ENFORCED: no REPORT ONLY heading', !enforcedDirty.text.includes(REPORT_ONLY_HEADING))
+  check(
+    'ENFORCED: the live-Stripe exemption still applies',
+    verdictOf(today, true).exitCode === 1 && today.findings.map((f) => f.key).join() === 'CRON_SECRET',
+  )
+  const stripeOnly = evaluate(
+    [stripeShared('STRIPE_SECRET_KEY', ['development', 'preview', 'production'])],
+    probe('pk_live_1', ['development', 'preview', 'production']),
+  )
+  check(
+    'ENFORCED: exempted Stripe alone exits 0',
+    stripeOnly.exempted.length === 2 && verdictOf(stripeOnly, true).exitCode === 0,
+  )
+
+  const reportOnlyDirty = reportOf(dirty, false)
+  check('REPORT ONLY: findings exit 0', reportOnlyDirty.verdict.exitCode === 0 && reportOnlyDirty.verdict.ok)
+  check('REPORT ONLY: …and are still marked not isolated', reportOnlyDirty.verdict.isolated === false)
+  check('REPORT ONLY: the heading is printed', reportOnlyDirty.text.startsWith(REPORT_ONLY_HEADING))
+  check('REPORT ONLY: every sharing finding is still printed', reportOnlyDirty.text.includes('  CRON_SECRET\n'))
+  check(
+    'REPORT ONLY: every mode finding is still printed',
+    reportOnlyDirty.text.includes(`  ${STRIPE_MODE_PROBE}\n`) && /UNKNOWN/.test(reportOnlyDirty.text),
+  )
+  check(
+    'REPORT ONLY: the text is the enforced report plus the heading and tally, nothing dropped',
+    reportOnlyDirty.text.includes(enforcedDirty.text),
+  )
+  check('REPORT ONLY: clean exits 0 and says isolated', reportOf(clean, false).verdict.isolated === true)
+  check(
+    'REPORT ONLY: a negative-control abort still throws (exit 2), never a pass',
+    throws(() => evaluate([])),
+  )
 
   process.stdout.write(`\n${failures.length ? `${failures.length} FAILED` : 'all self-test cases pass'}\n`)
   process.exit(failures.length ? 1 : 0)
