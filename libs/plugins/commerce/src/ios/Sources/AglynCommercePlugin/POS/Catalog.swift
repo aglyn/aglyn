@@ -258,3 +258,18 @@ func categoryLevel(_ categories: [PosCategory], parentID: String?) -> [PosCatego
 func categoriesQuery(_ hostID: String) -> FirestoreQuery {
   FirestoreQuery(["hosts", hostID, "productCategories"], limit: posCategoryCeiling)
 }
+
+/// A checked-in stay a sale can be charged to.
+struct PosStay: Equatable, Identifiable {
+  let id: String
+  let name: String
+}
+
+/// The stays a sale can be charged to, asked for BY STATUS as the console's register asks (AGL-3321).
+func staysQuery(_ hostID: String) -> FirestoreQuery {
+  FirestoreQuery(["hosts", hostID, "reservations"], equals: [("status", "checked_in")], limit: 100)
+}
+
+func posStay(_ doc: FirestoreDocument) -> PosStay {
+  PosStay(id: doc.id, name: text(doc.data["guestName"]) ?? text(doc.data["guestEmail"]) ?? doc.id)
+}

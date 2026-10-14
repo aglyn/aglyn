@@ -160,6 +160,9 @@ final class ScriptedSaleAPI: PosSaleAPI, @unchecked Sendable {
   let hostID = "h1"
   var answers: [Result<PosPaymentAnswer, Error>] = []
   private(set) var steps: [(SaleStep, String?)] = []
+  /// What a store-credit lookup finds, and the lookups asked.
+  var creditAccounts: Result<[PosCreditAccount], Error> = .success([])
+  private(set) var lookups: [String] = []
 
   func context() async throws -> PosContext {
     PosContext(settings: PosRegisterSettings(), terminalAvailable: true, testMode: true, readers: [], smsReceipts: false)
@@ -173,6 +176,10 @@ final class ScriptedSaleAPI: PosSaleAPI, @unchecked Sendable {
   }
   func giftCardBalance(code: String) async throws -> GiftCardBalance {
     GiftCardBalance(availableCents: 500, frozen: false, voided: false, last4: "1234")
+  }
+  func creditLookup(providerID: String, query: String) async throws -> [PosCreditAccount] {
+    lookups.append("\(providerID):\(query)")
+    return try creditAccounts.get()
   }
 }
 
