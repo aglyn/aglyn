@@ -9,7 +9,7 @@ unlisted: true
 
 :::caution Rolling out
 Delivery apps are **not yet available** on aglyn.com-hosted workspaces. Until
-they are, no **Delivery apps** card appears in your store's settings and no
+they are, no **Delivery apps** card appears on **Products → Integrations** and no
 delivery orders appear on the register.
 :::
 
@@ -29,7 +29,7 @@ Delivery apps come with the plans that include the POS register.
 
 ## Connect a store {#connect-a-store}
 
-1. Open your store's **Settings** and find the **Delivery apps** cards.
+1. Open **Products → Integrations** and find the **Delivery apps** cards.
 2. On the service's card, enter the store ID the service shows you — the
    **DoorDash store ID**, the **Uber Eats store ID** from Uber Eats Manager, or
    the **Grubhub merchant ID** — and select **Connect**.

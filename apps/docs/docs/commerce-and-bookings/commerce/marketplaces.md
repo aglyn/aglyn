@@ -9,7 +9,7 @@ unlisted: true
 
 :::caution Rolling out
 Marketplaces are **not yet available** on aglyn.com-hosted workspaces. Until
-they are, no **Marketplaces** card appears in your store's settings.
+they are, no **Marketplaces** card appears on **Products → Sales channels**.
 :::
 
 If you also sell on a marketplace, connect your seller account there to your
@@ -29,10 +29,10 @@ store and sell everywhere from **one stock count**:
 
 ## Connect a marketplace {#connect-a-marketplace}
 
-1. Open your store's **Settings** and find the **Marketplaces** card.
+1. Open **Products → Sales channels** and find the **Marketplaces** card.
 2. Next to the marketplace, select **Connect**.
 3. Sign in to your own seller account there and allow Aglyn access. You come
-   back to the store settings with the marketplace connected.
+   back to **Sales channels** with the marketplace connected.
 
 You need to be an admin of the site to connect, change or disconnect a
 marketplace. Aglyn never sees your marketplace password; it keeps only the

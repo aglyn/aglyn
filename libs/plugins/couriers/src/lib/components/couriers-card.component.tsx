@@ -32,7 +32,7 @@ import {
 } from './couriers-api'
 
 /**
- * What commerce's `commerceSettings` zone hands a widget, restated here
+ * What commerce's `commerceSettingsShipping` zone hands a widget, restated here
  * because a plugin never imports another (AGL-3695): the site.
  */
 export interface CouriersCardProps {
@@ -105,7 +105,8 @@ function keysChip(view: CourierKeysView, mode: CourierKeyMode) {
 }
 
 /**
- * The Couriers card (AGL-3695), under the store's Settings: connect the
+ * The Couriers card (AGL-3695), on the store's Shipping & delivery settings
+ * page (AGL-3713): connect the
  * merchant's own DoorDash Drive developer keys — live, test or both — set the
  * phone and note every courier gets at the store, and copy the webhook
  * DoorDash reports progress to. Draws nothing when the deployment or the site

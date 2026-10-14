@@ -42,6 +42,7 @@ import { resolveDocsHelpTarget } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useConsoleRoutePlugins } from '../../../../hooks/use-console-plugins'
+import { useFilledZones } from '../../../../hooks/use-filled-zones'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import useOrgHosts from '../../../../hooks/use-org-hosts'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
@@ -197,6 +198,7 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         : undefined,
     [resolved, orgSlug],
   )
+  const filledZones = useFilledZones(resolved?.navItem.sections)
   const resolvedSections = useMemo(
     () =>
       resolveHubSections(resolved?.navItem.sections, basePath, {
@@ -209,8 +211,20 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         // body below refuses it with (AGL-3080), so a hidden tab and a
         // refused deep link are one verdict.
         permission: permissionAnswers,
+        // A section that is only plugin zones is offered while one of them
+        // has something to draw (AGL-3713).
+        filledZones,
       }),
-    [resolved, basePath, flags, isStaff, org, orgReady, permissionAnswers],
+    [
+      resolved,
+      basePath,
+      flags,
+      isStaff,
+      org,
+      orgReady,
+      permissionAnswers,
+      filledZones,
+    ],
   )
 
   /*

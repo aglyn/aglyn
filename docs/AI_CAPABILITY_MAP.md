@@ -797,7 +797,8 @@ catering inquiry into Inquiries.
 - **Live, not a draft.** Store settings have no draft state, and the cards
   save them live; the plan card's Confirm is the agreement. The capabilities
   carry the contract's `live` flag (AGL-3745), so the job's output reads
-  "Live now, in Products → Settings." rather than "A draft".
+  "Live now, in Products → Shipping & delivery." (or "→ Taxes")
+  rather than "A draft".
 - **Idempotent.** Each change is applied inside a transaction to the
   settings the site has; a new zone or rate takes an id derived from the
   item, and a change the settings already hold writes nothing (`replayed`).
@@ -813,7 +814,7 @@ a console card already sets, and only values that are not secrets.
 | Google Analytics 4, Google Tag Manager | Setup → Tracking (`analytics.gaMeasurementId`, `analytics.gtmContainerId`) | **yes**, the `tracking` op |
 | Meta pixel, Google Ads tag, LinkedIn Insight, TikTok pixel, Pinterest tag | Setup → Tracking (`analytics.adTags.*`) | **yes**, the `tracking` op |
 | Meta, TikTok, Pinterest Conversions API | the Ad conversions card (`ad-conversions` plugin) | no: connecting needs the vendor's access token, which the person pastes |
-| Order webhooks | Products → Settings → Order webhooks (commerce) | no: the endpoint's signing secret is shown once, to the person who adds it, and the endpoint sends buyers' order data to an outside address |
+| Order webhooks | Products → Notifications → Order webhooks (commerce) | no: the endpoint's signing secret is shown once, to the person who adds it, and the endpoint sends buyers' order data to an outside address |
 | Zapier | the Zapier card (`zapier` plugin) | no: a Zap is made in Zapier with the person's API key; the card only lists and disconnects |
 | Klaviyo, Mailchimp, Omnisend, Attentive | the Marketing platforms card | no: OAuth or an API key |
 | A workflow's `webhookPost` step | Workflows | already the `workflow` op |

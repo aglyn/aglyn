@@ -1207,6 +1207,52 @@ your own.
 | `GA4_API_SECRET` | Optional | Runtime | The measurement-protocol API secret for that stream. Both are needed; with either missing, every server-side hit is dropped silently — no log, no throw. Note this path has no consent gate, and its custom dimensions must be registered in GA4 or the events land unreportable. |
 | `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD` | Development only | Build | Re-enables analytics on a non-production build. A build using it stamps `traffic_type: internal` on every hit unconditionally, so it cannot be used to collect real traffic. Leave unset. |
 
+### Account-holder ad audiences {#ad-audience-sync}
+
+A nightly job (`/api/admin/ad-audience-sync`, the `consoleAdAudienceSync`
+scheduled function) can keep a customer-list audience of your **own** account
+holders in step on your **own** Meta, Google and LinkedIn ad accounts, so you
+can retarget people who signed up and leave them out of prospecting. Each
+provider receives only the SHA-256 hash of each address, normalized the way
+that provider documents. An account is included only when its address is
+verified, it is not disabled, staff, locked, banned or on your support
+address's domain, a `super` staff member has not opted it out on its staff user
+page, and its country is the United States — the billing address of a
+workspace it owns, or else where it signed up from. An account with neither is
+left out.
+
+**It sends nothing until the `release_ad_audience_sync` release flag is on**,
+and it is off by default. This is a new use of your account holders' data:
+publish it in your own privacy policy, and add the recipients to your own
+subprocessor list, before you turn the flag on. Each provider is independent
+and is skipped, with a log line naming what is missing, until all of its
+variables are set. Before you turn the flag on, ask the route for the numbers:
+a `GET` with `Authorization: Bearer $CRON_SECRET` reports, per provider, how
+many accounts are eligible and how many hashes would be added and removed, and
+sends nothing. These are Aglyn-only / your own values: set your own or leave
+every one blank. Set them on the **console only**.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `META_AUDIENCE_SYNC_ACCESS_TOKEN` | Aglyn-only / your own | Runtime, console | A system-user access token with `ads_management` on the ad account that owns the audience. A secret. |
+| `META_AUDIENCE_SYNC_AUDIENCE_ID` | Aglyn-only / your own | Runtime, console | The id of a Custom Audience of subtype `CUSTOM` with customer file source `USER_PROVIDED_ONLY`, created once in Ads Manager or the Marketing API. The job never creates one. Each night's change replaces the audience's members in one session. |
+| `GOOGLE_AUDIENCE_SYNC_CLIENT_ID` | Aglyn-only / your own | Runtime, console | An OAuth client id from a Google Cloud project with the **Data Manager API** enabled. The Google Ads API's Customer Match upload is closed to projects that have not used it recently, so the job uses the Data Manager API, which needs no developer token. |
+| `GOOGLE_AUDIENCE_SYNC_CLIENT_SECRET` | Aglyn-only / your own | Runtime, console | That client's secret. A secret. |
+| `GOOGLE_AUDIENCE_SYNC_REFRESH_TOKEN` | Aglyn-only / your own | Runtime, console | A refresh token for a Google account with access to the Google Ads account, granted the `https://www.googleapis.com/auth/datamanager` scope. A secret. |
+| `GOOGLE_AUDIENCE_SYNC_CUSTOMER_ID` | Aglyn-only / your own | Runtime, console | The Google Ads customer id that owns the list, with or without dashes. |
+| `GOOGLE_AUDIENCE_SYNC_LOGIN_CUSTOMER_ID` | Optional | Runtime, console | A manager account the Google account reaches the customer through. Leave unset when it has direct access. |
+| `GOOGLE_AUDIENCE_SYNC_USER_LIST_ID` | Aglyn-only / your own | Runtime, console | The id of an empty Customer Match list (contact information) in that account. Accept the Customer Match terms in Google Ads first: each upload states that they are accepted. |
+| `LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN` | Aglyn-only / your own | Runtime, console | A member access token with `rw_dmp_segments`, from a developer app LinkedIn has approved for Matched Audiences. A secret. |
+| `LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID` | Aglyn-only / your own | Runtime, console | The DMP segment's id (or its `urn:li:dmpSegment:` URN). |
+
+Google and LinkedIn have no replace, so the job keeps the hashes it last sent
+to each, server-side in `adAudienceSync/{provider}/members`, to remove an
+account that is no longer eligible — including one that was erased, whose
+address is gone. No address is stored and nothing is logged but counts. A night
+whose audience would shrink by more than half is held and raises an operator
+alert, since that is likelier a failed read than real churn; a `POST` with
+`?force=1` sends it.
+
 **Inline vendor boots need the CSP nonce.** Every advertising tag the console
 mounts is a pair — an inline boot that declares the consent state and configures
 the account, then the vendor's library — and the console enforces a nonce'd

@@ -167,6 +167,13 @@
       },
       "description": "Weglot translation on published sites with the merchant's own Weglot key (AGL-3700). Platform-wide kill switch; each site still switches it on itself.",
       "valueType": "JSON"
+    },
+    "release_ad_audience_sync": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Nightly sync of US account holders, as SHA-256 hashed emails, to the operator's own Meta, Google and LinkedIn customer-list audiences (AGL-3780). OFF until the Privacy Policy disclosing it is published.",
+      "valueType": "JSON"
     }
   },
   "version": {

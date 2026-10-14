@@ -64,6 +64,7 @@ import {
 } from '../../../../../../utils/extension-permission'
 import { hubRedirectTarget, resolveHubSections } from '../../../../../../utils/plugin-hub-sections'
 import { useConsoleRoutePlugins } from '../../../../../../hooks/use-console-plugins'
+import { useFilledZones } from '../../../../../../hooks/use-filled-zones'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useHostRole from '../../../../../../hooks/use-host-role'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
@@ -260,6 +261,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    * compute this for itself — release flags are `scope:app` — and a rail that
    * guessed would link into the shell's own "coming soon" notice.
    */
+  const filledZones = useFilledZones(resolved?.navItem.sections)
   const resolvedSections = useMemo(
     // One rule for both shells that mount a hub — this route and the
     // organization-level CRM route (AGL-2630) — so the two rails cannot
@@ -275,8 +277,20 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         // body below refuses it with (AGL-3080), so a hidden tab and a
         // refused deep link are one verdict.
         permission: permissionAnswers,
+        // A section that is only plugin zones is offered while one of them
+        // has something to draw (AGL-3713).
+        filledZones,
       }),
-    [resolved, basePath, flags, isStaff, org, orgReady, permissionAnswers],
+    [
+      resolved,
+      basePath,
+      flags,
+      isStaff,
+      org,
+      orgReady,
+      permissionAnswers,
+      filledZones,
+    ],
   )
 
   /**

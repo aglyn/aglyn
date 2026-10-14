@@ -51,7 +51,6 @@
 import {
   ASSIGNMENT_REFUSAL_MESSAGES,
   assignmentReadout,
-  grantEntriesAsRecorded,
   isOrgWideMember,
   normalizeContactEmail,
   readMarketingBasis,
@@ -70,11 +69,10 @@ import {
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-// The leaves, not the barrels: this plugin's specs substitute both barrels
+// The leaf, not the barrel: this plugin's specs substitute both barrels
 // wholesale, and what a deleted contact's refusal still says must be read
 // under them by the real store and the real merge.
-import { readRetainedRefusals } from '@aglyn/tenant-data-admin/server/retained-refusals'
-import { refusalsOf, withRetainedRefusals } from '@aglyn/aglyn/app-utils/retained-refusals'
+import { readContactConsent } from '@aglyn/tenant-data-admin/server/consent-by-address'
 
 /**
  * The most addresses one request may name.
@@ -90,9 +88,6 @@ import { refusalsOf, withRetainedRefusals } from '@aglyn/aglyn/app-utils/retaine
  * added.
  */
 export const LIST_MEMBER_BATCH_MAX = 100
-
-/** How many contact addresses one `in` query may carry. */
-const CONTACT_LOOKUP_CHUNK = 30
 
 /** Everything a list-membership route needs, or the refusal to send back. */
 export type ListContext =
@@ -344,7 +339,11 @@ export async function resolveAddresses(input: {
   const group = await consentGroupForSite(input.hostId)
   const [suppression, { stored, grants }] = await Promise.all([
     suppressionFor(input.hostId, group, addresses),
-    storedConsentFor(input.hostId, group, addresses),
+    readContactConsent(
+      orgDataCollectionForHost(input.hostId, 'contacts'),
+      group,
+      addresses,
+    ),
   ])
 
   const unrecorded: MarketingConsentRecord = readMarketingBasis(null, group)
@@ -436,102 +435,6 @@ async function suppressionFor(
     )
   }
   return refusals
-}
-
-/**
- * The stored consent facts for these addresses, off the org's contacts.
- *
- * Read UNSCOPED, deliberately, exactly as the Inbox route reads it:
- * `scopedToHost` narrows an org collection to what one site may see, and a
- * refusal filtered out by that narrowing is a refusal this route would then
- * step over — the failure mode is enrolling somebody who said no. It is safe
- * because the caller has already been proved an org-wide member, which is the
- * tier the rules grant the whole org's contacts to.
- *
- * ## A refusal wins over an opt-in when the CRM holds both
- *
- * Nothing guarantees one contact per address — the collection is keyed by
- * resource id, not by email — so two records for one person can disagree.
- * Taking whichever the query happened to answer first would make the outcome
- * depend on document order. A recorded refusal is the answer whenever one
- * exists, which is the same precedence `assignmentBasis` applies within a
- * single record.
- *
- * ## A refusal outlives the contact it was written on (AGL-3338)
- *
- * Deleting a contact keeps every refusal it held in the org's retained store,
- * so the address is read with what was retained laid over whatever record is
- * left — `withRetainedRefusals` — and an address with no contact at all still
- * reads `declined` when its person said no. A grant given after the refusal,
- * on a contact the person signed up again through, is the person changing
- * their mind and reads `granted`. The grants carried onto a membership come
- * off the same merged record.
- *
- * A failed read falls to `declined` for the whole batch, for the reason the
- * Inbox route states: a read that throws can neither say the person consented
- * nor that they refused, and the direction that costs a retry is the one that
- * does not enroll somebody whose stored refusal we simply failed to see. The
- * retained store is read the same way, and fails the same way.
- */
-async function storedConsentFor(
-  hostId: string,
-  group: ConsentGroup,
-  addresses: readonly string[],
-): Promise<{
-  stored: Map<string, MarketingConsentRecord>
-  grants: Map<string, Record<string, Record<string, unknown>>>
-}> {
-  const found = new Map<string, MarketingConsentRecord>()
-  const grants = new Map<string, Record<string, Record<string, unknown>>>()
-  if (!addresses.length) return { stored: found, grants }
-  try {
-    const contacts = await orgDataCollectionForHost(hostId, 'contacts')
-    const chunks: string[][] = []
-    for (let at = 0; at < addresses.length; at += CONTACT_LOOKUP_CHUNK) {
-      chunks.push(addresses.slice(at, at + CONTACT_LOOKUP_CHUNK))
-    }
-    const [snapshots, retained] = await Promise.all([
-      Promise.all(chunks.map((chunk) => contacts.where('email', 'in', chunk).get())),
-      readRetainedRefusals(contacts, addresses),
-    ])
-    const consider = (email: string, data: Record<string, unknown> | null) => {
-      const merged = withRetainedRefusals(data, refusalsOf(retained.get(email)))
-      const record = readMarketingBasis(merged, group)
-      const already = found.get(email)
-      if (already?.basis === 'declined') return
-      if (already && record.basis !== 'declined') return
-      found.set(email, record)
-      grants.set(email, grantEntriesAsRecorded(merged, group))
-    }
-    for (const snapshot of snapshots) {
-      for (const doc of snapshot.docs) {
-        const email = normalizeContactEmail(doc.get('email'))
-        if (email) consider(email, doc.data() as Record<string, unknown>)
-      }
-    }
-    // What was retained for an address no contact answers any more.
-    for (const email of retained.keys()) {
-      if (!found.has(email)) consider(email, null)
-    }
-    return { stored: found, grants }
-  } catch (error) {
-    console.error('[email] consent lookup failed', error)
-    const refused: MarketingConsentRecord = {
-      ...readMarketingBasis(null, group),
-      basis: 'declined',
-      // Attributed to nobody: this is what a failed read falls back to, not a
-      // refusal anybody recorded.
-      assertedBy: null,
-      source: null,
-      basisAtMs: null,
-      capturedAtMs: null,
-    }
-    return {
-      stored: new Map(addresses.map((email) => [email, refused])),
-      // Nobody is enrollable on a failed read, so nobody's grants travel.
-      grants: new Map(),
-    }
-  }
 }
 
 /** The addresses named by one request, or the refusal to send back. */

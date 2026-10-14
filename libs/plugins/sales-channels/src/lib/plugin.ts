@@ -36,7 +36,7 @@ export function registerSalesChannelsConsole(): void {
     featureFlag: SALES_CHANNELS_ENTITLEMENT,
     widgets: [
       {
-        slot: 'commerceSettings',
+        slot: 'commerceSettingsChannels',
         widgetId: 'sales-channels-feeds',
         title: 'Sales channels',
         Component: SalesChannelsCard,
