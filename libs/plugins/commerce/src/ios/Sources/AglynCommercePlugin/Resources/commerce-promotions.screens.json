@@ -1,0 +1,814 @@
+{
+  "$comment": "The Commerce plugin's promotions, natively: discounts (codes and automatic promotions) and coupons written to the store's own documents as the console writes them, and gift cards (issue, void, release, search) through /api/commerce/gift-cards, read from the store's giftCards. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.discounts",
+      "title": "Discounts",
+      "label": "Discounts",
+      "subtitle": "Codes and automatic promotions",
+      "icon": "tag|sell",
+      "scope": "site",
+      "order": 50,
+      "load": {
+        "discounts": {
+          "query": {
+            "collection": "hosts/{site.id}/discounts",
+            "limit": 100
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "discounts",
+          "title": "Discounts",
+          "items": "data.discounts.items",
+          "primary": "{item.code|item.name|'Automatic'}",
+          "icon": "tag|sell",
+          "empty": "Codes buyers enter at checkout, or automatic promotions that apply on their own.",
+          "badges": [
+            {
+              "text": "{item.valuePct}% off",
+              "tone": "neutral",
+              "when": "item.kind == percent"
+            },
+            {
+              "text": "{item.valueCents:cents} off",
+              "tone": "neutral",
+              "when": "item.kind == fixed"
+            },
+            {
+              "text": "Free shipping",
+              "tone": "neutral",
+              "when": "item.kind == free_shipping"
+            },
+            {
+              "text": "{item.productIds:count} products only",
+              "tone": "neutral",
+              "when": "item.productIds.0"
+            },
+            {
+              "text": "Store-wide",
+              "tone": "neutral",
+              "when": "!item.productIds.0"
+            },
+            {
+              "text": "Min {item.minSubtotalCents:cents}",
+              "tone": "neutral",
+              "when": "item.minSubtotalCents"
+            },
+            {
+              "text": "{item.redemptions|'0'}/{item.maxRedemptions} used",
+              "tone": "neutral",
+              "when": "item.maxRedemptions"
+            },
+            {
+              "text": "{item.redemptions|'0'} used",
+              "tone": "neutral",
+              "when": "!item.maxRedemptions"
+            },
+            {
+              "text": "{item.holds.*.expiresAtMs:ahead} held in checkout",
+              "tone": "warning",
+              "when": "item.holds.*.expiresAtMs > @now.ms"
+            },
+            {
+              "text": "Disabled",
+              "tone": "warning",
+              "when": "item.enabled == false"
+            }
+          ],
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "prompt": [
+                {
+                  "key": "code",
+                  "label": "Code (blank = automatic)",
+                  "kind": "text",
+                  "placeholder": "SAVE10",
+                  "initial": "{item.code}"
+                },
+                {
+                  "key": "name",
+                  "label": "Promotion name",
+                  "kind": "text",
+                  "placeholder": "Summer sale",
+                  "when": "!form.code",
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "kind",
+                  "label": "Type",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "percent",
+                      "label": "Percent off"
+                    },
+                    {
+                      "value": "fixed",
+                      "label": "Fixed amount off"
+                    },
+                    {
+                      "value": "free_shipping",
+                      "label": "Free shipping"
+                    }
+                  ],
+                  "initial": "{item.kind|'percent'}"
+                },
+                {
+                  "key": "valuePct",
+                  "label": "%",
+                  "kind": "number",
+                  "min": 1,
+                  "max": 100,
+                  "required": true,
+                  "when": "form.kind == percent",
+                  "initial": "{item.valuePct}"
+                },
+                {
+                  "key": "valueDollars",
+                  "label": "$ off",
+                  "kind": "number",
+                  "min": 0.01,
+                  "required": true,
+                  "when": "form.kind == fixed",
+                  "initial": "{item.valueCents:amount}"
+                },
+                {
+                  "key": "minDollars",
+                  "label": "Min subtotal ($, blank = none)",
+                  "kind": "number",
+                  "min": 0,
+                  "initial": "{item.minSubtotalCents:amount}"
+                },
+                {
+                  "key": "maxRedemptions",
+                  "label": "Max uses (blank = unlimited)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1,
+                  "initial": "{item.maxRedemptions}"
+                },
+                {
+                  "key": "starts",
+                  "label": "Starts",
+                  "kind": "date",
+                  "initial": "{item.startAtMs}"
+                },
+                {
+                  "key": "ends",
+                  "label": "Ends",
+                  "kind": "date",
+                  "initial": "{item.endAtMs}"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/discounts/{item.$id}",
+                "fields": {
+                  "code": {
+                    "$orNull": "{form.code:code}"
+                  },
+                  "name": "{form.name}",
+                  "kind": "{form.kind}",
+                  "valuePct": "{form.valuePct}",
+                  "valueCents": {
+                    "$cents": "{form.valueDollars}"
+                  },
+                  "minSubtotalCents": {
+                    "$orNull": {
+                      "$cents": "{form.minDollars}"
+                    }
+                  },
+                  "maxRedemptions": {
+                    "$orNull": "{form.maxRedemptions}"
+                  },
+                  "startAtMs": {
+                    "$orNull": {
+                      "$dateMs": {
+                        "value": "{form.starts}",
+                        "time": "00:00:00"
+                      }
+                    }
+                  },
+                  "endAtMs": {
+                    "$orNull": {
+                      "$dateMs": {
+                        "value": "{form.ends}",
+                        "time": "23:59:59"
+                      }
+                    }
+                  }
+                }
+              },
+              "success": "Discount saved"
+            },
+            {
+              "id": "delete",
+              "label": "Delete",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Delete {item.code|item.name|'this promotion'}?",
+              "write": {
+                "delete": "hosts/{site.id}/discounts/{item.$id}"
+              },
+              "success": "Deleted"
+            }
+          ],
+          "load": "discounts"
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addDiscount",
+              "label": "Add discount",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "code",
+                  "label": "Code (blank = automatic)",
+                  "kind": "text",
+                  "placeholder": "SAVE10"
+                },
+                {
+                  "key": "name",
+                  "label": "Promotion name",
+                  "kind": "text",
+                  "placeholder": "Summer sale",
+                  "when": "!form.code"
+                },
+                {
+                  "key": "kind",
+                  "label": "Type",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "percent",
+                      "label": "Percent off"
+                    },
+                    {
+                      "value": "fixed",
+                      "label": "Fixed amount off"
+                    },
+                    {
+                      "value": "free_shipping",
+                      "label": "Free shipping"
+                    }
+                  ],
+                  "initial": "percent"
+                },
+                {
+                  "key": "valuePct",
+                  "label": "%",
+                  "kind": "number",
+                  "min": 1,
+                  "max": 100,
+                  "required": true,
+                  "when": "form.kind == percent",
+                  "initial": "10"
+                },
+                {
+                  "key": "valueDollars",
+                  "label": "$ off",
+                  "kind": "number",
+                  "min": 0.01,
+                  "required": true,
+                  "when": "form.kind == fixed"
+                },
+                {
+                  "key": "minDollars",
+                  "label": "Min subtotal ($, blank = none)",
+                  "kind": "number",
+                  "min": 0
+                },
+                {
+                  "key": "maxRedemptions",
+                  "label": "Max uses (blank = unlimited)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1
+                },
+                {
+                  "key": "starts",
+                  "label": "Starts",
+                  "kind": "date"
+                },
+                {
+                  "key": "ends",
+                  "label": "Ends",
+                  "kind": "date"
+                }
+              ],
+              "write": {
+                "add": "hosts/{site.id}/discounts",
+                "fields": {
+                  "code": {
+                    "$orNull": "{form.code:code}"
+                  },
+                  "name": "{form.name}",
+                  "kind": "{form.kind}",
+                  "valuePct": "{form.valuePct}",
+                  "valueCents": {
+                    "$cents": "{form.valueDollars}"
+                  },
+                  "minSubtotalCents": {
+                    "$orNull": {
+                      "$cents": "{form.minDollars}"
+                    }
+                  },
+                  "maxRedemptions": {
+                    "$orNull": "{form.maxRedemptions}"
+                  },
+                  "startAtMs": {
+                    "$orNull": {
+                      "$dateMs": {
+                        "value": "{form.starts}",
+                        "time": "00:00:00"
+                      }
+                    }
+                  },
+                  "endAtMs": {
+                    "$orNull": {
+                      "$dateMs": {
+                        "value": "{form.ends}",
+                        "time": "23:59:59"
+                      }
+                    }
+                  },
+                  "enabled": true,
+                  "redemptions": 0
+                }
+              },
+              "success": "Discount saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.coupons",
+      "title": "Coupons",
+      "label": "Coupons",
+      "subtitle": "Percent-off codes buyers enter at checkout",
+      "icon": "ticket|local_offer",
+      "scope": "site",
+      "order": 51,
+      "load": {
+        "coupons": {
+          "query": {
+            "collection": "hosts/{site.id}/coupons",
+            "limit": 100
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "coupons",
+          "title": "Coupons",
+          "items": "data.coupons.items",
+          "primary": "{item.$id}",
+          "secondary": "{item.percentOff}% off",
+          "icon": "ticket|local_offer",
+          "badges": [
+            {
+              "text": "{item.redemptions|'0'}/{item.maxRedemptions} used",
+              "tone": "neutral",
+              "when": "item.maxRedemptions"
+            },
+            {
+              "text": "{item.redemptions|'0'} used",
+              "tone": "neutral",
+              "when": "!item.maxRedemptions"
+            },
+            {
+              "text": "{item.holds.*.expiresAtMs:ahead} held in checkout",
+              "tone": "warning",
+              "when": "item.holds.*.expiresAtMs > @now.ms"
+            },
+            {
+              "text": "Expired",
+              "tone": "error",
+              "when": "item.expiresAtMs < @now.ms"
+            },
+            {
+              "text": "Expires {item.expiresAtMs:date}",
+              "tone": "neutral",
+              "when": "item.expiresAtMs >= @now.ms"
+            },
+            {
+              "text": "Disabled",
+              "tone": "warning",
+              "when": "item.enabled == false"
+            }
+          ],
+          "empty": "Percent-off codes buyers can enter at checkout.",
+          "actions": [
+            {
+              "id": "disable",
+              "label": "Disable",
+              "icon": "pause.circle|pause_circle",
+              "when": "item.enabled != false",
+              "write": {
+                "doc": "hosts/{site.id}/coupons/{item.$id}",
+                "fields": {
+                  "enabled": false
+                }
+              },
+              "success": "Disabled"
+            },
+            {
+              "id": "enable",
+              "label": "Enable",
+              "icon": "play.circle|play_circle",
+              "when": "item.enabled == false",
+              "write": {
+                "doc": "hosts/{site.id}/coupons/{item.$id}",
+                "fields": {
+                  "enabled": true
+                }
+              },
+              "success": "Enabled"
+            }
+          ],
+          "load": "coupons"
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addCoupon",
+              "label": "Add coupon",
+              "icon": "plus|add",
+              "prompt": [
+                {
+                  "key": "code",
+                  "label": "Code",
+                  "kind": "text",
+                  "required": true,
+                  "help": "Letters/numbers; stored uppercase, e.g. LAUNCH20"
+                },
+                {
+                  "key": "percentOff",
+                  "label": "Percent off",
+                  "kind": "number",
+                  "integer": true,
+                  "required": true,
+                  "min": 1,
+                  "max": 100
+                },
+                {
+                  "key": "maxRedemptions",
+                  "label": "Max redemptions (blank = unlimited)",
+                  "kind": "number",
+                  "integer": true,
+                  "min": 1
+                },
+                {
+                  "key": "expiresOn",
+                  "label": "Expires",
+                  "kind": "date",
+                  "help": "Blank = never expires. The code works through this day."
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}/coupons/{form.code:code/40}",
+                "fields": {
+                  "percentOff": "{form.percentOff}",
+                  "enabled": true,
+                  "redemptions": 0,
+                  "maxRedemptions": {
+                    "$orNull": "{form.maxRedemptions}"
+                  },
+                  "expiresAtMs": {
+                    "$orNull": {
+                      "$dateMs": {
+                        "value": "{form.expiresOn}",
+                        "time": "23:59:59.999",
+                        "local": true
+                      }
+                    }
+                  },
+                  "createdAt": {
+                    "$timestamp": true
+                  }
+                }
+              },
+              "success": "Coupon {form.code:code/40} created"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commerce.giftCards",
+      "title": "Gift cards",
+      "label": "Gift cards",
+      "subtitle": "Issued cards and what is left on them",
+      "icon": "gift|card_giftcard",
+      "scope": "site",
+      "order": 52,
+      "load": {
+        "gate": {
+          "entitlement": "giftCards"
+        },
+        "cards": {
+          "query": {
+            "collection": "hosts/{site.id}/giftCards",
+            "limit": 50,
+            "orderBy": "createdAtMs desc"
+          }
+        },
+        "live": {
+          "query": {
+            "collection": "hosts/{site.id}/giftCards",
+            "where": [
+              [
+                "balanceCents",
+                ">",
+                0
+              ]
+            ],
+            "aggregate": {
+              "count": true,
+              "sum": "balanceCents"
+            }
+          }
+        },
+        "issued": {
+          "query": {
+            "collection": "hosts/{site.id}/giftCards",
+            "aggregate": {
+              "count": true
+            }
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "locked",
+          "tone": "info",
+          "when": "!data.gate.carried",
+          "text": "Gift cards let shoppers buy store credit for someone else, and let you issue credit by hand for a goodwill gesture or a service recovery. Balances apply automatically at checkout. Included from {data.gate.label}."
+        },
+        {
+          "type": "fields",
+          "id": "totals",
+          "when": "data.gate.carried",
+          "rows": [
+            {
+              "label": "Outstanding",
+              "value": "{data.live.sum|'Unavailable':cents}"
+            },
+            {
+              "label": "With a balance",
+              "value": "{data.live.count|'Unavailable'}"
+            },
+            {
+              "label": "Issued",
+              "value": "{data.issued.count|'Unavailable'}"
+            }
+          ],
+          "footer": "Outstanding balance is store credit your customers have already paid for and not yet spent: it is a liability, not revenue."
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "when": "data.gate.carried",
+          "items": [
+            {
+              "id": "issue",
+              "label": "Issue a card",
+              "icon": "plus|add",
+              "url": "/api/commerce/gift-cards",
+              "prompt": [
+                {
+                  "key": "amount",
+                  "label": "Issue amount (USD)",
+                  "kind": "number",
+                  "required": true,
+                  "min": 0.01
+                },
+                {
+                  "key": "email",
+                  "label": "Email it to (optional)",
+                  "kind": "email"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "action": "issue",
+                "amountCents": {
+                  "$cents": "{form.amount}"
+                },
+                "recipientEmail": "{form.email}"
+              },
+              "instead": [
+                {
+                  "when": "response.emailed",
+                  "title": "Issued",
+                  "text": "Issued {response.code} — emailed to {form.email}"
+                }
+              ],
+              "success": "Issued {response.code}"
+            },
+            {
+              "id": "search",
+              "label": "Search by code or email",
+              "icon": "magnifyingglass|search",
+              "prompt": [
+                {
+                  "key": "q",
+                  "label": "Search by code or email",
+                  "kind": "text",
+                  "required": true
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.giftCardsSearch",
+                "params": {
+                  "q": "{form.q}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "cards",
+          "when": "data.gate.carried",
+          "title": "Latest cards",
+          "items": "data.cards.items",
+          "empty": "No gift cards yet. Sell a gift-card product, or issue one above.",
+          "primary": "{item.$id}",
+          "secondary": "{item.balanceCents:cents} of {item.initialCents:cents}",
+          "tertiary": "{item.recipientEmail}",
+          "icon": "gift|card_giftcard",
+          "badges": [
+            {
+              "text": "Issued by hand",
+              "tone": "neutral",
+              "when": "!item.orderId"
+            },
+            {
+              "text": "On hold: payment questioned",
+              "tone": "warning",
+              "when": "!item.voidedAtMs && item.frozenAtMs > 0"
+            },
+            {
+              "text": "Voided: order refunded",
+              "tone": "neutral",
+              "when": "item.voidedAtMs && item.voidedReason == refund"
+            },
+            {
+              "text": "Voided: chargeback lost",
+              "tone": "neutral",
+              "when": "item.voidedAtMs && item.voidedReason == dispute-lost"
+            },
+            {
+              "text": "Voided",
+              "tone": "neutral",
+              "when": "item.voidedAtMs && item.voidedReason != refund && item.voidedReason != dispute-lost"
+            }
+          ],
+          "actions": [
+            {
+              "id": "release",
+              "label": "Release",
+              "icon": "lock.open|lock_open",
+              "when": "!item.voidedAtMs && item.frozenAtMs > 0",
+              "url": "/api/commerce/gift-cards",
+              "confirm": "Release {item.$id}? The payment that bought this card was questioned by the card issuer, held for review, or disputed. Release it only if you are satisfied the payment is genuine: the holder can then spend what is left on it.",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "release",
+                "code": "{item.$id}"
+              },
+              "success": "{item.$id} released"
+            },
+            {
+              "id": "void",
+              "label": "Void",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "!item.voidedAtMs && item.balanceCents > 0",
+              "url": "/api/commerce/gift-cards",
+              "confirm": "Void {item.$id}? This zeroes the {item.balanceCents:cents} left on the card. The holder will no longer be able to redeem it, and it cannot be undone.",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "void",
+                "code": "{item.$id}"
+              },
+              "success": "{item.$id} voided"
+            }
+          ],
+          "load": "cards"
+        }
+      ]
+    },
+    {
+      "id": "commerce.giftCardsSearch",
+      "title": "Gift cards",
+      "label": "Gift card search",
+      "icon": "gift|card_giftcard",
+      "scope": "site",
+      "load": {
+        "cards": {
+          "query": {
+            "collection": "hosts/{site.id}/giftCards",
+            "limit": 50,
+            "orderBy": "createdAtMs desc",
+            "where": [
+              [
+                "searchTokens",
+                "array-contains",
+                "{params.q:token}"
+              ]
+            ]
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "cards",
+          "title": "Matches for {params.q}",
+          "items": "data.cards.items",
+          "empty": "No gift card matches that code or email.",
+          "primary": "{item.$id}",
+          "secondary": "{item.balanceCents:cents} of {item.initialCents:cents}",
+          "tertiary": "{item.recipientEmail}",
+          "icon": "gift|card_giftcard",
+          "badges": [
+            {
+              "text": "Issued by hand",
+              "tone": "neutral",
+              "when": "!item.orderId"
+            },
+            {
+              "text": "On hold: payment questioned",
+              "tone": "warning",
+              "when": "!item.voidedAtMs && item.frozenAtMs > 0"
+            },
+            {
+              "text": "Voided: order refunded",
+              "tone": "neutral",
+              "when": "item.voidedAtMs && item.voidedReason == refund"
+            },
+            {
+              "text": "Voided: chargeback lost",
+              "tone": "neutral",
+              "when": "item.voidedAtMs && item.voidedReason == dispute-lost"
+            },
+            {
+              "text": "Voided",
+              "tone": "neutral",
+              "when": "item.voidedAtMs && item.voidedReason != refund && item.voidedReason != dispute-lost"
+            }
+          ],
+          "actions": [
+            {
+              "id": "release",
+              "label": "Release",
+              "icon": "lock.open|lock_open",
+              "when": "!item.voidedAtMs && item.frozenAtMs > 0",
+              "url": "/api/commerce/gift-cards",
+              "confirm": "Release {item.$id}? The payment that bought this card was questioned by the card issuer, held for review, or disputed. Release it only if you are satisfied the payment is genuine: the holder can then spend what is left on it.",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "release",
+                "code": "{item.$id}"
+              },
+              "success": "{item.$id} released"
+            },
+            {
+              "id": "void",
+              "label": "Void",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "!item.voidedAtMs && item.balanceCents > 0",
+              "url": "/api/commerce/gift-cards",
+              "confirm": "Void {item.$id}? This zeroes the {item.balanceCents:cents} left on the card. The holder will no longer be able to redeem it, and it cannot be undone.",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "void",
+                "code": "{item.$id}"
+              },
+              "success": "{item.$id} voided"
+            }
+          ],
+          "load": "cards"
+        }
+      ]
+    }
+  ]
+}

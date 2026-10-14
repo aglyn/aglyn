@@ -1,0 +1,81 @@
+{
+  "$comment": "What one order earned, spent and gave back in Rewards, in the order's services. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "loyalty.order",
+      "title": "Rewards",
+      "label": "Rewards",
+      "icon": "star|star",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 60,
+      "load": {
+        "view": {
+          "url": "/api/loyalty/order?hostId={site.id}&orderId={params.orderId}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.view.order",
+          "text": "Rewards are not available for this site. They run on a site that sells, with Rewards switched on for it."
+        },
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "data.view.order && !data.view.order.earnedPoints && !data.view.order.spentCents && !data.view.order.entries.0",
+          "text": "Rewards did not touch this order."
+        },
+        {
+          "type": "fields",
+          "id": "order",
+          "when": "data.view.order.earnedPoints || data.view.order.spentCents",
+          "title": "Rewards on this order",
+          "rows": [
+            {
+              "label": "Earned",
+              "value": "{data.view.order.earnedPoints:number} points",
+              "when": "data.view.order.earnedPoints"
+            },
+            {
+              "label": "For",
+              "value": "{data.view.order.email}",
+              "when": "data.view.order.earnedPoints && data.view.order.email"
+            },
+            {
+              "label": "Taken back by refunds",
+              "value": "{data.view.order.reversedPoints:number} points",
+              "when": "data.view.order.earnedPoints && data.view.order.reversedPoints"
+            },
+            {
+              "label": "Paid with rewards",
+              "value": "{data.view.order.spentCents:cents}",
+              "when": "data.view.order.spentCents"
+            },
+            {
+              "label": "Store credit used",
+              "value": "{data.view.order.spentCreditCents:cents}",
+              "when": "data.view.order.spentCents && data.view.order.spentCreditCents"
+            },
+            {
+              "label": "Points used",
+              "value": "{data.view.order.spentPoints:number} points",
+              "when": "data.view.order.spentCents && data.view.order.spentPoints"
+            },
+            {
+              "label": "Given back by refunds",
+              "value": "{data.view.order.restoredCents:cents}",
+              "when": "data.view.order.spentCents && data.view.order.restoredCents"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

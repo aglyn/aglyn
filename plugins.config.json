@@ -472,7 +472,7 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.settings"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.display", "commerce.kiosk"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
@@ -1572,6 +1572,28 @@
     },
     {
       "id": "accounting",
+      "mobile": {
+        "$comment": "AGL-3652: accounting natively (QuickBooks Online, Xero, and other software through Codat): connect (the provider's sign-in opens in the secure browser), the account and tax mapping, how sales post, disconnect, and the sync log with retry, from the spec in src/android/screens/accounting.screens.json.",
+        "ios": {
+          "module": "AglynAccountingPlugin",
+          "register": "registerAccountingNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.accounting",
+          "register": "registerAccountingNative"
+        },
+        "contributes": {
+          "screens": [
+            "accounting.books",
+            "accounting.attention",
+            "accounting.activity"
+          ],
+          "deepLinks": [
+            "accounting.books.link",
+            "accounting.books.link2"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-accounting",
       "register": {
         "console": "registerAccountingConsole",
@@ -2947,6 +2969,36 @@
     },
     {
       "id": "shipping",
+      "mobile": {
+        "$comment": "AGL-3652: shipping natively: where parcels ship from, boxes, label format, signature and insurance, checkout services, paying for labels, carrier accounts, the merchant's own Easyship/Sendcloud/ShipperHQ account, and the label spend on Billing, from the spec in src/android/screens/shipping.screens.json. Buying a label on an order is the order screen's.",
+        "ios": {
+          "module": "AglynShippingPlugin",
+          "register": "registerShippingNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.shipping",
+          "register": "registerShippingNative"
+        },
+        "contributes": {
+          "screens": [
+            "shipping.service",
+            "shipping.shipFrom",
+            "shipping.boxes",
+            "shipping.labels",
+            "shipping.services",
+            "shipping.billing",
+            "shipping.carriers",
+            "shipping.connectCarrier",
+            "shipping.own",
+            "shipping.connectOwn",
+            "shipping.spend",
+            "shipping.order",
+            "shipping.returnLabel",
+            "shipping.batch",
+            "shipping.batchReview"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-shipping",
       "register": {
         "console": "registerShippingConsole",
@@ -3009,7 +3061,8 @@
         },
         "contributes": {
           "screens": [
-            "post-purchase.service"
+            "post-purchase.service",
+            "post-purchase.order"
           ]
         }
       },
@@ -3044,6 +3097,23 @@
     },
     {
       "id": "review-platforms",
+      "mobile": {
+        "$comment": "AGL-3652: review platforms natively (Trustpilot invitations, Yotpo Reviews), from the spec in src/android/screens/review-platforms.screens.json. It sits in Commerce settings' commerceSettings zone. The per-order widget (whether each service was asked to invite one buyer) is the order screen's.",
+        "ios": {
+          "module": "AglynReviewPlatformsPlugin",
+          "register": "registerReviewPlatformsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.reviewplatforms",
+          "register": "registerReviewPlatformsNative"
+        },
+        "contributes": {
+          "screens": [
+            "review-platforms.service",
+            "review-platforms.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-review-platforms",
       "register": {
         "console": "registerReviewPlatformsConsole",
@@ -3075,6 +3145,26 @@
     },
     {
       "id": "loyalty",
+      "mobile": {
+        "$comment": "AGL-3652: Rewards natively, from the spec in src/android/screens/loyalty.screens.json: the program (earn and redeem rates, referral offer, emails, what members hold), the store's own Smile.io or Yotpo Loyalty account, members and their history, and adjusting a balance by hand with a key per press. The program, account and members sit in Commerce promotions' commercePromotions zone; what one order earned and spent is the order screen's.",
+        "ios": {
+          "module": "AglynLoyaltyPlugin",
+          "register": "registerLoyaltyNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.loyalty",
+          "register": "registerLoyaltyNative"
+        },
+        "contributes": {
+          "screens": [
+            "loyalty.rewards",
+            "loyalty.connection",
+            "loyalty.members",
+            "loyalty.member",
+            "loyalty.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-loyalty",
       "register": {
         "console": "registerLoyaltyConsole",
@@ -3178,6 +3268,23 @@
     },
     {
       "id": "marketing-platforms",
+      "mobile": {
+        "$comment": "AGL-3652: the Email platforms cards natively (Mailchimp, Klaviyo, Omnisend, Attentive), from the spec in src/android/screens/marketing-platforms.screens.json. It sits in the site's plugin settings (sitePluginSettings zone), where the console's hostSettings slot draws it.",
+        "ios": {
+          "module": "AglynMarketingPlatformsPlugin",
+          "register": "registerMarketingPlatformsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.marketingplatforms",
+          "register": "registerMarketingPlatformsNative"
+        },
+        "contributes": {
+          "screens": [
+            "marketing-platforms.service",
+            "marketing-platforms.platform"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-marketing-platforms",
       "register": {
         "console": "registerMarketingPlatformsConsole",
@@ -3223,6 +3330,23 @@
     },
     {
       "id": "ad-conversions",
+      "mobile": {
+        "$comment": "AGL-3652: ad conversions natively (Meta, TikTok and Pinterest server-side events with the merchant's own token), from the spec in src/android/screens/ad-conversions.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynAdConversionsPlugin",
+          "register": "registerAdConversionsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.adconversions",
+          "register": "registerAdConversionsNative"
+        },
+        "contributes": {
+          "screens": [
+            "ad-conversions.service",
+            "ad-conversions.provider"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-ad-conversions",
       "register": {
         "console": "registerAdConversionsConsole",
@@ -3273,6 +3397,22 @@
     },
     {
       "id": "zapier",
+      "mobile": {
+        "$comment": "AGL-3652: Zapier natively (the Zaps that take this site's records, and disconnecting one), from the spec in src/android/screens/zapier.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynZapierPlugin",
+          "register": "registerZapierNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.zapier",
+          "register": "registerZapierNative"
+        },
+        "contributes": {
+          "screens": [
+            "zapier.connections"
+          ]
+        }
+      },
       "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
       "package": "@aglyn/plugins-zapier",
       "register": {
@@ -3320,7 +3460,8 @@
         "contributes": {
           "screens": [
             "fulfillment-networks.service",
-            "fulfillment-networks.network"
+            "fulfillment-networks.network",
+            "fulfillment-networks.order"
           ]
         }
       },
@@ -3370,6 +3511,23 @@
     },
     {
       "id": "couriers",
+      "mobile": {
+        "$comment": "AGL-3652: couriers natively (DoorDash Drive with the merchant's own keys): live and test keys, testing them, the store phone and note and the webhook, from the spec in src/android/screens/couriers.screens.json. It sits in Commerce settings' commerceSettings zone. A courier on one order is the order screen's.",
+        "ios": {
+          "module": "AglynCouriersPlugin",
+          "register": "registerCouriersNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.couriers",
+          "register": "registerCouriersNative"
+        },
+        "contributes": {
+          "screens": [
+            "couriers.service",
+            "couriers.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-couriers",
       "register": {
         "console": "registerCouriersConsole",
@@ -3417,6 +3575,24 @@
     },
     {
       "id": "marketplaces",
+      "mobile": {
+        "$comment": "AGL-3652: the Marketplaces cards natively (Amazon, eBay, Etsy, TikTok Shop, Walmart, Faire), from the spec in src/android/screens/marketplaces.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynMarketplacesPlugin",
+          "register": "registerMarketplacesNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.marketplaces",
+          "register": "registerMarketplacesNative"
+        },
+        "contributes": {
+          "screens": [
+            "marketplaces.service",
+            "marketplaces.marketplace",
+            "marketplaces.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-marketplaces",
       "register": {
         "console": "registerMarketplacesConsole",
@@ -3463,6 +3639,27 @@
     },
     {
       "id": "print-on-demand",
+      "mobile": {
+        "$comment": "AGL-3652: print on demand natively (Printful and Printify with the merchant's own token): connections and settings, importing products from the service's catalog, imported products and the orders sent, from the spec in src/android/screens/print-on-demand.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynPrintOnDemandPlugin",
+          "register": "registerPrintOnDemandNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.printondemand",
+          "register": "registerPrintOnDemandNative"
+        },
+        "contributes": {
+          "screens": [
+            "print-on-demand.service",
+            "print-on-demand.connection",
+            "print-on-demand.catalog",
+            "print-on-demand.imported",
+            "print-on-demand.orders",
+            "print-on-demand.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-print-on-demand",
       "register": {
         "console": "registerPrintOnDemandConsole",
@@ -3515,6 +3712,23 @@
     },
     {
       "id": "inventory-sync",
+      "mobile": {
+        "$comment": "AGL-3652: inventory and ERP natively (Cin7 Core, inFlow Inventory with the merchant's keys; Brightpearl by signing in): stock counts, location, product sync, sending paid orders, the orders not sent and recent activity, from the spec in src/android/screens/inventory-sync.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynInventorySyncPlugin",
+          "register": "registerInventorySyncNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.inventorysync",
+          "register": "registerInventorySyncNative"
+        },
+        "contributes": {
+          "screens": [
+            "inventory-sync.service",
+            "inventory-sync.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-inventory-sync",
       "register": {
         "console": "registerInventorySyncConsole",
@@ -3566,6 +3780,24 @@
     },
     {
       "id": "delivery-apps",
+      "mobile": {
+        "$comment": "AGL-3652: delivery apps natively (DoorDash, Uber Eats, Grubhub): linking a store, auto-accept and prep time, sending the menu and matching items to products, from the spec in src/android/screens/delivery-apps.screens.json. It sits in Commerce settings' commerceSettings zone. The register's delivery queue belongs to the POS register lane.",
+        "ios": {
+          "module": "AglynDeliveryAppsPlugin",
+          "register": "registerDeliveryAppsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.deliveryapps",
+          "register": "registerDeliveryAppsNative"
+        },
+        "contributes": {
+          "screens": [
+            "delivery-apps.service",
+            "delivery-apps.store",
+            "delivery-apps.match"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-delivery-apps",
       "register": {
         "console": "registerDeliveryAppsConsole",
@@ -3611,6 +3843,25 @@
     },
     {
       "id": "sales-channels",
+      "mobile": {
+        "$comment": "AGL-3652: sales channels natively: each shopping channel's feed (switch, address, setup steps), the store defaults, the catalog check, and the Google and Meta API connections, from the spec in src/android/screens/sales-channels.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynSalesChannelsPlugin",
+          "register": "registerSalesChannelsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.saleschannels",
+          "register": "registerSalesChannelsNative"
+        },
+        "contributes": {
+          "screens": [
+            "sales-channels.service",
+            "sales-channels.channel",
+            "sales-channels.diagnostics",
+            "sales-channels.diagnosticsChannel"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-sales-channels",
       "register": {
         "console": "registerSalesChannelsConsole",
@@ -3738,6 +3989,22 @@
     },
     {
       "id": "live-chat",
+      "mobile": {
+        "$comment": "AGL-3652: live chat natively (the merchant's own Tidio or LiveChat account), from the spec in src/android/screens/live-chat.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynLiveChatPlugin",
+          "register": "registerLiveChatNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.livechat",
+          "register": "registerLiveChatNative"
+        },
+        "contributes": {
+          "screens": [
+            "live-chat.settings"
+          ]
+        }
+      },
       "$comment": "AGL-3698: the merchant's OWN Tidio or LiveChat account on their site's pages, by the public key or license number its install code carries (not a secret; stored in hosts/{hostId}/pluginSettings/live-chat, written only by the console route /api/live-chat/settings, which a site admin reaches). tenantApi registers the page enricher: a page the chat shows on gets a `liveChat` slice, every other page nothing, so the site bundle loads only where the chat is. The site runtime draws a launcher once the page is idle and loads the vendor's widget only on a press, or for a site that chose 'load with the page', once idle AND for a visitor whose recorded consent grants analytics. `siteCsp` names the vendor hosts the tenant policy admits for a site that runs it. Off for a site until that site turns it on; no workspace switch, no release flag, no env: the merchant's own key is all it needs. Every plan.",
       "package": "@aglyn/plugins-live-chat",
       "register": {

@@ -16,15 +16,36 @@ public enum ScreenValues {
     let trimmed = path.trimmingCharacters(in: .whitespaces)
     if trimmed.isEmpty { return context }
     var current: JSONValue? = context
-    for raw in segments(trimmed) {
+    let parts = segments(trimmed)
+    for (position, raw) in parts.enumerated() {
+      if raw == "*" {
+        // `rows.*.field`: that field of every row, as a list (rows without it are left out). Over an object (a map of
+        // holds by key) the rows are its values, in key order.
+        let rest = parts.dropFirst(position + 1).joined(separator: ".")
+        let items: [JSONValue]
+        switch current {
+        case .array(let list)?: items = list
+        case .object(let record)?: items = record.sorted { $0.key < $1.key }.map(\.value)
+        default: return nil
+        }
+        return .array(items.compactMap { row in
+          if rest.isEmpty { return row }
+          guard let found = lookup(rest, in: row), found != .null else { return nil }
+          return found
+        })
+      }
       // `rows[field=other.path]`: the first row whose field reads as the text at other.path.
       var segment = raw
       var selector: (field: String, path: String)?
+      var containing: (field: String, path: String)?
       if raw.hasSuffix("]"), let open = raw.firstIndex(of: "[") {
         let inner = raw[raw.index(after: open)..<raw.index(before: raw.endIndex)]
         segment = String(raw[..<open])
         if !segment.isEmpty { current = step(current, segment) }
-        if let equals = inner.firstIndex(of: "=") {
+        if let tilde = inner.range(of: "~=") {
+          // `rows[badges~=path]`: the first row whose list field holds the text at path.
+          containing = (String(inner[..<tilde.lowerBound]), String(inner[tilde.upperBound...]))
+        } else if let equals = inner.firstIndex(of: "=") {
           selector = (String(inner[..<equals]), String(inner[inner.index(after: equals)...]))
         } else {
           // `map[some.key]`: a key that itself holds dots; `map[@path]`: the key is the text at path.
@@ -40,6 +61,10 @@ public enum ScreenValues {
       if let selector {
         let wanted = text(lookup(selector.path, in: context))
         current = current.array.first { text(lookup(selector.field, in: $0)) == wanted }
+      }
+      if let containing {
+        let wanted = text(lookup(containing.path, in: context))
+        current = current.array.first { row in lookup(containing.field, in: row).array.contains { text($0) == wanted } }
       }
     }
     return current
@@ -79,8 +104,10 @@ public enum ScreenValues {
     case .object(let record)?: return record[segment]
     case .array(let items)?:
       if segment == "length" { return .number(Double(items.count)) }
-      guard let index = Int(segment), items.indices.contains(index) else { return nil }
-      return items[index]
+      // A negative number counts from the end: `attempts.-1` is the last one.
+      guard let number = Int(segment) else { return nil }
+      let index = number < 0 ? items.count + number : number
+      return items.indices.contains(index) ? items[index] : nil
     default: return nil
     }
   }
@@ -119,6 +146,10 @@ public enum ScreenValues {
   /// One `{…}` expression: `a.b|c.d|'fallback'` with an optional `:format`.
   /// The first alternative that is present wins.
   public static func evaluate(_ expression: String, in context: JSONValue) -> JSONValue? {
+    // `{?a == b || !c}`: a condition, as true or false.
+    if expression.trimmingCharacters(in: .whitespaces).hasPrefix("?") {
+      return .bool(condition(String(expression.trimmingCharacters(in: .whitespaces).dropFirst()), in: context))
+    }
     var body = expression
     var format: String?
     // A format follows the last ':' that is outside quotes.
@@ -225,11 +256,124 @@ public enum ScreenValues {
         if truthy(value) { map[key] = value } else { map[key] = nil }
       }
       return .object(map)
+    case .object(let record) where record.count == 1 && record["$timestamp"] != nil:
+      // `{"$timestamp": true}`: the server's time, written as a Firestore timestamp (a write's `updatedAt`).
+      return ["$timestamp": true]
+    case .object(let record) where record.count == 1 && record["$dateMs"] != nil:
+      // `{"$dateMs": {"value": "{form.starts}", "time": "23:59:59"}}`: a date and a UTC time of day as epoch milliseconds; null when it is not a date.
+      let spec = record["$dateMs"] ?? .null
+      let date = Self.text(resolveBody(spec["value"] ?? .null, in: context)).trimmingCharacters(in: .whitespaces)
+      let time = spec["time"]?.stringValue ?? "00:00:00"
+      guard date.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil,
+        let millis = epochMillis(.string("\(date)T\(time)Z"))
+      else { return .null }
+      // With `"local": true` the time of day is the device's own (a browser's `Date.parse` of a zone-less time): the
+      // offset is looked up at the guess and again at the corrected instant, so a daylight-saving change lands right.
+      if spec["local"]?.boolValue == true {
+        func offset(at instant: Int64) -> Int64 { Int64(TimeZone.current.secondsFromGMT(for: Date(timeIntervalSince1970: Double(instant) / 1000))) * 1000 }
+        let guess = millis - offset(at: millis)
+        return .number(Double(millis - offset(at: guess)))
+      }
+      return .number(Double(millis))
+    case .object(let record) where record.count == 1 && record["$slug"] != nil:
+      // `{"$slug": "{form.name}"}`: the console's slug of a name (lower case, letters and digits joined by hyphens).
+      return .string(commerceSlug(Self.text(resolveBody(record["$slug"] ?? .null, in: context))))
+    case .object(let record) where record.count == 1 && record["$codes"] != nil:
+      // `{"$codes": "{form.countries}"}`: comma- or line-separated codes, trimmed and upper case, as a list (empty ones dropped).
+      let typed = Self.text(resolveBody(record["$codes"] ?? .null, in: context))
+      return .array(typed.split(whereSeparator: { $0 == "," || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }.filter { !$0.isEmpty }.map(JSONValue.string))
+    case .object(let record) where record.count == 1 && record["$reject"] != nil:
+      // `{"$reject": {"list": "{rates}", "key": "zoneId", "match": "{item.id}"}}`: the list without the rows whose `key` equals `match`.
+      let spec = record["$reject"] ?? .null
+      var list: [JSONValue] = []
+      if case .array(let items) = resolveBody(spec["list"] ?? .null, in: context) { list = items }
+      let key = spec["key"]?.stringValue ?? ""
+      let match = Self.text(resolveBody(spec["match"] ?? .null, in: context))
+      return .array(list.filter { Self.text(lookup(key, in: $0)) != match })
+    case .object(let record) where record.count == 1 && record["$overlay"] != nil:
+      // `{"$overlay": {"base": "{overlay}", "set": {"slug": "{form.slug}", "supplierId": {"$orNull": "{form.supplier}"}}}}`: the base object with each
+      // key of `set` put on top, a key whose value is null taken off. What a route that replaces a document is sent.
+      let spec = record["$overlay"] ?? .null
+      var merged: [String: JSONValue] = [:]
+      if case .object(let base) = resolveBody(spec["base"] ?? .null, in: context) { merged = base }
+      if case .object(let set) = resolveBody(spec["set"] ?? .null, in: context) {
+        for (key, value) in set { if case .null = value { merged[key] = nil } else { merged[key] = value } }
+      }
+      return .object(merged)
+    case .object(let record) where record.count == 1 && record["$map"] != nil:
+      // `{"$map": {"list": "{data.rates.results}", "where": "item.rate", "fields": {"recordId": "{item.recordId}"}}}`: one object of
+      // `fields` for each row of the list that meets `where` (all of them with none), each read with `item` set to the row.
+      let spec = record["$map"] ?? .null
+      var list: [JSONValue] = []
+      if case .array(let items) = resolveBody(spec["list"] ?? .null, in: context) { list = items }
+      let keep = spec["where"]?.stringValue
+      let fields = spec["fields"] ?? .null
+      return .array(list.map { ScreenContext.with(context, item: $0) }.filter { condition(keep, in: $0) }.map { resolveBody(fields, in: $0) })
+    case .object(let record) where record.count == 1 && record["$number"] != nil:
+      // `{"$number": "{form.ready}"}`: a choice or typed text as a number; null when it is not one (a select's "don't say").
+      return number(resolveBody(record["$number"] ?? .null, in: context)).map { .number($0) } ?? .null
+    case .object(let record) where record.count == 1 && record["$nowMs"] != nil:
+      // `{"$nowMs": true}`: the time of the press, as epoch milliseconds (a moderation's `moderatedAtMs`).
+      return .number((Date().timeIntervalSince1970 * 1000).rounded())
+    case .object(let record) where record.count == 1 && record["$orNull"] != nil:
+      // `{"$orNull": "{form.parentId}"}`: the value, or an explicit null when it is empty (a merge write clears the field).
+      let value = resolveBody(record["$orNull"] ?? .null, in: context)
+      return truthy(value) ? value : .null
+    case .object(let record) where record.count == 1 && record["$cents"] != nil:
+      // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`, and `-5.50` to take money away) as whole cents; null when it is not an amount.
+      var typed = Self.text(resolveBody(record["$cents"] ?? .null, in: context)).trimmingCharacters(in: .whitespaces)
+        .replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: "")
+      let negative = typed.hasPrefix("-")
+      if negative { typed.removeFirst() }
+      guard typed.range(of: #"^(\d+(\.\d{0,2})?|\.\d{1,2})$"#, options: .regularExpression) != nil else { return .null }
+      let parts = typed.split(separator: ".", omittingEmptySubsequences: false)
+      let whole = Int(parts[0].isEmpty ? "0" : String(parts[0])) ?? 0
+      let fraction = parts.count > 1 ? Int(String(parts[1]).padding(toLength: 2, withPad: "0", startingAt: 0)) ?? 0 : 0
+      return .number(Double((whole * 100 + fraction) * (negative ? -1 : 1)))
+    case .object(let record) where record.count == 1 && record["$gather"] != nil:
+      // `{"$gather": {"from": "{form}", "prefix": "restock_", "key": "lineItemId", "value": "quantity"}}`: the entries of
+      // an object whose names start with `prefix`, as `{ key: <rest of the name>, value: <entry> }` rows in name order.
+      let spec = record["$gather"] ?? .null
+      var source: [String: JSONValue] = [:]
+      if case .object(let found) = resolveBody(spec["from"] ?? .null, in: context) { source = found }
+      let prefix = spec["prefix"]?.stringValue ?? ""
+      let keyName = spec["key"]?.stringValue ?? "key"
+      let valueName = spec["value"]?.stringValue ?? "value"
+      // `with` adds more columns from other prefixes (`{"reason": "reason_"}`); `skipEmpty` leaves out a row whose value is empty or zero.
+      let extra = spec["with"].objectEntries.reduce(into: [String: String]()) { $0[$1.key] = $1.value.stringValue ?? "" }
+      let skipEmpty = spec["skipEmpty"] == .bool(true)
+      // `keys`: only the names (after the prefix) of the entries that are on, in name order: the checked events of a list of toggles.
+      if spec["keys"] == .bool(true) {
+        return .array(source.filter { $0.key.hasPrefix(prefix) && truthy($0.value) }.sorted { $0.key < $1.key }.map { .string(String($0.key.dropFirst(prefix.count))) })
+      }
+      return .array(
+        source.filter { $0.key.hasPrefix(prefix) }.sorted { $0.key < $1.key }.compactMap { name, entry in
+          if skipEmpty, !truthy(entry) { return nil }
+          let rest = String(name.dropFirst(prefix.count))
+          var row: [String: JSONValue] = [keyName: Int64(rest).map { .number(Double($0)) } ?? .string(rest), valueName: entry]
+          for (column, columnPrefix) in extra { if let more = source[columnPrefix + rest] { row[column] = more } }
+          return .object(row)
+        })
+    case .object(let record) where record.count == 1 && record["$uuid"] != nil:
+      // `{"$uuid": "box_"}`: the prefix and eight random hex digits, a fresh id for a row the person is adding.
+      return .string(Self.text(resolveBody(record["$uuid"] ?? .null, in: context)) + String(UUID().uuidString.lowercased().prefix(8)))
+    case .object(let record) where record.count == 1 && record["$replace"] != nil:
+      // `{"$replace": {"list": "{a}", "key": "id", "match": "{b}", "value": {...}}}`: the list with the row whose
+      // `key` equals `match` replaced by `value`.
+      let spec = record["$replace"] ?? .null
+      var list: [JSONValue] = []
+      if case .array(let items) = resolveBody(spec["list"] ?? .null, in: context) { list = items }
+      let key = spec["key"]?.stringValue ?? ""
+      let match = Self.text(resolveBody(spec["match"] ?? .null, in: context))
+      let value = resolveBody(spec["value"] ?? .null, in: context)
+      // key "*": the row that equals `match` as a whole (a list of rows with no id of their own).
+      let whole = key == "*" ? resolveBody(spec["match"] ?? .null, in: context) : nil
+      return .array(list.map { row in (key == "*" ? row == whole : Self.text(lookup(key, in: row)) == match) ? value : row })
     case .object(let record) where record.count == 1 && record["$split"] != nil:
-      // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
+      // `{"$split": "{form.pcts}"}`: the comma- or line-separated text as a list; a part that is a number stays one.
       let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))
       return .array(
-        joined.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map { part in
+        joined.split(whereSeparator: { $0 == "," || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.map { part in
           if let number = Double(part) { return .number(number) }
           return .string(part)
         })
@@ -251,7 +395,8 @@ public enum ScreenValues {
       for (key, value) in record {
         let resolved = resolveBody(value, in: context)
         // A template that found nothing is left out; a literal null is sent (it clears the field).
-        if resolved != .null || value == .null { out[key] = resolved }
+        // A key written as a template (`{item.id}`) is the text it renders: a map keyed by the row's own id.
+        if resolved != .null || value == .null || value["$orNull"] != nil { out[key.contains("{") ? render(key, in: context) : key] = resolved }
       }
       return .object(out)
     default: return body
@@ -300,15 +445,67 @@ public enum ScreenValues {
     let clause = raw.trimmingCharacters(in: .whitespaces)
     for op in ["!=", "=="] {
       if let range = clause.range(of: op) {
-        let left = text(lookup(String(clause[..<range.lowerBound]), in: context))
+        let leftPath = String(clause[..<range.lowerBound])
+        let found = lookup(leftPath, in: context)
+        let left = text(found)
         var right = clause[range.upperBound...].trimmingCharacters(in: .whitespaces)
         if right.count >= 2, right.hasPrefix("'"), right.hasSuffix("'") { right = String(right.dropFirst().dropLast()) }
-        let options = right.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        // `path == @other.path`: compared with the text at another path instead of a literal.
+        let options = right.hasPrefix("@")
+          ? [text(lookup(String(right.dropFirst()), in: context))]
+          : right.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        // A projected list (`zones.*.kind == radius`): `==` holds when any of its values does, `!=` when none does.
+        if case .array(let items)? = found, leftPath.contains(".*") {
+          let hit = items.contains { options.contains(text($0)) }
+          return op == "==" ? hit : !hit
+        }
         return op == "==" ? options.contains(left) : !options.contains(left)
+      }
+    }
+    // `path < @now.ms+7d`: numbers and times compared; the right side is a number or `@path` with an optional offset.
+    for op in ["<=", ">=", "<", ">"] {
+      guard let range = clause.range(of: op) else { continue }
+      let found = lookup(String(clause[..<range.lowerBound]), in: context)
+      guard let right = operand(clause[range.upperBound...].trimmingCharacters(in: .whitespaces), in: context) else { return false }
+      // A projected list (`holds.*.expiresAtMs > @now.ms`) holds when any of its values does.
+      let lefts: [Double]
+      if case .array(let list)? = found { lefts = list.compactMap { comparable($0) } } else { lefts = comparable(found).map { [$0] } ?? [] }
+      return lefts.contains { left in
+        switch op {
+        case "<=": return left <= right
+        case ">=": return left >= right
+        case "<": return left < right
+        default: return left > right
+        }
       }
     }
     if clause.hasPrefix("!") { return !truthy(lookup(String(clause.dropFirst()), in: context)) }
     return truthy(lookup(clause, in: context))
+  }
+
+  /// A number as it is, or a time (epoch milliseconds, a Firestore timestamp, an ISO date) as milliseconds.
+  private static func comparable(_ value: JSONValue?) -> Double? {
+    if case .number(let number)? = value { return number }
+    return epochMillis(value).map(Double.init)
+  }
+
+  /// The right side of `<`: a number, `@path`, or `@path+7d` / `@path-30m` (units ms, s, m, h, d; none is ms).
+  static func operand(_ text: String, in context: JSONValue) -> Double? {
+    if let number = Double(text) { return number }
+    guard text.hasPrefix("@") else { return nil }
+    let body = String(text.dropFirst())
+    let pattern = #"^(.+?)\s*([+-])\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?$"#
+    if let regex = try? NSRegularExpression(pattern: pattern),
+      let found = regex.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)),
+      let pathRange = Range(found.range(at: 1), in: body), let signRange = Range(found.range(at: 2), in: body),
+      let amountRange = Range(found.range(at: 3), in: body), let base = comparable(lookup(String(body[pathRange]), in: context)),
+      let amount = Double(body[amountRange])
+    {
+      let unit = Range(found.range(at: 4), in: body).map { String(body[$0]) } ?? "ms"
+      let scale: Double = ["s": 1_000, "m": 60_000, "h": 3_600_000, "d": 86_400_000][unit] ?? 1
+      return body[signRange] == "+" ? base + amount * scale : base - amount * scale
+    }
+    return comparable(lookup(body, in: context))
   }
 
   private static func lastUnquotedColon(_ text: String) -> String.Index? {
@@ -428,6 +625,9 @@ public enum ScreenValues {
       return epochMillis(value).map { dateText($0, "MMM d, yyyy") } ?? text(value)
     case "datetime":
       return epochMillis(value).map { dateText($0, "MMM d, yyyy, h:mm a") } ?? text(value)
+    case "clock":
+      // A time of day alone: `3:05 PM`.
+      return epochMillis(value).map { dateText($0, "h:mm a") } ?? text(value)
     case "cents":
       guard let amount = number(value) else { return text(value) }
       let currency = parts.count > 1 ? text(lookup(parts[1], in: context)) : "USD"
@@ -435,6 +635,26 @@ public enum ScreenValues {
     case "dollars":
       guard let amount = number(value) else { return text(value) }
       return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
+    case "code":
+      // A code the way coupons store it: trimmed, upper case, only letters, digits, hyphens and underscores.
+      // `code/40` keeps at most that many characters.
+      let code = text(value).trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        .replacingOccurrences(of: "[^A-Z0-9_-]", with: "", options: .regularExpression)
+      if parts.count > 1, let limit = Int(parts[1]) { return String(code.prefix(limit)) }
+      return code
+    case "token":
+      // The search token of typed words: lower case, the first word, at most twelve characters.
+      let word = text(value).trimmingCharacters(in: .whitespacesAndNewlines).lowercased().split(whereSeparator: \.isWhitespace).first
+      return String(word.map(String.init) ?? "").prefix(12).description
+    case "sum", "sumcents":
+      var total = 0.0
+      if case .array(let items)? = value { total = items.reduce(0) { $0 + (number($1) ?? 0) } }
+      return name == "sum" ? numberText(total) : formatOrderMoney(Int(total.rounded()), currency: "USD")
+    case "amount":
+      // Whole cents as a plain amount a money field starts with: 1250 -> 12.50 (nothing for no amount).
+      guard let cents = number(value) else { return "" }
+      let whole = Int(cents.rounded())
+      return "\(whole / 100).\(String(format: "%02d", abs(whole) % 100))"
     case "bytes":
       return number(value).map(bytesText) ?? text(value)
     case "number":
@@ -447,13 +667,65 @@ public enum ScreenValues {
       case .object(let record)?: return String(record.count)
       default: return number(value).map { grouped($0) } ?? "0"
       }
+    case "ago":
+      // A time as how long ago it was: `5m ago`, `3h ago`, `2d ago`; a dash for none.
+      guard let at = epochMillis(value) else { return "\u{2014}" }
+      let minutes = Int(max(0, ((Date().timeIntervalSince1970 * 1000 - Double(at)) / 60_000).rounded()))
+      if minutes < 60 { return "\(minutes)m ago" }
+      let hours = Int((Double(minutes) / 60).rounded())
+      return hours < 48 ? "\(hours)h ago" : "\(Int((Double(hours) / 24).rounded()))d ago"
+    case "minus":
+      // `minus/other.path`: this number less the one at the path, never below zero (text that is no number stays as it is).
+      guard let amount = number(value) else { return text(value) }
+      let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
+      return numberText(max(0, amount - other))
+    case "lesscents":
+      // `lesscents/other.path`: this amount less the one at the path, never below zero, as money.
+      let other = parts.count > 1 ? number(lookup(parts[1], in: context)) ?? 0 : 0
+      return formatOrderMoney(Int(max(0, (number(value) ?? 0) - other).rounded()), currency: "USD")
+    case "slashed":
+      // A site path with its leading slash: `about` is `/about`, the home page `/`.
+      let path = text(value)
+      return path == "/" ? "/" : "/" + (path.hasPrefix("/") ? String(path.dropFirst()) : path)
+    case "take":
+      // `take/120`: at most that many characters.
+      return String(text(value).prefix(parts.count > 1 ? Int(parts[1]) ?? Int.max : Int.max))
+    case "plural":
+      // `plural/item`: the count (a list of numbers is their total, any other list its length) with its noun, `1 item` or `3 items`.
+      if value == nil || value == .null { return "" }
+      var count = number(value) ?? 0
+      if case .array(let items)? = value {
+        count = !items.isEmpty && items.allSatisfy({ number($0) != nil }) ? items.reduce(0) { $0 + (number($1) ?? 0) } : Double(items.count)
+      }
+      return "\(numberText(count)) \(parts.count > 1 ? parts[1] : "")\(count == 1 ? "" : "s")"
+    case "ordernumber":
+      // `ordernumber/item.$id`: an order's number as `#1042`, else the last six characters of its id (`#A1B2C3`).
+      if truthy(value) { return "#\(text(value))" }
+      let id = parts.count > 1 ? text(lookup(parts[1], in: context)) : ""
+      return id.isEmpty ? "#\u{2014}" : "#\(id.suffix(6).uppercased())"
+    case "isodate":
+      // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.
+      guard let at = epochMillis(value) else { return "\u{2014}" }
+      let formatter = DateFormatter()
+      formatter.locale = Locale(identifier: "en_US_POSIX")
+      formatter.calendar = Calendar(identifier: .gregorian)
+      formatter.timeZone = TimeZone(identifier: "UTC")
+      formatter.dateFormat = "yyyy-MM-dd"
+      return formatter.string(from: Date(timeIntervalSince1970: Double(at) / 1000))
+    case "ahead":
+      // How many of a list of times are still ahead (the holds on a promotion that have not lapsed).
+      guard case .array(let items)? = value else { return "0" }
+      let now = Int64(Date().timeIntervalSince1970 * 1000)
+      return String(items.filter { (epochMillis($0) ?? 0) > now }.count)
     case "yesno":
       return truthy(value) ? "Yes" : "No"
     case "title":
       let raw = text(value).replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
       return raw.prefix(1).uppercased() + raw.dropFirst()
     case "upper":
-      return text(value).uppercased()
+      // `upper/2` also keeps at most that many characters (a country or state code).
+      let upper = text(value).uppercased()
+      return parts.count > 1 ? Int(parts[1]).map { String(upper.prefix($0)) } ?? upper : upper
     case "phone":
       return normalizedPhone(text(value)) ?? text(value)
     case "json":

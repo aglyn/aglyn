@@ -1,0 +1,443 @@
+{
+  "$comment": "The Ad conversions plugin's native screens, in the site's plugin settings: the Meta, TikTok and Pinterest server-side conversion connections a site can hold with the merchant's own access token, each one's status, last event, test events, pause and disconnect. Routes: GET /api/ad-conversions/connections, POST connections, PATCH and DELETE connection, POST test-event. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "ad-conversions.service",
+      "title": "Ad conversions",
+      "label": "Ad conversions",
+      "subtitle": "Meta, TikTok and Pinterest server-side events",
+      "icon": "megaphone|campaign",
+      "scope": "site",
+      "order": 70,
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "requires": "params.pluginId == ad-conversions",
+      "load": {
+        "conn": "/api/ad-conversions/connections?hostId={site.id}"
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "meta",
+            "label": "Meta",
+            "api": "Conversions API",
+            "tag": "Meta pixel",
+            "needsTag": true,
+            "adAccount": false,
+            "hasCode": true,
+            "tokenHelp": "In Meta Events Manager: your pixel, Settings, Conversions API, Generate access token.",
+            "testHelp": "From Events Manager, Test events, like TEST12345. Test orders and the Send test event button use it; real orders never do."
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok",
+            "api": "Events API",
+            "tag": "TikTok pixel",
+            "needsTag": true,
+            "adAccount": false,
+            "hasCode": true,
+            "tokenHelp": "In TikTok Ads Manager: Assets, Events, your pixel, Settings, Events API, Generate access token.",
+            "testHelp": "From Events Manager, your pixel, Test events. Test orders and the Send test event button use it; real orders never do."
+          },
+          {
+            "id": "pinterest",
+            "label": "Pinterest",
+            "api": "Conversions API",
+            "tag": "Pinterest tag",
+            "needsTag": false,
+            "adAccount": true,
+            "hasCode": false,
+            "tokenHelp": "In Pinterest Ads: Conversions, Conversions API, Generate new token, for the ad account below.",
+            "testHelp": "Test orders and the Send test event button are sent with Pinterest’s test flag, so they never count as real conversions."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.conn.available && !data.conn.connections",
+          "text": "This deployment cannot store access tokens yet."
+        },
+        {
+          "type": "notice",
+          "id": "consent",
+          "tone": "warning",
+          "when": "data.conn.setup && !data.conn.setup.asksAboutAdvertising",
+          "text": "Nothing is sent until this site asks visitors about advertising. Turn on the advertising question in Cookie consent on the Tracking tab; until a visitor allows advertising, no browser tag loads and no server event is sent for them."
+        },
+        {
+          "type": "list",
+          "id": "providers",
+          "title": "Conversions",
+          "when": "data.conn.available || data.conn.connections",
+          "items": "const.providers",
+          "primary": "{item.label} {item.api}",
+          "secondary": "Server-side purchases and leads, paired with your {item.tag} so each is counted once.",
+          "icon": "megaphone|campaign",
+          "badges": [
+            {
+              "text": "{data.conn.connections[provider=item.id].status:title}",
+              "when": "data.conn.connections[provider=item.id]",
+              "tones": {
+                "Active": "success",
+                "Paused": "neutral",
+                "Reconnect": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Not connected",
+              "tone": "neutral",
+              "when": "!data.conn.connections[provider=item.id]"
+            }
+          ],
+          "open": {
+            "screen": "ad-conversions.provider",
+            "params": {
+              "provider": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ad-conversions.provider",
+      "title": "{const.providers[id=params.provider].label} {const.providers[id=params.provider].api}",
+      "label": "Ad conversions",
+      "icon": "megaphone|campaign",
+      "scope": "site",
+      "load": {
+        "conn": "/api/ad-conversions/connections?hostId={site.id}"
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "meta",
+            "label": "Meta",
+            "api": "Conversions API",
+            "tag": "Meta pixel",
+            "needsTag": true,
+            "adAccount": false,
+            "hasCode": true,
+            "tokenHelp": "In Meta Events Manager: your pixel, Settings, Conversions API, Generate access token.",
+            "testHelp": "From Events Manager, Test events, like TEST12345. Test orders and the Send test event button use it; real orders never do."
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok",
+            "api": "Events API",
+            "tag": "TikTok pixel",
+            "needsTag": true,
+            "adAccount": false,
+            "hasCode": true,
+            "tokenHelp": "In TikTok Ads Manager: Assets, Events, your pixel, Settings, Events API, Generate access token.",
+            "testHelp": "From Events Manager, your pixel, Test events. Test orders and the Send test event button use it; real orders never do."
+          },
+          {
+            "id": "pinterest",
+            "label": "Pinterest",
+            "api": "Conversions API",
+            "tag": "Pinterest tag",
+            "needsTag": false,
+            "adAccount": true,
+            "hasCode": false,
+            "tokenHelp": "In Pinterest Ads: Conversions, Conversions API, Generate new token, for the ad account below.",
+            "testHelp": "Test orders and the Send test event button are sent with Pinterest’s test flag, so they never count as real conversions."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "needsTag",
+          "tone": "info",
+          "when": "!data.conn.connections[provider=params.provider] && const.providers[id=params.provider].needsTag && !data.conn.setup.tagIds[@params.provider]",
+          "text": "Add your {const.providers[id=params.provider].tag} ID on the Tracking tab first: server events go to that pixel and are paired with what it sends from the browser."
+        },
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "when": "!data.conn.connections[provider=params.provider] && data.conn.available",
+          "text": "Not connected. Your {const.providers[id=params.provider].tag} still reports from the browser for visitors who allow advertising."
+        },
+        {
+          "type": "notice",
+          "id": "failing",
+          "tone": "error",
+          "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.connections[provider=params.provider].lastError",
+          "text": "{data.conn.connections[provider=params.provider].lastError}"
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Connection",
+          "when": "data.conn.connections[provider=params.provider]",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{data.conn.connections[provider=params.provider].status:title}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Paused": "neutral",
+                "Reconnect": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Ad account",
+              "value": "{data.conn.connections[provider=params.provider].adAccountId}",
+              "when": "data.conn.connections[provider=params.provider].adAccountId"
+            },
+            {
+              "label": "Test event code",
+              "value": "{data.conn.connections[provider=params.provider].testEventCode}",
+              "when": "data.conn.connections[provider=params.provider].testEventCode"
+            },
+            {
+              "label": "Last event sent",
+              "value": "{data.conn.connections[provider=params.provider].lastSentEvent|'Event'}, {data.conn.connections[provider=params.provider].lastSentAtMs:datetime}",
+              "when": "data.conn.connections[provider=params.provider].lastSentAtMs"
+            },
+            {
+              "label": "Last event sent",
+              "value": "Not yet",
+              "when": "!data.conn.connections[provider=params.provider].lastSentAtMs"
+            },
+            {
+              "label": "Sent",
+              "value": "{data.conn.connections[provider=params.provider].totals.sent:number}"
+            },
+            {
+              "label": "Last failure",
+              "value": "{data.conn.connections[provider=params.provider].lastFailedAtMs:datetime} — {data.conn.connections[provider=params.provider].lastError|'refused'} · {data.conn.connections[provider=params.provider].totals.failed:number} failed",
+              "when": "data.conn.connections[provider=params.provider].lastFailedAtMs"
+            },
+            {
+              "label": "Failures",
+              "value": "None",
+              "when": "!data.conn.connections[provider=params.provider].lastFailedAtMs"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect",
+              "icon": "link|link",
+              "when": "!data.conn.connections[provider=params.provider] && data.conn.available && !const.providers[id=params.provider].needsTag || !data.conn.connections[provider=params.provider] && data.conn.available && data.conn.setup.tagIds[@params.provider]",
+              "url": "/api/ad-conversions/connections",
+              "prompt": [
+                {
+                  "key": "accessToken",
+                  "label": "Access token",
+                  "kind": "password",
+                  "required": true,
+                  "help": "{const.providers[id=params.provider].tokenHelp} Stored encrypted; it is never shown again."
+                },
+                {
+                  "key": "adAccountId",
+                  "label": "Pinterest ad account ID",
+                  "kind": "text",
+                  "required": true,
+                  "when": "params.provider == pinterest",
+                  "help": "The number in your Pinterest Ads address, after /advertiser/."
+                },
+                {
+                  "key": "testEventCode",
+                  "label": "Test event code",
+                  "kind": "text",
+                  "when": "params.provider == meta,tiktok",
+                  "help": "{const.providers[id=params.provider].testHelp}"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "accessToken": "{form.accessToken}",
+                "adAccountId": "{form.adAccountId}",
+                "testEventCode": "{form.testEventCode}"
+              },
+              "success": "Connected."
+            },
+            {
+              "id": "replace",
+              "label": "Replace token",
+              "icon": "key|key",
+              "when": "data.conn.connections[provider=params.provider].status != reconnect && data.conn.connections[provider=params.provider] && data.conn.available",
+              "url": "/api/ad-conversions/connections",
+              "prompt": [
+                {
+                  "key": "accessToken",
+                  "label": "Access token",
+                  "kind": "password",
+                  "required": true,
+                  "help": "{const.providers[id=params.provider].tokenHelp} Stored encrypted; it is never shown again."
+                },
+                {
+                  "key": "adAccountId",
+                  "label": "Pinterest ad account ID",
+                  "kind": "text",
+                  "required": true,
+                  "when": "params.provider == pinterest",
+                  "help": "The number in your Pinterest Ads address, after /advertiser/."
+                },
+                {
+                  "key": "testEventCode",
+                  "label": "Test event code",
+                  "kind": "text",
+                  "when": "params.provider == meta,tiktok",
+                  "help": "{const.providers[id=params.provider].testHelp}"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "accessToken": "{form.accessToken}",
+                "adAccountId": "{form.adAccountId}",
+                "testEventCode": "{form.testEventCode}"
+              },
+              "success": "Token replaced."
+            },
+            {
+              "id": "reconnect",
+              "label": "Connect again",
+              "icon": "link|link",
+              "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.available",
+              "url": "/api/ad-conversions/connections",
+              "prompt": [
+                {
+                  "key": "accessToken",
+                  "label": "Access token",
+                  "kind": "password",
+                  "required": true,
+                  "help": "{const.providers[id=params.provider].tokenHelp} Stored encrypted; it is never shown again."
+                },
+                {
+                  "key": "adAccountId",
+                  "label": "Pinterest ad account ID",
+                  "kind": "text",
+                  "required": true,
+                  "when": "params.provider == pinterest",
+                  "help": "The number in your Pinterest Ads address, after /advertiser/."
+                },
+                {
+                  "key": "testEventCode",
+                  "label": "Test event code",
+                  "kind": "text",
+                  "when": "params.provider == meta,tiktok",
+                  "help": "{const.providers[id=params.provider].testHelp}"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "accessToken": "{form.accessToken}",
+                "adAccountId": "{form.adAccountId}",
+                "testEventCode": "{form.testEventCode}"
+              },
+              "success": "Connected again."
+            },
+            {
+              "id": "pause",
+              "label": "Pause",
+              "icon": "pause.circle|pause_circle",
+              "when": "data.conn.connections[provider=params.provider].status == active",
+              "method": "PATCH",
+              "url": "/api/ad-conversions/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": true
+              },
+              "success": "Paused."
+            },
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play.circle|play_circle",
+              "when": "data.conn.connections[provider=params.provider].status == paused",
+              "method": "PATCH",
+              "url": "/api/ad-conversions/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": false
+              },
+              "success": "Resumed."
+            },
+            {
+              "id": "test",
+              "label": "Send test event",
+              "icon": "paperplane|send",
+              "when": "data.conn.connections[provider=params.provider].status == active",
+              "url": "/api/ad-conversions/test-event",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "success": "A test Purchase was sent. Look for it in {const.providers[id=params.provider].label}’s test events."
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.conn.connections[provider=params.provider]",
+              "confirm": "Disconnect the {const.providers[id=params.provider].label} {const.providers[id=params.provider].api}? No more server events are sent, and the stored access token and any events not yet sent are deleted. Your {const.providers[id=params.provider].tag} on the site is not affected; remove it on the Tracking tab.",
+              "method": "DELETE",
+              "url": "/api/ad-conversions/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "back": true,
+              "success": "Disconnected."
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "testCode",
+          "title": "Test events",
+          "when": "data.conn.connections[provider=params.provider] && const.providers[id=params.provider].hasCode",
+          "footer": "{const.providers[id=params.provider].testHelp}",
+          "fields": [
+            {
+              "key": "testEventCode",
+              "label": "Test event code",
+              "kind": "text",
+              "initial": "{data.conn.connections[provider=params.provider].testEventCode}"
+            }
+          ],
+          "submit": {
+            "label": "Save code",
+            "method": "PATCH",
+            "url": "/api/ad-conversions/connection",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "{params.provider}",
+              "testEventCode": "{form.testEventCode}"
+            },
+            "success": "Saved."
+          }
+        },
+        {
+          "type": "notice",
+          "id": "flag",
+          "tone": "info",
+          "when": "data.conn.connections[provider=params.provider] && !const.providers[id=params.provider].hasCode",
+          "text": "{const.providers[id=params.provider].testHelp}"
+        }
+      ]
+    }
+  ]
+}

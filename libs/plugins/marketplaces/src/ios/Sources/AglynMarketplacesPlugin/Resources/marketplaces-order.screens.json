@@ -1,0 +1,147 @@
+{
+  "$comment": "A marketplace order's fees and tracking confirmations, in the order's services, with sending tracking again. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "marketplaces.order",
+      "title": "Marketplace order",
+      "label": "Marketplace order",
+      "icon": "bag|shopping_basket",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "marketplaces": [
+          {
+            "id": "amazon",
+            "label": "Amazon"
+          },
+          {
+            "id": "ebay",
+            "label": "eBay"
+          },
+          {
+            "id": "etsy",
+            "label": "Etsy"
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok Shop"
+          },
+          {
+            "id": "walmart",
+            "label": "Walmart"
+          },
+          {
+            "id": "faire",
+            "label": "Faire"
+          }
+        ],
+        "shipment": [
+          {
+            "id": "pending",
+            "label": "Sending tracking"
+          },
+          {
+            "id": "confirmed",
+            "label": "Tracking sent"
+          },
+          {
+            "id": "failed",
+            "label": "Not confirmed"
+          }
+        ]
+      },
+      "load": {
+        "view": {
+          "url": "/api/marketplaces/order?hostId={site.id}&recordId={params.orderId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.view.order",
+          "text": "This order was not sold on a marketplace."
+        },
+        {
+          "type": "fields",
+          "id": "sold",
+          "when": "data.view.order",
+          "title": "Sold on {const.marketplaces[id=data.view.order.marketplace].label|data.view.order.marketplace}",
+          "rows": [
+            {
+              "label": "Order",
+              "value": "{data.view.order.displayRef}"
+            },
+            {
+              "label": "Sandbox",
+              "value": "Sandbox",
+              "chip": true,
+              "tone": "info",
+              "when": "data.view.order.sandbox"
+            },
+            {
+              "label": "Fees",
+              "value": "{data.view.order.feesTotalMinor:cents/data.view.order.currency}",
+              "when": "data.view.order.fees"
+            },
+            {
+              "label": "Fees",
+              "value": "Not known yet",
+              "when": "!data.view.order.fees"
+            }
+          ],
+          "footer": "Recorded for your books; the marketplace takes its fees from your payout."
+        },
+        {
+          "type": "list",
+          "id": "fees",
+          "when": "data.view.order.fees.1",
+          "title": "Fees",
+          "items": "data.view.order.fees",
+          "primary": "{item.label}",
+          "trailing": "{item.amountMinor:cents/data.view.order.currency}",
+          "icon": "payments|payments"
+        },
+        {
+          "type": "list",
+          "id": "shipments",
+          "when": "data.view.order",
+          "title": "Tracking",
+          "items": "data.view.order.shipments",
+          "empty": "No shipments yet.",
+          "icon": "shippingbox|local_shipping",
+          "primary": "{item.carrier} {item.trackingNumber|'No tracking number'}",
+          "secondary": "{item.message}",
+          "badges": [
+            {
+              "text": "{const.shipment[id=item.state].label}",
+              "tone": "neutral"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "retry",
+          "items": [
+            {
+              "id": "retry",
+              "label": "Send tracking again",
+              "icon": "send|send",
+              "when": "data.view.order.shipments.*.state == failed",
+              "url": "/api/marketplaces/order/retry",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}"
+              },
+              "success": "Tracking sent again."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
