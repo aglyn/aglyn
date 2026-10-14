@@ -59,12 +59,12 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "commerce",
-      contributes: ["screens": ["commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.products", "commerce.promotions", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.suppliers", "commerce.tax", "commerce.taxSummary"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
+      contributes: ["screens": ["commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.products", "commerce.promotions", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.suppliers", "commerce.tax", "commerce.taxSummary"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
       register: AglynCommercePlugin.registerCommerceNative
     ),
     NativePluginManifestEntry(
       id: "couriers",
-      contributes: ["screens": ["couriers.service"]],
+      contributes: ["screens": ["couriers.order", "couriers.service"]],
       register: AglynCouriersPlugin.registerCouriersNative
     ),
     NativePluginManifestEntry(
@@ -94,7 +94,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "fulfillment-networks",
-      contributes: ["screens": ["fulfillment-networks.network", "fulfillment-networks.service"]],
+      contributes: ["screens": ["fulfillment-networks.network", "fulfillment-networks.order", "fulfillment-networks.service"]],
       register: AglynFulfillmentNetworksPlugin.registerFulfillmentNetworksNative
     ),
     NativePluginManifestEntry(
@@ -109,7 +109,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "inventory-sync",
-      contributes: ["screens": ["inventory-sync.service"]],
+      contributes: ["screens": ["inventory-sync.order", "inventory-sync.service"]],
       register: AglynInventorySyncPlugin.registerInventorySyncNative
     ),
     NativePluginManifestEntry(
@@ -129,7 +129,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "marketplaces",
-      contributes: ["screens": ["marketplaces.marketplace", "marketplaces.service"]],
+      contributes: ["screens": ["marketplaces.marketplace", "marketplaces.order", "marketplaces.service"]],
       register: AglynMarketplacesPlugin.registerMarketplacesNative
     ),
     NativePluginManifestEntry(
@@ -139,12 +139,12 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "post-purchase",
-      contributes: ["screens": ["post-purchase.service"]],
+      contributes: ["screens": ["post-purchase.order", "post-purchase.service"]],
       register: AglynPostPurchasePlugin.registerPostPurchaseNative
     ),
     NativePluginManifestEntry(
       id: "print-on-demand",
-      contributes: ["screens": ["print-on-demand.catalog", "print-on-demand.connection", "print-on-demand.imported", "print-on-demand.orders", "print-on-demand.service"]],
+      contributes: ["screens": ["print-on-demand.catalog", "print-on-demand.connection", "print-on-demand.imported", "print-on-demand.order", "print-on-demand.orders", "print-on-demand.service"]],
       register: AglynPrintOnDemandPlugin.registerPrintOnDemandNative
     ),
     NativePluginManifestEntry(
@@ -154,7 +154,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "review-platforms",
-      contributes: ["screens": ["review-platforms.service"]],
+      contributes: ["screens": ["review-platforms.order", "review-platforms.service"]],
       register: AglynReviewPlatformsPlugin.registerReviewPlatformsNative
     ),
     NativePluginManifestEntry(
@@ -164,7 +164,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "shipping",
-      contributes: ["screens": ["shipping.billing", "shipping.boxes", "shipping.carriers", "shipping.connectCarrier", "shipping.connectOwn", "shipping.labels", "shipping.own", "shipping.service", "shipping.services", "shipping.shipFrom", "shipping.spend"]],
+      contributes: ["screens": ["shipping.billing", "shipping.boxes", "shipping.carriers", "shipping.connectCarrier", "shipping.connectOwn", "shipping.labels", "shipping.order", "shipping.own", "shipping.returnLabel", "shipping.service", "shipping.services", "shipping.shipFrom", "shipping.spend"]],
       register: AglynShippingPlugin.registerShippingNative
     ),
     NativePluginManifestEntry(

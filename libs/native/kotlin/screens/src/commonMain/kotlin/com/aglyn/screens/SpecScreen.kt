@@ -444,6 +444,8 @@ private fun Block(
       val contributions = ScreenCatalog.zone(name).filter { ScreenValues.condition(it.requires, context) }
       // Native widgets other plugins put in the same slot sit beside the spec screens.
       val widgets = plugin.slotWidgets(name)
+      // `empty`: what to say when no plugin has put anything in the zone.
+      if (contributions.isEmpty() && widgets.isEmpty()) block.string("empty")?.let { NoticeBanner(ScreenValues.render(it, context), StatusTone.INFO) }
       if (contributions.isNotEmpty() || widgets.isNotEmpty()) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
           if (contributions.isNotEmpty()) {

@@ -1,0 +1,138 @@
+{
+  "$comment": "An inventory system's hand-off of one order, in the order's services: where it stands, and sending it again. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "inventory-sync.order",
+      "title": "Inventory system",
+      "label": "Inventory system",
+      "icon": "tray|inventory_2",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "providers": [
+          {
+            "id": "cin7-core",
+            "label": "Cin7 Core"
+          },
+          {
+            "id": "inflow",
+            "label": "inFlow Inventory"
+          },
+          {
+            "id": "brightpearl",
+            "label": "Brightpearl"
+          }
+        ],
+        "statuses": [
+          {
+            "id": "queued",
+            "label": "Waiting to send"
+          },
+          {
+            "id": "sent",
+            "label": "Sent"
+          },
+          {
+            "id": "failed",
+            "label": "Not sent"
+          },
+          {
+            "id": "skipped",
+            "label": "Not sent"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled"
+          }
+        ]
+      },
+      "load": {
+        "view": {
+          "url": "/api/inventory-sync/order?hostId={site.id}&recordId={params.orderId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.view.order",
+          "text": "This order has not been handed to an inventory system."
+        },
+        {
+          "type": "fields",
+          "id": "state",
+          "when": "data.view.order",
+          "title": "{const.providers[id=data.view.order.provider].label}",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.statuses[id=data.view.order.status].label}",
+              "chip": true,
+              "tones": {
+                "sent": "success",
+                "failed": "error",
+                "queued": "info",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Reference",
+              "value": "{data.view.order.reference}"
+            },
+            {
+              "label": "System number",
+              "value": "{data.view.order.externalNumber}",
+              "when": "data.view.order.externalNumber"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "lines",
+          "when": "data.view.order",
+          "items": "data.view.order.lines",
+          "empty": "No lines.",
+          "primary": "{item.name}",
+          "secondary": "{item.sku}",
+          "trailing": "{item.quantity}",
+          "icon": "tray|inventory_2"
+        },
+        {
+          "type": "notice",
+          "id": "note",
+          "tone": "warning",
+          "when": "data.view.order.note",
+          "text": "{data.view.order.note}"
+        },
+        {
+          "type": "actions",
+          "id": "send",
+          "items": [
+            {
+              "id": "again",
+              "label": "Send again",
+              "icon": "send|send",
+              "when": "data.view.order.status == failed && data.view.connection.provider == @data.view.order.provider && data.view.connection.status != reconnect",
+              "url": "/api/inventory-sync/order/send",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}"
+              },
+              "instead": [
+                {
+                  "when": "response.order.status == sent",
+                  "text": "Sent to {const.providers[id=response.order.provider].label}."
+                }
+              ],
+              "success": "Sent."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

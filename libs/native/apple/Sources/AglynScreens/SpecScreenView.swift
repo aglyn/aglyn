@@ -331,6 +331,14 @@ struct SpecScreenBody: View {
             .accessibilityIdentifier("zone-widget-\(widget.id)")
         }
       }
+      // `empty`: what to say when no plugin has put anything in the zone.
+      if contributions.isEmpty, widgets.isEmpty, let empty = block["empty"]?.stringValue {
+        Section {
+          AglynNotice(ScreenValues.render(empty, in: context), tone: .info)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+        }
+      }
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))

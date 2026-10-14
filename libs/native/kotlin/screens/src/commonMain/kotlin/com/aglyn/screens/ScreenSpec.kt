@@ -74,6 +74,8 @@ class LoadSpec(val key: String, json: JsonElement) {
   val switchboard: String? = json.str("switchboard")
   /** A plan feature whose gate the screen reads: `{ carried, label }`, where `label` names the plan that includes it. */
   val entitlement: String? = json.str("entitlement")
+  /** An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship. */
+  val orderZone: String? = json.str("orderZone")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
@@ -214,7 +216,8 @@ class FieldSpec private constructor(
     // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
     val keep = from.str("where")
     return options + rows.map { ScreenContext.withItem(context, it) }.filter { ScreenValues.condition(keep, it) }.map { scope ->
-      ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope)
+      // A label built from parts that may be empty reads clean: runs of spaces become one, and the ends are trimmed.
+      ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope).replace(Regex(" {2,}"), " ").trim()
     }
   }
 

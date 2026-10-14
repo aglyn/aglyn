@@ -228,6 +228,11 @@ public final class ScreenModel {
       let value = try await FirestoreLoads.document(reader, ScreenValues.render(doc, in: context))
       return (load.key, value, nil)
     }
+    if let id = load.orderZone {
+      guard let reader else { return (load.key, .null, nil) }
+      let hostID = ScreenValues.render("{site.id}", in: context)
+      return (load.key, try await FirestoreLoads.orderZone(reader, hostID: hostID, orderID: ScreenValues.render(id, in: context)), nil)
+    }
     if let feature = load.entitlement {
       guard let reader else { return (load.key, .null, nil) }
       return (load.key, try await FirestoreLoads.entitlement(reader, feature: feature, orgID: ScreenValues.render("{org.id}", in: context)), nil)

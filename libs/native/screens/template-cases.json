@@ -89,7 +89,23 @@
         "day": 1791590400000,
         "recent": 0,
         "one": 1,
-        "slash": "/"
+        "slash": "/",
+        "rates": [
+          {
+            "id": "a",
+            "badges": [
+              "fastest"
+            ]
+          },
+          {
+            "id": "b",
+            "badges": [
+              "cheapest",
+              "best_value"
+            ]
+          }
+        ],
+        "cheap": "cheapest"
       },
       "qty": [
         2,
@@ -350,6 +366,22 @@
     {
       "template": "{data.members.-1.role}",
       "expect": "editor"
+    },
+    {
+      "template": "{data.stub.day:clock}",
+      "expect": "12:00 AM"
+    },
+    {
+      "template": "{data.stub.nothing:clock}",
+      "expect": ""
+    },
+    {
+      "template": "{data.stub.rates[badges~=data.stub.cheap].id}",
+      "expect": "b"
+    },
+    {
+      "template": "{data.stub.rates[badges~=data.hostKey].id|'none'}",
+      "expect": "none"
     }
   ],
   "url": [

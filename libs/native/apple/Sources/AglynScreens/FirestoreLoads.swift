@@ -69,6 +69,50 @@ enum FirestoreLoads {
     ])
   }
 
+  /// One order as an order widget is handed it (the console's `consoleOrderZoneOrder`): the stored order, and for each line
+  /// its units, how many shipped and how many are left, whether it ships at all, whether the order has anything left to
+  /// ship or anything shipped to bring back, and its number and test mode, all worked out by the ported figures.
+  @MainActor
+  static func orderZone(_ reader: FirestoreReader, hostID: String, orderID: String) async throws -> JSONValue {
+    guard let doc = try await rawDocument(reader, "hosts/\(hostID)/orders/\(orderID)") else { return .null }
+    let order = liftLegacyOrder((try? decodeJSONFields(HostOrder.self, doc.data)) ?? HostOrder())
+    let states = orderLineFulfillmentStates(order)
+    var record: [String: JSONValue] = [:]
+    if case .object(let stored) = json(doc) { record = stored }
+    if let data = try? JSONEncoder().encode(order), case .object(let lifted)? = JSONValue.decode(data) {
+      record.merge(lifted) { _, new in new }
+    }
+    var lines: [JSONValue] = []
+    if case .array(let items)? = record["lineItems"] {
+      for (index, line) in items.enumerated() {
+        var row: [String: JSONValue] = [:]
+        if case .object(let fields) = line { row = fields }
+        let state = states.indices.contains(index) ? states[index] : nil
+        row["lineItemId"] = .number(Double(index))
+        row["quantity"] = .number(Double(state?.quantity ?? 0))
+        row["fulfilledQuantity"] = .number(Double(state?.fulfilledQuantity ?? 0))
+        row["remainingQuantity"] = .number(Double(state?.remainingQuantity ?? 0))
+        row["requiresShipping"] = .bool(state?.requiresShipping ?? true)
+        lines.append(.object(row))
+      }
+    }
+    record["id"] = .string(doc.id)
+    record["number"] = .string(formatOrderNumber(order, docId: doc.id))
+    record["currency"] = .string("USD")
+    record["lines"] = .array(lines)
+    record["shipLines"] = .array(lines.filter { $0["requiresShipping"] == .bool(true) })
+    record["shippable"] = .bool(states.contains { $0.requiresShipping && $0.remainingQuantity > 0 })
+    record["returnable"] = .bool(states.contains { $0.requiresShipping && $0.fulfilledQuantity > 0 })
+    record["testMode"] = .bool(orderIsTestMode(order, docID: doc.id, livemode: doc.bool("livemode")))
+    record["fulfillmentMethod"] = .string(record["fulfillmentMethod"]?.stringValue ?? "shipping")
+    // Where a pickup or a local delivery stands; a status the order does not hold reads as where each starts.
+    let pickedStatus = record["pickup"]?["status"]?.stringValue ?? ""
+    record["pickupStatus"] = .string(["preparing", "ready", "picked_up"].contains(pickedStatus) ? pickedStatus : "preparing")
+    let deliveryStatus = record["localDelivery"]?["status"]?.stringValue ?? ""
+    record["deliveryStatus"] = .string(["scheduled", "out_for_delivery", "delivered", "failed"].contains(deliveryStatus) ? deliveryStatus : "scheduled")
+    return .object(record)
+  }
+
   @MainActor
   private static func rawDocument(_ reader: FirestoreReader, _ path: String) async throws -> FirestoreDocument? {
     let doc: FirestoreDocument? = try await withCheckedThrowingContinuation { continuation in

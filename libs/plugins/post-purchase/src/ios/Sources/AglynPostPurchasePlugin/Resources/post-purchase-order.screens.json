@@ -1,0 +1,138 @@
+{
+  "$comment": "Package protection, followed parcels and the Narvar hand-off on one order, in the order's services. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "post-purchase.order",
+      "title": "Tracking and protection",
+      "label": "Tracking and protection",
+      "icon": "shield|shield",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "vendors": [
+          {
+            "id": "aftership",
+            "label": "AfterShip"
+          },
+          {
+            "id": "route",
+            "label": "Route"
+          },
+          {
+            "id": "narvar",
+            "label": "Narvar"
+          }
+        ]
+      },
+      "load": {
+        "avail": {
+          "optional": true,
+          "url": "/api/post-purchase/availability?hostId={site.id}"
+        },
+        "view": {
+          "url": "/api/post-purchase/order?hostId={site.id}&recordId={params.orderId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "off",
+          "tone": "info",
+          "when": "data.avail.available == false",
+          "text": "Package tracking and protection are not set up on this site."
+        },
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "data.avail.available != false && !data.view.order.protection && !data.view.order.trackedParcels.0 && !data.view.order.narvar",
+          "text": "Nothing is followed or protected on this order."
+        },
+        {
+          "type": "fields",
+          "id": "protection",
+          "when": "data.view.order.protection",
+          "title": "Package protection",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Covered",
+              "chip": true,
+              "tone": "success",
+              "when": "data.view.order.protection.status == registered"
+            },
+            {
+              "label": "Status",
+              "value": "Opening",
+              "chip": true,
+              "tone": "info",
+              "when": "data.view.order.protection.status == registering"
+            },
+            {
+              "label": "Status",
+              "value": "Canceled",
+              "chip": true,
+              "tone": "neutral",
+              "when": "data.view.order.protection.status == cancelled"
+            },
+            {
+              "label": "Status",
+              "value": "Needs attention",
+              "chip": true,
+              "tone": "error",
+              "when": "data.view.order.protection.status == failed"
+            },
+            {
+              "label": "Paid by the buyer",
+              "value": "{data.view.order.protection.premiumCents:cents}"
+            },
+            {
+              "label": "Route policy",
+              "value": "{data.view.order.protection.policyId}",
+              "when": "data.view.order.protection.policyId"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "protectionError",
+          "tone": "warning",
+          "when": "data.view.order.protection.error",
+          "text": "{data.view.order.protection.error}"
+        },
+        {
+          "type": "list",
+          "id": "parcels",
+          "when": "data.view.order.trackedParcels.0",
+          "title": "Parcels",
+          "items": "data.view.order.trackedParcels",
+          "primary": "{item.trackingNumber}",
+          "secondary": "Followed by {const.vendors[id=item.vendor].label}",
+          "icon": "shippingbox|local_shipping"
+        },
+        {
+          "type": "fields",
+          "id": "narvar",
+          "when": "data.view.order.narvar && !data.view.order.narvar.error",
+          "title": "Narvar",
+          "rows": [
+            {
+              "label": "Sent",
+              "value": "{data.view.order.narvar.syncedAtMs:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "narvarError",
+          "tone": "warning",
+          "when": "data.view.order.narvar.error",
+          "text": "Narvar: {data.view.order.narvar.error}"
+        }
+      ]
+    }
+  ]
+}

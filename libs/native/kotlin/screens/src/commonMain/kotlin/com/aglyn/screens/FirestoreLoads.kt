@@ -7,11 +7,14 @@ import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
+import com.aglyn.core.decode
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 /**
  * The reads a spec makes straight from Firestore, under the same rules the
@@ -44,6 +47,47 @@ internal object FirestoreLoads {
       "label" to (com.aglyn.core.PlanFeatureDefaults.grantedFrom[feature]?.let { JsonPrimitive(it) } ?: JsonNull),
     ),
   )
+
+  /**
+   * One order as an order widget is handed it (the console's `consoleOrderZoneOrder`): the stored order, and for each line
+   * its units, how many shipped and how many are left, whether it ships at all, whether the order has anything left to
+   * ship or anything shipped to bring back, and its number and test mode, all worked out by the ported figures.
+   */
+  suspend fun orderZone(reader: FirestoreReader, hostId: String, orderId: String): JsonElement {
+    val doc = reader.get("hosts/$hostId/orders/$orderId") ?: return JsonNull
+    val order = com.aglyn.contracts.liftLegacyOrder(doc.decode(com.aglyn.contracts.HostOrder.serializer()) ?: com.aglyn.contracts.HostOrder())
+    val states = com.aglyn.contracts.orderLineFulfillmentStates(order)
+    val stored = (json(doc) as? JsonObject) ?: JsonObject(emptyMap())
+    val lifted = com.aglyn.core.FirestoreDecoding.encodeToJsonElement(com.aglyn.contracts.HostOrder.serializer(), order) as? JsonObject ?: JsonObject(emptyMap())
+    val lines = (lifted["lineItems"] as? JsonArray).orEmpty().mapIndexed { index, line ->
+      val state = states.getOrNull(index)
+      JsonObject(
+        ((line as? JsonObject) ?: JsonObject(emptyMap())) + mapOf(
+          "lineItemId" to JsonPrimitive(index),
+          "quantity" to JsonPrimitive(state?.quantity ?: 0L),
+          "fulfilledQuantity" to JsonPrimitive(state?.fulfilledQuantity ?: 0L),
+          "remainingQuantity" to JsonPrimitive(state?.remainingQuantity ?: 0L),
+          "requiresShipping" to JsonPrimitive(state?.requiresShipping ?: true),
+        ),
+      )
+    }
+    return JsonObject(
+      stored + lifted + mapOf(
+        "id" to JsonPrimitive(doc.id),
+        "number" to JsonPrimitive(com.aglyn.contracts.formatOrderNumber(order, doc.id)),
+        "currency" to JsonPrimitive("USD"),
+        "lines" to JsonArray(lines),
+        "shipLines" to JsonArray(lines.filter { (it.jsonObject["requiresShipping"] as? JsonPrimitive)?.content == "true" }),
+        "shippable" to JsonPrimitive(states.any { it.requiresShipping && it.remainingQuantity > 0 }),
+        "returnable" to JsonPrimitive(states.any { it.requiresShipping && it.fulfilledQuantity > 0 }),
+        "testMode" to JsonPrimitive(com.aglyn.contracts.orderIsTestMode(order, doc.id, doc.data["livemode"] as? Boolean)),
+        "fulfillmentMethod" to JsonPrimitive(((stored["fulfillmentMethod"] as? JsonPrimitive)?.contentOrNull) ?: "shipping"),
+        // Where a pickup or a local delivery stands; a status the order does not hold reads as where each starts.
+        "pickupStatus" to JsonPrimitive(((stored["pickup"] as? JsonObject)?.get("status") as? JsonPrimitive)?.contentOrNull?.takeIf { it in listOf("preparing", "ready", "picked_up") } ?: "preparing"),
+        "deliveryStatus" to JsonPrimitive(((stored["localDelivery"] as? JsonObject)?.get("status") as? JsonPrimitive)?.contentOrNull?.takeIf { it in listOf("scheduled", "out_for_delivery", "delivered", "failed") } ?: "scheduled"),
+      ),
+    )
+  }
 
   /** `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. */
   suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement): JsonElement {

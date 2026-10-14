@@ -74,6 +74,9 @@ import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.space
 
 const val COMMERCE_ORDERS_SCREEN = "commerce.orders"
+
+/** The spec screen with this order's pickup and delivery steps, its returns and the services other plugins add. */
+const val COMMERCE_ORDER_SERVICES_SCREEN = "commerce.orderServices"
 const val COMMERCE_ORDER_SCREEN = "commerce.order"
 
 /** The console's chip color for a status, as a kit tone. */
@@ -209,7 +212,7 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
         EmptyState("This order is gone", body = "It may have been removed in the console.", icon = AglynIcons.named("receipt"))
       } else {
         val detail = orderDetail(doc)
-        OrderDetailContent(detail, actions)
+        OrderDetailContent(detail, actions) { context.navigate(COMMERCE_ORDER_SERVICES_SCREEN, mapOf("orderId" to orderId)) }
         OrderDialogs(detail, actions)
       }
     }
@@ -217,7 +220,7 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
 }
 
 @Composable
-private fun OrderDetailContent(detail: OrderDetail, actions: OrderActionsModel) {
+private fun OrderDetailContent(detail: OrderDetail, actions: OrderActionsModel, openServices: () -> Unit) {
   val order = detail.order
   val totals = order.totals
   val uriHandler = LocalUriHandler.current
@@ -299,6 +302,18 @@ private fun OrderDetailContent(detail: OrderDetail, actions: OrderActionsModel) 
     }
 
     order.note?.takeIf { it.isNotBlank() }?.let { note -> SectionCard("Note") { Text(note) } }
+
+    // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
+    SectionCard(null) {
+      AglynListItem(
+        title = "Pickup, returns and services",
+        supporting = "Pickup and delivery steps, returns, labels and connected services",
+        icon = AglynIcons.named("extension"),
+        trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+        onClick = openServices,
+        modifier = Modifier.testTag("order-more"),
+      )
+    }
 
     detail.restock?.let { check -> RestockCard(detail, check, actions) }
 

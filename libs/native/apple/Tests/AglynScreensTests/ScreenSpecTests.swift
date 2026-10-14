@@ -278,6 +278,28 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ScreenValues.render("{data.accounts.*.name}", in: context), "Sales, Main bank")
   }
 
+  /// A plugin's package bundles every spec file it has: a file left out of `resources` compiles and tests green, and
+  /// its screens are simply missing from the app.
+  func testEveryPluginSpecFileIsBundledByItsPackage() throws {
+    let plugins = Self.screensDir.appendingPathComponent("../../plugins").standardizedFileURL
+    let dirs = try FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil)
+    var checked = 0
+    for dir in dirs {
+      let package = dir.appendingPathComponent("src/ios/Package.swift")
+      guard let manifest = try? String(contentsOf: package, encoding: .utf8) else { continue }
+      let sources = dir.appendingPathComponent("src/ios/Sources")
+      for target in (try? FileManager.default.contentsOfDirectory(at: sources, includingPropertiesForKeys: nil)) ?? [] {
+        let resources = target.appendingPathComponent("Resources")
+        for file in (try? FileManager.default.contentsOfDirectory(at: resources, includingPropertiesForKeys: nil)) ?? []
+        where file.lastPathComponent.hasSuffix(".screens.json") {
+          checked += 1
+          XCTAssertTrue(manifest.contains("\"Resources/\(file.lastPathComponent)\""), "\(package.path) does not bundle \(file.lastPathComponent)")
+        }
+      }
+    }
+    XCTAssertGreaterThan(checked, 20)
+  }
+
   /// A report picks one of the last twelve months, newest first, each ending where the next begins.
   func testTheLastTwelveMonthsRunNewestFirstWithoutGaps() throws {
     let now = ScreenSession.now(Date(timeIntervalSince1970: 1_792_000_000))

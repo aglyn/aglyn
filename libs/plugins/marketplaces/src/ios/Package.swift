@@ -29,7 +29,7 @@ let package = Package(
         .product(name: "AglynPluginHost", package: "apple"),
         .product(name: "AglynScreens", package: "apple"),
       ],
-      resources: [.copy("Resources/marketplaces.screens.json")]
+      resources: [.copy("Resources/marketplaces-order.screens.json"), .copy("Resources/marketplaces.screens.json")]
     ),
     .testTarget(name: "AglynMarketplacesPluginTests", dependencies: ["AglynMarketplacesPlugin"]),
   ]

@@ -1,0 +1,704 @@
+{
+  "$comment": "The shipping labels of one order, in the order's services: the labels bought, voiding one, checking the address, buying an outbound or return label from a rate, and the customs invoice. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "shipping.order",
+      "title": "Shipping labels",
+      "label": "Shipping labels",
+      "icon": "printer|print",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "statuses": [
+          {
+            "id": "purchased",
+            "label": "Label bought"
+          },
+          {
+            "id": "purchasing",
+            "label": "Buying…"
+          },
+          {
+            "id": "failed",
+            "label": "Failed"
+          },
+          {
+            "id": "void_pending",
+            "label": "Refund pending"
+          },
+          {
+            "id": "voided",
+            "label": "Voided"
+          },
+          {
+            "id": "void_rejected",
+            "label": "Void refused"
+          }
+        ],
+        "tracking": [
+          {
+            "id": "pre_transit",
+            "label": "Label created"
+          },
+          {
+            "id": "in_transit",
+            "label": "In transit"
+          },
+          {
+            "id": "out_for_delivery",
+            "label": "Out for delivery"
+          },
+          {
+            "id": "delivered",
+            "label": "Delivered"
+          },
+          {
+            "id": "exception",
+            "label": "Delivery problem"
+          },
+          {
+            "id": "returned",
+            "label": "Returned to sender"
+          }
+        ],
+        "kinds": {
+          "outbound": "outbound",
+          "return": "return"
+        },
+        "cheapest": "cheapest"
+      },
+      "load": {
+        "order": {
+          "orderZone": "{params.orderId}"
+        },
+        "avail": {
+          "optional": true,
+          "url": "/api/shipping/availability?hostId={site.id}"
+        },
+        "labels": {
+          "optional": true,
+          "url": "/api/shipping/labels?hostId={site.id}&recordId={params.orderId}"
+        },
+        "settings": {
+          "optional": true,
+          "url": "/api/shipping/settings?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "off",
+          "tone": "info",
+          "when": "data.avail.available == false",
+          "text": "Shipping labels are not set up on this site."
+        },
+        {
+          "type": "notice",
+          "id": "invalid",
+          "tone": "error",
+          "when": "data.labels.addressCheck.verdict == invalid && data.order.shippable",
+          "text": "The carrier cannot deliver to this order’s address. {data.labels.addressCheck.messages}"
+        },
+        {
+          "type": "notice",
+          "id": "corrected",
+          "tone": "warning",
+          "when": "data.labels.addressCheck.verdict == corrected && data.order.shippable",
+          "text": "The carrier suggests a corrected address for this order: {data.labels.addressCheck.suggested.line1}, {data.labels.addressCheck.suggested.city}, {data.labels.addressCheck.suggested.state} {data.labels.addressCheck.suggested.postalCode}."
+        },
+        {
+          "type": "list",
+          "id": "labels",
+          "when": "data.avail.available",
+          "title": "Labels",
+          "items": "data.labels.labels",
+          "empty": "No labels bought for this order yet.",
+          "icon": "printer|print",
+          "primary": "{item.serviceLabel} {item.trackingNumber}",
+          "secondary": "{item.chargeCents|item.costCents:cents/item.currency}",
+          "tertiary": "{item.recordShipmentRefusal} {item.billingFailure}",
+          "badges": [
+            {
+              "text": "{const.statuses[id=item.status].label|item.status}",
+              "tone": "neutral"
+            },
+            {
+              "text": "Return",
+              "tone": "neutral",
+              "when": "item.kind == return"
+            },
+            {
+              "text": "{const.tracking[id=item.trackingStatus].label}",
+              "tone": "neutral",
+              "when": "item.trackingStatus"
+            },
+            {
+              "text": "Bought, but the order was not updated",
+              "tone": "warning",
+              "when": "item.recordShipmentRefusal"
+            },
+            {
+              "text": "Cost goes on your next invoice",
+              "tone": "neutral",
+              "when": "item.billingFailure"
+            }
+          ],
+          "actions": [
+            {
+              "id": "print",
+              "label": "Print",
+              "icon": "printer|print",
+              "when": "item.labelUrl && item.status == purchased",
+              "link": "{item.labelUrl}"
+            },
+            {
+              "id": "invoice",
+              "label": "Customs invoice",
+              "icon": "description|description",
+              "when": "item.commercialInvoiceUrl && item.status == purchased",
+              "link": "{item.commercialInvoiceUrl}"
+            },
+            {
+              "id": "void",
+              "label": "Void",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "item.status == purchased,void_rejected",
+              "confirm": "Void this label? The carrier is asked to refund it.",
+              "url": "/api/shipping/labels/void",
+              "body": {
+                "hostId": "{site.id}",
+                "labelId": "{item.labelId}"
+              },
+              "success": "Void requested"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "buy",
+          "when": "data.avail.available",
+          "items": [
+            {
+              "id": "buy",
+              "label": "Buy label",
+              "icon": "printer|print",
+              "when": "data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict != corrected",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "data.order.shipLines",
+                    "each": [
+                      {
+                        "key": "qty_{item.lineItemId}",
+                        "label": "{item.name} (of {item.remainingQuantity})",
+                        "kind": "number",
+                        "integer": true,
+                        "min": 0,
+                        "max": "{item.remainingQuantity}",
+                        "initial": "{item.remainingQuantity}"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "presetId",
+                  "label": "Box",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.settings.settings.defaultPackageId|data.settings.settings.packages.0.id}",
+                  "options": [
+                    {
+                      "value": "custom",
+                      "label": "Another size"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.settings.settings.packages",
+                    "value": "{item.id}",
+                    "label": "{item.name} ({item.lengthCm} × {item.widthCm} × {item.heightCm} cm)"
+                  }
+                },
+                {
+                  "key": "lengthCm",
+                  "label": "Length (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "widthCm",
+                  "label": "Width (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "heightCm",
+                  "label": "Height (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "weight",
+                  "label": "Weight (g)",
+                  "kind": "number",
+                  "min": 1,
+                  "help": "Summed from the products; change it to the scale’s reading."
+                }
+              ],
+              "url": "/api/shipping/rates",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}",
+                "kind": "outbound",
+                "lines": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "qty_",
+                    "key": "lineIndex",
+                    "value": "quantity",
+                    "skipEmpty": true
+                  }
+                },
+                "package": {
+                  "presetId": "{form.presetId}",
+                  "lengthCm": "{form.lengthCm}",
+                  "widthCm": "{form.widthCm}",
+                  "heightCm": "{form.heightCm}",
+                  "weightGrams": "{form.weight}"
+                }
+              },
+              "then": {
+                "label": "Buy label",
+                "prompt": [
+                  {
+                    "key": "rateId",
+                    "label": "Service",
+                    "kind": "select",
+                    "required": true,
+                    "initial": "{response.rates[badges~=const.cheapest].rateId|response.rates.0.rateId}",
+                    "options": [],
+                    "optionsFrom": {
+                      "items": "response.rates",
+                      "value": "{item.rateId}",
+                      "label": "{item.label} · {item.amountCents:cents/item.currency} {item.estimatedDays:plural/day} {item.badges}"
+                    },
+                    "help": "{response.messages.0}"
+                  }
+                ],
+                "url": "/api/shipping/labels/buy",
+                "body": {
+                  "hostId": "{site.id}",
+                  "recordId": "{params.orderId}",
+                  "shipmentId": "{response.shipmentId}",
+                  "rateId": "{form.rateId}",
+                  "attemptKey": "{response.shipmentId}-{form.rateId}"
+                },
+                "open": "label.labelUrl",
+                "success": "Label bought"
+              }
+            },
+            {
+              "id": "buyCorrected",
+              "label": "Buy label (suggested address)",
+              "icon": "printer|print",
+              "when": "data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict == corrected",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "data.order.shipLines",
+                    "each": [
+                      {
+                        "key": "qty_{item.lineItemId}",
+                        "label": "{item.name} (of {item.remainingQuantity})",
+                        "kind": "number",
+                        "integer": true,
+                        "min": 0,
+                        "max": "{item.remainingQuantity}",
+                        "initial": "{item.remainingQuantity}"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "presetId",
+                  "label": "Box",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.settings.settings.defaultPackageId|data.settings.settings.packages.0.id}",
+                  "options": [
+                    {
+                      "value": "custom",
+                      "label": "Another size"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.settings.settings.packages",
+                    "value": "{item.id}",
+                    "label": "{item.name} ({item.lengthCm} × {item.widthCm} × {item.heightCm} cm)"
+                  }
+                },
+                {
+                  "key": "lengthCm",
+                  "label": "Length (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "widthCm",
+                  "label": "Width (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "heightCm",
+                  "label": "Height (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "weight",
+                  "label": "Weight (g)",
+                  "kind": "number",
+                  "min": 1,
+                  "help": "Summed from the products; change it to the scale’s reading."
+                }
+              ],
+              "url": "/api/shipping/rates",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}",
+                "kind": "outbound",
+                "lines": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "qty_",
+                    "key": "lineIndex",
+                    "value": "quantity",
+                    "skipEmpty": true
+                  }
+                },
+                "package": {
+                  "presetId": "{form.presetId}",
+                  "lengthCm": "{form.lengthCm}",
+                  "widthCm": "{form.widthCm}",
+                  "heightCm": "{form.heightCm}",
+                  "weightGrams": "{form.weight}"
+                },
+                "shipTo": "{data.labels.addressCheck.suggested}"
+              },
+              "then": {
+                "label": "Buy label (suggested address)",
+                "prompt": [
+                  {
+                    "key": "rateId",
+                    "label": "Service",
+                    "kind": "select",
+                    "required": true,
+                    "initial": "{response.rates[badges~=const.cheapest].rateId|response.rates.0.rateId}",
+                    "options": [],
+                    "optionsFrom": {
+                      "items": "response.rates",
+                      "value": "{item.rateId}",
+                      "label": "{item.label} · {item.amountCents:cents/item.currency} {item.estimatedDays:plural/day} {item.badges}"
+                    },
+                    "help": "{response.messages.0}"
+                  }
+                ],
+                "url": "/api/shipping/labels/buy",
+                "body": {
+                  "hostId": "{site.id}",
+                  "recordId": "{params.orderId}",
+                  "shipmentId": "{response.shipmentId}",
+                  "rateId": "{form.rateId}",
+                  "attemptKey": "{response.shipmentId}-{form.rateId}"
+                },
+                "open": "label.labelUrl",
+                "success": "Label bought"
+              }
+            },
+            {
+              "id": "buyAsIs",
+              "label": "Buy label (address as given)",
+              "icon": "printer|print",
+              "when": "data.order.shippable && data.order.shippingAddress && data.labels.addressCheck.verdict == corrected",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "data.order.shipLines",
+                    "each": [
+                      {
+                        "key": "qty_{item.lineItemId}",
+                        "label": "{item.name} (of {item.remainingQuantity})",
+                        "kind": "number",
+                        "integer": true,
+                        "min": 0,
+                        "max": "{item.remainingQuantity}",
+                        "initial": "{item.remainingQuantity}"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "presetId",
+                  "label": "Box",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.settings.settings.defaultPackageId|data.settings.settings.packages.0.id}",
+                  "options": [
+                    {
+                      "value": "custom",
+                      "label": "Another size"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.settings.settings.packages",
+                    "value": "{item.id}",
+                    "label": "{item.name} ({item.lengthCm} × {item.widthCm} × {item.heightCm} cm)"
+                  }
+                },
+                {
+                  "key": "lengthCm",
+                  "label": "Length (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "widthCm",
+                  "label": "Width (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "heightCm",
+                  "label": "Height (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "weight",
+                  "label": "Weight (g)",
+                  "kind": "number",
+                  "min": 1,
+                  "help": "Summed from the products; change it to the scale’s reading."
+                }
+              ],
+              "url": "/api/shipping/rates",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}",
+                "kind": "outbound",
+                "lines": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "qty_",
+                    "key": "lineIndex",
+                    "value": "quantity",
+                    "skipEmpty": true
+                  }
+                },
+                "package": {
+                  "presetId": "{form.presetId}",
+                  "lengthCm": "{form.lengthCm}",
+                  "widthCm": "{form.widthCm}",
+                  "heightCm": "{form.heightCm}",
+                  "weightGrams": "{form.weight}"
+                }
+              },
+              "then": {
+                "label": "Buy label (address as given)",
+                "prompt": [
+                  {
+                    "key": "rateId",
+                    "label": "Service",
+                    "kind": "select",
+                    "required": true,
+                    "initial": "{response.rates[badges~=const.cheapest].rateId|response.rates.0.rateId}",
+                    "options": [],
+                    "optionsFrom": {
+                      "items": "response.rates",
+                      "value": "{item.rateId}",
+                      "label": "{item.label} · {item.amountCents:cents/item.currency} {item.estimatedDays:plural/day} {item.badges}"
+                    },
+                    "help": "{response.messages.0}"
+                  }
+                ],
+                "url": "/api/shipping/labels/buy",
+                "body": {
+                  "hostId": "{site.id}",
+                  "recordId": "{params.orderId}",
+                  "shipmentId": "{response.shipmentId}",
+                  "rateId": "{form.rateId}",
+                  "attemptKey": "{response.shipmentId}-{form.rateId}"
+                },
+                "open": "label.labelUrl",
+                "success": "Label bought"
+              }
+            },
+            {
+              "id": "buyReturn",
+              "label": "Return label",
+              "icon": "printer|print",
+              "when": "data.order.returnable",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "data.order.shipLines",
+                    "each": [
+                      {
+                        "key": "qty_{item.lineItemId}",
+                        "label": "{item.name} (of {item.fulfilledQuantity})",
+                        "kind": "number",
+                        "integer": true,
+                        "min": 0,
+                        "max": "{item.fulfilledQuantity}",
+                        "initial": "{item.fulfilledQuantity}"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "presetId",
+                  "label": "Box",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.settings.settings.defaultPackageId|data.settings.settings.packages.0.id}",
+                  "options": [
+                    {
+                      "value": "custom",
+                      "label": "Another size"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.settings.settings.packages",
+                    "value": "{item.id}",
+                    "label": "{item.name} ({item.lengthCm} × {item.widthCm} × {item.heightCm} cm)"
+                  }
+                },
+                {
+                  "key": "lengthCm",
+                  "label": "Length (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "widthCm",
+                  "label": "Width (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "heightCm",
+                  "label": "Height (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "weight",
+                  "label": "Weight (g)",
+                  "kind": "number",
+                  "min": 1,
+                  "help": "Summed from the products; change it to the scale’s reading."
+                }
+              ],
+              "url": "/api/shipping/rates",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}",
+                "kind": "return",
+                "lines": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "qty_",
+                    "key": "lineIndex",
+                    "value": "quantity",
+                    "skipEmpty": true
+                  }
+                },
+                "package": {
+                  "presetId": "{form.presetId}",
+                  "lengthCm": "{form.lengthCm}",
+                  "widthCm": "{form.widthCm}",
+                  "heightCm": "{form.heightCm}",
+                  "weightGrams": "{form.weight}"
+                }
+              },
+              "then": {
+                "label": "Return label",
+                "prompt": [
+                  {
+                    "key": "rateId",
+                    "label": "Service",
+                    "kind": "select",
+                    "required": true,
+                    "initial": "{response.rates[badges~=const.cheapest].rateId|response.rates.0.rateId}",
+                    "options": [],
+                    "optionsFrom": {
+                      "items": "response.rates",
+                      "value": "{item.rateId}",
+                      "label": "{item.label} · {item.amountCents:cents/item.currency} {item.estimatedDays:plural/day} {item.badges}"
+                    },
+                    "help": "{response.messages.0}"
+                  }
+                ],
+                "url": "/api/shipping/labels/buy",
+                "body": {
+                  "hostId": "{site.id}",
+                  "recordId": "{params.orderId}",
+                  "shipmentId": "{response.shipmentId}",
+                  "rateId": "{form.rateId}",
+                  "attemptKey": "{response.shipmentId}-{form.rateId}"
+                },
+                "open": "label.labelUrl",
+                "success": "Label bought"
+              }
+            },
+            {
+              "id": "check",
+              "label": "Check address",
+              "icon": "location_on|location_on",
+              "when": "data.order.shippingAddress && data.order.shippable",
+              "url": "/api/shipping/address/validate",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}"
+              },
+              "instead": [
+                {
+                  "when": "response.check.verdict == valid",
+                  "title": "Address",
+                  "text": "The carrier can deliver to this address."
+                },
+                {
+                  "when": "response.check.verdict == invalid",
+                  "title": "Address",
+                  "text": "The carrier cannot deliver to this address. {response.check.messages}"
+                },
+                {
+                  "when": "response.check.verdict == corrected",
+                  "title": "Address",
+                  "text": "The carrier suggests: {response.check.suggested.line1}, {response.check.suggested.city}, {response.check.suggested.state} {response.check.suggested.postalCode}"
+                }
+              ],
+              "success": "Checked"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -472,7 +472,7 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
@@ -2987,7 +2987,7 @@
             "shipping.own",
             "shipping.connectOwn",
             "shipping.spend"
-          ]
+          , "shipping.order", "shipping.returnLabel"]
         }
       },
       "package": "@aglyn/plugins-shipping",
@@ -3053,7 +3053,7 @@
         "contributes": {
           "screens": [
             "post-purchase.service"
-          ]
+          , "post-purchase.order"]
         }
       },
       "package": "@aglyn/plugins-post-purchase",
@@ -3100,7 +3100,7 @@
         "contributes": {
           "screens": [
             "review-platforms.service"
-          ]
+          , "review-platforms.order"]
         }
       },
       "package": "@aglyn/plugins-review-platforms",
@@ -3430,7 +3430,7 @@
           "screens": [
             "fulfillment-networks.service",
             "fulfillment-networks.network"
-          ]
+          , "fulfillment-networks.order"]
         }
       },
       "package": "@aglyn/plugins-fulfillment-networks",
@@ -3492,7 +3492,7 @@
         "contributes": {
           "screens": [
             "couriers.service"
-          ]
+          , "couriers.order"]
         }
       },
       "package": "@aglyn/plugins-couriers",
@@ -3556,7 +3556,7 @@
           "screens": [
             "marketplaces.service",
             "marketplaces.marketplace"
-          ]
+          , "marketplaces.order"]
         }
       },
       "package": "@aglyn/plugins-marketplaces",
@@ -3622,7 +3622,7 @@
             "print-on-demand.catalog",
             "print-on-demand.imported",
             "print-on-demand.orders"
-          ]
+          , "print-on-demand.order"]
         }
       },
       "package": "@aglyn/plugins-print-on-demand",
@@ -3690,7 +3690,7 @@
         "contributes": {
           "screens": [
             "inventory-sync.service"
-          ]
+          , "inventory-sync.order"]
         }
       },
       "package": "@aglyn/plugins-inventory-sync",

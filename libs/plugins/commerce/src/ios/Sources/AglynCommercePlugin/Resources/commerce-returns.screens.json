@@ -696,6 +696,16 @@
           "tertiary": "{item.atMs:datetime}",
           "count": false,
           "empty": "Nothing has happened on this return yet."
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "returnDetail",
+          "params": {
+            "returnId": "{params.returnId}",
+            "orderId": "{data.ret.orderId}"
+          },
+          "title": "Services"
         }
       ]
     },

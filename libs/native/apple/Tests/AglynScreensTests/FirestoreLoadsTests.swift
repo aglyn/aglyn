@@ -110,6 +110,39 @@ final class FirestoreLoadsTests: XCTestCase {
     XCTAssertEqual(unknown["label"], .null)
   }
 
+  /// An order is handed to a widget with what each line has shipped and what is left, as the Kotlin renderer's test holds.
+  @MainActor
+  func testAnOrderIsHandedToAWidgetWithItsLinesUnitsAndWhatIsLeftToShipOrBringBack() async throws {
+    let reader = Reader()
+    reader.docs["hosts/h1/orders/ord1234567"] = [
+      "status": "paid", "number": 1042, "livemode": true,
+      "shippingAddress": ["line1": "1 Main", "city": "Austin", "country": "US"],
+      "lineItems": [
+        ["productId": "p1", "name": "Mug", "quantity": 3, "unitAmountCents": 1000],
+        ["productId": "p2", "name": "Gift", "quantity": 1, "unitAmountCents": 500, "productType": "digital"],
+        ["productId": "p3", "name": "Tee", "quantity": 2, "unitAmountCents": 2000],
+      ],
+      "fulfillments": [["id": "f1", "atMs": 1, "status": "active", "lineItemIds": [0], "lines": [["lineItemId": 0, "quantity": 1]]]],
+    ]
+    let order = try await FirestoreLoads.orderZone(reader, hostID: "h1", orderID: "ord1234567")
+    XCTAssertEqual(order["number"]?.stringValue, "#1042")
+    XCTAssertEqual(order["id"]?.stringValue, "ord1234567")
+    let lines = ScreenValues.lookup("lines", in: order).array
+    XCTAssertEqual(lines.map { ScreenValues.text($0["quantity"]) }, ["3", "1", "2"])
+    XCTAssertEqual(lines.map { ScreenValues.text($0["fulfilledQuantity"]) }, ["1", "0", "0"])
+    XCTAssertEqual(lines.map { ScreenValues.text($0["remainingQuantity"]) }, ["2", "1", "2"])
+    XCTAssertEqual(lines.map { ScreenValues.text($0["requiresShipping"]) }, ["true", "false", "true"])
+    XCTAssertEqual(ScreenValues.lookup("shipLines", in: order).array.count, 2, "a digital line does not ship")
+    XCTAssertEqual(order["shippable"], .bool(true))
+    XCTAssertEqual(order["returnable"], .bool(true))
+    XCTAssertEqual(order["testMode"], .bool(false))
+    XCTAssertEqual(order["fulfillmentMethod"]?.stringValue, "shipping")
+    XCTAssertEqual(order["pickupStatus"]?.stringValue, "preparing")
+    reader.docs["hosts/h1/orders/missing"] = nil
+    let none = try await FirestoreLoads.orderZone(reader, hostID: "h1", orderID: "missing")
+    XCTAssertEqual(none, .null)
+  }
+
   /// A coupon "works through this day" on the device's own clock, as a browser's `Date.parse` of a zone-less time.
   func testADateCanBeTheDevicesOwnEndOfDay() throws {
     let body: JSONValue = ["$dateMs": ["value": "2026-11-30", "time": "23:59:59.999", "local": true]]

@@ -44,8 +44,14 @@ object ScreenValues {
         val segment = raw.substring(0, open)
         val inner = raw.substring(open + 1, raw.length - 1)
         if (segment.isNotEmpty()) current = step(current, segment)
+        val contains = inner.indexOf("~=")
         val equals = inner.indexOf('=')
-        if (equals >= 0) {
+        if (contains >= 0) {
+          // `rows[badges~=path]`: the first row whose list field holds the text at path.
+          val wanted = text(lookup(inner.substring(contains + 2), context))
+          val field = inner.substring(0, contains)
+          current = (current as? JsonArray)?.firstOrNull { row -> (lookup(field, row) as? JsonArray)?.any { text(it) == wanted } == true }
+        } else if (equals >= 0) {
           val wanted = text(lookup(inner.substring(equals + 1), context))
           val field = inner.substring(0, equals)
           current = (current as? JsonArray)?.firstOrNull { text(lookup(field, it)) == wanted }
@@ -519,6 +525,11 @@ object ScreenValues {
     return when (parts[0]) {
       "date" -> epochMillis(value)?.let { dateText(it, false) } ?: text(value)
       "datetime" -> epochMillis(value)?.let { dateText(it, true) } ?: text(value)
+      // A time of day alone: `3:05 PM`.
+      "clock" -> epochMillis(value)?.let { at ->
+        val (_, _, _, hour, minuteOfHour) = localParts(at, timeZone)
+        "${if (hour % 12 == 0) 12 else hour % 12}:${minuteOfHour.toString().padStart(2, '0')} ${if (hour < 12) "AM" else "PM"}"
+      } ?: text(value)
       "cents" -> number(value)?.let { amount ->
         val currency = if (parts.size > 1) text(lookup(parts[1], context)) else "USD"
         formatOrderMoney(round(amount), currency.ifEmpty { "USD" })
@@ -556,7 +567,7 @@ object ScreenValues {
       // `take/120`: at most that many characters.
       "take" -> text(value).take(parts.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE)
       // `plural/item`: the count (a list of numbers is their total, any other list its length) with its noun, `1 item` or `3 items`.
-      "plural" -> (if (value is JsonArray) (if (value.isNotEmpty() && value.all { number(it) != null }) value.sumOf { number(it) ?: 0.0 } else value.size.toDouble()) else number(value) ?: 0.0).let { count -> "${numberText(count)} ${parts.getOrElse(1) { "" }}${if (count == 1.0) "" else "s"}" }
+      "plural" -> if (value == null || value == JsonNull) "" else (if (value is JsonArray) (if (value.isNotEmpty() && value.all { number(it) != null }) value.sumOf { number(it) ?: 0.0 } else value.size.toDouble()) else number(value) ?: 0.0).let { count -> "${numberText(count)} ${parts.getOrElse(1) { "" }}${if (count == 1.0) "" else "s"}" }
       // `ordernumber/item.$id`: an order's number as `#1042`, else the last six characters of its id (`#A1B2C3`).
       "ordernumber" -> if (truthy(value)) "#${text(value)}" else parts.getOrNull(1)?.let { text(lookup(it, context)) }?.takeIf { it.isNotEmpty() }?.let { "#${it.takeLast(6).uppercase()}" } ?: "#\u2014"
       // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.

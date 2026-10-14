@@ -177,6 +177,22 @@ struct OrderDetailView: View {
         }
       }
 
+      // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
+      Section {
+        Button {
+          context.navigate("commerce.orderServices", ["orderId": orderID])
+        } label: {
+          AglynRow(
+            "Pickup, returns and services", subtitle: "Pickup and delivery steps, returns, labels and connected services",
+            systemImage: "puzzlepiece.extension"
+          ) {
+            Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+          }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("order-more")
+      }
+
       OrderAnnotationSections(context: context, orderID: orderID, order: order)
     }
     .formStyle(.grouped)

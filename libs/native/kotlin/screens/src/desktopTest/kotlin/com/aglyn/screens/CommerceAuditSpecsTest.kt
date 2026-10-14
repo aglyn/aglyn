@@ -89,7 +89,7 @@ class CommerceAuditSpecsTest : SpecTestBase() {
       ""","returnLabel":{"carrier":"USPS","trackingNumber":"9400","labelUrl":"https://l/x.pdf","trackingUrl":"https://t/9400","attachedAtMs":1},
          "restock":{"lines":[{"lineItemId":1,"quantity":1}],"locationId":"L1","atMs":1760000000000},"refundedAtMs":1760000000000,"refundCents":4200,"merchantNote":"Boxed" """,
     )
-    assertEquals(listOf("summary", "lines", "label", "labelLinks", "restocked", "refunded", "progress", "note", "timeline"), model.shown())
+    assertEquals(listOf("summary", "lines", "label", "labelLinks", "restocked", "refunded", "progress", "note", "timeline", "zone"), model.shown())
     assertEquals(listOf("printLabel", "track"), model.actionsShown("labelLinks"))
     assertEquals("https://l/x.pdf", ScreenValues.render(model.action("labelLinks", "printLabel").link!!, model.context))
     assertEquals("1× Mug", ScreenValues.render(model.block("restocked").string("primary")!!, model.row("data.ret.restock.lines")))

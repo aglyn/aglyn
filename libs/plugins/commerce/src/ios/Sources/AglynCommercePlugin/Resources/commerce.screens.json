@@ -181,6 +181,384 @@
       ]
     },
     {
+      "id": "commerce.orderServices",
+      "title": "Order {data.order.number}",
+      "label": "More for this order",
+      "subtitle": "Pickup and delivery, returns, labels and connected services",
+      "icon": "extension|extension",
+      "scope": "site",
+      "constants": {
+        "pickup": [
+          {
+            "id": "preparing",
+            "label": "Preparing"
+          },
+          {
+            "id": "ready",
+            "label": "Ready for pickup"
+          },
+          {
+            "id": "picked_up",
+            "label": "Picked up"
+          }
+        ],
+        "delivery": [
+          {
+            "id": "scheduled",
+            "label": "Scheduled"
+          },
+          {
+            "id": "out_for_delivery",
+            "label": "Out for delivery"
+          },
+          {
+            "id": "delivered",
+            "label": "Delivered"
+          },
+          {
+            "id": "failed",
+            "label": "Delivery failed"
+          }
+        ],
+        "flags": [
+          {
+            "id": "price-changed",
+            "label": "A price changed after the register cached it; the sale kept the price it was rung at"
+          },
+          {
+            "id": "unknown-product",
+            "label": "A product was deleted before the sale synced; the line kept what the receipt printed"
+          },
+          {
+            "id": "tax-differs",
+            "label": "The tax rung differs from the store’s rate now; the sale kept the tax it collected"
+          },
+          {
+            "id": "totals-restated",
+            "label": "The register’s totals did not add up; the server restated them from the lines"
+          },
+          {
+            "id": "discount-over-limit",
+            "label": "The discount is above this register’s limit"
+          },
+          {
+            "id": "cash-short",
+            "label": "The cash recorded is less than the total"
+          },
+          {
+            "id": "stock-short",
+            "label": "Stock went short: more was sold than the shelf held"
+          },
+          {
+            "id": "shift-closed",
+            "label": "Rung in a shift that closed before the sale synced; its Z report does not include it"
+          },
+          {
+            "id": "no-shift",
+            "label": "Rung with no shift open, on a site that requires one"
+          },
+          {
+            "id": "unknown-register",
+            "label": "The register it was rung on no longer exists"
+          },
+          {
+            "id": "register-over-cap",
+            "label": "The register it was rung on is over the plan’s register limit"
+          },
+          {
+            "id": "late-sync",
+            "label": "Synced more than a day after it was rung"
+          },
+          {
+            "id": "clock-adjusted",
+            "label": "The device clock was off; the sale is dated when it synced"
+          },
+          {
+            "id": "cashier-unverified",
+            "label": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member"
+          }
+        ],
+        "returnStatuses": [
+          {
+            "id": "requested",
+            "label": "Requested"
+          },
+          {
+            "id": "approved",
+            "label": "Approved"
+          },
+          {
+            "id": "declined",
+            "label": "Declined"
+          },
+          {
+            "id": "received",
+            "label": "Received"
+          },
+          {
+            "id": "refunded",
+            "label": "Refunded"
+          },
+          {
+            "id": "closed",
+            "label": "Closed"
+          }
+        ]
+      },
+      "load": {
+        "order": {
+          "orderZone": "{params.orderId}"
+        },
+        "returns": {
+          "query": {
+            "collection": "hosts/{site.id}/returns",
+            "where": [
+              [
+                "orderId",
+                "==",
+                "{params.orderId}"
+              ]
+            ],
+            "limit": 50
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "offline",
+          "tone": "info",
+          "when": "data.order.offline",
+          "text": "Rung while the register was offline. Rung {data.order.offline.soldAtMs:datetime}, synced {data.order.offline.syncedAtMs:datetime}."
+        },
+        {
+          "type": "list",
+          "id": "offlineStock",
+          "when": "data.order.offline.stockConflicts.0",
+          "title": "Checks",
+          "items": "data.order.offline.stockConflicts",
+          "icon": "warning|warning",
+          "primary": "{item.shortUnits} of {item.requested}× {item.name} not in stock"
+        },
+        {
+          "type": "list",
+          "id": "offlineFlags",
+          "when": "data.order.offline.flags.0",
+          "items": "data.order.offline.flags",
+          "filter": "item != stock-short",
+          "icon": "warning|warning",
+          "primary": "{const.flags[id=item].label|item}"
+        },
+        {
+          "type": "fields",
+          "id": "pickup",
+          "when": "data.order.fulfillmentMethod == pickup && data.order.pickup",
+          "title": "Pickup",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.pickup[id=data.order.pickupStatus].label}",
+              "chip": true
+            },
+            {
+              "label": "Where",
+              "value": "{data.order.pickup.locationName} {data.order.pickup.address}"
+            },
+            {
+              "label": "Collected by",
+              "value": "{data.order.pickup.pickedUpBy}",
+              "when": "data.order.pickup.pickedUpBy"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "delivery",
+          "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery",
+          "title": "Local delivery",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.delivery[id=data.order.deliveryStatus].label}",
+              "chip": true
+            },
+            {
+              "label": "Window",
+              "value": "{data.order.localDelivery.windowLabel}",
+              "when": "data.order.localDelivery.windowLabel"
+            },
+            {
+              "label": "Zone",
+              "value": "{data.order.localDelivery.zoneName}",
+              "when": "data.order.localDelivery.zoneName"
+            },
+            {
+              "label": "Postal code",
+              "value": "{data.order.localDelivery.postalCode}",
+              "when": "data.order.localDelivery.postalCode"
+            },
+            {
+              "label": "Last attempt",
+              "value": "{data.order.localDelivery.failedReason}",
+              "when": "data.order.localDelivery.failedReason"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "outside",
+          "tone": "warning",
+          "when": "data.order.localDelivery.addressOutsideZone",
+          "text": "The address entered at payment is outside your delivery zones. Contact the buyer, or refund the delivery."
+        },
+        {
+          "type": "actions",
+          "id": "steps",
+          "items": [
+            {
+              "id": "ready",
+              "label": "Mark ready",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == pickup && data.order.pickup && data.order.status != cancelled,refunded,pending && data.order.pickupStatus == preparing",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "ready"
+              },
+              "success": "Marked ready — the buyer has been told"
+            },
+            {
+              "id": "pickedUp",
+              "label": "Picked up",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == pickup && data.order.pickup && data.order.status != cancelled,refunded,pending && data.order.pickupStatus == preparing,ready",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "picked_up"
+              },
+              "success": "Marked picked up"
+            },
+            {
+              "id": "notReady",
+              "label": "Not ready yet",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == pickup && data.order.pickup && data.order.status != cancelled,refunded,pending && data.order.pickupStatus == ready",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "preparing"
+              },
+              "success": "Back to preparing"
+            },
+            {
+              "id": "out",
+              "label": "Out for delivery",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery && data.order.status != cancelled,refunded,pending && data.order.deliveryStatus == scheduled,failed",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "out_for_delivery"
+              },
+              "success": "Out for delivery — the buyer has been told"
+            },
+            {
+              "id": "delivered",
+              "label": "Delivered",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery && data.order.status != cancelled,refunded,pending && data.order.deliveryStatus == scheduled,failed,out_for_delivery",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "delivered"
+              },
+              "success": "Marked delivered"
+            },
+            {
+              "id": "failed",
+              "label": "Couldn’t deliver",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.order.fulfillmentMethod == local_delivery && data.order.localDelivery && data.order.status != cancelled,refunded,pending && data.order.deliveryStatus == out_for_delivery",
+              "url": "/api/commerce/local-fulfillment",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}",
+                "action": "delivery_failed",
+                "reason": {
+                  "$orNull": "{form.reason:take/200}"
+                }
+              },
+              "success": "Delivery marked failed",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "What happened (optional)",
+                  "kind": "text"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "returns",
+          "title": "Returns",
+          "items": "data.returns.items",
+          "empty": "No returns on this order.",
+          "icon": "restore|restore",
+          "primary": "{item.lines.*.name}",
+          "secondary": "{item.createdAtMs:date}",
+          "badges": [
+            {
+              "text": "{const.returnStatuses[id=item.status].label|item.status}",
+              "tone": "neutral"
+            }
+          ],
+          "open": {
+            "screen": "commerce.return",
+            "params": {
+              "returnId": "{item.$id}"
+            }
+          }
+        },
+        {
+          "type": "actions",
+          "id": "startReturn",
+          "when": "data.order.status == paid,partially_fulfilled,fulfilled,delivered",
+          "items": [
+            {
+              "id": "start",
+              "label": "Start return",
+              "icon": "plus|add",
+              "navigate": {
+                "screen": "commerce.startReturn",
+                "params": {
+                  "orderId": "{params.orderId}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "orderDetail",
+          "params": {
+            "orderId": "{params.orderId}"
+          },
+          "title": "Services",
+          "footer": "Shipping labels, couriers, fulfillment networks and the other services you have connected, for this order.",
+          "empty": "No service is connected for this order. Connect shipping, couriers and other services in Commerce settings."
+        }
+      ]
+    },
+    {
       "id": "commerce.settings",
       "title": "Commerce settings",
       "label": "Commerce settings",

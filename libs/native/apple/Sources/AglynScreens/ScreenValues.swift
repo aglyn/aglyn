@@ -37,11 +37,15 @@ public enum ScreenValues {
       // `rows[field=other.path]`: the first row whose field reads as the text at other.path.
       var segment = raw
       var selector: (field: String, path: String)?
+      var containing: (field: String, path: String)?
       if raw.hasSuffix("]"), let open = raw.firstIndex(of: "[") {
         let inner = raw[raw.index(after: open)..<raw.index(before: raw.endIndex)]
         segment = String(raw[..<open])
         if !segment.isEmpty { current = step(current, segment) }
-        if let equals = inner.firstIndex(of: "=") {
+        if let tilde = inner.range(of: "~=") {
+          // `rows[badges~=path]`: the first row whose list field holds the text at path.
+          containing = (String(inner[..<tilde.lowerBound]), String(inner[tilde.upperBound...]))
+        } else if let equals = inner.firstIndex(of: "=") {
           selector = (String(inner[..<equals]), String(inner[inner.index(after: equals)...]))
         } else {
           // `map[some.key]`: a key that itself holds dots; `map[@path]`: the key is the text at path.
@@ -57,6 +61,10 @@ public enum ScreenValues {
       if let selector {
         let wanted = text(lookup(selector.path, in: context))
         current = current.array.first { text(lookup(selector.field, in: $0)) == wanted }
+      }
+      if let containing {
+        let wanted = text(lookup(containing.path, in: context))
+        current = current.array.first { row in lookup(containing.field, in: row).array.contains { text($0) == wanted } }
       }
     }
     return current
@@ -596,6 +604,9 @@ public enum ScreenValues {
       return epochMillis(value).map { dateText($0, "MMM d, yyyy") } ?? text(value)
     case "datetime":
       return epochMillis(value).map { dateText($0, "MMM d, yyyy, h:mm a") } ?? text(value)
+    case "clock":
+      // A time of day alone: `3:05 PM`.
+      return epochMillis(value).map { dateText($0, "h:mm a") } ?? text(value)
     case "cents":
       guard let amount = number(value) else { return text(value) }
       let currency = parts.count > 1 ? text(lookup(parts[1], in: context)) : "USD"
@@ -660,6 +671,7 @@ public enum ScreenValues {
       return String(text(value).prefix(parts.count > 1 ? Int(parts[1]) ?? Int.max : Int.max))
     case "plural":
       // `plural/item`: the count (a list of numbers is their total, any other list its length) with its noun, `1 item` or `3 items`.
+      if value == nil || value == .null { return "" }
       var count = number(value) ?? 0
       if case .array(let items)? = value {
         count = !items.isEmpty && items.allSatisfy({ number($0) != nil }) ? items.reduce(0) { $0 + (number($1) ?? 0) } : Double(items.count)

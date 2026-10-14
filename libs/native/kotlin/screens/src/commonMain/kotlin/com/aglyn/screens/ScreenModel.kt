@@ -197,6 +197,10 @@ class ScreenModel(
     load.query?.let { query ->
       return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
     }
+    load.orderZone?.let { id ->
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      return Triple(load.key, FirestoreLoads.orderZone(reader, ScreenValues.render("{site.id}", context), ScreenValues.render(id, context)), null)
+    }
     load.entitlement?.let { feature ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
       return Triple(load.key, FirestoreLoads.entitlement(reader, feature, ScreenValues.render("{org.id}", context)), null)

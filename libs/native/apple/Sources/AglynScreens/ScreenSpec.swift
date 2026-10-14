@@ -83,6 +83,8 @@ public struct LoadSpec: Sendable, Hashable {
   public let switchboard: String?
   /// A plan feature whose gate the screen reads: `{ carried, label }`, where `label` names the plan that includes it.
   public let entitlement: String?
+  /// An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship.
+  public let orderZone: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -97,6 +99,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.query = nil
       self.switchboard = nil
       self.entitlement = nil
+      self.orderZone = nil
       self.method = .get
       self.body = nil
       self.optional = false
@@ -111,6 +114,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.query = json["query"]
       self.switchboard = json["switchboard"]?.stringValue
       self.entitlement = json["entitlement"]?.stringValue
+      self.orderZone = json["orderZone"]?.stringValue
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
@@ -443,7 +447,10 @@ public struct FieldSpec: Sendable, Identifiable {
     // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
     let keep = from["where"]?.stringValue
     return options + rows.map { ScreenContext.with(context, item: $0) }.filter { ScreenValues.condition(keep, in: $0) }.map { scope in
-      (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))
+      // A label built from parts that may be empty reads clean: runs of spaces become one, and the ends are trimmed.
+      let label = ScreenValues.render(labelTemplate, in: scope).replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespaces)
+      return (ScreenValues.render(valueTemplate, in: scope), label)
     }
   }
 }
