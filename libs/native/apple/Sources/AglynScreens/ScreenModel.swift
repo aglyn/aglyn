@@ -132,6 +132,8 @@ public final class ScreenModel {
   /// The cursor of each paged load's next page, by load key.
   public private(set) var cursors: [String: String] = [:]
   public private(set) var loadingMore: Set<String> = []
+  /// The limit each Firestore `query` load is now read with, once "Show more" has widened it.
+  private var queryLimits: [String: Int] = [:]
   /// Per-block search words for loads whose route searches (`search` param).
   public var search: [String: String] = [:]
   /// What the person has done on this screen since it opened, newest first: `{ at, text, confirmed }` (`session.log`).
@@ -261,6 +263,7 @@ public final class ScreenModel {
     }
     var results: [String: JSONValue] = [:]
     var nextCursors: [String: String] = [:]
+    queryLimits = [:]
     do {
       // The loads run in parallel; a `late` one waits for the rest, reads their answers, and its `when` can too.
       for late in [false, true] {
@@ -315,7 +318,8 @@ public final class ScreenModel {
     }
     if let query = load.query {
       guard let reader else { return (load.key, .null, nil) }
-      return (load.key, try await FirestoreLoads.query(reader, query, in: context), nil)
+      let value = try await FirestoreLoads.query(reader, query, in: context)
+      return (load.key, value, moreCursor(load, value, limit: nil))
     }
     let body = load.body.map { ScreenValues.resolveBody($0, in: context) }
     let value: JSONValue
@@ -330,7 +334,38 @@ public final class ScreenModel {
   }
 
   /// The next page of a paged load, appended to its rows.
+  /// "more" when a Firestore query that can be widened came back full, so there may be rows past it.
+  nonisolated static func moreCursor(_ load: LoadSpec, _ value: JSONValue, limit: Int?) -> String? {
+    guard load.more != nil, let query = load.query else { return nil }
+    let limit = limit ?? ScreenValues.number(query["limit"]).map { Int($0) } ?? 50
+    return value["items"].array.count >= limit ? "more" : nil
+  }
+
+  /// Reads a Firestore query again with a larger limit (each load's `more` rows beyond the last read).
+  private func widen(_ load: LoadSpec, by step: Int, query: JSONValue) async {
+    guard let reader, !loadingMore.contains(load.key) else { return }
+    loadingMore.insert(load.key)
+    defer { loadingMore.remove(load.key) }
+    let limit = (queryLimits[load.key] ?? ScreenValues.number(query["limit"]).map { Int($0) } ?? 50) + step
+    guard case .object(var record) = query else { return }
+    record["limit"] = .number(Double(limit))
+    do {
+      let value = try await FirestoreLoads.query(reader, .object(record), in: context)
+      guard case .object(var results) = data else { return }
+      results[load.key] = value
+      context = ScreenContext.with(context, "data", .object(results))
+      queryLimits[load.key] = limit
+      cursors[load.key] = Self.moreCursor(load, value, limit: limit)
+    } catch {
+      return
+    }
+  }
+
   public func loadMore(_ key: String) async {
+    if let load = spec.loads.first(where: { $0.key == key }), let step = load.more, let query = load.query, cursors[key] != nil {
+      await widen(load, by: step, query: query)
+      return
+    }
     guard let api, let load = spec.loads.first(where: { $0.key == key }), let cursor = cursors[key],
       let itemsPath = load.items, !loadingMore.contains(key)
     else { return }
@@ -408,6 +443,12 @@ public final class ScreenModel {
     if let key = action.arm { armed.insert(key) }
     if let key = action.disarm { armed.remove(key) }
     if !entries.isEmpty || action.arm != nil || action.disarm != nil { publishSession() }
+  }
+
+  /// The records a `lookup` field's group finds for the words typed.
+  public func lookup(_ group: LookupGroup, words: String) async throws -> [JSONValue] {
+    guard let api else { return [] }
+    return group.rows(in: try await api.request(group.request(words: words)))
   }
 
   /// The session-log entries an action's `log` lines make of its answer.

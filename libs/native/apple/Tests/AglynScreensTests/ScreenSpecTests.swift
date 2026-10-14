@@ -528,6 +528,88 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertNil(resolved.tenantId)
   }
 
+  /// "Populate from" on a system email test: workspaces, sites and people are searched by the words typed, and picking
+  /// one fills the merge tokens the template takes (and the recipient, for a person with an address).
+  @MainActor
+  func testThePopulateFromPickerSearchesAndFillsTheTokens() async throws {
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.staff.emails" })
+    let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })
+    let test = try XCTUnwrap(list["actions"].array.compactMap(ActionSpec.init).first { $0.id == "test" })
+    // A template that takes the workspace's name and the person's email, with the staff member as the default recipient.
+    let scope: JSONValue = [
+      "user": ["email": "ops@example.test"], "item": ["key": "welcome"],
+      "const": ["tokens": ["welcome": [["name": "org.name", "sample": "Acme"], ["name": "user.email", "sample": "a@b.co"]]]],
+    ]
+    let inputs = test.inputs(in: scope)
+    XCTAssertEqual(inputs.map(\.key), ["populate", "to", "token.org.name", "token.user.email"])
+    let picker = try XCTUnwrap(inputs.first)
+    XCTAssertEqual(picker.kind, "lookup")
+    XCTAssertEqual(picker.groups.map(\.label), ["Workspaces", "Sites", "People"])
+    let keys = Set(inputs.map(\.key))
+
+    let org = try XCTUnwrap(picker.groups.first { $0.id == "org" })
+    XCTAssertEqual(org.request(words: "  "), "/api/admin/orgs?pageSize=10")
+    XCTAssertEqual(org.request(words: "Acme & Sons"), "/api/admin/orgs?pageSize=10&search=Acme%20%26%20Sons")
+    // Only the fields the form has are filled: the template takes no org.id.
+    let filled = org.fills(for: ["name": "Acme Co", "$id": "o1"], in: scope, among: keys)
+    XCTAssertEqual(filled.map(\.key), ["token.org.name"])
+    XCTAssertEqual(filled.map(\.value), ["Acme Co"])
+
+    let person = try XCTUnwrap(picker.groups.first { $0.id == "user" })
+    let row: JSONValue = ["uid": "u1", "email": "dana@example.test", "displayName": "Dana"]
+    XCTAssertEqual(person.heading(for: row, in: scope), "dana@example.test")
+    XCTAssertEqual(person.detail(for: row, in: scope), "Dana")
+    let byPerson = person.fills(for: row, in: scope, among: keys)
+    XCTAssertEqual(Dictionary(uniqueKeysWithValues: byPerson.map { ($0.key, $0.value) }), ["token.user.email": "dana@example.test", "to": "dana@example.test"])
+    // A person with no address sets the token blank and leaves the recipient alone.
+    let noAddress = person.fills(for: ["uid": "u2", "displayName": "No Mail"], in: scope, among: keys)
+    XCTAssertEqual(noAddress.map(\.key), ["token.user.email"])
+    XCTAssertEqual(noAddress.map(\.value), [""])
+    XCTAssertEqual(person.heading(for: ["uid": "u2", "displayName": "No Mail"], in: scope), "No Mail")
+
+    let transport = RecordingTransport(responses: [(200, #"{"orgs":[{"$id":"o1","name":"Acme Co"},{"$id":"o2","name":"Acme Two"}]}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let model = ScreenModel(spec: spec, context: [:], api: api)
+    let rows = try await model.lookup(org, words: "acme")
+    XCTAssertEqual(rows.map { ScreenValues.text($0["name"] ?? .null) }, ["Acme Co", "Acme Two"])
+    XCTAssertEqual(transport.requests.first?.url?.path, "/api/admin/orgs")
+    XCTAssertEqual(transport.requests.first?.url?.query, "pageSize=10&search=acme")
+  }
+
+  /// A collection read straight from Firestore shows its first rows; one that came back full offers "Show more", which reads it
+  /// again with a larger limit until the end, so a big site can be gone through to its last page.
+  @MainActor
+  func testAFullFirestoreQueryOffersMoreRows() async throws {
+    let reader = RowsReader(total: 6)
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: RecordingTransport(responses: []))
+    let spec = try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": ["rows": ["query": ["collection": "hosts/h1/screens", "limit": 3], "more": 2]],
+      ]))
+    let model = ScreenModel(spec: spec, context: [:], api: api, reader: reader)
+    await model.load()
+    XCTAssertEqual(ScreenValues.lookup("data.rows.items", in: model.context).array.count, 3)
+    XCTAssertEqual(model.cursors["rows"], "more")
+    await model.loadMore("rows")
+    XCTAssertEqual(ScreenValues.lookup("data.rows.items", in: model.context).array.count, 5)
+    XCTAssertEqual(model.cursors["rows"], "more")
+    await model.loadMore("rows")
+    // The last read came back short: that was everything, and the button goes.
+    XCTAssertEqual(ScreenValues.lookup("data.rows.items", in: model.context).array.count, 6)
+    XCTAssertNil(model.cursors["rows"])
+    XCTAssertEqual(reader.limits, [3, 5, 7])
+    // A load without `more` never offers it, however full it comes back.
+    let plain = try XCTUnwrap(ScreenSpec(["id": "core.y", "title": "Y", "load": ["rows": ["query": ["collection": "c", "limit": 3]]]]))
+    let fixed = ScreenModel(spec: plain, context: [:], api: api, reader: RowsReader(total: 6))
+    await fixed.load()
+    XCTAssertNil(fixed.cursors["rows"])
+    // A reload starts over from the first limit.
+    await model.load()
+    XCTAssertEqual(ScreenValues.lookup("data.rows.items", in: model.context).array.count, 3)
+    XCTAssertEqual(model.cursors["rows"], "more")
+  }
+
   /// A probe that answers 503 is reporting: its body is the answer.
   @MainActor
   func testLoadAcceptsTheStatusAProbeReportsWith() async throws {
@@ -798,6 +880,32 @@ final class ScreenSpecTests: XCTestCase {
     default: return []
     }
   }
+}
+
+/// A reader that holds a collection of numbered rows and answers each query with as many as its limit allows.
+final class RowsReader: FirestoreReader, @unchecked Sendable {
+  private let lock = NSLock()
+  private var seenLimits: [Int] = []
+  let total: Int
+  var limits: [Int] { lock.withLock { seenLimits } }
+  init(total: Int) { self.total = total }
+
+  @MainActor
+  func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void) -> FirestoreListening {
+    let limit = query.limit ?? total
+    lock.withLock { seenLimits.append(limit) }
+    onChange(.success((0..<min(limit, total)).map { FirestoreDocument(id: "r\($0)", data: ["n": $0]) }))
+    return NoListener()
+  }
+
+  @MainActor
+  func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void) -> FirestoreListening {
+    onChange(.success(nil))
+    return NoListener()
+  }
+
+  func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
+  func deleteDocument(_ path: [String]) async throws {}
 }
 
 /// A reader that holds one site document and counts whatever it is asked to (loads run in parallel, so it locks).

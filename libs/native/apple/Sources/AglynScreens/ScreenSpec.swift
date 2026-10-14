@@ -90,6 +90,9 @@ public struct LoadSpec: Sendable, Hashable {
   /// A list's `route` columns ask for the others.
   public let sortParam: String?
   public let sortDefault: String?
+  /// For a Firestore `query` that returned its whole `limit`: how many more rows each "Show more" reads. The query is read
+  /// again with the larger limit, so a collection too big for one read can still be gone through to its end.
+  public let more: Int?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -110,6 +113,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.late = false
       self.sortParam = nil
       self.sortDefault = nil
+      self.more = nil
     } else {
       self.url = json["url"]?.stringValue ?? ""
       self.when = json["when"]?.stringValue
@@ -127,6 +131,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.late = json["late"] == .bool(true)
       self.sortParam = json["sortParam"]?.stringValue
       self.sortDefault = json["sortDefault"]?.stringValue
+      self.more = ScreenValues.number(json["more"]).map { Int($0) }
     }
   }
 }
@@ -419,6 +424,8 @@ public struct FieldSpec: Sendable, Identifiable {
   /// `{ length, alphabet }`: the field offers a button that fills it with a random value of that many
   /// characters drawn from the alphabet (a template; the console's password generator).
   public let generate: JSONValue?
+  /// A `lookup` field's sources: the kinds of record a person can search, and what picking one fills in.
+  public let groups: [LookupGroup]
 
   /// A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name
   /// the console's own constants); nil for a field that does not.
@@ -450,6 +457,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.when = nil
     self.mustMatch = nil
     self.generate = nil
+    self.groups = []
     self.each = nil
   }
 
@@ -470,6 +478,7 @@ public struct FieldSpec: Sendable, Identifiable {
     when = template.when
     mustMatch = template.mustMatch
     generate = template.generate
+    groups = template.groups
     each = nil
   }
 
@@ -496,6 +505,7 @@ public struct FieldSpec: Sendable, Identifiable {
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
     self.generate = json["generate"]
+    self.groups = json["groups"].array.compactMap(LookupGroup.init)
     self.each = json["each"]?.stringValue
   }
 
@@ -511,6 +521,66 @@ public struct FieldSpec: Sendable, Identifiable {
       let scope = ScreenContext.with(context, item: row)
       return (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))
     }
+  }
+}
+
+/// One kind of record a `lookup` field searches (the system email test's "Populate from": workspaces, sites, people), and
+/// the form fields picking one fills in. The route searches by the `search` word, as a list's search does.
+public struct LookupGroup: Sendable, Identifiable {
+  public let id: String
+  public let label: String
+  /// The route that lists the records; the words typed go on as `search`.
+  public let url: String
+  /// The path in the answer of the list of records.
+  public let items: String
+  public let title: String
+  public let subtitle: String?
+  /// Form fields set from the picked record, whatever it holds: `key` is the field's key, the value a template over `item`.
+  public let fill: [(key: String, value: String)]
+  /// The same, but only when the template comes out with something (the person's address, as the recipient).
+  public let fillWhenSet: [(key: String, value: String)]
+
+  init?(_ json: JSONValue) {
+    guard let id = json["id"]?.stringValue, let url = json["url"]?.stringValue, let items = json["items"]?.stringValue,
+      let title = json["title"]?.stringValue
+    else { return nil }
+    self.id = id
+    self.label = json["label"]?.stringValue ?? id
+    self.url = url
+    self.items = items
+    self.title = title
+    self.subtitle = json["subtitle"]?.stringValue
+    self.fill = json["fill"].objectEntries.compactMap { entry in entry.value.stringValue.map { (entry.key, $0) } }
+    self.fillWhenSet = json["fillWhenSet"].objectEntries.compactMap { entry in entry.value.stringValue.map { (entry.key, $0) } }
+  }
+
+  /// The route to ask for the words typed (blank lists the first few).
+  public func request(words: String) -> String {
+    let trimmed = words.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return url }
+    return url + (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(trimmed)
+  }
+
+  /// The records an answer holds.
+  public func rows(in response: JSONValue?) -> [JSONValue] {
+    ScreenValues.rows(response.flatMap { ScreenValues.lookup(items, in: $0) })
+  }
+
+  public func heading(for row: JSONValue, in context: JSONValue) -> String {
+    ScreenValues.render(title, in: ScreenContext.with(context, item: row))
+  }
+
+  public func detail(for row: JSONValue, in context: JSONValue) -> String? {
+    subtitle.map { ScreenValues.render($0, in: ScreenContext.with(context, item: row)) }.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// What picking `row` writes into the form: every `fill` entry, then the `fillWhenSet` entries that came out non-blank,
+  /// for the fields the form has (`keys`): a template that takes no `org.id` has no field for it.
+  public func fills(for row: JSONValue, in context: JSONValue, among keys: Set<String>) -> [(key: String, value: String)] {
+    let scope = ScreenContext.with(context, item: row)
+    let always = fill.map { ($0.key, ScreenValues.render($0.value, in: scope)) }
+    let sometimes = fillWhenSet.map { ($0.key, ScreenValues.render($0.value, in: scope)) }.filter { !$0.1.isEmpty }
+    return (always + sometimes).filter { keys.contains($0.0) }
   }
 }
 

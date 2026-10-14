@@ -159,7 +159,7 @@ struct SpecScreenBody: View {
         }
       }
       .sheet(item: $prompting) { pending in
-        ActionInputSheet(pending: pending, context: context) { filled in
+        ActionInputSheet(pending: pending, context: context, search: { group, words in try await model.lookup(group, words: words) }) { filled in
           prompting = nil
           Task { await execute(pending.action, scope: filled) }
         }

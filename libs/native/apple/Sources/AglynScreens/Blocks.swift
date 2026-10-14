@@ -536,9 +536,13 @@ struct FormBlock: View {
 struct ActionInputSheet: View {
   let pending: PendingAction
   let context: JSONValue
+  /// Finds the records a `lookup` field offers for the words typed.
+  var search: (LookupGroup, String) async throws -> [JSONValue] = { _, _ in [] }
   let run: (JSONValue) -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var values: [String: FieldValue] = [:]
+  /// What each `lookup` field last picked, as the person reads it.
+  @State private var picked: [String: String] = [:]
 
   private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
 
@@ -565,10 +569,20 @@ struct ActionInputSheet: View {
         }
         Section {
           ForEach(inputs.filter { ScreenValues.condition($0.when, in: filled) }) { field in
-            FieldInput(
-              field: field, context: pending.scope,
-              value: Binding(
-                get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+            if field.kind == "lookup" {
+              LookupRow(field: field, context: pending.scope, picked: picked[field.key], search: search) { group, row in
+                picked[field.key] = group.heading(for: row, in: pending.scope)
+                // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
+                for fill in group.fills(for: row, in: pending.scope, among: Set(inputs.map(\.key))) {
+                  values[fill.key] = .text(fill.value)
+                }
+              }
+            } else {
+              FieldInput(
+                field: field, context: pending.scope,
+                value: Binding(
+                  get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+            }
           }
         }
       }
@@ -590,6 +604,107 @@ struct ActionInputSheet: View {
     }
     .frame(minWidth: 360, minHeight: 280)
     .presentationDetents([.medium, .large])
+  }
+}
+
+/// A `lookup` field: a row that opens a search over the kinds of record its groups name. Picking one fills the form's other
+/// fields (the system email test's "Populate from").
+struct LookupRow: View {
+  let field: FieldSpec
+  let context: JSONValue
+  let picked: String?
+  let search: (LookupGroup, String) async throws -> [JSONValue]
+  let pick: (LookupGroup, JSONValue) -> Void
+  @State private var open = false
+
+  var body: some View {
+    let label = ScreenValues.render(field.label, in: context)
+    VStack(alignment: .leading, spacing: 4) {
+      Button {
+        open = true
+      } label: {
+        LabeledContent(label) { Text(picked ?? "Choose").foregroundStyle(picked == nil ? .secondary : .primary) }
+      }
+      .accessibilityIdentifier("lookup-\(field.key)")
+      if let help = field.help {
+        Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
+      }
+    }
+    .sheet(isPresented: $open) {
+      LookupSheet(field: field, context: context, search: search) { group, row in
+        pick(group, row)
+        open = false
+      }
+    }
+  }
+}
+
+/// The search behind a `lookup` field: one section per kind of record, filled as words are typed.
+struct LookupSheet: View {
+  let field: FieldSpec
+  let context: JSONValue
+  let search: (LookupGroup, String) async throws -> [JSONValue]
+  let pick: (LookupGroup, JSONValue) -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var words = ""
+  @State private var found: [String: [JSONValue]] = [:]
+  @State private var failed: [String] = []
+  @State private var loading = false
+
+  var body: some View {
+    NavigationStack {
+      List {
+        ForEach(field.groups) { group in
+          let rows = found[group.id] ?? []
+          Section(group.label) {
+            if rows.isEmpty && !loading {
+              Text(words.isEmpty ? "Nothing yet." : "Nothing found.").foregroundStyle(.secondary)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+              Button {
+                pick(group, row)
+              } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(group.heading(for: row, in: context)).foregroundStyle(.primary)
+                  if let detail = group.detail(for: row, in: context) {
+                    Text(detail).font(AglynFont.caption).foregroundStyle(.secondary)
+                  }
+                }
+              }
+            }
+          }
+        }
+        if !failed.isEmpty {
+          Section { AglynNotice("Could not search \(failed.joined(separator: ", ")). Try again.", tone: .warning) }
+        }
+      }
+      .searchable(text: $words, prompt: "Search by name or email")
+      .navigationTitle(ScreenValues.render(field.label, in: context))
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+      // A short wait after the last key, so a name typed quickly is one search and not one per letter.
+      .task(id: words) {
+        if !words.isEmpty { try? await Task.sleep(nanoseconds: 300_000_000) }
+        guard !Task.isCancelled else { return }
+        await load()
+      }
+    }
+    .frame(minWidth: 360, minHeight: 360)
+  }
+
+  private func load() async {
+    loading = true
+    var next: [String: [JSONValue]] = [:]
+    var missed: [String] = []
+    for group in field.groups {
+      do { next[group.id] = try await search(group, words) } catch { missed.append(group.label.lowercased()) }
+      if Task.isCancelled { return }
+    }
+    found = next
+    failed = missed
+    loading = false
   }
 }
 
