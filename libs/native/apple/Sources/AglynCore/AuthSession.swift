@@ -142,13 +142,25 @@ public final class AuthSession {
   public private(set) var ready = false
   public let transport: AuthTransport
 
+  /// The support session a staff member is in as a customer, nil for an ordinary session. While it is on, `user` is the
+  /// customer and every token is theirs; the staff member's own session is set aside untouched.
+  public private(set) var impersonation: Impersonation?
+  /// Whether a support session is on, for readers that are not on the main actor.
+  public let impersonationFlag = ImpersonationFlag()
+
   @ObservationIgnored private let rest: IdentityToolkitAuth?
   @ObservationIgnored private var handle: AuthStateDidChangeListenerHandle?
   @ObservationIgnored private var beforeSignOut: [@MainActor () async -> Void] = []
+  /// How a support session signs in: a REST client that keeps its session in memory, never in the Keychain.
+  @ObservationIgnored private let makeImpersonationAuth: (@Sendable () -> IdentityToolkitAuth)?
+  @ObservationIgnored private var impersonated: IdentityToolkitAuth?
+  /// The staff member's own sign-in, set aside while a support session is on.
+  @ObservationIgnored private var staffAside: AglynUser?
 
   /// `rest` is the REST client to sign in with; nil signs in with the Firebase SDK.
-  public init(rest: IdentityToolkitAuth? = nil) {
+  public init(rest: IdentityToolkitAuth? = nil, impersonationAuth: (@Sendable () -> IdentityToolkitAuth)? = nil) {
     self.rest = rest
+    makeImpersonationAuth = impersonationAuth
     transport = rest == nil ? .sdk : .rest
     if let rest {
       Task { @MainActor in
@@ -160,10 +172,14 @@ public final class AuthSession {
     }
     handle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
       MainActor.assumeIsolated {
-        self?.user = user.map {
-          AglynUser(uid: $0.uid, email: $0.email, displayName: $0.displayName)
-        }
+        let signedIn = user.map { AglynUser(uid: $0.uid, email: $0.email, displayName: $0.displayName) }
         self?.ready = true
+        // While a support session is on, the SDK's user is the staff member's, set aside.
+        if self?.impersonation != nil {
+          self?.staffAside = signedIn
+          return
+        }
+        self?.user = signedIn
         Task { await self?.refreshStanding() }
       }
     }
@@ -171,7 +187,11 @@ public final class AuthSession {
 
   /// The session for a config: REST when `transport` says so, else the SDK.
   public static func make(_ config: AglynConfig, transport: AuthTransport = .resolve()) -> AuthSession {
-    guard transport == .rest else { return AuthSession() }
+    // A support session signs in over REST in either case, and keeps nothing: the customer's session is never persisted.
+    let impersonationAuth: @Sendable () -> IdentityToolkitAuth = {
+      IdentityToolkitAuth(apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost, store: MemoryCredentialStore())
+    }
+    guard transport == .rest else { return AuthSession(impersonationAuth: impersonationAuth) }
     return AuthSession(
       rest: IdentityToolkitAuth(
         apiKey: config.firebase.apiKey,
@@ -179,7 +199,8 @@ public final class AuthSession {
         store: KeychainCredentialStore(
           service: restAuthKeychainService(
             bundleID: Bundle.main.bundleIdentifier ?? "com.aglyn.app", buildHash: restBuildHash()),
-          account: config.firebase.projectID)))
+          account: config.firebase.projectID)),
+      impersonationAuth: impersonationAuth)
   }
 
   public func signIn(email: String, password: String) async throws {
@@ -207,7 +228,38 @@ public final class AuthSession {
     beforeSignOut.append(task)
   }
 
+  /// Signs in as a customer with the custom token `/api/admin/impersonate` minted, in the pool it was minted in. The staff
+  /// member's own session is set aside untouched; the customer's lives in memory only. Throws when the token is refused.
+  public func beginImpersonation(token: String, tenantId: String?) async throws {
+    guard let makeImpersonationAuth else { throw IdentityToolkitError(code: nil, status: 0) }
+    if impersonation != nil { await endImpersonation() }
+    let aside = user
+    let session = makeImpersonationAuth()
+    let customer = try await session.signInWithCustomToken(token, tenantId: tenantId)
+    staffAside = aside
+    impersonated = session
+    impersonationFlag.set(true)
+    impersonation = Impersonation(customer: customer, staffEmail: aside?.email)
+    staff = nil
+    user = customer
+    await refreshStanding()
+  }
+
+  /// Ends the support session and returns to the staff member's own, which was never signed out.
+  public func endImpersonation() async {
+    guard let session = impersonated else { return }
+    await session.signOut()
+    impersonated = nil
+    impersonationFlag.set(false)
+    impersonation = nil
+    user = staffAside
+    staffAside = nil
+    await refreshStanding()
+  }
+
   public func signOut() async {
+    // Leaving the app from a support session ends it, and then signs the staff member out as well.
+    await endImpersonation()
     for task in beforeSignOut { await task() }
     staff = nil
     if let rest {
@@ -229,6 +281,12 @@ public final class AuthSession {
 
   /// The current ID token; nil when signed out.
   public nonisolated func idToken(forceRefresh: Bool) async throws -> String? {
+    if let session = await MainActor.run(body: { self.impersonated }) {
+      let token = try await session.idToken(forceRefresh: forceRefresh)
+      // A refresh the server refuses (the support session was revoked) ends it, and the staff session returns.
+      if token == nil { await endImpersonation() }
+      return token
+    }
     if let rest {
       let token = try await rest.idToken(forceRefresh: forceRefresh)
       if token == nil { await MainActor.run { self.user = nil } }

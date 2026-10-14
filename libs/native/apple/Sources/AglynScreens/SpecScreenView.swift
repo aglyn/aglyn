@@ -489,6 +489,20 @@ struct SpecScreenBody: View {
       {
         await webAuthentication.openHostedPage(url)
       }
+      if let impersonate = action.impersonate {
+        // The route minted a custom token for the customer; the app signs in with it. The token goes to the session
+        // and is shown, logged and kept nowhere else.
+        guard let (token, tenantId) = impersonate.resolve(in: response) else {
+          show("The support session could not be opened.", .error)
+          return
+        }
+        do {
+          try await session.impersonate(token, tenantId)
+        } catch {
+          show("The support session could not be opened. Try again.", .error)
+        }
+        return
+      }
       if let navigate = action.navigate {
         plugin.navigate(navigate.screen, navigate.params.mapValues { ScreenValues.render($0, in: after) })
       }

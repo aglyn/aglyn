@@ -22,12 +22,16 @@ public struct ScreenSession: Sendable {
   public var reauthenticate: @Sendable (_ password: String) async throws -> Void
   /// Re-reads the token's claims (after a reauth, or when a screen asks).
   public var refreshClaims: @Sendable () async -> Void
+  /// Signs in as a customer with the custom token a staff route minted (`/api/admin/impersonate`), in the identity
+  /// pool it was minted in; the staff session is set aside and returns when the support session ends.
+  public var impersonate: @Sendable (_ token: String, _ tenantId: String?) async throws -> Void
 
   public init(
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
     siteName: String? = nil, claims: TokenClaims = TokenClaims(), origin: String = "",
     reauthenticate: @escaping @Sendable (String) async throws -> Void = { _ in },
-    refreshClaims: @escaping @Sendable () async -> Void = {}
+    refreshClaims: @escaping @Sendable () async -> Void = {},
+    impersonate: @escaping @Sendable (String, String?) async throws -> Void = { _, _ in }
   ) {
     self.email = email
     self.displayName = displayName
@@ -38,6 +42,7 @@ public struct ScreenSession: Sendable {
     self.origin = origin
     self.reauthenticate = reauthenticate
     self.refreshClaims = refreshClaims
+    self.impersonate = impersonate
   }
 
   /// The base context every template reads.

@@ -210,6 +210,10 @@ public struct ActionSpec: Sendable, Identifiable {
   public let arm: String?
   /// A key the screen forgets once the action succeeds: the run that spends its preview.
   public let disarm: String?
+  /// `{ token, tenantId }`: paths in the route's answer. Once the action succeeds the app signs in as the customer with the
+  /// custom token found at `token` (a support session), in the identity pool named at `tenantId`. The token is a credential:
+  /// it goes to the session and is shown nowhere.
+  public let impersonate: ImpersonateSpec?
   /// Hands text to the device as a file (Save, or the share sheet): the working papers' CSV, the audit log's.
   public let file: FileSpec?
   /// Repeats the request page by page until the route is done, and answers the totals.
@@ -261,6 +265,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.log = json["log"].array.compactMap(ReportLine.init)
     self.arm = json["arm"]?.stringValue
     self.disarm = json["disarm"]?.stringValue
+    self.impersonate = json["impersonate"].flatMap(ImpersonateSpec.init)
     self.loop = json["loop"].flatMap(LoopSpec.init)
     self.file = json["file"].flatMap(FileSpec.init)
     self.instead = json["instead"]
@@ -293,6 +298,26 @@ public struct ActionSpec: Sendable, Identifiable {
     return reason
       ? asked + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true, help: "Recorded in the audit log.")]
       : asked
+  }
+}
+
+/// Where in a route's answer a support session's custom token and identity pool are.
+public struct ImpersonateSpec: Sendable {
+  public let token: String
+  public let tenantId: String?
+
+  init?(_ json: JSONValue) {
+    guard let token = json["token"]?.stringValue else { return nil }
+    self.token = token
+    self.tenantId = json["tenantId"]?.stringValue
+  }
+
+  /// The token and pool a route answered, or nil when it named no token.
+  public func resolve(in response: JSONValue?) -> (token: String, tenantId: String?)? {
+    let answer = response ?? .null
+    guard let found = ScreenValues.lookup(token, in: answer)?.stringValue, !found.isEmpty else { return nil }
+    let pool = tenantId.flatMap { ScreenValues.lookup($0, in: answer)?.stringValue }.flatMap { $0.isEmpty ? nil : $0 }
+    return (found, pool)
   }
 }
 

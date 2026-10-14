@@ -33,6 +33,18 @@ struct RootView<Shell: View>: View {
           shell(navigation)
             .environment(navigation)
             .focusedSceneValue(\.shellNavigation, navigation)
+            // A support session says so on every screen, with its way back to the staff member's own session.
+            .safeAreaInset(edge: .top, spacing: 0) {
+              if let impersonation = auth.impersonation {
+                AglynNotice(
+                  impersonation.banner, tone: .warning, actionTitle: "Exit impersonation",
+                  action: { Task { await auth.endImpersonation() } }
+                )
+                .padding(AglynSpace.one)
+                .background(.bar)
+                .accessibilityIdentifier("impersonation-banner")
+              }
+            }
         }
       }
     }
@@ -41,6 +53,13 @@ struct RootView<Shell: View>: View {
     .onChange(of: model.auth?.user, initial: true) { _, user in
       model.userChanged(user)
       openPendingPush()
+    }
+    // Entering or leaving a support session starts from home: nothing open belonged to the other person.
+    .onChange(of: model.auth?.impersonation) {
+      navigation.paths = [:]
+      navigation.section = .home
+      navigation.showSwitcher = false
+      navigation.pendingInvite = nil
     }
     .onOpenURL { url in model.open(url.absoluteString, in: navigation) }
     .onChange(of: model.push.pendingLink) { openPendingPush() }
