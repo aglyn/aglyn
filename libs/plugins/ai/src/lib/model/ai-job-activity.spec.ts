@@ -24,6 +24,8 @@
 
 import {
   AI_JOB_SELF_CONFIRM_GRACE_MS,
+  AI_SITE_BUILD_PLAN_FRESH_MS,
+  aiSiteBuildInFlight,
   aiJobActivityCounts,
   aiJobConfirmingOwnPlan,
   aiJobActivityState,
@@ -177,5 +179,46 @@ describe('the launcher’s accessible name', () => {
     expect(aiJobsLauncherLabel('Aglyn', aiJobsActivity([refused]))).toBe(
       'Open Aglyn Assist, 1 AI job needs attention',
     )
+  })
+})
+
+describe('another page being built on the site (AGL-3765)', () => {
+  // The production timeline (org rbgIvex5O8, 2026-10-13): Vgqphowx8u's plan
+  // was ready at 08:03:06Z when the second page job was started at 08:03:33Z,
+  // and it was building when that job's plan was confirmed at 08:04:33Z.
+  const NOW = Date.parse('2026-10-13T08:03:33.222Z')
+  const onSite = (patch: Parameters<typeof job>[0] & { kind?: string; hostId?: string | null }) => ({
+    kind: 'page',
+    hostId: 'host-1',
+    updatedAt: '2026-10-13T08:03:06.396Z',
+    ...job(patch),
+    ...patch,
+  })
+
+  it('finds a page, a guided start or a build that is queued, planning or building on the same site', () => {
+    for (const kind of ['page', 'site', 'build']) {
+      for (const moving of [planning, queued, building]) {
+        const other = onSite({ ...moving, id: `${kind}-${moving.id}`, kind })
+        expect(aiSiteBuildInFlight([other], { hostId: 'host-1', now: NOW })).toBe(other)
+      }
+    }
+  })
+
+  it('finds a plan waiting for its confirmation only while it is fresh', () => {
+    const ready = onSite({ ...planReady })
+    expect(aiSiteBuildInFlight([ready], { hostId: 'host-1', now: NOW })).toBe(ready)
+    const stale = Date.parse('2026-10-13T08:03:06.396Z') + AI_SITE_BUILD_PLAN_FRESH_MS
+    expect(aiSiteBuildInFlight([ready], { hostId: 'host-1', now: stale })).toBeNull()
+  })
+
+  it('never counts the job itself, another site, another kind, or a job stopped or settled', () => {
+    const own = onSite({ ...building, id: 'own' })
+    expect(aiSiteBuildInFlight([own], { hostId: 'host-1', exceptJobId: 'own', now: NOW })).toBeNull()
+    expect(aiSiteBuildInFlight([onSite({ ...building, hostId: 'host-2' })], { hostId: 'host-1', now: NOW })).toBeNull()
+    expect(aiSiteBuildInFlight([onSite({ ...building, kind: 'form' })], { hostId: 'host-1', now: NOW })).toBeNull()
+    for (const stopped of [refused, outOfCredits, done, failed]) {
+      expect(aiSiteBuildInFlight([onSite({ ...stopped })], { hostId: 'host-1', now: NOW })).toBeNull()
+    }
+    expect(aiSiteBuildInFlight([onSite({ ...building })], { hostId: null, now: NOW })).toBeNull()
   })
 })

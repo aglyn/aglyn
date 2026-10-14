@@ -1,0 +1,138 @@
+// Copyright 2026 Aglyn LLC
+// SPDX-License-Identifier: Apache-2.0
+
+import AglynContracts
+import AglynCore
+import AglynPluginHost
+import AglynUI
+import SwiftUI
+
+/// What a person picked in the chooser: the stored reference the console's
+/// `formatMediaRef` mints (`media:{scope}/{mediaId}`), the file, and where it
+/// is served from.
+public struct ChosenMedia: Equatable, Sendable {
+  public let item: MediaItem
+  public let scope: MediaScope
+
+  /// `media:{cdnScope}/{mediaId}`: the asset by identity, so replacing or moving the file never breaks what names it.
+  public var reference: String { "media:\(scope.cdnScope)/\(item.id)" }
+}
+
+/// The media library as a chooser, the native side of the console's media
+/// picker (`pickMedia`): this site's files and the workspace's, filtered to
+/// one kind, one tap to choose. Shown in a sheet by whoever needs a file.
+public struct MediaChooserSheet: View {
+  let context: NativePluginContext
+  let kind: String
+  let onChoose: (ChosenMedia) -> Void
+  @State private var tab = 0
+  @Environment(\.dismiss) private var dismiss
+
+  public init(context: NativePluginContext, kind: String = "image", onChoose: @escaping (ChosenMedia) -> Void) {
+    self.context = context
+    self.kind = kind
+    self.onChoose = onChoose
+  }
+
+  private var scope: MediaScope? {
+    if context.hostID != nil, tab == 0 { return context.hostID.map { .site(hostID: $0) } }
+    return context.orgID.map { .org(orgID: $0, forHostID: context.hostID) }
+  }
+
+  public var body: some View {
+    NavigationStack {
+      VStack(spacing: 0) {
+        if context.hostID != nil {
+          Picker("Library", selection: $tab) {
+            Text("This site").tag(0)
+            Text("Workspace").tag(1)
+          }
+          .pickerStyle(.segmented)
+          .labelsHidden()
+          .padding(.horizontal, AglynSpace.two)
+          .padding(.vertical, AglynSpace.one)
+        }
+        if let scope {
+          MediaScopeGate(context: context, scope: scope) { scopeTokens in
+            MediaChooserGrid(context: context, scope: scope, scopeTokens: scopeTokens, kind: kind) { chosen in
+              onChoose(chosen)
+              dismiss()
+            }
+          }
+          .id(scope)
+        } else {
+          AglynEmptyState("Pick a workspace first", systemImage: SiteSymbols.media)
+        }
+      }
+      .background(AglynColor.page)
+      .navigationTitle("Choose from media")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+      }
+    }
+    .frame(minWidth: 420, minHeight: 480)
+    .accessibilityIdentifier("media-chooser")
+  }
+}
+
+private struct MediaChooserGrid: View {
+  let context: NativePluginContext
+  let scope: MediaScope
+  let scopeTokens: [String]?
+  let kind: String
+  let onChoose: (ChosenMedia) -> Void
+  @State private var model = MediaListModel()
+  @State private var searchText = ""
+
+  var body: some View {
+    Group {
+      switch model.rows {
+      case .loading:
+        SkeletonGrid(count: 12)
+      case .failed(let message):
+        AglynEmptyState("Could not load the library", systemImage: SiteSymbols.error, message: message) {
+          Button("Try again") { model.refresh() }
+        }
+      case .ready(let items) where items.isEmpty:
+        AglynEmptyState(
+          model.search.isEmpty ? "No files here yet" : "No files match", systemImage: SiteSymbols.media,
+          message: model.search.isEmpty ? "Upload photos in the Media library, then choose them here." : nil)
+      case .ready(let items):
+        ScrollView {
+          LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: AglynSpace.one)], spacing: AglynSpace.one) {
+            ForEach(items) { item in
+              Button {
+                onChoose(ChosenMedia(item: item, scope: scope))
+              } label: {
+                AglynMediaTile(
+                  item.fileName, imageURL: item.thumbnail(origin: context.api.origin).flatMap(URL.init(string:)),
+                  systemImage: mediaKindSymbol(item.kind),
+                  badge: item.isPrivate ? (text: "Private", tone: AglynTone.warning) : nil)
+              }
+              .buttonStyle(AglynPressableStyle())
+              .accessibilityIdentifier("media-choice-\(item.id)")
+            }
+          }
+          .padding(AglynSpace.two)
+          if model.hasMore {
+            AglynLoadMoreRow("Show more files") { model.loadMore() }.padding(.bottom, AglynSpace.two)
+          }
+        }
+        .refreshable { model.refresh() }
+      }
+    }
+    .searchable(text: $searchText, prompt: "Search files")
+    .task(id: searchText) {
+      try? await Task.sleep(nanoseconds: 300_000_000)
+      if !Task.isCancelled { model.search = searchText }
+    }
+    .task(id: scope) {
+      model.type = kind
+      model.start(context.firestore, scope: scope, scopeTokens: scopeTokens)
+    }
+    .onDisappear { model.stop() }
+  }
+}

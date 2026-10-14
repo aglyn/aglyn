@@ -360,4 +360,24 @@ class SiteTest {
     assertEquals(listOf("/api/fonts/prepare", "/api/fonts/theme", "/api/media/replace", "/api/fonts/theme"), seen.map { it.first })
     assertEquals(emptyList(), installedFontsOf(null))
   }
+
+  @Test
+  fun anAudioUploadCarriesItsRightsConfirmationAndOtherFilesCarryNone() = runTest {
+    val bodies = mutableListOf<kotlinx.serialization.json.JsonObject>()
+    val engine = MockEngine { request ->
+      val text = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      if (text.isNotEmpty()) bodies += Json.parseToJsonElement(text).jsonObject
+      respond("""{"mediaId":"m1"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    val api = com.aglyn.site.media.MediaApi(ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1), MediaScope.Site("h1"))
+    val song = PickedFile("song.mp3", "audio/mpeg", byteArrayOf(1, 2, 3))
+    assertTrue(com.aglyn.site.media.isAudioFile(song))
+    assertTrue(!com.aglyn.site.media.isAudioFile(PickedFile("a.png", "image/png", byteArrayOf(1))))
+    api.upload(song, null, rightsConfirmed = true)
+    api.upload(PickedFile("a.png", "image/png", byteArrayOf(1)), null)
+    assertEquals("true", bodies[0]["rightsConfirmed"]?.jsonPrimitive?.content)
+    assertEquals("audio/mpeg", bodies[0]["contentType"]?.jsonPrimitive?.content)
+    assertNull(bodies[1]["rightsConfirmed"])
+    assertEquals("I own this audio or have a license to use it on my site", com.aglyn.site.media.AUDIO_RIGHTS_STATEMENT)
+  }
 }

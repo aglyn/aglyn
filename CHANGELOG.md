@@ -9,6 +9,43 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.251 — 2026-10-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.250...v1.0.0-beta.251)
+
+### Added
+
+- **ai:** warn when a page is already being built on the site ([AGL-3765](https://linear.app/aglyn/issue/AGL-3765))
+- **native:** logic rows, formula builder, test run and reference health on Android ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** buy and change plan add-ons in the app, as the console does ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** returns at the register on Apple and Kotlin ([AGL-3651](https://linear.app/aglyn/issue/AGL-3651), [AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** dataset image, page, page address and rating fields on Android ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668), [AGL-3763](https://linear.app/aglyn/issue/AGL-3763))
+- **commerce:** pair displays and kiosks from the POS devices card ([AGL-3712](https://linear.app/aglyn/issue/AGL-3712))
+- **native:** commerce settings and service cards from specs ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+
+### Fixed
+
+- **ai:** a failed sibling-form or band-date lookup leaves the form refusal as it was ([AGL-3765](https://linear.app/aglyn/issue/AGL-3765))
+- **ai:** a form unit refused at the band places a sibling build's form, or fails as ours ([AGL-3765](https://linear.app/aglyn/issue/AGL-3765))
+- **ai:** a business the table names leads a site's photo search, ahead of its photo words ([AGL-3779](https://linear.app/aglyn/issue/AGL-3779), [AGL-3769](https://linear.app/aglyn/issue/AGL-3769))
+- **ai:** a site start in another language always ends up with English photo words ([AGL-3779](https://linear.app/aglyn/issue/AGL-3779), [AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
+- **native:** the issue report asks the console's per-kind questions ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **mui:** size images by their own % width; Grid cell fills a lone last row ([AGL-3715](https://linear.app/aglyn/issue/AGL-3715))
+- **console:** plugin cards get their own Integrations rail section ([AGL-3711](https://linear.app/aglyn/issue/AGL-3711))
+- **renderer:** release held server HTML when the scheme changes ([AGL-3772](https://linear.app/aglyn/issue/AGL-3772), [AGL-3581](https://linear.app/aglyn/issue/AGL-3581))
+
+<details>
+<summary>Also in this release: 3 test, 1 chore</summary>
+
+- **env-isolation:** report only by owner decision, behind ENV_ISOLATION_ENFORCED ([AGL-2401](https://linear.app/aglyn/issue/AGL-2401))
+- **console:** setup specs mock the zone's has-widgets hook ([AGL-3711](https://linear.app/aglyn/issue/AGL-3711))
+- **ai:** re-record the page axe fixture for the Grid sx change ([AGL-3715](https://linear.app/aglyn/issue/AGL-3715))
+- **native:** registration tests for commerce.settings ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+
+</details>
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.250 — 2026-10-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.249...v1.0.0-beta.250)
