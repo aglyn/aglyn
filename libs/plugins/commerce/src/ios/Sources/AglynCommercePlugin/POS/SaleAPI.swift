@@ -33,6 +33,8 @@ struct PosRegisterSettings: Equatable {
   var tippingEnabled = false
   var tipPercentages: [Double] = []
   var receiptDefault = ReceiptDefault.ask
+  /// Offer the store's marketing opt-in under the email field a customer types on the display.
+  var displayMarketingOptIn = true
 }
 
 struct PosSmartReader: Equatable, Identifiable {
@@ -152,7 +154,7 @@ func readPosContext(_ body: JSONValue?) -> PosContext {
     settings: PosRegisterSettings(
       tippingEnabled: settings["tippingEnabled"].flag,
       tipPercentages: Array(settings["tipPercentages"].array.compactMap(\.numberValue).filter { $0 > 0 }.prefix(4)),
-      receiptDefault: receipt),
+      receiptDefault: receipt, displayMarketingOptIn: settings["displayMarketingOptIn"] != .some(.bool(false))),
     terminalAvailable: terminal["available"].flag,
     testMode: terminal["testMode"].flag,
     readers: record["readers"].array.compactMap { entry in
@@ -219,7 +221,7 @@ enum SaleStep: Equatable {
   case cancel(paymentID: String)
   case sale
   case void
-  case receipt(channel: String, to: String?)
+  case receipt(channel: String, to: String?, marketingOptIn: Bool = false)
 
   var action: String {
     switch self {
@@ -263,9 +265,10 @@ enum SaleStep: Equatable {
       record["code"] = .string(code)
       if let amount, amount > 0 { put("amountCents", amount) }
     case .status(let id), .cancel(let id): record["paymentId"] = .string(id)
-    case .receipt(let channel, let to):
+    case .receipt(let channel, let to, let marketingOptIn):
       record["channel"] = .string(channel)
       if let to { record["to"] = .string(to) }
+      if marketingOptIn { record["marketingOptIn"] = .bool(true) }
     case .sale, .void: break
     }
     return .object(record)
@@ -318,6 +321,7 @@ struct ConsolePosSaleAPI: PosSaleAPI {
     if let locationID { body["locationId"] = .string(locationID) }
     if cart.discountPct > 0 { body["discountPct"] = .number(Double(cart.discountPct)) }
     if !cart.customerEmail.isEmpty { body["customerEmail"] = .string(cart.customerEmail) }
+    if let customer = cart.customer { body["customer"] = customer.json }
     if let assertion = cashier.assertion { body["cashierAssertion"] = .string(assertion) }
     return readOpenedSale(
       try await api.request(posOrderRoute, method: .post, body: .object(body), idempotencyKey: attemptKey))

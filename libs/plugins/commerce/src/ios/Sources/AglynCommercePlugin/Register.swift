@@ -47,6 +47,20 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
     CardReadersScreen(context: context)
   }
 
+  // A tablet set up as the screen facing the customer: no one signs in; a register's code pairs it.
+  r.screen(
+    commerceDisplayScreen, title: "Customer display", requiresSite: false, apps: [.pos], icon: "rectangle.on.rectangle",
+    placement: .device
+  ) { context, _ in
+    PosCustomerDisplayScreen(context: context)
+  }
+  // A tablet customers order from: no one signs in; a register's kiosk code pairs it.
+  r.screen(
+    commerceKioskScreen, title: "Self-service kiosk", requiresSite: false, apps: [.pos], icon: "cart.badge.plus",
+    placement: .device
+  ) { context, _ in
+    PosKioskScreen(context: context)
+  }
   // Commerce settings, and the commerceSettings zone other plugins' cards sit in:
   // a spec screen drawn by AglynScreens (Resources/commerce.screens.json).
   SpecScreens.register(ScreenCatalog.load(from: .module), into: r)

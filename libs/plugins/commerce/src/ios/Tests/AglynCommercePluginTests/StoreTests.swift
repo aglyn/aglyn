@@ -90,7 +90,7 @@ final class CommerceRegistrationTests: XCTestCase {
     let registry = NativePluginRegistry()
     let declared = NativeContributionDeclaration(
       screens: [
-        "commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products",
+        "commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.order", "commerce.orders", "commerce.product", "commerce.products",
         "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings",
       ],
       tabs: ["commerce.orders-tab", "commerce.products-tab"],
@@ -104,7 +104,7 @@ final class CommerceRegistrationTests: XCTestCase {
     XCTAssertTrue(registry.quickActions(for: .aglyn).allSatisfy { registry.screen($0.screen) != nil })
     XCTAssertEqual(registry.tabs(for: .aglyn).map(\.id), ["commerce.orders-tab", "commerce.products-tab"])
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/products/orders"), .screen("commerce.orders", ["orgSlug": "acme", "hostSlug": "shop"]))
-    XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.register"])
+    XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.register"])
   }
 }
 

@@ -87,6 +87,8 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
           }
         }
         SectionCard("Shift") { ShiftControls(model) }
+        DisplayDevicesSection(model)
+        SectionCard("Last receipt") { LastReceiptControls(model) }
         SectionCard("Returns") {
           OutlinedButton(onClick = { returning = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-return")) { Text("Return items") }
         }
@@ -103,6 +105,46 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   }
   if (returning) PosReturnDialog(model) { returning = false }
   ShiftDialogs(model)
+}
+
+/** The last sale's receipt: shown, printed again here or as a gift receipt, and sent to the register's receipt printer. */
+@Composable
+private fun LastReceiptControls(model: RegisterModel) {
+  val last = model.lastReceipt
+  last.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { last.notice = null }) { Text("Dismiss") } }) }
+  last.error?.let { NoticeBanner(it, StatusTone.WARNING) }
+  val sale = last.summary
+  if (sale == null) {
+    Text("The next sale you finish shows here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    return
+  }
+  AmountRow("Last sale ${sale.label}", money(sale.totalCents, model.currency), Modifier.testTag("pos-last-sale"))
+  val direct = model.peripherals.printers.isNotEmpty()
+  if (!direct && !last.hasPrinter) {
+    Text(
+      "This register has no receipt printer. Add one in the console, or connect one to this device, to print receipts here.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    return
+  }
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    if (direct) {
+      OutlinedButton(
+        onClick = { last.printHere(gift = false) { receipt, gift -> model.print(receipt, openDrawer = false, gift = gift) } },
+        enabled = !last.busy && last.receipt != null,
+        modifier = Modifier.testTag("pos-last-receipt-print"),
+      ) { Text("Print") }
+      OutlinedButton(
+        onClick = { last.printHere(gift = true) { receipt, gift -> model.print(receipt, openDrawer = false, gift = gift) } },
+        enabled = !last.busy && last.receipt != null,
+        modifier = Modifier.testTag("pos-last-receipt-gift"),
+      ) { Text("Gift receipt") }
+    }
+    if (last.hasPrinter) {
+      OutlinedButton(onClick = last::sendToPrinter, enabled = !last.busy, modifier = Modifier.testTag("pos-last-receipt-cloud")) { Text("Receipt printer") }
+    }
+  }
 }
 
 /** Staff PINs: set, change or remove your own, and a workspace admin's reset of anyone's. */
@@ -432,5 +474,85 @@ fun LockedRegister(model: RegisterModel) {
     dismissible = false,
     onDismiss = model.cashier::unlock,
     onVerified = model.cashier::switchTo,
+  )
+}
+
+/** The register's paired screens: whether a customer display is connected, who is paired, and a code to pair another. */
+@Composable
+private fun DisplayDevicesSection(model: RegisterModel) {
+  val display = model.display
+  LaunchedEffect(model.register?.id) { display.loadDevices() }
+  SectionCard("Customer display and kiosk") {
+    StatusChip(
+      if (display.connected) "Display connected" else "No display connected",
+      if (display.connected) StatusTone.SUCCESS else StatusTone.NEUTRAL,
+      Modifier.testTag("pos-display-status"),
+    )
+    display.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { display.notice = null }) { Text("Dismiss") } }) }
+    display.error?.let { NoticeBanner(it, StatusTone.WARNING) }
+    display.devices.forEach { device ->
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        Column(Modifier.weight(1f)) {
+          Text(device.label, style = MaterialTheme.typography.bodyLarge)
+          val seen = if (device.connected(nowMs().toDouble())) "connected" else "last seen ${formatReceiptTime(device.lastSeenAtMs.toLong(), model.timeZone)}"
+          Text(
+            "${if (device.mode == com.aglyn.contracts.PosDeviceMode.KIOSK) "Self-service kiosk" else "Customer display"} · $seen",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        TextButton(onClick = { display.revoke(device.id) }, enabled = !display.busy) { Text("Sign out") }
+      }
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      OutlinedButton(
+        onClick = { display.newPairingCode(com.aglyn.contracts.PosDeviceMode.DISPLAY) },
+        enabled = model.register != null && !display.busy,
+        modifier = Modifier.testTag("pos-pair-display"),
+      ) { Text("Pair a customer display") }
+      OutlinedButton(
+        onClick = { display.newPairingCode(com.aglyn.contracts.PosDeviceMode.KIOSK) },
+        enabled = model.register != null && !display.busy,
+        modifier = Modifier.testTag("pos-pair-kiosk"),
+      ) { Text("Pair a self-service kiosk") }
+      if (display.devices.size > 1) TextButton(onClick = { display.revoke("*") }, enabled = !display.busy) { Text("Sign out every screen") }
+    }
+  }
+  display.pairing?.let { PairingCodeDialog(model, it) }
+}
+
+/** The six-digit code a screen enters to pair, good for ten minutes and usable once. */
+@Composable
+private fun PairingCodeDialog(model: RegisterModel, pairing: PosPairingCode) {
+  val display = model.display
+  val kiosk = display.pairingMode == com.aglyn.contracts.PosDeviceMode.KIOSK
+  var left by remember(pairing) { mutableStateOf(((pairing.expiresAtMs - nowMs()) / 1000).toLong().coerceAtLeast(0)) }
+  LaunchedEffect(pairing) {
+    while (left > 0) {
+      kotlinx.coroutines.delay(1000)
+      left = ((pairing.expiresAtMs - nowMs()) / 1000).toLong().coerceAtLeast(0)
+    }
+  }
+  AlertDialog(
+    onDismissRequest = display::closePairing,
+    modifier = Modifier.testTag("pos-pairing"),
+    title = { Text(if (kiosk) "Pair a self-service kiosk" else "Pair a customer display") },
+    text = {
+      Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(1.5f)), modifier = Modifier.fillMaxWidth()) {
+        Text(pairing.spoken, style = MaterialTheme.typography.displayMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.testTag("pairing-code"))
+        Text(
+          if (kiosk) "On the tablet customers order from, choose Self-service kiosk and enter this code." else "On the tablet facing your customer, choose Customer display and enter this code.",
+          style = MaterialTheme.typography.bodyMedium,
+          textAlign = TextAlign.Center,
+        )
+        Text(
+          if (left > 0) "Good for ${left / 60}:${(left % 60).toString().padStart(2, '0')} and works once." else "This code has expired. Make a new one.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(onClick = { display.newPairingCode(display.pairingMode) }, enabled = !display.busy) { Text("New code") }
+      }
+    },
+    confirmButton = { TextButton(onClick = { display.closePairing(); display.loadDevices() }) { Text("Done") } },
   )
 }

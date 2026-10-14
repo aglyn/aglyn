@@ -80,7 +80,16 @@ struct CheckoutView: View {
   @ViewBuilder private var tender: some View {
     if !checkout.tips.isEmpty {
       VStack(alignment: .leading, spacing: AglynSpace.one) {
-        AglynSectionHeader("Tip")
+        AglynSectionHeader("Tip") {
+          if model.display.connected {
+            Button(model.display.asking == .tip ? "Waiting for the customer…" : "Ask on display") {
+              Task { await model.askTipOnDisplay() }
+            }
+            .buttonStyle(.borderless)
+            .disabled(model.display.asking != nil || checkout.busy)
+            .accessibilityIdentifier("tip-ask-display")
+          }
+        }
         ScrollView(.horizontal, showsIndicators: false) {
           HStack {
             ForEach(checkout.tips) { tip in
@@ -220,6 +229,9 @@ struct CheckoutView: View {
           .aglynCardSurface()
       }
       AglynSectionHeader("Receipt")
+      if model.display.asking == .receipt {
+        AglynNotice("The customer is choosing a receipt on the display…", tone: .info)
+      }
       TextField(model.context?.smsReceipts == true ? "Email or phone" : "Email", text: $receiptTo)
         .textFieldStyle(.roundedBorder)
         .autocorrectionDisabled()
@@ -228,12 +240,18 @@ struct CheckoutView: View {
           .keyboardType(.emailAddress)
         #endif
         .onAppear { if receiptTo.isEmpty { receiptTo = model.cart.customerEmail } }
+        .task { await model.askReceiptOnDisplay(checkout) }
       HStack {
-        Button("No receipt") { Task { if await checkout.sendReceipt(channel: "none") { model.finished() } } }
+        Button("No receipt") {
+          // The cashier answers for the customer: the display's prompt ends with a thank-you.
+          model.display.cancelAsk()
+          Task { if await checkout.sendReceipt(channel: "none") { model.finished() } }
+        }
           .buttonStyle(.bordered)
         Spacer()
         Button("Send receipt") {
           let channel = isReceiptEmail(receiptTo) ? "email" : "sms"
+          model.display.cancelAsk()
           Task { if await checkout.sendReceipt(channel: channel, to: receiptTo) { model.finished() } }
         }
         .buttonStyle(.borderedProminent)

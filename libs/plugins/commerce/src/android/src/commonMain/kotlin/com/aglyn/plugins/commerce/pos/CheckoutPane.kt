@@ -131,6 +131,13 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
   val tips = checkout.tips()
   if (tips.isNotEmpty()) {
     Section("Tip") {
+      if (model.display.connected) {
+        TextButton(
+          onClick = { model.act { model.askTipOnDisplay() } },
+          enabled = model.display.asking == null && !state.busy,
+          modifier = Modifier.testTag("tip-ask-display"),
+        ) { Text(if (model.display.asking == com.aglyn.contracts.PosDisplayMode.TIP) "Waiting for the customer…" else "Ask on display") }
+      }
       ChoiceChipRow(
         tips.map { ChipOption(it.id, if (it.cents > 0) "${it.label} · ${fmt(it.cents)}" else it.label) },
         state.tipId,
@@ -307,6 +314,11 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
 private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, step: CheckoutStep.Receipt, fmt: (Long) -> String) {
   val context = model.context
   val cash = state.sale.payments.any { it.method == "cash" && it.status == "succeeded" }
+  // Once per sale: when the store asks, the receipt choice goes to the customer's screen.
+  LaunchedEffect(checkout) { model.askReceiptOnDisplay(checkout) }
+  if (model.display.asking == com.aglyn.contracts.PosDisplayMode.RECEIPT) {
+    NoticeBanner("The customer is choosing a receipt on the display…", StatusTone.INFO)
+  }
   Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(1f))) {
     Icon(AglynIcons.named("check_circle"), null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
     Text(fmt(state.sale.totalCents), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -340,7 +352,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
         modifier = Modifier.weight(1f).testTag("pos-receipt-email"),
       )
       Button(
-        onClick = { model.act { if (checkout.sendReceipt("email", email)) model.finished() } },
+        onClick = { model.display.cancelAsk(); model.act { if (checkout.sendReceipt("email", email)) model.finished() } },
         enabled = isReceiptEmail(email) && !state.busy && model.online,
       ) { Text("Send") }
     }
@@ -357,7 +369,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
           modifier = Modifier.weight(1f),
         )
-        Button(onClick = { model.act { if (checkout.sendReceipt("sms", phone)) model.finished() } }, enabled = isReceiptPhone(phone) && !state.busy) { Text("Send") }
+        Button(onClick = { model.display.cancelAsk(); model.act { if (checkout.sendReceipt("sms", phone)) model.finished() } }, enabled = isReceiptPhone(phone) && !state.busy) { Text("Send") }
       }
     }
   }
@@ -368,6 +380,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
       OutlinedButton(
         onClick = {
           val receipt = model.receipt ?: return@OutlinedButton
+          model.display.cancelAsk()
           model.act {
             printProblem = model.print(receipt, openDrawer = cash)
             if (printProblem == null && checkout.sendReceipt("print")) model.finished()
@@ -382,7 +395,7 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
       }
     }
     Button(
-      onClick = { model.act { if (checkout.sendReceipt("none")) model.finished() } },
+      onClick = { model.display.cancelAsk(); model.act { if (checkout.sendReceipt("none")) model.finished() } },
       modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("pos-new-sale"),
     ) { Text("No receipt · New sale") }
   }

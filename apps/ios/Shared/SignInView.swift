@@ -85,6 +85,21 @@ struct SignInView: View {
             .buttonStyle(.borderless)
             .disabled(busy)
         }
+
+        if !model.deviceScreens.isEmpty {
+          Divider()
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Not a register?").font(AglynFont.headline)
+            Text("Set this tablet up as a screen for your customers. A code from a register pairs it.")
+              .font(AglynFont.subheadline).foregroundStyle(.secondary)
+            ForEach(model.deviceScreens) { screen in
+              Button(screen.title) { model.setDeviceMode(screen.id) }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .accessibilityIdentifier("device-mode-\(screen.id)")
+            }
+          }
+        }
       }
       .padding(24)
       .frame(maxWidth: 440)
