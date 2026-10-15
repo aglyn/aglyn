@@ -114,4 +114,15 @@ class ConsoleHandoffTest {
     assertEquals(JsonPrimitive("aglyn-org-1"), bodies[0]["tenantId"])
     assertEquals(JsonPrimitive("custom"), bodies[0]["token"])
   }
+
+  /** The desktop's redemption carries its first App Check token, which the custom-token exchange needs. */
+  @Test
+  fun theDesktopsRedemptionCarriesItsFirstAppCheckToken() = runTest {
+    val http = HttpClient(MockEngine {
+      respond("""{"ok":true,"token":"custom","tenantId":null,"appCheckToken":"ac-1","appCheckExpiresAtMs":4200}""", HttpStatusCode.OK, json)
+    })
+    val api = ConsoleApiClient("https://console.test", http, { null }, sleep = {})
+    val pending = ConsoleHandoff.begin("https://console.test", "http://127.0.0.1:5000/handoff", ConsoleHandoff.Start.SIGN_IN)
+    assertEquals(ConsoleHandoff.Grant("custom", null, "ac-1", 4200), ConsoleHandoff.redeem(api, "abc", pending))
+  }
 }

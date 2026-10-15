@@ -16,6 +16,8 @@
  */
 
 import { createHash, randomBytes } from 'crypto'
+import { getApp } from 'firebase-admin/app'
+import { getAppCheck } from 'firebase-admin/app-check'
 import firebaseAdmin from './firebase-admin'
 import { consumeOnce } from './consume-once'
 import { safeEqual } from './safe-equal'
@@ -207,4 +209,58 @@ export async function redeemNativeHandoff(input: {
     return { ok: false, reason: (outcome.reason ?? 'absent') as NativeHandoffRefusal }
   }
   return { ok: true, uid: outcome.value.uid, tenantId: outcome.value.tenantId }
+}
+
+/**
+ * The desktop's App Check (AGL-3816, Zach 2026-10-15): Compose Desktop has no
+ * attestation provider, and production enforces App Check on Identity
+ * Toolkit, so the console mints the desktop's tokens for a session it has
+ * just signed in. Measured against aglyn-main on 2026-10-15 with no token:
+ * `accounts:signInWithCustomToken` answers 401 "Firebase App Check token is
+ * invalid." before it reads the custom token, while the Secure Token refresh
+ * and `accounts:lookup` reach their own validation. So the hand-off's custom
+ * token cannot be exchanged without one, and the FIRST token rides the
+ * redemption; after that the desktop asks `/api/auth/native-app-check` with
+ * its ID token, which refreshes without App Check.
+ *
+ * What the token attests is weaker than App Attest or Play Integrity: not a
+ * genuine binary, but a session that a person completed in the console in the
+ * last moments, bound by PKCE to the process holding it (redemption), or a
+ * live, unrevoked ID token (the refresh route). Nothing outlives sign-out:
+ * the desktop drops its token, and a revoked or disabled account is refused
+ * a new one.
+ */
+
+/** A desktop App Check token's lifetime: an hour, refreshed by the app at half-life. */
+export const NATIVE_APP_CHECK_TTL_MS = 60 * 60 * 1000
+
+/**
+ * The Firebase app the desktop's tokens are minted for: the dedicated desktop
+ * registration when configured (`NATIVE_DESKTOP_APP_CHECK_APP_ID`), else the
+ * console's own web app, which App Check already accepts. Null when neither
+ * is set (a self-host without App Check), and the desktop then sends none.
+ */
+export function nativeDesktopAppCheckAppId(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const dedicated = env['NATIVE_DESKTOP_APP_CHECK_APP_ID']?.trim()
+  if (dedicated) return dedicated
+  return env['NEXT_PUBLIC_FIREBASE_APP_ID']?.trim() || null
+}
+
+/** Whether a return address is the desktop's loopback listener (not an app scheme). */
+export function isLoopbackRedirect(value: string): boolean {
+  return LOOPBACK_REDIRECT.test(value)
+}
+
+/** Mint one App Check token for the desktop; null when App Check is not configured here. */
+export async function mintNativeAppCheckToken(
+  input: { nowMs?: number; env?: Record<string, string | undefined> } = {},
+): Promise<{ token: string; expiresAtMs: number } | null> {
+  const appId = nativeDesktopAppCheckAppId(input.env)
+  if (!appId) return null
+  // Touch the facade so the app is initialized before App Check asks for it.
+  void firebaseAdmin
+  const minted = await getAppCheck(getApp()).createToken(appId, { ttlMillis: NATIVE_APP_CHECK_TTL_MS })
+  return { token: minted.token, expiresAtMs: (input.nowMs ?? Date.now()) + minted.ttlMillis }
 }

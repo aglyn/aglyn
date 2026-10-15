@@ -38,12 +38,17 @@ const mockRateLimit = jest.fn()
 const mockGetUser = jest.fn()
 const mockCreateCustomToken = jest.fn()
 const mockPool = jest.fn()
+const mockMintAppCheck = jest.fn()
+const mockAudit = jest.fn()
 let mockImpersonating = false
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
-    app: () => ({ auth: () => ({ verifyIdToken: (...a: unknown[]) => mockVerifyIdToken(...a) }) }),
+    app: () => ({
+      auth: () => ({ verifyIdToken: (...a: unknown[]) => mockVerifyIdToken(...a) }),
+      firestore: () => ({}),
+    }),
   },
   isImpersonationSession: () => mockImpersonating,
   lockdownRefusal: (...a: unknown[]) => mockLockdown(...a),
@@ -64,10 +69,22 @@ jest.mock('@aglyn/tenant-data-admin/server/native-handoff', () => {
     isNativeHandoffRedirect: actual.isNativeHandoffRedirect,
     isPkceChallenge: actual.isPkceChallenge,
     isPkceVerifier: actual.isPkceVerifier,
+    isLoopbackRedirect: actual.isLoopbackRedirect,
     authorizeNativeHandoff: (...a: unknown[]) => mockAuthorize(...a),
     redeemNativeHandoff: (...a: unknown[]) => mockRedeem(...a),
+    mintNativeAppCheckToken: (...a: unknown[]) => mockMintAppCheck(...a),
   }
 })
+
+jest.mock('@aglyn/tenant-data-admin/server/admin-audit-write', () => ({
+  __esModule: true,
+  addAdminAudit: (...a: unknown[]) => mockAudit(...a),
+}))
+
+jest.mock('firebase-admin/firestore', () => ({
+  __esModule: true,
+  FieldValue: { serverTimestamp: () => 'SERVER_TIME' },
+}))
 
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () => ({
   __esModule: true,
@@ -76,6 +93,7 @@ jest.mock('../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () =>
 
 import { POST as authorizePost } from '../app/api/auth/native-handoff/authorize/route'
 import { POST as redeemPost } from '../app/api/auth/native-handoff/redeem/route'
+import { POST as appCheckPost } from '../app/api/auth/native-app-check/route'
 
 const CHALLENGE = 'c'.repeat(43)
 const CODE = 'k'.repeat(43)
@@ -111,6 +129,8 @@ beforeEach(() => {
   mockRedeem.mockResolvedValue({ ok: true, uid: 'u1', tenantId: 'aglyn-org-1' })
   mockGetUser.mockResolvedValue({ uid: 'u1', disabled: false })
   mockCreateCustomToken.mockResolvedValue('custom-token')
+  mockMintAppCheck.mockResolvedValue({ token: 'app-check-token', expiresAtMs: 123 })
+  mockAudit.mockResolvedValue(undefined)
 })
 
 describe('authorize', () => {
@@ -184,6 +204,28 @@ describe('redeem', () => {
     expect(mockCreateCustomToken).toHaveBeenCalledWith('u1')
   })
 
+  it('hands the desktop its first App Check token, which the custom-token exchange needs', async () => {
+    const response = await redeemPost(
+      redeemRequest({ code: CODE, verifier: VERIFIER, redirectUri: 'http://127.0.0.1:53682/handoff' }),
+    )
+    expect(await response.json()).toEqual({
+      ok: true, token: 'custom-token', tenantId: 'aglyn-org-1', appCheckToken: 'app-check-token', appCheckExpiresAtMs: 123,
+    })
+    expect(mockAudit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      actorUid: 'u1', action: 'user.nativeAppSignIn', after: { tenantId: 'aglyn-org-1', app: 'desktop', appCheckIssued: true },
+    }))
+  })
+
+  it('mints no App Check token for the phone apps, which attest themselves', async () => {
+    const response = await redeemPost(redeemRequest({ code: CODE, verifier: VERIFIER, redirectUri: 'aglyn-pos://auth/handoff' }))
+    const body = await response.json()
+    expect(body.appCheckToken).toBeUndefined()
+    expect(mockMintAppCheck).not.toHaveBeenCalled()
+    expect(mockAudit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      action: 'user.nativeAppSignIn', after: expect.objectContaining({ app: 'aglyn-pos' }),
+    }))
+  })
+
   it('says a spent or expired code has to be started again', async () => {
     mockRedeem.mockResolvedValueOnce({ ok: false, reason: 'verifier' })
     const response = await redeemPost(redeemRequest({ code: CODE, verifier: VERIFIER, redirectUri: 'aglyn://auth/handoff' }))
@@ -214,5 +256,55 @@ describe('redeem', () => {
     const response = await redeemPost(redeemRequest({ code: CODE, verifier: VERIFIER, redirectUri: 'aglyn://auth/handoff' }))
     expect(response.status).toBe(429)
     expect(mockRedeem).not.toHaveBeenCalled()
+  })
+})
+
+describe('native-app-check', () => {
+  function appCheckRequest(bearer: string | null = 'id-token', device: string | null = 'install-abc123') {
+    const headers: Record<string, string> = {}
+    if (bearer) headers.authorization = `Bearer ${bearer}`
+    if (device) headers['x-aglyn-device'] = device
+    return new Request('https://app.aglyn.com/api/auth/native-app-check', { method: 'POST', headers })
+  }
+
+  it('mints a token for a live session, rate limited per account and device, and audits it', async () => {
+    const response = await appCheckPost(appCheckRequest())
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await response.json()).toEqual({ ok: true, token: 'app-check-token', expiresAtMs: 123 })
+    expect(mockRateLimit).toHaveBeenCalledWith('native-app-check:u1:install-abc123', expect.objectContaining({ limit: 12 }))
+    expect(mockAudit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      actorUid: 'u1', action: 'user.nativeAppCheck', after: { tenantId: 'aglyn-org-1', device: 'install-abc123' },
+    }))
+  })
+
+  it('needs a session and a device id', async () => {
+    expect((await appCheckPost(appCheckRequest(null))).status).toBe(401)
+    expect((await appCheckPost(appCheckRequest('id-token', null))).status).toBe(400)
+    expect(mockMintAppCheck).not.toHaveBeenCalled()
+  })
+
+  it('refuses a revoked token or a disabled account, so nothing outlives sign-out', async () => {
+    mockVerifyIdToken.mockRejectedValueOnce(Object.assign(new Error('revoked'), { code: 'auth/id-token-revoked' }))
+    expect((await appCheckPost(appCheckRequest())).status).toBe(401)
+    mockVerifyIdToken.mockRejectedValueOnce(Object.assign(new Error('disabled'), { code: 'auth/user-disabled' }))
+    expect((await appCheckPost(appCheckRequest())).status).toBe(401)
+    expect(mockMintAppCheck).not.toHaveBeenCalled()
+  })
+
+  it('refuses a support session and answers a lockdown', async () => {
+    mockImpersonating = true
+    expect((await appCheckPost(appCheckRequest())).status).toBe(403)
+    mockImpersonating = false
+    mockLockdown.mockResolvedValueOnce(Response.json({ error: 'locked' }, { status: 423 }))
+    expect((await appCheckPost(appCheckRequest())).status).toBe(423)
+    expect(mockMintAppCheck).not.toHaveBeenCalled()
+  })
+
+  it('is rate limited', async () => {
+    mockRateLimit.mockResolvedValueOnce({ allowed: false })
+    const response = await appCheckPost(appCheckRequest())
+    expect(response.status).toBe(429)
+    expect(mockMintAppCheck).not.toHaveBeenCalled()
   })
 })

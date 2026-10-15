@@ -22,11 +22,21 @@
  */
 
 jest.mock('./firebase-admin', () => ({ __esModule: true, default: { app: () => ({}) } }))
+const mockCreateToken = jest.fn()
+jest.mock('firebase-admin/app', () => ({ __esModule: true, getApp: () => ({}) }))
+jest.mock('firebase-admin/app-check', () => ({
+  __esModule: true,
+  getAppCheck: () => ({ createToken: (...a: unknown[]) => mockCreateToken(...a) }),
+}))
 
 import { createHash } from 'crypto'
 import {
   authorizeNativeHandoff,
+  isLoopbackRedirect,
   isNativeHandoffRedirect,
+  mintNativeAppCheckToken,
+  NATIVE_APP_CHECK_TTL_MS,
+  nativeDesktopAppCheckAppId,
   isPkceChallenge,
   isPkceVerifier,
   nativeHandoffKey,
@@ -162,5 +172,23 @@ describe('a code', () => {
       code, verifier: VERIFIER, redirectUri: 'aglyn://auth/handoff', nowMs: NOW + NATIVE_HANDOFF_TTL_MS + 1, firestore,
     })
     expect(late).toEqual({ ok: false, reason: 'expired' })
+  })
+})
+
+describe('the desktop’s App Check token', () => {
+  it('is minted for the dedicated desktop app when one is configured, else the console’s web app', async () => {
+    expect(nativeDesktopAppCheckAppId({ NATIVE_DESKTOP_APP_CHECK_APP_ID: '1:1:web:desk', NEXT_PUBLIC_FIREBASE_APP_ID: '1:1:web:console' })).toBe('1:1:web:desk')
+    expect(nativeDesktopAppCheckAppId({ NEXT_PUBLIC_FIREBASE_APP_ID: '1:1:web:console' })).toBe('1:1:web:console')
+    expect(nativeDesktopAppCheckAppId({})).toBeNull()
+    mockCreateToken.mockResolvedValueOnce({ token: 'minted', ttlMillis: NATIVE_APP_CHECK_TTL_MS })
+    const minted = await mintNativeAppCheckToken({ nowMs: NOW, env: { NATIVE_DESKTOP_APP_CHECK_APP_ID: '1:1:web:desk' } })
+    expect(minted).toEqual({ token: 'minted', expiresAtMs: NOW + NATIVE_APP_CHECK_TTL_MS })
+    expect(mockCreateToken).toHaveBeenCalledWith('1:1:web:desk', { ttlMillis: NATIVE_APP_CHECK_TTL_MS })
+    expect(await mintNativeAppCheckToken({ env: {} })).toBeNull()
+  })
+
+  it('rides only the desktop’s loopback return', () => {
+    expect(isLoopbackRedirect('http://127.0.0.1:53682/handoff')).toBe(true)
+    expect(isLoopbackRedirect('aglyn://auth/handoff')).toBe(false)
   })
 })
