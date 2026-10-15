@@ -639,4 +639,59 @@ public struct MediaAPI: Sendable {
       usedBytes: Int(answer.numberField("usedBytes") ?? 0), allowanceMB: answer.numberField("allowanceMb").map { Int($0) },
       unlimited: answer.boolField("unlimited") == true)
   }
+
+  /// Which of these files staff have disabled, and what the owner is told (`POST /api/media/quarantine`, AGL-1612),
+  /// asked in batches of `mediaQuarantineProbeMax`, the most the route takes. Silent on failure, as the console is: a
+  /// notice is extra context on a grid that reads fine without it, so a failed probe leaves the grid as it was.
+  public func quarantine(_ ids: [String]) async -> [String: MediaQuarantineNotice] {
+    var found: [String: MediaQuarantineNotice] = [:]
+    var wanted: [String] = []
+    for id in ids.sorted() where !id.trimmed.isEmpty && wanted.last != id { wanted.append(id) }
+    var start = 0
+    while start < wanted.count {
+      let batch = Array(wanted[start..<min(start + mediaQuarantineProbeMax, wanted.count)])
+      start += mediaQuarantineProbeMax
+      if let answer = try? await post("/api/media/quarantine", ["mediaIds": batch]) {
+        found.merge(parseMediaQuarantine(answer)) { _, new in new }
+      }
+    }
+    return found
+  }
+}
+
+/// How many files one `/api/media/quarantine` call may ask about (`MAX_PROBE_IDS`).
+public let mediaQuarantineProbeMax = 100
+
+/// Why a file stopped serving, in the words its owner is shown. The staff note (a takedown notice number, a
+/// complainant) is not in what the route answers, so it cannot reach this.
+public struct MediaQuarantineNotice: Equatable, Sendable {
+  public let reason: String
+  public let title: String
+  public let body: String
+  public let contact: String?
+
+  public init(reason: String, title: String, body: String, contact: String?) {
+    self.reason = reason
+    self.title = title
+    self.body = body
+    self.contact = contact
+  }
+
+  /// The notice as one line: the body, then the support address in brackets, as the console's tooltip reads.
+  public var message: String { contact.map { "\(body) (\($0))" } ?? body }
+}
+
+/// The route's `quarantined` map (media id to notice); none when the answer has no map, as a healthy platform's does.
+public func parseMediaQuarantine(_ answer: JSONValue?) -> [String: MediaQuarantineNotice] {
+  guard case .object(let map)? = answer?["quarantined"] else { return [:] }
+  var notices: [String: MediaQuarantineNotice] = [:]
+  for (id, entry) in map {
+    guard case .object = entry else { continue }
+    let title = entry["title"]?.stringValue?.trimmed ?? ""
+    notices[id] = MediaQuarantineNotice(
+      reason: entry["reason"]?.stringValue ?? "", title: title.isEmpty ? "Disabled" : title,
+      body: entry["body"]?.stringValue ?? "",
+      contact: entry["contact"]?.stringValue.flatMap { $0.trimmed.isEmpty ? nil : $0 })
+  }
+  return notices
 }
