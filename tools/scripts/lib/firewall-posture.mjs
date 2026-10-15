@@ -1094,6 +1094,45 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/.well-known/' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Native app API bypass',
+        why: "the iOS, Android and desktop apps call console routes from URLSession/OkHttp, which cannot solve a challenge, so sign-up, SSO, passkeys, invites, the desktop hand-off and every signed-in call answered 429 HTML to the apps",
+        // Live since 2026-10-15 (AGL-3800). Found while the round-3 store
+        // builds were in TestFlight and Play internal testing: the console's
+        // bot protection answers every non-browser client with a challenge
+        // (measured for bearer-carrying clients in AGL-2727), and nothing
+        // here covered the native apps' ~200 console routes.
+        //
+        // TWO mouths. The first is any `/api/` call carrying a JWT-shaped
+        // bearer. Every such route verifies the Firebase ID token itself and
+        // answers 401 without a valid one, so the bypass removes the bot
+        // challenge and nothing else. The regex keeps a junk `Bearer x`, or
+        // a bare `Authorization`, challenged.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/' }),
+          Object.freeze({
+            type: 'header',
+            op: 're',
+            key: 'authorization',
+            value: '^Bearer [A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$',
+          }),
+        ]),
+        // The second is the pre-sign-in doors, which have no token yet: the
+        // SSO hand-off redeem (single-use PKCE), SSO and identifier lookup,
+        // password reset, and passkey sign-in. All except `sso-lookup` carry
+        // their own rate limit; `sso-lookup` returns only the public routing
+        // facts the web sign-in page already reads. EXACT paths, anchored at
+        // both ends, so a look-alike such as `/api/auth/sso-lookupX` stays
+        // challenged.
+        alsoRequiresGroups: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 're',
+            value:
+              '^/api/auth/(native-handoff/redeem|sso-lookup|resolve-identifier|send-password-reset|passkeys/signin/(options|verify))$',
+          }),
+        ]),
+      }),
     ]),
     // The console mount is the one mailed images resolve to, so Gmail's image
     // proxy and every campaign image land on this copy of the rule.
