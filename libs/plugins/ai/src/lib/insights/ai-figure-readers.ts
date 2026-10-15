@@ -381,16 +381,22 @@ export function formsFigureReader(firestore: AiFigureFirestore): PluginFigureRea
         .filter(({ data }) => !data['deletedAt'])
         .map(({ doc, data }) => {
           const totals = formStatsTotals(data['stats'] as FormStats | undefined, { from, to })
+          // Every submission to a form is counted on it, so a form with none
+          // recorded in the window had none: 0, not a blank the answer has to
+          // hedge over (AGL-3834). Leads are counted only on a form that
+          // routes them, so one that does reads 0 the same way, and a form
+          // that never has keeps a blank, which the table's note explains.
+          const submissions = totals.submissions ?? 0
+          const routesLeads = (data['routing'] as { lead?: unknown } | undefined)?.lead === true
           return {
             form: str(data['displayName']) || doc.id,
             views: totals.views,
-            submissions: totals.submissions,
-            completion:
-              totals.views && totals.submissions !== null ? share(totals.submissions, totals.views) : null,
-            leads: totals.leads,
+            submissions,
+            completion: totals.views ? share(submissions, totals.views) : null,
+            leads: totals.leads ?? (routesLeads ? 0 : null),
           }
         })
-        .sort((a, b) => (b.submissions ?? -1) - (a.submissions ?? -1) || a.form.localeCompare(b.form))
+        .sort((a, b) => b.submissions - a.submissions || a.form.localeCompare(b.form))
       const monthStart = from ? `${from}-01` : current.from
       return {
         ok: true,
@@ -414,6 +420,7 @@ export function formsFigureReader(firestore: AiFigureFirestore): PluginFigureRea
           notes: [
             'Form figures are kept by calendar month, so they cover whole months from the first day of the month the window starts in.',
             'Views are counted in the visitor’s browser and submissions on the server, so a rate can pass 100%.',
+            'A blank Leads figure means the form does not add its submissions to Leads.',
           ],
         },
       }

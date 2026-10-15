@@ -32,6 +32,44 @@ describe('aiHostPublishContext', () => {
     })
   })
 
+  it('reads the routing map’s paths as URLs: a page published at `menu` is /menu (AGL-3834)', () => {
+    // Copper Kettle Catering's map, 2026-10-15: the home is `/`, every other
+    // page a bare slug. Only `/` was named, as if it were the only page.
+    const host = {
+      subdomain: 'copper-kettle-catering',
+      screens: {
+        FBwJbXvslg: 'catering-packages',
+        iCiTY1bkPC: 'menu',
+        _NI9jNkoBd: 'our-story',
+        mtMXNnNLvS: 'contact',
+        ugb5MGNC_2: '/',
+        nested: 'services/pricing/',
+        blank: '',
+        odd: 7,
+      },
+    }
+    const context = aiHostPublishContext(host)
+    expect(context.publishedPages).toEqual([
+      '/',
+      '/catering-packages',
+      '/contact',
+      '/menu',
+      '/our-story',
+      '/services/pricing',
+    ])
+    expect(aiSiteStatusTable(context, 't3').rows[2]).toEqual({
+      figure: 'Published pages',
+      value: '/, /catering-packages, /contact, /menu, /our-story, /services/pricing',
+    })
+  })
+
+  it('reads a site published only below its home as published', () => {
+    expect(aiHostPublishContext({ subdomain: 'shop', screens: { a: 'about' } })).toMatchObject({
+      published: true,
+      publishedPages: ['/about'],
+    })
+  })
+
   it('reads a site with no route as unpublished, and names no first publish it was not given', () => {
     expect(aiHostPublishContext({ subdomain: 'shop' })).toEqual({
       published: false,
