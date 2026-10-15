@@ -43,6 +43,7 @@ jest.mock('./render-system-email', () => ({
   renderSystemEmail: async () => null,
 }))
 
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { announceNewSite, announceNewWorkspace } from './growth-announcements'
 
 const SITE = {
@@ -59,13 +60,13 @@ beforeEach(() => {
 })
 
 describe('AGL-3491 · announceNewSite', () => {
-  it('tells staff, linking the staff site page', async () => {
+  it('tells staff, linking the staff site page and the live site', async () => {
     await announceNewSite(SITE)
 
     expect(mockNotifyStaff).toHaveBeenCalledWith({
       type: 'staff.siteCreated',
       title: 'New site: Paperlink',
-      body: 'owner@example.com created Paperlink (paperlink).',
+      body: `owner@example.com created Paperlink (paperlink).\nLive site: https://paperlink.${TENANT_APEX}`,
       link: '/admin/sites/host-1',
     })
   })
