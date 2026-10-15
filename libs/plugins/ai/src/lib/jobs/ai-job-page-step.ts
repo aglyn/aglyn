@@ -858,17 +858,19 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const seed = `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`
       // A photo another page of the job already shows is not placed here.
       const avoid = await aiJobPagesPlacedPhotos(firestore, { hostId, job, draftId })
+      const photoWords = aiStockPhotoWordsOf(job)
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         sectionIds,
         sectionNames,
         seed,
+        ...(photoWords.language ? { language: photoWords.language } : {}),
         source: (deps.stockPhotos ?? aiLayoutStockPhotoSource)({
           hostId,
           uid: job.createdBy,
           seed,
           business: aiSiteWords(job.inputs).about,
-          ...aiStockPhotoWordsOf(job),
+          ...photoWords,
           sectionNames,
           jobId: aiOriginJobId(job),
           ...(avoid.length ? { avoid } : {}),
