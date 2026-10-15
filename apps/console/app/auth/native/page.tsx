@@ -20,12 +20,13 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
-import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
+import { fbClientAppOptions, useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { Button, CircularProgress, Stack, Typography } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AuthFormComponent from '../../../components/auth-form.component'
 import { markInteractiveSignOut } from '../../../utils/interactive-signin'
+import { nativeHandoffAuthOrigin } from '../../../utils/native-handoff-origin'
 
 /**
  * `/auth/native` — the console page the native apps open to sign in through
@@ -64,6 +65,11 @@ function NativeHandoff() {
     () => new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search),
     [],
   )
+  // The whole hand-off runs on the Firebase auth origin, or the sign-in sheet never sees an SSO result (AGL-3836).
+  const authOrigin = useMemo(
+    () => (typeof window === 'undefined' ? null : nativeHandoffAuthOrigin(window.location, fbClientAppOptions.authDomain)),
+    [],
+  )
   const here = useMemo(() => {
     if (typeof window === 'undefined') return '/auth/native'
     const carried = new URLSearchParams(window.location.search)
@@ -85,6 +91,10 @@ function NativeHandoff() {
   )
 
   useEffect(() => {
+    if (authOrigin) {
+      window.location.replace(authOrigin)
+      return
+    }
     if (status === 'loading') return
     if (!signedIn) {
       const start = START_PAGES[params.get('start') ?? '']
@@ -96,7 +106,7 @@ function NativeHandoff() {
       return
     }
     setPhase(user?.emailVerified ? 'ready' : 'unverified')
-  }, [params, sendTo, signedIn, status, user?.emailVerified])
+  }, [authOrigin, params, sendTo, signedIn, status, user?.emailVerified])
 
   const handOff = useCallback(async () => {
     const current = auth.currentUser
