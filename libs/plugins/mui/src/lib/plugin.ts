@@ -87,6 +87,7 @@ const list = viaTier('list')
 const listItem = viaTier('listItem')
 const listItemText = viaTier('listItemText')
 const formControls = viaTier('formControls')
+const formPickers = viaTier('formPickers')
 const blocks = viaTier('blocks')
 const dataTable = viaTier('dataTable')
 const collectionEntries = viaTier('collectionEntries')
@@ -287,6 +288,18 @@ export const MUI_COMPONENT_SOURCES: Readonly<
     module: formControls,
     component: 'AglynRating',
     schema: 'ratingSchema',
+  },
+  // The date and time pickers (form-pickers.tsx), in a chunk of their own.
+  muiDatePicker: {
+    module: formPickers,
+    component: 'AglynDatePicker',
+    schema: 'datePickerSchema',
+    presets: 'formPickerPresets',
+  },
+  muiTimePicker: {
+    module: formPickers,
+    component: 'AglynTimePicker',
+    schema: 'timePickerSchema',
   },
   // form, formField moved to @aglyn/plugins-forms (AGL-395).
   videoEmbed: {

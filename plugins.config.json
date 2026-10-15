@@ -43,6 +43,8 @@
             "muiRadio",
             "muiFormControlLabel",
             "muiRating",
+            "muiDatePicker",
+            "muiTimePicker",
             "videoEmbed",
             "socialLinks",
             "dataTable",
