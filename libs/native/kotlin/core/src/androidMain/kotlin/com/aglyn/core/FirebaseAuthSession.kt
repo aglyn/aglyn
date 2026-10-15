@@ -60,7 +60,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     } catch (error: FirebaseAuthException) {
       throw AuthError(authErrorMessage(error.errorCode), error)
     } catch (error: Exception) {
-      throw AuthError(authErrorMessage(null), error)
+      throw AuthError(authErrorMessage(appCheckRefusalCode(error)), error)
     }
   }
 
@@ -70,7 +70,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     } catch (error: FirebaseAuthException) {
       throw AuthError(authErrorMessage(error.errorCode), error)
     } catch (error: Exception) {
-      throw AuthError(authErrorMessage(null), error)
+      throw AuthError(authErrorMessage(appCheckRefusalCode(error)), error)
     }
   }
 
@@ -83,7 +83,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     } catch (error: FirebaseAuthException) {
       throw AuthError(passwordChangeMessage(error.errorCode), error)
     } catch (error: Exception) {
-      throw AuthError(passwordChangeMessage(null), error)
+      throw AuthError(passwordChangeMessage(appCheckRefusalCode(error)), error)
     }
   }
 

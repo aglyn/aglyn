@@ -3,6 +3,7 @@ package com.aglyn.core
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -76,5 +77,18 @@ class AglynConfigTest {
     assertEquals("web.apps.googleusercontent.com", set.googleWebClientId)
     assertEquals("desk", set.googleDesktopClientId)
     assertEquals("shh", set.googleDesktopClientSecret)
+  }
+
+  @Test
+  fun appCheckIsOnForProductionAndOffForTheEmulatorStack() {
+    val production = AglynEnv(
+      firebaseApiKey = "key", firebaseAuthDomain = "x.firebaseapp.com", firebaseProjectId = "x", firebaseAppId = "1:1:android:1",
+    )
+    assertTrue(AglynConfig.read(production, AglynAppId.AGLYN).appCheck)
+    val emulator = production.copy(consoleUrl = "http://10.0.2.2:4200", authEmulatorHost = "10.0.2.2:9099")
+    assertFalse(AglynConfig.read(emulator, AglynAppId.AGLYN).appCheck)
+    assertTrue(AglynConfig.read(emulator.copy(appCheck = "on"), AglynAppId.AGLYN).appCheck)
+    assertFalse(AglynConfig.read(production.copy(appCheck = " OFF "), AglynAppId.POS).appCheck)
+    assertFailsWith<IllegalArgumentException> { AglynConfig.read(production.copy(appCheck = "maybe"), AglynAppId.AGLYN) }
   }
 }

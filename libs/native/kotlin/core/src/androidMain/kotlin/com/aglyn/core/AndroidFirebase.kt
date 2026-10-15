@@ -3,8 +3,11 @@ package com.aglyn.core
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 
 /**
  * Firebase configured in code from [AglynConfig]: no google-services.json and
@@ -14,6 +17,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 class AndroidFirebase private constructor(val app: FirebaseApp, val config: AglynConfig) {
   val auth: FirebaseAuth = FirebaseAuth.getInstance(app)
   val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(app)
+  /** The App Check token, for a REST or gRPC call to Firebase; Auth and Firestore read it themselves. */
+  val appCheck: AppCheckTokenProvider = if (config.appCheck) FirebaseAppCheckTokens(app) else NoAppCheck
 
   companion object {
     @Volatile private var current: AndroidFirebase? = null
@@ -34,6 +39,7 @@ class AndroidFirebase private constructor(val app: FirebaseApp, val config: Agly
         .build()
       val app = FirebaseApp.getApps(context).firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
         ?: FirebaseApp.initializeApp(context, options)
+      installAppCheck(app, config)
       val firebase = AndroidFirebase(app, config)
       config.authEmulatorHost?.let { hostPort ->
         val (host, port) = hostPort.split(':')
@@ -45,7 +51,28 @@ class AndroidFirebase private constructor(val app: FirebaseApp, val config: Agly
       }
       return firebase
     }
+
+    /**
+     * Firebase App Check on [app], before Auth or Firestore make a call: production enforces it on both. The Play Integrity
+     * provider asks Firebase for a challenge (`generatePlayIntegrityChallenge`), has Google Play attest the app with it as the
+     * nonce, and trades the verdict for a token (`exchangePlayIntegrityToken`); `firebase-appcheck` caches the token for its
+     * lifetime, refreshes it before it lapses and shares one exchange among concurrent callers. Every Firebase app needs its
+     * own (a support session's named app too): copying the options does not copy App Check. Off for the emulator stack.
+     */
+    fun installAppCheck(app: FirebaseApp, config: AglynConfig) {
+      if (!config.appCheck) return
+      FirebaseAppCheck.getInstance(app).apply {
+        installAppCheckProviderFactory(PlayIntegrityAppCheckProviderFactory.getInstance())
+        setTokenAutoRefreshEnabled(true)
+      }
+    }
   }
+}
+
+/** Firebase App Check's current token for one Firebase app. */
+private class FirebaseAppCheckTokens(private val app: FirebaseApp) : AppCheckTokenProvider {
+  override suspend fun token(forceRefresh: Boolean): String? =
+    FirebaseAppCheck.getInstance(app).getAppCheckToken(forceRefresh).await().token
 }
 
 class SharedPreferencesStore(context: Context, name: String = "aglyn") : KeyValueStore {

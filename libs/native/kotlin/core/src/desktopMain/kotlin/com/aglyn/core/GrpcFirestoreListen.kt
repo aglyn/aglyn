@@ -45,6 +45,8 @@ interface FirestoreListen {
 class GrpcFirestoreListen(
   projectId: String,
   emulatorHost: String?,
+  /** The App Check token each stream carries as `x-firebase-appcheck` (none on desktop yet, nor on the emulator). */
+  private val appCheck: AppCheckTokenProvider = NoAppCheck,
 ) : FirestoreListen {
   private val database = "projects/$projectId/databases/(default)"
   private val documents = "$database/documents"
@@ -88,6 +90,7 @@ class GrpcFirestoreListen(
     val headers = Metadata().apply {
       put(AUTHORIZATION, "Bearer $idToken")
       put(RESOURCE_PREFIX, database)
+      runCatching { appCheck.token(false) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { put(APP_CHECK, it) }
     }
     val requests = ClientCalls.asyncBidiStreamingCall(
       ClientInterceptors.intercept(grpcChannel, MetadataUtils.newAttachHeadersInterceptor(headers)).newCall(LISTEN, CallOptions.DEFAULT),
@@ -146,6 +149,7 @@ class GrpcFirestoreListen(
     private const val TARGET_ID = 1
     private val AUTHORIZATION: Metadata.Key<String> = Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER)
     private val RESOURCE_PREFIX: Metadata.Key<String> = Metadata.Key.of("google-cloud-resource-prefix", Metadata.ASCII_STRING_MARSHALLER)
+    internal val APP_CHECK: Metadata.Key<String> = Metadata.Key.of(APP_CHECK_HEADER.lowercase(), Metadata.ASCII_STRING_MARSHALLER)
 
     /** The one RPC this client calls, described by hand so no generated stub is needed. */
     val LISTEN: MethodDescriptor<ListenRequest, ListenResponse> = MethodDescriptor.newBuilder(

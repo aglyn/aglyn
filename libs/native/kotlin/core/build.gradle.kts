@@ -36,6 +36,10 @@ kotlin {
       api(libs.firebase.auth)
       api(libs.firebase.firestore)
       api(libs.firebase.messaging)
+      // Firebase App Check (AGL-3818): its Play Integrity provider, which Auth and Firestore read, and the Play Integrity
+      // library it calls, pinned here so the version is ours.
+      implementation(libs.firebase.appcheck.playintegrity)
+      implementation(libs.play.integrity)
     }
     named("desktopTest") {
       dependencies {

@@ -42,6 +42,7 @@ class AglynPosApplication : Application() {
         firebaseMessagingSenderId = BuildConfig.FIREBASE_MESSAGING_SENDER_ID,
         authEmulatorHost = BuildConfig.AUTH_EMULATOR_HOST,
         firestoreEmulatorHost = BuildConfig.FIRESTORE_EMULATOR_HOST,
+        appCheck = BuildConfig.APP_CHECK,
       ),
       manifest = NativePluginManifest.entries,
       appVersion = BuildConfig.VERSION_NAME,

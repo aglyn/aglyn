@@ -9,6 +9,7 @@ import com.aglyn.core.JavaPreferencesStore
 import com.aglyn.core.RestFirestoreReader
 import com.aglyn.core.WorkspaceStore
 import com.aglyn.core.defaultHttpClient
+import com.aglyn.core.withAppCheck
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.NativePluginManifestEntry
 import com.aglyn.pluginhost.NativePluginRegistry
@@ -67,6 +68,7 @@ object DesktopShell {
       firestoreEmulatorHost = read("firestoreEmulatorHost", "127.0.0.1:8082"),
       googleDesktopClientId = read("googleDesktopClientId", null),
       googleDesktopClientSecret = read("googleDesktopClientSecret", null),
+      appCheck = read("appCheck", null),
     )
   }
 
@@ -88,7 +90,10 @@ object DesktopShell {
   ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { System.err.println("Aglyn: $it") }
-    val http = defaultHttpClient()
+    // Firebase App Check: Compose Desktop has no attestation provider yet, so its Firebase calls carry none; a desktop
+    // provider plugs in here, and every Firebase call below picks it up.
+    val appCheck: com.aglyn.core.AppCheckTokenProvider = com.aglyn.core.NoAppCheck
+    val http = defaultHttpClient().let { if (config.appCheck) it.withAppCheck(appCheck) else it }
     // One kept session per app and Firebase project, so an emulator run never restores into production.
     val auth = IdentityToolkitAuthSession(
       http,
@@ -102,7 +107,9 @@ object DesktopShell {
       config.firebase.projectId,
       config.firestoreEmulatorHost,
       { auth.idToken(false) },
-      listen = com.aglyn.core.GrpcFirestoreListen(config.firebase.projectId, config.firestoreEmulatorHost),
+      listen = com.aglyn.core.GrpcFirestoreListen(
+        config.firebase.projectId, config.firestoreEmulatorHost, if (config.appCheck) appCheck else com.aglyn.core.NoAppCheck,
+      ),
       freshIdToken = { auth.idToken(true) },
     )
     val prefs = JavaPreferencesStore(if (app == NativeApp.POS) "com/aglyn/pos" else "com/aglyn/app")

@@ -70,7 +70,9 @@ interface AuthSession {
 class AuthError(override val message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /** The sign-in form's words for an Identity Toolkit / Firebase Auth error code. */
-fun authErrorMessage(code: String?): String = when (code?.uppercase()?.substringBefore(' ')) {
+fun authErrorMessage(code: String?): String = if (code == APP_CHECK_REFUSED || isAppCheckRefusalText(code)) {
+  APP_CHECK_REFUSAL_MESSAGE
+} else when (code?.uppercase()?.substringBefore(' ')) {
   "EMAIL_NOT_FOUND", "INVALID_PASSWORD", "INVALID_LOGIN_CREDENTIALS", "ERROR_WRONG_PASSWORD",
   "ERROR_USER_NOT_FOUND", "ERROR_INVALID_CREDENTIAL", "INVALID_CREDENTIAL",
   -> "That email and password do not match."
