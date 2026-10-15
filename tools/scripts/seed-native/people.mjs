@@ -125,12 +125,12 @@ export async function seedCrm({ put, uid, orgId, hostId, now }) {
 
   /* ---------- companies ---------- */
   const companies = [
-    { id: 'co-northwind', name: 'Northwind Traders', domain: 'northwind.example', phone: '+1 555 0100', industry: 'Retail', owner: uid },
-    { id: 'co-contoso', name: 'Contoso Coffee', domain: 'contoso.example', phone: '+1 555 0101', industry: 'Food & Beverage', owner: uid },
-    { id: 'co-fabrikam', name: 'Fabrikam Studio', domain: 'fabrikam.example', phone: '+1 555 0102', industry: 'Design' },
-    { id: 'co-tailspin', name: 'Tailspin Bikes', domain: 'tailspin.example', phone: '+1 555 0103', industry: 'Retail', owner: uid },
-    { id: 'co-litware', name: 'Litware Books', domain: 'litware.example', industry: 'Publishing' },
-    { id: 'co-adatum', name: 'Adatum Dental', domain: 'adatum.example', phone: '+1 555 0105', industry: 'Healthcare' },
+    { id: 'co-northwind', name: 'Harbor Market Co-op', domain: 'harbormarket.example', phone: '+1 555 0100', industry: 'Retail', owner: uid },
+    { id: 'co-contoso', name: 'Larkspur Cafe', domain: 'larkspur.example', phone: '+1 555 0101', industry: 'Food & Beverage', owner: uid },
+    { id: 'co-fabrikam', name: 'Fernhill Events', domain: 'fernhill.example', phone: '+1 555 0102', industry: 'Design' },
+    { id: 'co-tailspin', name: 'Cedar & Oak Catering', domain: 'cedaroak.example', phone: '+1 555 0103', industry: 'Retail', owner: uid },
+    { id: 'co-litware', name: 'Maple Street Books', domain: 'maplestreet.example', industry: 'Publishing' },
+    { id: 'co-adatum', name: 'Brightside Dental', domain: 'brightside.example', phone: '+1 555 0105', industry: 'Healthcare' },
   ]
   for (const [index, company] of companies.entries()) {
     await put(`${root}/companies/${company.id}`, {
@@ -157,13 +157,18 @@ export async function seedCrm({ put, uid, orgId, hostId, now }) {
 
   /* ---------- contacts ---------- */
   const contacts = [
-    { email: 'grace.hopper@northwind.example', name: 'Grace Hopper', phone: '+1 555 0110', stage: 'customer', company: 'co-northwind', title: 'COO', owner: uid },
-    { email: 'alan.turing@contoso.example', name: 'Alan Turing', phone: '+1 555 0111', stage: 'opportunity', company: 'co-contoso', title: 'Founder', owner: uid },
-    { email: 'katherine.johnson@fabrikam.example', name: 'Katherine Johnson', stage: 'sales-qualified', company: 'co-fabrikam', title: 'Creative director' },
-    { email: 'margaret.hamilton@tailspin.example', name: 'Margaret Hamilton', phone: '+1 555 0113', stage: 'lead', company: 'co-tailspin', owner: uid },
-    { email: 'edsger@litware.example', name: 'Edsger Dijkstra', stage: 'subscriber', company: 'co-litware' },
-    { email: 'barbara.liskov@adatum.example', name: 'Barbara Liskov', phone: '+1 555 0115', stage: 'customer', company: 'co-adatum', title: 'Practice manager' },
-    { email: 'linus@example.test', name: 'Linus Torvalds', stage: 'marketing-qualified' },
+    { email: 'daniel.kim@harbormarket.example', name: 'Daniel Kim', phone: '+1 555 0110', stage: 'customer', company: 'co-northwind', title: 'COO', owner: uid },
+    { email: 'marcus.hale@larkspur.example', name: 'Marcus Hale', phone: '+1 555 0111', stage: 'opportunity', company: 'co-contoso', title: 'Founder', owner: uid },
+    { email: 'renee.fournier@fernhill.example', name: 'Renee Fournier', stage: 'sales-qualified', company: 'co-fabrikam', title: 'Events director' },
+    { email: 'isabel.moreno@cedaroak.example', name: 'Isabel Moreno', phone: '+1 555 0113', stage: 'lead', company: 'co-tailspin', owner: uid },
+    { email: 'owen@maplestreet.example', name: 'Owen Parker', stage: 'subscriber', company: 'co-litware' },
+    { email: 'naomi.brooks@brightside.example', name: 'Naomi Brooks', phone: '+1 555 0115', stage: 'customer', company: 'co-adatum', title: 'Practice manager' },
+    { email: 'ethan@example.test', name: 'Ethan Cole', stage: 'marketing-qualified' },
+    { email: 'sofia.reyes@harbormarket.example', name: 'Sofia Reyes', phone: '+1 555 0116', stage: 'customer', company: 'co-northwind', title: 'Buyer', owner: uid },
+    { email: 'james.okafor@larkspur.example', name: 'James Okafor', phone: '+1 555 0117', stage: 'customer', company: 'co-contoso', title: 'Head barista' },
+    { email: 'lena.fischer@fernhill.example', name: 'Lena Fischer', phone: '+1 555 0118', stage: 'opportunity', company: 'co-fabrikam', title: 'Planner', owner: uid },
+    { email: 'victor.santos@maplestreet.example', name: 'Victor Santos', stage: 'lead', company: 'co-litware', title: 'Manager' },
+    { email: 'amelia.wright@cedaroak.example', name: 'Amelia Wright', phone: '+1 555 0119', stage: 'sales-qualified', company: 'co-tailspin', title: 'Owner', owner: uid },
   ]
   const contactIds = {}
   for (const [index, contact] of contacts.entries()) {
@@ -198,14 +203,14 @@ export async function seedCrm({ put, uid, orgId, hostId, now }) {
 
   /* ---------- leads ---------- */
   const leads = [
-    { email: 'ada@analytical.example', name: 'Ada Lovelace', phone: '+1 555 0120', company: 'Analytical Engines', title: 'Founder', status: 'new' },
-    { email: 'charles@difference.example', name: 'Charles Babbage', company: 'Difference Works', status: 'working', owner: uid },
-    { email: 'hedy@frequency.example', name: 'Hedy Lamarr', phone: '+1 555 0122', mobile: '+1 555 0222', company: 'Frequency Labs', status: 'nurturing' },
-    { email: 'tim@web.example', name: 'Tim Berners-Lee', company: 'Web Foundry', title: 'CTO', status: 'working', owner: uid },
-    { email: 'radia@spanning.example', name: 'Radia Perlman', phone: '+1 555 0124', company: 'Spanning Tree Co', status: 'new' },
-    { email: 'dennis@unix.example', name: 'Dennis Ritchie', company: 'Bell Shop', status: 'unqualified', reason: 'No budget this year' },
-    { email: 'frances@compilers.example', name: 'Frances Allen', company: 'Compiler Guild', status: 'qualified', owner: uid },
-    { email: 'john@lisp.example', name: 'John McCarthy', status: 'new' },
+    { email: 'jules@rodriguezflowers.example', name: 'Jules Rivera', phone: '+1 555 0120', company: 'Rivera Flowers', title: 'Founder', status: 'new' },
+    { email: 'tyler@nguyenhardware.example', name: 'Tyler Nguyen', company: 'Nguyen Hardware', status: 'working', owner: uid },
+    { email: 'chloe@brightyoga.example', name: 'Chloe Martin', phone: '+1 555 0122', mobile: '+1 555 0222', company: 'Bright Yoga', status: 'nurturing' },
+    { email: 'ben@carterrealty.example', name: 'Ben Carter', company: 'Carter Realty', title: 'CTO', status: 'working', owner: uid },
+    { email: 'rachel@kimwellness.example', name: 'Rachel Kim', phone: '+1 555 0124', company: 'Kim Wellness', status: 'new' },
+    { email: 'dan@bellstreetgym.example', name: 'Dan Ortiz', company: 'Bell Street Gym', status: 'unqualified', reason: 'No budget this year' },
+    { email: 'fran@delgadolaw.example', name: 'Fran Delgado', company: 'Delgado Law', status: 'qualified', owner: uid },
+    { email: 'jon@millerco.example', name: 'Jon Miller', status: 'new' },
   ]
   const STATUS_LABELS = { new: 'New', nurturing: 'Nurturing', working: 'Working', qualified: 'Qualified', unqualified: 'Unqualified' }
   const leadIds = []
@@ -251,12 +256,12 @@ export async function seedCrm({ put, uid, orgId, hostId, now }) {
   })
   const contactOf = (email) => contactIds[email]
   const deals = [
-    { id: 'deal-northwind', title: 'Northwind annual plan', cents: 1_250_000, stage: 'proposal-price-quote', company: 'co-northwind', contact: 'grace.hopper@northwind.example', close: 14 },
-    { id: 'deal-contoso', title: 'Contoso espresso bar fit-out', cents: 480_000, stage: 'negotiation-review', company: 'co-contoso', contact: 'alan.turing@contoso.example', close: 5 },
-    { id: 'deal-fabrikam', title: 'Fabrikam rebrand', cents: 900_000, stage: 'qualification', company: 'co-fabrikam', contact: 'katherine.johnson@fabrikam.example', close: 45 },
-    { id: 'deal-tailspin', title: 'Tailspin spring catalog', cents: 215_000, stage: 'prospecting', company: 'co-tailspin', contact: 'margaret.hamilton@tailspin.example', close: 60 },
-    { id: 'deal-adatum', title: 'Adatum booking site', cents: 360_000, status: 'won', stage: 'won', company: 'co-adatum', contact: 'barbara.liskov@adatum.example', closed: 6 },
-    { id: 'deal-litware', title: 'Litware store launch', cents: 150_000, status: 'lost', stage: 'lost', company: 'co-litware', contact: 'edsger@litware.example', closed: 12, lost: 'Chose to wait until next year' },
+    { id: 'deal-northwind', title: 'Harbor Market weekly bread order', cents: 1_250_000, stage: 'proposal-price-quote', company: 'co-northwind', contact: 'daniel.kim@harbormarket.example', close: 14 },
+    { id: 'deal-contoso', title: 'Larkspur Cafe wholesale coffee', cents: 480_000, stage: 'negotiation-review', company: 'co-contoso', contact: 'marcus.hale@larkspur.example', close: 5 },
+    { id: 'deal-fabrikam', title: 'Fernhill wedding season catering', cents: 900_000, stage: 'qualification', company: 'co-fabrikam', contact: 'renee.fournier@fernhill.example', close: 45 },
+    { id: 'deal-tailspin', title: 'Cedar & Oak holiday catering', cents: 215_000, stage: 'prospecting', company: 'co-tailspin', contact: 'isabel.moreno@cedaroak.example', close: 60 },
+    { id: 'deal-adatum', title: 'Brightside Dental office catering', cents: 360_000, status: 'won', stage: 'won', company: 'co-adatum', contact: 'naomi.brooks@brightside.example', closed: 6 },
+    { id: 'deal-litware', title: 'Maple Street Books cafe pastries', cents: 150_000, status: 'lost', stage: 'lost', company: 'co-litware', contact: 'owen@maplestreet.example', closed: 12, lost: 'Chose to wait until next year' },
   ]
   for (const [index, deal] of deals.entries()) {
     const status = deal.status ?? 'open'
@@ -299,11 +304,11 @@ export async function seedCrm({ put, uid, orgId, hostId, now }) {
     ['act-lead-2', { leadId: leadIds[1] }, 'call', 'Intro call. Wants a demo next week.', 2, { outcome: 'Connected', durationMinutes: 20, direction: 'outbound' }],
     ['act-lead-3', { leadId: leadIds[1] }, 'email', 'Sent the case study and pricing.', 1, { direction: 'outbound' }],
     ['act-lead-4', { leadId: leadIds[3] }, 'meeting', 'Discovery meeting with the web team.', 3, { durationMinutes: 45 }],
-    ['act-contact-1', { contactId: contactOf('grace.hopper@northwind.example'), companyId: 'co-northwind' }, 'call', 'Renewal check-in. Happy with the store.', 4, { outcome: 'Connected', durationMinutes: 15, direction: 'inbound' }],
-    ['act-contact-2', { contactId: contactOf('alan.turing@contoso.example'), companyId: 'co-contoso' }, 'note', 'Prefers text over email.', 6],
+    ['act-contact-1', { contactId: contactOf('daniel.kim@harbormarket.example'), companyId: 'co-northwind' }, 'call', 'Renewal check-in. Happy with the store.', 4, { outcome: 'Connected', durationMinutes: 15, direction: 'inbound' }],
+    ['act-contact-2', { contactId: contactOf('marcus.hale@larkspur.example'), companyId: 'co-contoso' }, 'note', 'Prefers text over email.', 6],
     ['act-company-1', { companyId: 'co-tailspin' }, 'note', 'Three locations; buying decisions made at head office.', 8],
-    ['act-deal-1', { dealId: 'deal-northwind', contactId: contactOf('grace.hopper@northwind.example'), companyId: 'co-northwind' }, 'email', 'Sent the proposal for the annual plan.', 2, { direction: 'outbound' }],
-    ['act-deal-2', { dealId: 'deal-contoso', contactId: contactOf('alan.turing@contoso.example'), companyId: 'co-contoso' }, 'meeting', 'Walked through the contract terms.', 1, { durationMinutes: 30 }],
+    ['act-deal-1', { dealId: 'deal-northwind', contactId: contactOf('daniel.kim@harbormarket.example'), companyId: 'co-northwind' }, 'email', 'Sent the proposal for the annual plan.', 2, { direction: 'outbound' }],
+    ['act-deal-2', { dealId: 'deal-contoso', contactId: contactOf('marcus.hale@larkspur.example'), companyId: 'co-contoso' }, 'meeting', 'Walked through the contract terms.', 1, { durationMinutes: 30 }],
   ]
   for (const [id, link, kind, body, daysAgo, extra] of activities) {
     await put(`${root}/crmActivities/${id}`, {
@@ -314,7 +319,7 @@ export async function seedCrm({ put, uid, orgId, hostId, now }) {
       ...link,
       ...(extra ?? {}),
       byUid: uid,
-      byName: 'Mobile Owner',
+      byName: 'Hannah Reyes',
       createdAt: at(daysAgo),
       updatedAt: at(daysAgo),
     })

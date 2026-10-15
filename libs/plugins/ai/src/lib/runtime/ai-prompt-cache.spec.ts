@@ -34,7 +34,7 @@ import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inv
 import { aiModelCacheMinTokens } from '../providers/catalog'
 import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import type { AiStepKind } from '../providers/catalog'
-import type { AiSystemBlock, AiTool } from '../providers/contract'
+import type { AiProvider, AiProviderRequest, AiResult, AiSystemBlock, AiTool } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { AI_EVAL_GRADER_INSTRUCTIONS, AI_EVAL_RUBRIC_TOOL } from './ai-eval-live'
 import {
@@ -42,6 +42,7 @@ import {
   aiDoctrineSystemBlock,
   aiDoctrineSystemBlocks,
   aiDoctrineTreeTool,
+  runValidatedGeneration,
 } from './ai-doctrine'
 import { detectPublishIntent } from './ai-doctrine-validators'
 import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
@@ -89,7 +90,7 @@ import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
-import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import { AI_INVENTORY_LOOKUP_TOOL_NAME, aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
 import {
   AI_CATALOG_INSTRUCTIONS,
@@ -1153,3 +1154,138 @@ describe('a site’s context block extends the shared prefix, never enters it (A
   })
 })
 
+
+/**
+ * A GENERATION THAT CONTINUES READS ITS OWN CONVERSATION (AGL-3809).
+ *
+ * A lookup round and a re-ask re-send the whole first turn — the brief and
+ * what the door put beside it — and the site's inventory, which without a
+ * breakpoint after them is billed at the full input rate on every
+ * continuation. A door that turns `cacheConversation` on pays a cache write
+ * on its first call's tail, which pays back only where most generations
+ * continue, so the doors that may are listed with their measurement
+ * (`docs/AI_CACHE_AUDIT_2026-10.md`): a new one is red here until measured.
+ */
+const AI_CONVERSATION_CACHE_DOORS: Record<string, string> = {
+  'jobs/ai-job-plan-step.ts':
+    'plans continue more often than not: 27 lookup rounds to 42 answers on Claude Sonnet 5.5 in the golden replay store, and two or three calls in about half of production plan steps',
+}
+
+describe('a generation that continues reads its own conversation (AGL-3809)', () => {
+  it('is turned on only by the doors measured to continue', () => {
+    const turnedOn = sourceFiles(LIB_ROOT)
+      .filter((path) => /\bcacheConversation:\s*true\b/.test(readFileSync(path, 'utf8')))
+      .map((path) => path.slice(LIB_ROOT.length + 1))
+      .sort()
+    expect(turnedOn).toEqual(Object.keys(AI_CONVERSATION_CACHE_DOORS).sort())
+  })
+
+  /** A provider that answers from a queue and keeps every request it was sent. */
+  function recording(answers: AiResult[]): { fake: AiProvider; requests: AiProviderRequest[] } {
+    const requests: AiProviderRequest[] = []
+    const fake: AiProvider = {
+      id: 'fake',
+      label: 'Fake',
+      apiKeyEnv: 'FAKE_AI_KEY',
+      endpointHost: 'ai.test',
+      readApiKey: () => 'key',
+      models: () => [],
+      complete: async (request) => {
+        requests.push(request)
+        const next = answers.shift()
+        if (!next) throw new Error('no answer armed')
+        return next
+      },
+      stream: async () => {
+        throw new Error('the doctrine loop never streams')
+      },
+    }
+    return { fake, requests }
+  }
+
+  const answer = (toolUse: Array<{ name: string; input: Record<string, unknown> }>): AiResult => ({
+    kind: 'completion',
+    text: toolUse.length ? '' : 'A plan in prose.',
+    toolUse,
+    usage: { inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    estCostUsd: 0,
+    stopReason: toolUse.length ? 'tool_use' : 'end_turn',
+  })
+
+  /** The wire body with every cache marker taken out: what the cache matches on. */
+  const unmarked = (request: AiProviderRequest) =>
+    JSON.parse(
+      JSON.stringify(buildAnthropicRequestBody({ ...request, stream: false }), (key, value) =>
+        key === 'cache_control' ? undefined : value,
+      ),
+    ) as { tools: unknown; system: unknown; messages: unknown[] }
+
+  const markers = (request: AiProviderRequest) =>
+    (JSON.stringify(buildAnthropicRequestBody({ ...request, stream: false })).match(/"cache_control"/g) ?? []).length
+
+  async function planGeneration(): Promise<AiProviderRequest[]> {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    // A lookup round, then two answers the check cannot read: three calls, as
+    // far as a plan's conversation grows before it gives up.
+    const { fake, requests } = recording([
+      answer([{ name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'components', query: 'card' } }]),
+      answer([]),
+      answer([]),
+    ])
+    await runValidatedGeneration('plan', {
+      step: 'job.plan',
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      // The plan with its site block: three system breakpoints, so the
+      // conversation's is the fourth and last the provider caches.
+      instructions: aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, {
+        profile: resolveBusinessProfile({ host: { displayName: 'Acme Roofing' }, site: {} }),
+        preferences: [],
+      }),
+      inventory: SITE_A,
+      messages: [{ role: 'user', content: 'Kind of job: site\nBrief: a roofer in Springfield' }],
+      tool: aiBuildPlanToolFor('', { language: true }),
+      cacheConversation: true,
+    })
+    warn.mockRestore()
+    return requests
+  }
+
+  it('asks every call of the generation to cache its conversation, within the four markers', async () => {
+    const requests = await planGeneration()
+    expect(requests).toHaveLength(3)
+    for (const request of requests) {
+      expect(request.cacheConversation).toBe(true)
+      expect(markers(request)).toBe(4)
+    }
+  })
+
+  it('sends each call’s cached bytes as the exact prefix of the next call’s', async () => {
+    const requests = await planGeneration()
+    for (let index = 1; index < requests.length; index++) {
+      const before = unmarked(requests[index - 1])
+      const after = unmarked(requests[index])
+      expect(after.tools).toEqual(before.tools)
+      expect(after.system).toEqual(before.system)
+      // Everything the earlier call marked, its whole conversation, opens the later one unchanged.
+      expect(after.messages.slice(0, before.messages.length)).toEqual(before.messages)
+      expect(after.messages.length).toBeGreaterThan(before.messages.length)
+    }
+  })
+
+  it('drops the conversation’s breakpoint, never a system one, where the system holds all four', async () => {
+    const { fake, requests } = recording([answer([{ name: 'submit', input: {} }])])
+    await runValidatedGeneration('four-breakpoints', {
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      // The doctrine's own breakpoint and these three.
+      instructions: [1, 2, 3].map((n) => ({ text: `rules ${n}`, cacheBreakpoint: true })),
+      messages: [{ role: 'user', content: 'brief' }],
+      tool: { name: 'submit', description: 'Submit.', strict: true, inputSchema: { type: 'object', properties: {} } },
+      cacheConversation: true,
+      check: () => ({ value: {}, violations: [] }),
+    })
+    expect(requests[0].cacheConversation).toBeUndefined()
+    expect(markers(requests[0])).toBe(4)
+  })
+})

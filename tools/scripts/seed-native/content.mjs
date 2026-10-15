@@ -152,9 +152,9 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
   await put(
     `hosts/${hostId}`,
     {
-      logoUrl: 'https://demo-site.example.test/logo.png',
+      logoUrl: 'https://juniperstreet.example/logo.png',
       business: {
-        supportEmail: 'hello@mobile-demo.test',
+        supportEmail: 'hello@juniperstreet.example',
         address: '12 Main St\nPortland, OR 97201',
         socialLinks: [
           { label: 'Instagram', url: 'https://social.example.com/instagram/mobiledemo' },
@@ -164,14 +164,14 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
       locales: ['en'],
       defaultLocale: 'en',
       seo: {
-        title: 'Mobile Demo Bakery',
+        title: 'Juniper Street Bakery',
         description: 'Fresh bread and pastries, baked every morning in Portland.',
         separator: '|',
-        favicon: 'https://demo-site.example.test/favicon.png',
+        favicon: 'https://juniperstreet.example/favicon.png',
         entity: {
           type: '1',
-          name: 'Mobile Demo Bakery',
-          email: 'hello@mobile-demo.test',
+          name: 'Juniper Street Bakery',
+          email: 'hello@juniperstreet.example',
           telephone: '+1 503 555 0100',
           businessType: 'FoodEstablishment',
           areaServed: ['Portland', 'Beaverton'],
@@ -203,7 +203,7 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
   })
   // One customized email: its design is a version the Besigner opens.
   await put(`hosts/${hostId}/emailTemplates/order-receipt`, {
-    subject: 'Your order from Mobile Demo Bakery',
+    subject: 'Your order from Juniper Street Bakery',
     versionId: 'order-receipt-v1',
     updatedAt: ago(4),
   })
@@ -258,7 +258,7 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
       body: `# ${title}\n\nThe first paragraph of the post.`,
       status,
       ...(categoryId ? { categoryId } : {}),
-      ...(status === 'draft' ? { authorName: 'Mobile Owner' } : { authorId: author[0], authorName: author[1] }),
+      ...(status === 'draft' ? { authorName: 'Hannah Reyes' } : { authorId: author[0], authorName: author[1] }),
       tags: ['seed'],
       ...(published ? { publishedAt: published, publishSortAt: published } : {}),
       ...(scheduled ? { publishAt: scheduled, publishSortAt: scheduled } : {}),

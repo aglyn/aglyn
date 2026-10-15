@@ -183,10 +183,11 @@ const ANTHROPIC_DEFAULT_EFFORT: Readonly<Record<string, AiEffort>> = {
 export function buildAnthropicRequestBody(
   input: Omit<AiProviderRequest, 'apiKey' | 'signal'> & { stream: boolean },
 ): Record<string, unknown> {
-  const breakpoints = input.system.filter((block) => block.cacheBreakpoint)
-  if (breakpoints.length > ANTHROPIC_MAX_CACHE_BREAKPOINTS) {
+  const conversation = Boolean(input.cacheConversation) && input.messages.length > 0
+  const breakpoints = input.system.filter((block) => block.cacheBreakpoint).length + (conversation ? 1 : 0)
+  if (breakpoints > ANTHROPIC_MAX_CACHE_BREAKPOINTS) {
     throw new Error(
-      `${breakpoints.length} cache breakpoints; the Messages API allows ${ANTHROPIC_MAX_CACHE_BREAKPOINTS}`,
+      `${breakpoints} cache breakpoints; the Messages API allows ${ANTHROPIC_MAX_CACHE_BREAKPOINTS}`,
     )
   }
   // One lifetime for every breakpoint: the API refuses a longer-lived entry
@@ -223,9 +224,11 @@ export function buildAnthropicRequestBody(
         : {}),
     ...(effort ? { output_config: { effort } } : {}),
     ...(system.length ? { system } : {}),
-    messages: input.messages.map((message) => ({
+    messages: input.messages.map((message, index) => ({
       role: message.role,
-      content: anthropicContentOf(message),
+      content: conversation
+        ? anthropicBlocksOf(message, index === input.messages.length - 1 ? cacheControl : null)
+        : anthropicContentOf(message),
     })),
     ...(tools?.length ? { tools, tool_choice: { type: 'auto' } } : {}),
   }
@@ -243,6 +246,24 @@ function anthropicContentOf(message: AiMessage): string | Array<Record<string, u
       ? { type: 'image', source: { type: 'base64', media_type: part.mediaType, data: part.data } }
       : { type: 'text', text: part.text },
   )
+}
+
+/**
+ * A turn as content blocks whatever its shape, the last block carrying the
+ * conversation's breakpoint when it is the request's last turn (AGL-3809).
+ * Every turn of a request that caches its conversation is sent as blocks, so
+ * a turn reads the same on the call that marked it and on every call after,
+ * where it is no longer last.
+ */
+function anthropicBlocksOf(
+  message: AiMessage,
+  cacheControl: Record<string, unknown> | null,
+): Array<Record<string, unknown>> {
+  const content = anthropicContentOf(message)
+  const blocks = typeof content === 'string' ? [{ type: 'text', text: content }] : content
+  if (!cacheControl || !blocks.length) return blocks
+  const last = blocks.length - 1
+  return blocks.map((block, index) => (index === last ? { ...block, cache_control: cacheControl } : block))
 }
 
 /** The provider's request id, when it sent one — the log's join key. */

@@ -78,6 +78,52 @@ always seeded. `--list-brands` prints the packs, `--reset` deletes this
 host's fixtures, `--no-prune` merges instead of replacing. Credentials are
 optional when `FIRESTORE_EMULATOR_HOST` is set.
 
+## The store-review workspace (AGL-3812)
+
+App Store and Google Play reviewers sign in as the reviewer account, which
+owns one production org (`9A5fJ_zEoH`, "Juniper Street Co."). Its sites are
+`review-bakery` (Juniper Street Bakery, where the feature data lands),
+`review-juniper-cafe`, `review-juniper-catering`, and the brand-pack sites
+`review-cantina` and `review-ironleaf`.
+
+```bash
+# 1. The brand pack first: its prune deletes every `seed-` document in the
+#    collections it owns, this seed's included.
+node --env-file=.env tools/scripts/seed-demo-host.mjs --host review-bakery --brand bakery
+# 2. Then the workspace data. Without --write it prints every document.
+node --env-file=.env tools/scripts/seed-review-org.mjs \
+  --org 9A5fJ_zEoH --host review-bakery --create-sibling-sites --write
+# 3. Read it back: every planned field, per collection.
+node --env-file=.env tools/scripts/seed-review-org.mjs \
+  --org 9A5fJ_zEoH --host review-bakery --create-sibling-sites --verify
+```
+
+It accepts that org and that host only. It replays the native apps' emulator
+areas (`tools/scripts/seed-native/*`, or another checkout's with `--fixtures`),
+the e2e bakery's CRM book, and the docs bakery's builders
+(`tools/scripts/lib/docs-fixture-builders.mjs`: API keys, a chargeback, sixty
+days of traffic, the business profile, AI memory), then adds About, Contact
+and Order pages and a product template. The policy in
+`tools/scripts/lib/review-org-seed.mjs` decides what may reach a live org:
+
+- **Never written:** Auth users, member rows, invites, the org's plan,
+  subscription, entitlements, counters or usage; media (no Storage object
+  behind it); page versions, layouts, templates and email templates with no
+  designed nodes; the host's theme, analytics tag and verification token.
+- **Written disarmed:** scheduled sends are moved 75 years out so
+  `campaigns/process-scheduled` never finds them due; every seeded booking
+  carries `reminderSentAt` and every CRM task `reminderSentAtMs`, the stamps
+  their reminder crons write after sending; webhooks are off and carry no
+  secret.
+- **Addresses:** every one is under `example.com` or `example.org`; people
+  and owners are the org owner's uid only.
+
+Ids are `seed-review-…` and every write is a merge-set; a re-run deletes this
+seed's documents the plan no longer names (by prefix and `seedSource`). The
+run ends with site-wide publish outbox entries, so the console's drain drops
+the live sites' caches within fifteen minutes. `npm run test:review-org-seed`
+holds the plan to all of the above.
+
 ## Brand packs
 
 A pack is not a string table. Three sites that differ only in colour still

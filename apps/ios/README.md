@@ -79,7 +79,7 @@ Links: `aglyn://<console path>` (and `aglyn-pos://` for the register) opens a
 console path, natively when a plugin answers it, otherwise in the console WebView:
 
 ```bash
-xcrun simctl openurl booted 'aglyn://demo-workspace/hosts/demo-site/redirects'
+xcrun simctl openurl booted 'aglyn://juniper-street/hosts/juniper-street/redirects'
 ```
 
 From the command line (the build directory is git-ignored):
@@ -99,6 +99,16 @@ register: the `StripePaymentSheet` product of `stripe-ios-spm`, pinned exact in
 `Aglyn.xcodeproj`, filtered to iOS (the Mac build never sees it). The first build
 resolves it from GitHub. The Aglyn app target does not link it, and
 `check-mobile-isolation` keeps it that way.
+
+The Stripe Terminal SDK (Tap to Pay on iPhone, Bluetooth readers) is placed the
+same way: the `StripeTerminal` product of `stripe-terminal-ios`, pinned exact in
+`Aglyn.xcodeproj`, filtered to iOS and linked by Aglyn POS alone.
+`AglynPOS/StripeTerminalCollector.swift` binds it to the hardware kit's
+`CardCollector`, and the app publishes it as `DeviceCardReaders.shared` at
+launch, which is where the commerce register finds it. No plugin package may
+depend on it: both apps link the plugin manifest, so that would put the SDK
+(and its location and Bluetooth references) in the Aglyn app, which declares no
+purpose strings for them.
 
 ## Test
 

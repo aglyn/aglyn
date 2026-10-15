@@ -171,6 +171,15 @@ export function validateAiSystemBlocks(system: readonly AiSystemBlock[]): void {
 }
 
 /**
+ * Whether a request may also cache its conversation (AGL-3809): the
+ * conversation's breakpoint is one more marker, so it fits only where the
+ * system blocks leave one of the provider's four free.
+ */
+export function aiConversationCacheFits(system: readonly AiSystemBlock[]): boolean {
+  return system.filter((block) => block.cacheBreakpoint).length < AI_MAX_CACHE_BREAKPOINTS
+}
+
+/**
  * Whether a provider's model reads a picture in a user turn (AGL-2916): what
  * the provider's own descriptor of the model says. A model the provider does
  * not describe reads none, so an adopter's provider is never sent a picture
@@ -356,6 +365,11 @@ export async function runAiRequest(
   input: AiRequest | AiStreamRequest,
 ): Promise<AsyncIterable<AiStreamEvent> | AiResult> {
   validateAiSystemBlocks(input.system)
+  if (input.cacheConversation && !aiConversationCacheFits(input.system)) {
+    throw new AiRequestShapeError(
+      `the conversation's breakpoint would be the ${AI_MAX_CACHE_BREAKPOINTS + 1}th; at most ${AI_MAX_CACHE_BREAKPOINTS} are cached`,
+    )
+  }
   refuseRetiredModelInLiveRun(input.model)
   const { provider, apiKey } = providerFor(input)
   validateAiMessages(input.messages, () => aiModelReadsImages(provider, input.model))

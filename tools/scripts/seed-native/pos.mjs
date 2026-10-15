@@ -11,6 +11,7 @@
  * bookings to take payment for.
  */
 
+import { imageFields } from './store.mjs'
 const variant = (id, priceUsd, extra = {}) => ({ id, options: {}, priceUsd, ...extra })
 const size = (id, label, priceUsd, extra = {}) => ({ id, options: { Size: label }, priceUsd, ...extra })
 
@@ -37,6 +38,8 @@ const extras = {
   ],
 }
 
+const IMAGES = { mug: 'mug-cream', beans: 'beans-pos' }
+
 export async function seedPos({ put, hostId, now: date, nameSearchFields }) {
   const now = date.getTime()
   const product = (id, name, fields) => {
@@ -53,6 +56,7 @@ export async function seedPos({ put, hostId, now: date, nameSearchFields }) {
         barcodes: variants.map((entry) => entry.barcode).filter(Boolean).map((code) => code.toLowerCase()),
         priceFromCents: Math.min(...variants.map((entry) => Math.round(entry.priceUsd * 100))),
         createdAtMs: now,
+        ...imageFields(IMAGES[id] ?? id),
         ...fields,
       },
     ]
@@ -109,15 +113,15 @@ export async function seedPos({ put, hostId, now: date, nameSearchFields }) {
   docs.push(
     [
       `hosts/${hostId}/bookings/pos-ada`,
-      { serviceId: 'class', serviceName: 'Pastry class', name: 'Ada Lovelace', email: 'ada@example.test', startsAtMs: at(1), endsAtMs: at(2), status: 'confirmed' },
+      { serviceId: 'class', serviceName: 'Pastry class', name: 'Elise Carter', email: 'elise@example.test', startsAtMs: at(1), endsAtMs: at(2), status: 'confirmed' },
     ],
     [
       `hosts/${hostId}/bookings/pos-grace`,
-      { serviceId: 'consult', serviceName: 'Custom cake consultation', name: 'Grace Hopper', email: 'grace@example.test', startsAtMs: at(3), endsAtMs: at(3.5), status: 'confirmed' },
+      { serviceId: 'consult', serviceName: 'Custom cake consultation', name: 'Noah Bennett', email: 'noah@example.test', startsAtMs: at(3), endsAtMs: at(3.5), status: 'confirmed' },
     ],
     [
       `hosts/${hostId}/bookings/pos-alan`,
-      { serviceId: 'class', serviceName: 'Pastry class', name: 'Alan Turing', email: 'alan@example.test', startsAtMs: at(5), endsAtMs: at(6), status: 'confirmed', paidAmountCents: 4860 },
+      { serviceId: 'class', serviceName: 'Pastry class', name: 'Zoe Ramirez', email: 'zoe@example.test', startsAtMs: at(5), endsAtMs: at(6), status: 'confirmed', paidAmountCents: 4860 },
     ],
   )
 

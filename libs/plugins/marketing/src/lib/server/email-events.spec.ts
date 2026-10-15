@@ -1190,15 +1190,58 @@ describe('a delivery failure with no site to attribute it to', () => {
     expect(docs.get(PLATFORM_PATH)).toMatchObject({ reason: 'complaint' })
   })
 
-  it('still does NOT suppress a transient bounce', async () => {
-    // The rule that protects a real subscriber from a full mailbox did not
-    // move when the destination did.
+  it('still does NOT suppress a transient bounce on mail that is not a system email', async () => {
+    // A merchant's receipt or workflow mail names no site either. The rule
+    // that protects a real subscriber from a full mailbox did not move when
+    // the destination did.
     const result = await deliver(
-      failure('email.bounced', { bounce: { type: 'Transient' } }, {}),
+      failure(
+        'email.bounced',
+        { bounce: { type: 'Transient' } },
+        { context: 'workflow-send-email' },
+      ),
     )
 
     expect(result.body).toEqual({ ok: true, suppressed: false })
     expect(writtenPaths()).toEqual([])
+  })
+
+  it('files a soft bounce on a system email, so the retention sweep stops', async () => {
+    // The verification email to a sign-up address bounced, and the retention
+    // sweep then sent both verify reminders to the same address. One bounce
+    // on Aglyn's own mail ends Aglyn's mail to that address.
+    const result = await deliver(
+      failure(
+        'email.bounced',
+        { bounce: { type: 'Transient', subType: 'General' } },
+        { context: 'email-verification' },
+      ),
+    )
+
+    expect(result.body).toEqual({
+      ok: true,
+      suppressed: true,
+      scope: 'platform',
+    })
+    expect(docs.get(PLATFORM_PATH)).toMatchObject({
+      email: RECIPIENT,
+      reason: 'soft_bounce',
+      context: 'email-verification',
+      hostId: null,
+      releasedAt: null,
+    })
+    expect(writtenPaths()).toEqual([PLATFORM_PATH])
+  })
+
+  it('files a soft bounce on a retention email with no bounce type at all', async () => {
+    await deliver(
+      failure('email.bounced', {}, { context: 'retention-verify-reminder' }),
+    )
+
+    expect(docs.get(PLATFORM_PATH)).toMatchObject({
+      reason: 'soft_bounce',
+      context: 'retention-verify-reminder',
+    })
   })
 
   it('ignores an event with no recipient', async () => {

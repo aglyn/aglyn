@@ -170,7 +170,10 @@ synchronized groups, so adding a Swift file never edits `project.pbxproj`, and
 merges stay quiet. Local Swift packages are referenced by relative path:
 `libs/native/apple`, `apps/ios/PluginManifest`, and through it every plugin's
 `src/ios`. External packages come in through SPM: `firebase-ios-sdk` (Auth,
-Firestore, Messaging) and `stripe-terminal-ios` (iOS only).
+Firestore, Messaging), and, for the AglynPOS target only and filtered to
+iOS, `stripe-ios-spm` (`StripePaymentSheet`) and `stripe-terminal-ios`
+(`StripeTerminal`). Both are referenced by `Aglyn.xcodeproj` itself, never
+by a plugin package, because both app targets link the one plugin manifest.
 
 `#if os(iOS)` appears only where an API is iOS-only: Tap to Pay, Bluetooth
 readers, the camera barcode scanner, and the `UIApplication` push
@@ -777,10 +780,12 @@ With React Native gone, the guard's TypeScript rules for `libs/mobile` and
 plugin `src/mobile` go with it. `mobile-pure-modules.json` stays: it is now
 the list of pure modules the native generators (§5) may read.
 
-One SDK is placed by the same guard: Stripe's card-entry SDK (PaymentSheet) may be
-linked, imported or declared only by Aglyn POS (`apps/ios/AglynPOS`, the AglynPOS
-Xcode target, `apps/android/pos`, and the version catalog line that pins it). A
-kit, a plugin or the Aglyn app that names it is red (§10).
+Two SDKs are placed by the same guard: Stripe's card-entry SDK (PaymentSheet)
+and the Stripe Terminal SDK may be linked, imported or declared only by Aglyn
+POS (`apps/ios/AglynPOS`, the AglynPOS Xcode target, `apps/android/pos`, and
+the version catalog lines that pin them). A kit, a plugin (its Swift package,
+its Gradle build or its sources), the plugin manifest, the Aglyn app target or
+`:app` that names either is red (§10).
 
 The only sanctioned crossings are the generated files of §3 and §5–§7. Their
 generators read the pure modules. Native code reads only their outputs. Specs
@@ -826,6 +831,11 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   only. The shared kits and every plugin see only the `KeyedCardEntry` seam, and
   `check-mobile-isolation` fails if the Aglyn app target, a kit, a plugin or a
   web tree names the SDK. Tests for the tender run against a fake form.
+- **The reader SDK stays in Aglyn POS too.** Stripe Terminal is linked the
+  same way (the `StripeTerminal` product of `stripe-terminal-ios` on the
+  AglynPOS target, filtered to iOS; `com.stripe:stripeterminal` in `:pos`),
+  behind `CardCollector`, which Aglyn POS publishes as `DeviceCardReaders`
+  at launch. The same guard holds it.
 - **Tips** and **receipts by email or text**, through the routes the web
   register uses. **Print receipt** goes where the console's does: the
   register's cloud printer when it has one (the server queue the printer
@@ -869,19 +879,27 @@ on `main`, because it is server code with nothing RN in it.
 - The collect sequence (retrieve, collect, confirm), the reader prompts and
   the error words are in `AglynHardware/DeviceReader.swift`, the twin of the
   Kotlin `DeviceReader.kt`, tested with a fake `TerminalPaymentPort`.
-  `StripeTerminalCollector` (iOS only) binds the SDK to it. It connects the
+  `StripeTerminalCollector` (`apps/ios/AglynPOS`, iOS only) binds the SDK to
+  it, and Aglyn POS publishes it as `DeviceCardReaders.shared` at launch; the
+  commerce plugin's register, readers screen and kiosk, and a booking paid at
+  the counter, see only `CardCollector`. It connects the
   first reader discovery finds (this iPhone for Tap to Pay, the nearest
   Bluetooth reader), with the SDK's simulated readers whenever the
   connection token says test mode. Card-present payments settle on the
   platform account, so the connection never sets `onBehalfOf`.
-- The Stripe Terminal iOS SDK comes through SPM, pinned `exact: 6.0.0`, as a
-  dependency of the plugin package only, conditional on iOS, so the Mac
-  builds never see it. Both iOS apps link the one plugin manifest, so the
-  Aglyn app carries the framework too, although only `.pos` screens ever
-  construct a reader. Before the first App Store submission the manifest must
-  split per app (or the Aglyn app must declare the same usage strings), since
-  App Review reads the linked frameworks. Aglyn POS declares
+- The Stripe Terminal iOS SDK comes through SPM, pinned `exact: 6.0.0` in
+  `Aglyn.xcodeproj`, and only the AglynPOS target links its `StripeTerminal`
+  product, filtered to iOS, so the Mac builds never see it. The plugin
+  package does not depend on it: both iOS apps link the one plugin manifest,
+  so a plugin-level dependency put the framework, and its location and
+  Bluetooth API references, in the Aglyn app too, and App Store Connect
+  rejected that build for the missing purpose strings (ITMS-90683). The Aglyn
+  app declares none and carries no reader; its booking screens say to take
+  the payment in Aglyn POS. Aglyn POS declares
   `NSBluetoothAlwaysUsageDescription` and `NSLocationWhenInUseUsageDescription`.
+  On Android the SDK (`com.stripe:stripeterminal`, `stripeterminal-taptopay`)
+  is a dependency of `:pos` only, so `:app`'s runtime classpath and merged
+  manifest carry neither it nor its location and Bluetooth permissions.
   Tap to Pay on a real iPhone also needs Apple's Tap to Pay entitlement (§12).
 
 Peripherals live in the `AglynHardware` / `hardware` module:
