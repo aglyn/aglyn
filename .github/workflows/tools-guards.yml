@@ -340,6 +340,11 @@ jobs:
       # Pure node, no emulator, under a second.
       - run: npm run test:demo-brands
 
+      # AGL-3812. The store-review workspace's plan: nothing outside the
+      # reviewer org, nothing billing-shaped, no teammate, no address a reader
+      # owns, and every cron that could message someone disarmed.
+      - run: npm run test:review-org-seed
+
       # test:uptime-targets  WHAT the uptime probe watches (AGL-1617). Two
       # separate blindnesses: the tenant target was a workspace-subdomain
       # shape whose root 404s — health routes are host-independent, so the
