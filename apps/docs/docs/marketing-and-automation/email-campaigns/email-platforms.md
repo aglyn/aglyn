@@ -47,6 +47,9 @@ The first sync starts within 15 minutes. **Sync now** runs it straight away.
 Only a site admin can connect, change or disconnect a platform; editors can see
 the card and each platform's sync log.
 
+**Attentive** connects by signing in to Attentive rather than with an API key,
+and works one way only: see [Connect Attentive](./connect-attentive.md).
+
 ## Who is sent, and as what {#who-is-sent}
 
 Each person is sent with the answer the site's own campaigns would give them:

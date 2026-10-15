@@ -206,10 +206,6 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#1-open-the-workflows-page': 'In the console, go to Automation → Workflows and choose New workflow.',
     '#4-save-and-test': 'Save the workflow. When the trigger fires, the workflow runs and each run counts once toward your tier\'s metered allowance — however many steps it has, and whatever they are.',
   },
-  carrierAccounts: {
-    '#carrier-accounts': 'The Carrier accounts card lists the carriers your labels and checkout rates come from, for every site in the workspace.',
-    '#shipping-labels': 'A label bought on Aglyn\'s carrier accounts is charged to the workspace at the carrier\'s price, with nothing added.',
-  },
   catalog: {
     '#categories-and-tags': 'The Categories & collections card, in the products hub\'s catalog, organizes your products into categories and collections that storefront pages and filters use.',
     '#review-moderation': 'The Review moderation card, in the products hub\'s Promotions section, lists your reviews so you can publish, hide and reply to them.',
@@ -482,6 +478,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#pause-it-on-one-site': 'Each site\'s Automation → Actions section shows Org automations on this site: the ones placed on it, whether each runs here, and Pause here / Resume here.',
     '#what-an-org-automation-is': 'An org automation has a trigger, optional conditions and an ordered list of steps, exactly like an action — and a placement: the sites it runs on.',
   },
+  ownShippingAccounts: {
+    '#connect-an-account': 'Open your site\'s Products hub and choose Shipping & delivery.',
+  },
   pickupAndDelivery: {
     '#set-up-local-delivery': 'The Local delivery card, on Products → Shipping & delivery, lets your own driver deliver orders: buyers enter their postal code at the cart, pay your fee and book a delivery time.',
   },
@@ -576,11 +575,15 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#sequences': 'A sequence is the emails, and the tasks between them, one person gets from one rep.',
   },
   shipping: {
-    '#where-parcels-ship-from': 'Each inventory location (the Inventory locations card in the store\'s settings) can carry a postal address: choose Add address on its row, or Edit address once it has one.',
     '#zones-and-rates': 'The Shipping card, on Products → Shipping & delivery, prices every parcel: group the countries you ship to into zones, then give each zone one or more rates.',
   },
   shippingEasy: {
     '#connect': 'The ShippingEasy card, on Products → Shipping & delivery, sends each paid order to your ShippingEasy account and takes each label back, using the API keys from Before you start.',
+  },
+  shippingLabels: {
+    '#carrier-accounts': 'The Carrier accounts card, on Products → Shipping & delivery, lists the carriers your labels and checkout rates come from, for every site in the workspace.',
+    '#label-spend': 'Once your workspace has bought a label, Billing → Usage shows a Shipping labels card for this month and the five before it: Labels, From Stripe balance, On invoice, and Voided, returned.',
+    '#shipping-labels-settings': 'Open your site\'s Products hub and choose Shipping & delivery.',
   },
   shipStation: {
     '#connect': 'The ShipStation card, on Products → Shipping & delivery, connects your store to ShipStation as a Custom Store, so ShipStation imports your paid orders and sends each shipment back.',

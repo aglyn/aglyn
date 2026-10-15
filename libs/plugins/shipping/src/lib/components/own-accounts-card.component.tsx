@@ -138,8 +138,8 @@ export function OwnAccountsCard(props: ShippingSettingsWidgetProps) {
     <CardDisplay
       header="Your shipping accounts"
       subheader="Ship through an account of your own. Every site in this workspace uses it."
-      help={pluginDocsHelp('carrierAccounts', {
-        anchor: '#carrier-accounts',
+      help={pluginDocsHelp('ownShippingAccounts', {
+        anchor: '#connect-an-account',
         title: 'Your shipping accounts',
         excerpt:
           'Connect your own Easyship or Sendcloud account to buy labels and get rates there, billed to you by that service, or ShipperHQ to price checkout with your own rules.',
