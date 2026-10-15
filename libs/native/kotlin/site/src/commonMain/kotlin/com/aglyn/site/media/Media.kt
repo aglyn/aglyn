@@ -26,6 +26,8 @@ import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
 import com.aglyn.ui.Load
 import com.aglyn.ui.PickedFile
+import com.aglyn.ui.VideoProbe
+import com.aglyn.ui.VideoProbeResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -441,7 +443,7 @@ data class MediaStorage(val usedBytes: Long, val allowanceMb: Long?, val unlimit
  * above it), details, privacy, folders, moves, replace, delete, restore.
  */
 @OptIn(ExperimentalEncodingApi::class)
-class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope) {
+class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope, private val videoProbe: VideoProbe? = null) {
   private fun body(vararg fields: Pair<String, Any?>): JsonElement = jsonValue(
     buildMap {
       put(scope.bodyKey, scope.id)
@@ -450,16 +452,21 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope)
     },
   )
 
+  /** A film is read on this device before it is sent (neither server has a decoder): its length, frame size and a poster still. */
+  private suspend fun filmFields(file: PickedFile, contentType: String): Array<Pair<String, Any?>> =
+    if (contentType.startsWith("video/") && videoProbe != null) videoProbeFields(videoProbe.probe(file)).toList().toTypedArray() else emptyArray()
+
   /** Uploads one picked file into [folderId]; answers its media id. */
   suspend fun upload(file: PickedFile, folderId: String?, rightsConfirmed: Boolean = false): String? {
     val contentType = file.mimeType.ifBlank { "application/octet-stream" }
+    val film = filmFields(file, contentType)
     // An audio file is refused unless its uploader confirmed they own it or hold a license (AUDIO_RIGHTS_FIELD).
     val rights = if (rightsConfirmed) arrayOf("rightsConfirmed" to true) else emptyArray()
     if (file.size <= SIGNED_UPLOAD_THRESHOLD_BYTES) {
       val answer = api.request(
         "/api/media/upload",
         ApiMethod.POST,
-        body("fileName" to file.name, "contentType" to contentType, "folderId" to folderId, "data" to Base64.encode(file.bytes), *rights),
+        body("fileName" to file.name, "contentType" to contentType, "folderId" to folderId, "data" to Base64.encode(file.bytes), *film, *rights),
       )
       return answer.field("mediaId")
     }
@@ -470,20 +477,21 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope)
     )
     val mediaId = minted.field("mediaId") ?: return null
     api.putSigned(minted.field("uploadUrl") ?: return null, minted.field("contentType") ?: contentType, file.bytes)
-    api.request("/api/media/upload-url", ApiMethod.PATCH, body("mediaId" to mediaId, "fileName" to file.name, "folderId" to folderId, *rights))
+    api.request("/api/media/upload-url", ApiMethod.PATCH, body("mediaId" to mediaId, "fileName" to file.name, "folderId" to folderId, *film, *rights))
     return mediaId
   }
 
   /** Replaces the file's bytes in place: the same id and address everywhere it is used. */
   suspend fun replace(item: MediaItem, file: PickedFile, rightsConfirmed: Boolean = false) {
     val contentType = file.mimeType.ifBlank { item.contentType }
+    val film = filmFields(file, contentType)
     val expected = item.updatedAt?.epochMillis
     val rights = if (rightsConfirmed) arrayOf("rightsConfirmed" to true) else emptyArray()
     if (file.size <= SIGNED_UPLOAD_THRESHOLD_BYTES) {
       api.request(
         "/api/media/replace",
         ApiMethod.POST,
-        body("mediaId" to item.id, "contentType" to contentType, "data" to Base64.encode(file.bytes), "fileName" to file.name, "expectedUpdatedAtMs" to expected, *rights),
+        body("mediaId" to item.id, "contentType" to contentType, "data" to Base64.encode(file.bytes), "fileName" to file.name, "expectedUpdatedAtMs" to expected, *film, *rights),
       )
       return
     }
@@ -493,7 +501,7 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope)
       body("mediaId" to item.id, "contentType" to contentType, "fileName" to file.name, "sizeBytes" to file.size, "expectedUpdatedAtMs" to expected, *rights),
     )
     api.putSigned(minted.field("uploadUrl") ?: error("The upload could not start."), minted.field("contentType") ?: contentType, file.bytes)
-    api.request("/api/media/replace", ApiMethod.PATCH, body("mediaId" to item.id, "fileName" to file.name, "expectedUpdatedAtMs" to expected, *rights))
+    api.request("/api/media/replace", ApiMethod.PATCH, body("mediaId" to item.id, "fileName" to file.name, "expectedUpdatedAtMs" to expected, *film, *rights))
   }
 
   suspend fun saveDetails(id: String, fileName: String, alt: String, description: String, tags: List<String>) {
@@ -564,4 +572,78 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope)
       unlimited = answer.boolField("unlimited") == true,
     )
   }.getOrNull()
+
+  /**
+   * Which of these files staff have disabled, and what the owner is told (`POST /api/media/quarantine`, AGL-1612).
+   * Asked in batches of [MEDIA_QUARANTINE_PROBE_MAX], the most the route takes. Silent on failure, as the console is:
+   * a notice is extra context on a grid that reads fine without it, so a failed probe leaves the grid as it was.
+   */
+  suspend fun quarantine(ids: Collection<String>): Map<String, MediaQuarantineNotice> {
+    val found = mutableMapOf<String, MediaQuarantineNotice>()
+    for (batch in ids.filter { it.isNotBlank() }.distinct().sorted().chunked(MEDIA_QUARANTINE_PROBE_MAX)) {
+      runCatching { api.request("/api/media/quarantine", ApiMethod.POST, body("mediaIds" to batch)) }
+        .onSuccess { found += parseMediaQuarantine(it) }
+    }
+    return found
+  }
 }
+
+/** How many files one `/api/media/quarantine` call may ask about (`MAX_PROBE_IDS`). */
+const val MEDIA_QUARANTINE_PROBE_MAX = 100
+
+/**
+ * Why a file stopped serving, in the words its owner is shown. The staff note (a takedown notice number, a
+ * complainant) is not in what the route answers, so it cannot reach this.
+ */
+data class MediaQuarantineNotice(val reason: String, val title: String, val body: String, val contact: String?) {
+  /** The notice as one line: the body, then the support address in brackets, as the console's tooltip reads. */
+  val message: String get() = contact?.let { "$body ($it)" } ?: body
+}
+
+/** The route's `quarantined` map (media id to notice); none when the answer has no map, as a healthy platform's does. */
+fun parseMediaQuarantine(answer: JsonElement?): Map<String, MediaQuarantineNotice> {
+  val map = (answer as? JsonObject)?.get("quarantined") as? JsonObject ?: return emptyMap()
+  return map.mapNotNull { (id, entry) ->
+    if (entry !is JsonObject) return@mapNotNull null
+    id to MediaQuarantineNotice(
+      reason = entry.field("reason").orEmpty(),
+      title = entry.field("title")?.takeIf { it.isNotBlank() } ?: "Disabled",
+      body = entry.field("body").orEmpty(),
+      contact = entry.field("contact")?.takeIf { it.isNotBlank() },
+    )
+  }.toMap()
+}
+
+/** The most a film's length, or a side of its frame, may be before it is a bug and not a measurement (`MEDIA_VIDEO_MAX_*`). */
+private const val VIDEO_MAX_DURATION_MS = 24L * 60 * 60 * 1000
+private const val VIDEO_MAX_DIMENSION = 16384
+
+/** How far into a film its poster is taken: a tenth of the way, but never past the first second (`posterTimeSeconds`). */
+fun posterTimeSeconds(durationSeconds: Double): Double =
+  if (!durationSeconds.isFinite() || durationSeconds <= 0) 0.1 else minOf(1.0, durationSeconds * 0.1)
+
+/** The widest a poster is made, and the quality it is encoded at (`POSTER_MAX_WIDTH`, `POSTER_QUALITY`). */
+const val POSTER_MAX_WIDTH = 1920
+const val POSTER_QUALITY = 0.82
+
+/**
+ * What a probe adds to an upload or replace: `video` (length and frame size, all three or none, as the server accepts them),
+ * `poster` (base64, no prefix) and, only when there is no poster, `posterError` with the device's reason cut to 200
+ * characters. A probe that found nothing and said nothing adds nothing.
+ */
+@OptIn(ExperimentalEncodingApi::class)
+fun videoProbeFields(result: VideoProbeResult): Map<String, Any?> = buildMap {
+  val duration = result.durationMs
+  val width = result.width
+  val height = result.height
+  if (duration != null && width != null && height != null && duration in 1..VIDEO_MAX_DURATION_MS && width in 1..VIDEO_MAX_DIMENSION && height in 1..VIDEO_MAX_DIMENSION) {
+    put("video", mapOf("durationMs" to duration, "width" to width, "height" to height))
+  }
+  val poster = result.poster
+  if (poster != null && poster.isNotEmpty()) {
+    put("poster", Base64.encode(poster))
+  } else {
+    result.reason?.trim()?.take(200)?.takeIf { it.isNotEmpty() }?.let { put("posterError", it) }
+  }
+}
+

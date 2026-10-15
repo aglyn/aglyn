@@ -14,6 +14,7 @@ public let commerceOrdersScreen = "commerce.orders"
 public let commerceOrderScreen = "commerce.order"
 public let commerceProductsScreen = "commerce.products"
 public let commerceProductScreen = "commerce.product"
+public let commerceProductMediaScreen = "commerce.productMedia"
 public let commerceScanScreen = "commerce.scan"
 public let commerceSalesScreen = "commerce.sales"
 public let commerceSettingsScreen = "commerce.settings"
@@ -73,6 +74,10 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   }
   r.screen(commerceProductsScreen, title: "Products", requiresSite: true, icon: "shippingbox") { context, _ in
     ProductsScreen(context: context)
+  }
+  // A product's images and, for a digital product, its downloads and members videos.
+  r.screen(commerceProductMediaScreen, title: "Images and files", requiresSite: true, icon: "photo.on.rectangle") { context, params in
+    ProductMediaScreen(context: context, productID: params["productId"] ?? "")
   }
   r.screen(commerceProductScreen, title: "Product", requiresSite: true, icon: "shippingbox") { context, params in
     if params["new"] == "1" {

@@ -67,7 +67,7 @@ Debug launch arguments, for screenshots and UI tests:
 
 The Firebase SDK keeps its user in the data-protection Keychain, which a Mac
 build without a team signature cannot write to (`-34018`). Such a build (any
-local `xcodebuild` until the Apple team exists) therefore signs in through the
+local Debug build) therefore signs in through the
 Identity Toolkit REST API instead and reads Firestore over REST with the same
 ID token, so the same security rules apply. A live list re-reads every 30
 seconds and on Refresh (⌘R). The refresh token is kept in the login Keychain;
@@ -111,31 +111,71 @@ builds, `production` in release builds). Signing out deletes the row first.
 Settings → Notifications holds one switch per notification type, stored at
 `users/{uid}.notificationSettings.accountTypes.{type}.push`, the console's own
 settings. APNs hands a token only to a build signed with the `aps-environment`
-entitlement, so until the team exists registration fails quietly and no row is
-written.
+entitlement (a team-signed build), so an unsigned Mac Debug build fails quietly
+and writes no row.
+
+## Release to private testing
+
+The Release configuration is `Config/Release.xcconfig`: the production project
+(`aglyn-main`), the console at `https://app.aglyn.com`, and each app's own
+Firebase Apple app id and iOS OAuth client (picked by target name). All of it
+is public client config. A build for another project sets only what differs
+in `Config/Production.xcconfig` (git ignores it; see
+`Production.xcconfig.example`), which Release.xcconfig includes last.
+
+Signing is automatic for team **R3B7G75SWA** (Aglyn LLC) on both targets.
+Debug builds stay unsigned on the Mac (ad-hoc, no entitlements), so the
+emulator flow and CI (`CODE_SIGNING_ALLOWED=NO`) need no Apple account.
+Release builds sign with the team, which needs that account in Xcode →
+Settings → Accounts.
+
+| target | iOS and iPadOS (`Config/<app>.entitlements`) | macOS Release (`Config/<app>-macOS.entitlements`) |
+| -- | -- | -- |
+| Aglyn | `aps-environment`, `applinks:app.aglyn.com`, `webcredentials:aglyn.com` | App Sandbox, outgoing network, user-selected files read-write, `aps-environment`, the same associated domains, the app's own Keychain group (the Firebase SDK keeps its user there) |
+| Aglyn POS | `aps-environment`, `applinks:app.aglyn.com` | App Sandbox, outgoing network, user-selected files read-write, `aps-environment`, `applinks:app.aglyn.com`, the app's own Keychain group |
+
+`aps-environment` says `development` in the files; the App Store export signs
+it as `production`. Card readers (Stripe Terminal) and the barcode camera are
+iOS only, so the Mac apps ask for neither Bluetooth nor the camera.
+
+`tools/scripts/native-release.mjs` archives and uploads, under the shared
+xcodebuild lock, to `/private/tmp/aglyn-release/`:
+
+```bash
+node tools/scripts/native-release.mjs ios-archive Aglyn ios       # or AglynPOS, and macos
+node tools/scripts/native-release.mjs ios-upload /private/tmp/aglyn-release/Aglyn-ios-<build>.xcarchive
+```
+
+The build number (`CURRENT_PROJECT_VERSION`) is the UTC time as
+`yyyyMMddHHmm`, so every archive outnumbers the last; `MARKETING_VERSION`
+stays `0.1.0` until a store release. The upload goes to App Store Connect
+(records "Aglyn" and "Aglyn POS") and shows in TestFlight once processed.
 
 ## What Zach owes
 
-Nothing below is needed to build or test against the emulators. Each is needed
-for a real device, TestFlight, the Mac release or production data:
+Nothing below is needed to build or test against the emulators.
 
-1. **Apple Developer Program** enrollment, and the team id set as
-   `DEVELOPMENT_TEAM` on both targets.
-2. **App IDs** `com.aglyn.app` and `com.aglyn.pos`, each with **Push
-   Notifications** and **Associated Domains**. The targets then get their
-   entitlements (`aps-environment`, `com.apple.developer.associated-domains`
-   with `applinks:` for the console origin).
-3. **Tap to Pay on iPhone** entitlement for `com.aglyn.pos` (requested from
-   Apple, granted per team).
-4. **APNs key** (`.p8`, Key ID, Team ID), set as `APNS_KEY_P8`, `APNS_KEY_ID`
+Done: the Apple Developer Program (team R3B7G75SWA), the App IDs
+`com.aglyn.app` (Push Notifications, Associated Domains, Sign in with Apple)
+and `com.aglyn.pos` (Push Notifications, Associated Domains), the Firebase
+Apple app registrations in `aglyn-main` (their values are in
+`Config/Release.xcconfig`), and the App Store Connect records.
+
+Still owed:
+
+1. **Xcode account** for team R3B7G75SWA (Xcode → Settings → Accounts), for
+   Release archives and uploads.
+2. **Tap to Pay on iPhone** entitlement for `com.aglyn.pos` (requested from
+   Apple, granted per team); then `com.apple.developer.proximity-reader.payment.acceptance`
+   goes in `Config/AglynPOS.entitlements`.
+3. **APNs key** (`.p8`, Key ID, Team ID), set as `APNS_KEY_P8`, `APNS_KEY_ID`
    and `APNS_TEAM_ID` on the server.
-5. **Firebase app registrations** for iOS and macOS, for both bundles, in the
-   production project. Their public values go in `Config/Production.xcconfig`
-   (copy `Production.xcconfig.example`). No `GoogleService-Info.plist` is used.
-6. **Developer ID** signing and **notarization** for the Mac apps (or the Mac
-   App Store).
-7. **Stripe Terminal live mode** for the POS app.
-8. **`apple-app-site-association`** on the console origin, naming both apps'
-   app ids, so console links open the apps.
-9. **App Store Connect** records for both apps: listing, privacy labels and a
-   TestFlight group.
+4. **Developer ID** signing and **notarization** for Mac apps sold outside the
+   Mac App Store (TestFlight and the Mac App Store need neither).
+5. **Stripe Terminal live mode** for the POS app.
+6. **`apple-app-site-association`** served at
+   `https://app.aglyn.com/.well-known/apple-app-site-association` (`applinks`,
+   both apps: `R3B7G75SWA.com.aglyn.app`, `R3B7G75SWA.com.aglyn.pos`) and at
+   `https://aglyn.com/.well-known/apple-app-site-association` (`webcredentials`
+   for `R3B7G75SWA.com.aglyn.app`, for passkeys).
+7. **TestFlight**: listing, privacy labels and a tester group per app.

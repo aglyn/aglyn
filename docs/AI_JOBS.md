@@ -1524,8 +1524,9 @@ nothing itself.
   The scaffold asks no model anything.
 - **The units, in build order.** The site's LOOK first (AGL-3660, below), then
   the layout every page renders inside and the form
-  they place — a page binds both by id, so they must exist — then, on a paid
-  plan, a blog's first posts or a store's first products (AGL-3676, below),
+  they place — a page binds both by id, so they must exist — then a blog's
+  first posts (one on the Free taste, AGL-3798) or, on a paid plan, a store's
+  first products (AGL-3676, below),
   then the pages, then the welcome email. Each unit's derived job carries as its `$id` the id
   its plan entry recorded (the welcome email's is on the scaffold's own step),
   which is what a step that recorded no id of its own names its draft by, so a
@@ -1570,7 +1571,8 @@ nothing itself.
   `ai-job-site-content.ts`). A site whose kind is Blog & writing gets the row
   "Writing your first posts": a content collection "Blog" (the platform's own
   blog, served at `/{slug}` with a page per post, its slug clear of the planned
-  pages' addresses) and three posts, one `copy.blog` generation a pass through
+  pages' addresses) and three posts — on the Free taste one, on the fast tier,
+  under the row "Writing your first post" (AGL-3798) — one `copy.blog` generation a pass through
   the strict `write_blog_post` tool, each written as a draft by
   `@aglyn/tenant-data-admin/server/content-entry-drafts` — the console routes'
   allow-list, caps, slug claim and draft stamp — bylined with the business's
@@ -3210,8 +3212,13 @@ the element budget its request asks for.
   figures it derives, and the Free wall holds a Free site's plan to that section count
   and to its page cap. That leaves 57 credits, and one post at its worst on the fast
   tier — its answer at the `copy.blog` ceiling and its re-ask — is 4, within the 57 the wall
-  leaves since AGL-3781; a Free blog still writes no first posts (AGL-3676), because the
-  guided start gives a Free site no content part, whatever the wall leaves. On a paid workspace a site plan's one answer comes to at most 86 credits
+  leaves (68 on the balanced tier, which would not fit), so a Free blog writes one first post
+  there: at most 247 credits of the 300 (AGL-3798; Zach, 2026-10-14). The wall counts it
+  (`AI_FREE_SITE_WORST_CASE_CREDITS.post`; the plan's `freeSitePosts`) and still fits the eight
+  sections beside it, the quote and the Free door count it for a blog (`aiFreeSiteCreditRange`
+  with the site's kind), and the posts runner writes a Free blog's post on its provider's fast
+  tier (`aiSitePostModel`), as a Free site's plan and look are. A Free store still writes no
+  products: a Free plan has no `commerce` feature and `productsPerHost` is 0. On a paid workspace a site plan's one answer comes to at most 86 credits
   for five pages, where the routing table's ceiling with thinking spent 227. (84 before a paid plan could
   create datasets: the record-template plan tool and the dataset sentence, AGL-3616; 85 before a form could
   write to one: the plan tool's `writesTo` and the form-dataset sentence.) A paid site's plan

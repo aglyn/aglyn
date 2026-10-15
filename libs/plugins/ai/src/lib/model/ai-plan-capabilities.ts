@@ -95,6 +95,11 @@ export interface AiPlanCapabilities {
    */
   freeSitePages?: number
   /**
+   * The first posts a Free blog's site scaffold writes beside its pages
+   * (AGL-3798), which the Free wall counts before its sections. Absent is none.
+   */
+  freeSitePosts?: number
+  /**
    * Whether this job's pages are written in the compact layout language
    * (AGL-3660), whose compiler draws a section's repeated items itself: as
    * instances of a component the plan places there, or, with none, in their

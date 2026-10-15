@@ -12,6 +12,7 @@
       "zones": [
         "sitePluginSettings"
       ],
+      "cardSlot": "hostSettings",
       "requires": "params.pluginId == ad-conversions",
       "load": {
         "conn": "/api/ad-conversions/connections?hostId={site.id}"

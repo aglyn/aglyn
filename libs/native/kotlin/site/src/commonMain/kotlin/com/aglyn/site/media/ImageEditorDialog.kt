@@ -97,6 +97,27 @@ fun ImageEditorDialog(
   onDismiss: () -> Unit,
   onSave: (file: PickedFile, asCopy: Boolean) -> Unit,
 ) {
+  Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Surface(
+      Modifier.widthIn(max = 720.dp).fillMaxWidth(0.98f).heightIn(max = 900.dp).testTag("image-editor"),
+      shape = MaterialTheme.shapes.extraLarge,
+      color = MaterialTheme.colorScheme.surface,
+    ) {
+      ImageEditorContent(fileName, loadOriginal, busy, error, onDismiss, onSave)
+    }
+  }
+}
+
+/** The editor itself, without the dialog around it: the title, the picture with its controls, and the ways to save. */
+@Composable
+fun ImageEditorContent(
+  fileName: String,
+  loadOriginal: suspend () -> ByteArray?,
+  busy: Boolean,
+  error: String?,
+  onDismiss: () -> Unit,
+  onSave: (file: PickedFile, asCopy: Boolean) -> Unit,
+) {
   val transformer = LocalImageTransformer.current
   var source by remember { mutableStateOf<EditorSource>(EditorSource.Loading) }
   val opened = remember { arrayOfNulls<ImageEditSession>(1) }
@@ -112,26 +133,18 @@ fun ImageEditorDialog(
   }
   DisposableEffect(Unit) { onDispose { opened[0]?.close() } }
 
-  Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-    Surface(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth(0.98f).heightIn(max = 900.dp).testTag("image-editor"),
-      shape = MaterialTheme.shapes.extraLarge,
-      color = MaterialTheme.colorScheme.surface,
-    ) {
-      Column {
-        Row(Modifier.padding(horizontal = space(2f), vertical = space(1.5f)), verticalAlignment = Alignment.CenterVertically) {
-          Text("Edit image", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-          TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.testTag("image-edit-cancel")) { Text("Cancel") }
-        }
-        HorizontalDivider()
-        when (val state = source) {
-          EditorSource.Loading -> Box(Modifier.fillMaxWidth().padding(space(6f)), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading image" })
-          }
-          is EditorSource.Failed -> Column(Modifier.padding(space(2f))) { NoticeBanner(state.message, StatusTone.ERROR, Modifier.testTag("image-edit-failed")) }
-          is EditorSource.Ready -> EditorBody(fileName, state.session, busy, error, onSave)
-        }
+  Column {
+    Row(Modifier.padding(horizontal = space(2f), vertical = space(1.5f)), verticalAlignment = Alignment.CenterVertically) {
+      Text("Edit image", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+      TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.testTag("image-edit-cancel")) { Text("Cancel") }
+    }
+    HorizontalDivider()
+    when (val state = source) {
+      EditorSource.Loading -> Box(Modifier.fillMaxWidth().padding(space(6f)), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading image" })
       }
+      is EditorSource.Failed -> Column(Modifier.padding(space(2f))) { NoticeBanner(state.message, StatusTone.ERROR, Modifier.testTag("image-edit-failed")) }
+      is EditorSource.Ready -> EditorBody(fileName, state.session, busy, error, onSave)
     }
   }
 }
@@ -153,94 +166,97 @@ private fun EditorBody(
     value = withContext(Dispatchers.Default) { session.render(settings.previewPlan(session.width, session.height))?.toImageBitmapOrNull() }
   }
 
-  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-    Box(
-      Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.medium).padding(space(1f)),
-      contentAlignment = Alignment.Center,
-    ) {
-      val shown = preview
-      if (shown == null) {
-        Box(Modifier.heightIn(min = 160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-      } else {
-        var start by remember { mutableStateOf(Offset.Zero) }
-        Box(
-          Modifier
-            .widthIn(max = 480.dp)
-            .heightIn(max = 420.dp)
-            .aspectRatio(previewW.toFloat() / previewH.toFloat())
-            .testTag("image-edit-surface")
-            .pointerInput(settings.rotation, settings.aspect, previewW, previewH) {
-              // A drag on the picture draws the crop, in preview pixels like the console's.
-              fun toPreview(point: Offset) = Offset(point.x / size.width * previewW, point.y / size.height * previewH)
-              detectDragGestures(
-                onDragStart = { point -> start = toPreview(point) },
-                onDrag = { change, _ ->
-                  change.consume()
-                  val now = toPreview(change.position)
-                  settings = settings.dragged(start.x.toDouble(), start.y.toDouble(), now.x.toDouble(), now.y.toDouble(), previewW, previewH)
-                },
-              )
-            },
-        ) {
-          Image(shown, "Preview of $fileName", Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
-          Canvas(Modifier.fillMaxSize()) {
-            val crop = settings.crop ?: return@Canvas
-            val kx = size.width / previewW
-            val ky = size.height / previewH
-            val left = (crop.x * kx).toFloat()
-            val top = (crop.y * ky).toFloat()
-            val width = (crop.w * kx).toFloat()
-            val height = (crop.h * ky).toFloat()
-            val dim = Color.Black.copy(alpha = 0.45f)
-            drawRect(dim, Offset.Zero, Size(size.width, top))
-            drawRect(dim, Offset(0f, top + height), Size(size.width, size.height - top - height))
-            drawRect(dim, Offset(0f, top), Size(left, height))
-            drawRect(dim, Offset(left + width, top), Size(size.width - left - width, height))
-            drawRect(Color.White, Offset(left, top), Size(width, height), style = Stroke(width = 1.5f))
+  Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
+      Box(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.medium).padding(space(1f)),
+        contentAlignment = Alignment.Center,
+      ) {
+        val shown = preview
+        if (shown == null) {
+          Box(Modifier.heightIn(min = 160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else {
+          var start by remember { mutableStateOf(Offset.Zero) }
+          Box(
+            Modifier
+              .widthIn(max = 480.dp)
+              .heightIn(max = 420.dp)
+              .aspectRatio(previewW.toFloat() / previewH.toFloat())
+              .testTag("image-edit-surface")
+              .pointerInput(settings.rotation, settings.aspect, previewW, previewH) {
+                // A drag on the picture draws the crop, in preview pixels like the console's.
+                fun toPreview(point: Offset) = Offset(point.x / size.width * previewW, point.y / size.height * previewH)
+                detectDragGestures(
+                  onDragStart = { point -> start = toPreview(point) },
+                  onDrag = { change, _ ->
+                    change.consume()
+                    val now = toPreview(change.position)
+                    settings = settings.dragged(start.x.toDouble(), start.y.toDouble(), now.x.toDouble(), now.y.toDouble(), previewW, previewH)
+                  },
+                )
+              },
+          ) {
+            Image(shown, "Preview of $fileName", Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+            Canvas(Modifier.fillMaxSize()) {
+              val crop = settings.crop ?: return@Canvas
+              val kx = size.width / previewW
+              val ky = size.height / previewH
+              val left = (crop.x * kx).toFloat()
+              val top = (crop.y * ky).toFloat()
+              val width = (crop.w * kx).toFloat()
+              val height = (crop.h * ky).toFloat()
+              val dim = Color.Black.copy(alpha = 0.45f)
+              drawRect(dim, Offset.Zero, Size(size.width, top))
+              drawRect(dim, Offset(0f, top + height), Size(size.width, size.height - top - height))
+              drawRect(dim, Offset(0f, top), Size(left, height))
+              drawRect(dim, Offset(left + width, top), Size(size.width - left - width, height))
+              drawRect(Color.White, Offset(left, top), Size(width, height), style = Stroke(width = 1.5f))
+            }
           }
         }
       }
-    }
-    Text(
-      "Drag on the picture to set a crop. Pick a ratio first to lock its proportions.",
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      OutlinedButton(onClick = { settings = settings.turned(clockwise = false) }, modifier = Modifier.testTag("image-edit-rotate-left")) {
-        Icon(AglynIcons.named("rotate_left"), contentDescription = null)
-        Text("Rotate left", Modifier.padding(start = space(1f)))
+      Text(
+        "Drag on the picture to set a crop. Pick a ratio first to lock its proportions.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        OutlinedButton(onClick = { settings = settings.turned(clockwise = false) }, modifier = Modifier.testTag("image-edit-rotate-left")) {
+          Icon(AglynIcons.named("rotate_left"), contentDescription = null)
+          Text("Rotate left", Modifier.padding(start = space(1f)))
+        }
+        OutlinedButton(onClick = { settings = settings.turned(clockwise = true) }, modifier = Modifier.testTag("image-edit-rotate-right")) {
+          Icon(AglynIcons.named("rotate_right"), contentDescription = null)
+          Text("Rotate right", Modifier.padding(start = space(1f)))
+        }
       }
-      OutlinedButton(onClick = { settings = settings.turned(clockwise = true) }, modifier = Modifier.testTag("image-edit-rotate-right")) {
-        Icon(AglynIcons.named("rotate_right"), contentDescription = null)
-        Text("Rotate right", Modifier.padding(start = space(1f)))
+      SwitchRow("Flip horizontally", settings.flipH, { settings = settings.copy(flipH = it) }, modifier = Modifier.testTag("image-edit-flip-h"))
+      SwitchRow("Flip vertically", settings.flipV, { settings = settings.copy(flipV = it) }, modifier = Modifier.testTag("image-edit-flip-v"))
+      Text("Crop ratio", style = MaterialTheme.typography.titleSmall)
+      val ratios = imageEditAspects
+      ChoiceChipRow(
+        ratios.map { ChipOption(it.label, it.label) },
+        ratios.firstOrNull { it.ratio == settings.aspect }?.label,
+        { label -> settings = settings.withAspect(ratios.first { it.label == label }.ratio) },
+        wrap = true,
+      )
+      if (settings.crop != null) {
+        TextButton(onClick = { settings = settings.copy(crop = null) }, modifier = Modifier.testTag("image-edit-clear-crop")) { Text("Clear crop") }
       }
+      OutlinedTextField(
+        settings.maxWidth,
+        { settings = settings.withMaxWidth(it) },
+        label = { Text("Max width (px)") },
+        supportingText = { Text("Blank keeps the size.") },
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth().testTag("image-edit-max-width"),
+      )
+      (problem ?: error)?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.testTag("image-edit-error")) }
     }
-    SwitchRow("Flip horizontally", settings.flipH, { settings = settings.copy(flipH = it) }, modifier = Modifier.testTag("image-edit-flip-h"))
-    SwitchRow("Flip vertically", settings.flipV, { settings = settings.copy(flipV = it) }, modifier = Modifier.testTag("image-edit-flip-v"))
-    Text("Crop ratio", style = MaterialTheme.typography.titleSmall)
-    val ratios = imageEditAspects
-    ChoiceChipRow(
-      ratios.map { ChipOption(it.label, it.label) },
-      ratios.firstOrNull { it.ratio == settings.aspect }?.label,
-      { label -> settings = settings.withAspect(ratios.first { it.label == label }.ratio) },
-      wrap = true,
-    )
-    if (settings.crop != null) {
-      TextButton(onClick = { settings = settings.copy(crop = null) }, modifier = Modifier.testTag("image-edit-clear-crop")) { Text("Clear crop") }
-    }
-    OutlinedTextField(
-      settings.maxWidth,
-      { settings = settings.withMaxWidth(it) },
-      label = { Text("Max width (px)") },
-      supportingText = { Text("Blank keeps the size.") },
-      singleLine = true,
-      keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-      modifier = Modifier.fillMaxWidth().testTag("image-edit-max-width"),
-    )
-    (problem ?: error)?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.testTag("image-edit-error")) }
+    // The ways to save stay in view while the controls scroll.
     HorizontalDivider()
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End)) {
+    Row(Modifier.fillMaxWidth().padding(space(2f)), horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End)) {
       val working = busy || rendering
       fun finish(asCopy: Boolean) {
         rendering = true

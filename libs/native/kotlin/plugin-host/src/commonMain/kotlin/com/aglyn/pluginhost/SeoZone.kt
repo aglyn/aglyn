@@ -9,6 +9,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 class SeoZone(
   /** The site's stored `seo` settings. */
   val seo: Map<String, Any?>?,
+  /** The target keyword lines the SEO check above was last run with, one page a line (`/pricing: plans, pricing`); blank before a run. */
+  val keywords: String,
   /**
    * Puts [values] in the SEO form as unsaved edits, keyed by the form's field names (`seo.title`,
    * `seo.entity.description`, `seo.agent.whenToUse`). The same key twice applies once; the form's Save is the write.

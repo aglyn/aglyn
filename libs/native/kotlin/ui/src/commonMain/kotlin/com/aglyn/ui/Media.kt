@@ -183,3 +183,26 @@ fun ByteArray.toImageBitmapOrNull(): ImageBitmap? = try {
 } catch (_: Throwable) {
   null
 }
+
+/**
+ * What a device read from a film before it was uploaded (the console's `probeVideoFile`): its length and frame size, a still
+ * from near the start for a poster, or why none of that could be had. Neither server can decode a film, so the uploader's
+ * device does it, for nothing, before the bytes move.
+ */
+class VideoProbeResult(
+  val durationMs: Long? = null,
+  val width: Int? = null,
+  val height: Int? = null,
+  /** The poster still, as JPEG bytes. */
+  val poster: ByteArray? = null,
+  /** A short note on what did not happen; only said when something was tried and failed. */
+  val reason: String? = null,
+)
+
+/** The device's decoder for the film upload path: Android's media retriever; desktop has none, and says so. */
+fun interface VideoProbe {
+  suspend fun probe(file: PickedFile): VideoProbeResult
+}
+
+val LocalVideoProbe = staticCompositionLocalOf<VideoProbe?> { null }
+

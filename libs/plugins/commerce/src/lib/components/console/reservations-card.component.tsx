@@ -240,6 +240,24 @@ export function ReservationsCard(props: ReservationsCardProps) {
     const checkInDayMs = Date.parse(`${walkIn.checkIn}T00:00:00Z`)
     const checkOutDayMs = Date.parse(`${walkIn.checkOut}T00:00:00Z`)
     /*
+     * The stay is priced FIRST, and its `problem` stops the walk-in: the quote
+     * is the one rule for what can be booked (no nights, under the minimum
+     * stay), shared with the booking widget and both native apps. Ignoring it
+     * wrote a confirmed zero-night, $0 stay for a check-out on the arrival
+     * day (AGL-3794).
+     */
+    const quote = CommerceModel.computeReservationQuote(
+      resource,
+      checkInDayMs,
+      checkOutDayMs,
+    )
+    if (quote.problem) {
+      return void enqueueSnackbar(quote.problem, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+    /*
      * Every stay of THIS resource that ends after the walk-in arrives — the
      * same query `reserve.ts` checks a booking against, on the composite it
      * already has (AGL-3321). This used to test the rows on the card's
@@ -281,11 +299,6 @@ export function ReservationsCard(props: ReservationsCardProps) {
         persist: false,
       })
     }
-    const quote = CommerceModel.computeReservationQuote(
-      resource,
-      checkInDayMs,
-      checkOutDayMs,
-    )
     await setDoc(
       doc(
         firestore,

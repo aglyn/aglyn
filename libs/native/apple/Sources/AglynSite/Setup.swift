@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import Foundation
 
 // A site's setup as the console's Setup pages read and save it
@@ -16,6 +17,8 @@ import Foundation
 /// The setup sections, in the console's order (`setup-sections.ts`).
 public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
   case details, business, seo, tracking, theme, emails
+  /// The `hostSettings` zone (AGL-3711): offered only while a plugin running on the site has a card in it.
+  case integrations
 
   public var id: String { rawValue }
 
@@ -27,6 +30,7 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
     case .tracking: "Tracking"
     case .theme: "Theme"
     case .emails: "Emails"
+    case .integrations: "Integrations"
     }
   }
 
@@ -38,6 +42,7 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
     case .tracking: "Analytics, ad tags and the consent banner"
     case .theme: "Colors, font, shape and your saved themes"
     case .emails: "The emails your site sends to customers"
+    case .integrations: "Email platforms, Zapier, live chat and the other tools your site connects to"
     }
   }
 
@@ -49,6 +54,7 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
     case .tracking: "chart.xyaxis.line"
     case .theme: "paintpalette"
     case .emails: "envelope"
+    case .integrations: "puzzlepiece.extension"
     }
   }
 
@@ -61,6 +67,24 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
     default: SetupSection(rawValue: value ?? "") ?? .details
     }
   }
+}
+
+/// The id of a setup page's zone the Integrations section fills.
+public let integrationsSlot = "hostSettings"
+
+/// The plugins that run on a site: the workspace's list less what the site turned off, plus the default-off ones it opted
+/// into (`resolveHostEnabledPlugins`, as the console's switchboard resolves them). A list the document does not hold reads as
+/// the defaults.
+public func runningPlugins(org: [String: Any]?, host: [String: Any]?) -> [String] {
+  func ids(_ doc: [String: Any]?, _ key: String) -> [String]? { (doc?[key] as? [Any])?.compactMap { $0 as? String } }
+  return resolveHostEnabledPlugins(
+    orgEnabled: ids(org, "enabledPlugins"), hostDisabled: ids(host, "disabledPlugins"), hostEnabled: ids(host, "enabledPlugins"))
+}
+
+/// The cards the Integrations section draws: those of plugins running on the site. A plugin the catalog has no switch for
+/// (Zapier is infrastructure) is not switchable, so its card is always offered.
+public func integrationWidgets(_ widgets: [NativeWidget], running: [String]) -> [NativeWidget] {
+  widgets.filter { PluginCatalog.plugin($0.pluginID) == nil || running.contains($0.pluginID) }
 }
 
 /// The value at a dotted `path` of a document's fields.

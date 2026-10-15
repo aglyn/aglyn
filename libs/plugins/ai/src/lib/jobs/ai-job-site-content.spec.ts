@@ -19,8 +19,9 @@
  * A guided start's first posts and first products (AGL-3676), with the
  * generation, the writers and the catalog as doubles:
  *
- *  - WHICH PART a site gets: posts for a paid blog, products for a paid
- *    store, nothing on the Free taste or for any other kind;
+ *  - WHICH PART a site gets: posts for a blog — one on the Free taste, on
+ *    the fast tier (AGL-3798) — products for a paid store, and nothing for a
+ *    Free store or any other kind;
  *  - THE POSTS: a blog that avoids the pages' addresses, one post a pass
  *    under its own id, bylined and covered, continuing while posts remain,
  *    and a refusal or a failure as the item's;
@@ -44,11 +45,13 @@ jest.mock('../providers/routing', () => ({
 
 import type { PluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
+import { AI_MODEL_CATALOG } from '../providers/catalog'
 import { aiUnitFailure } from './ai-build-unit-outcome'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_SITE_BLOG_NAME,
   AI_SITE_CONTENT_INPUT,
+  AI_SITE_FREE_POSTS,
   AI_SITE_POSTS,
   AI_SITE_PRODUCT_NOTE,
   AI_SITE_PRODUCTS,
@@ -59,6 +62,7 @@ import {
   aiSiteContentRefusal,
   aiSiteListings,
   aiSitePostCover,
+  aiSitePostModel,
   aiSiteProductDescriptionWithoutGaps,
   aiSiteProductPhotos,
   aiSiteProductPhotoSrc,
@@ -109,11 +113,11 @@ const POST = {
 }
 
 describe('which part a site gets', () => {
-  it('writes a paid blog posts and a paid store products, and nothing on the Free taste or for another kind', () => {
+  it('writes a blog posts, Free or paid, and a paid store products, and nothing for a Free store or another kind', () => {
     expect(aiSiteContentPart({ siteKind: 'blog' }, false)).toBe('posts')
     expect(aiSiteContentPart({ siteKind: 'store' }, false)).toBe('products')
     expect(aiSiteContentPart({ businessType: 'a small online shop selling candles' }, false)).toBe('products')
-    expect(aiSiteContentPart({ siteKind: 'blog' }, true)).toBeNull()
+    expect(aiSiteContentPart({ siteKind: 'blog' }, true)).toBe('posts')
     expect(aiSiteContentPart({ siteKind: 'store' }, true)).toBeNull()
     expect(aiSiteContentPart({ siteKind: 'restaurant' }, false)).toBeNull()
     expect(aiSiteContentPart(null, false)).toBeNull()
@@ -183,6 +187,21 @@ describe('the first posts, one a pass', () => {
     expect(generate).toHaveBeenCalledWith(expect.objectContaining({ earlierTitles: ['One', 'Two'], index: 3 }))
     expect(writeEntry.mock.calls[0][1].id).toBe('job-site-posts-2')
     expect(outcome.continue).toBeUndefined()
+  })
+
+  it('writes a Free blog’s one post on its provider’s fast tier and asks for no next, a paid blog’s on the routed model (AGL-3798)', async () => {
+    const balanced = AI_MODEL_CATALOG.find((entry) => entry.tier === 'balanced')?.id as string
+    const fast = AI_MODEL_CATALOG.find((entry) => entry.tier === 'fast')?.id as string
+    const routed = (job: AiJob, org: Record<string, unknown>): AiJobStepContext => ({ ...context(job, org), modelFor: () => balanced })
+    const outcome = await run(routed(unitJob({ total: AI_SITE_FREE_POSTS }), { plan: 'free' }))
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ index: 1, total: 1, model: fast }))
+    expect(outcome.continue).toBeUndefined()
+    generate.mockClear()
+    await run(routed(unitJob(), { plan: 'pro' }))
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ model: balanced }))
+    // A model the creator picked by name stays theirs.
+    expect(aiSitePostModel({ model: balanced }, balanced, true)).toBe(balanced)
+    expect(aiSitePostModel({ model: 'auto' }, balanced, true)).toBe(fast)
   })
 
   it('bylines a post with the site’s name where the person gave none', async () => {

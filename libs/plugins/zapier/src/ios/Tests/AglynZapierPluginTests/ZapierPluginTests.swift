@@ -12,7 +12,7 @@ final class ZapierPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["zapier.connections"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["zapier.connections"], widgets: ["zapier.connections.card"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "zapier", contributes: declared, register: registerZapierNative)], into: registry)
     XCTAssertEqual(result.failed, [])
