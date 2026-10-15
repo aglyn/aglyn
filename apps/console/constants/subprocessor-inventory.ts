@@ -817,7 +817,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     reason:
       "Release tooling, not the product. `tools/scripts/native-release.mjs` (AGL-3800) uploads the team's own signed Android app bundle to a Google Play testing track through the Play Developer API, when a team member runs a release. No customer site, console request or visitor ever reaches it.",
     dataReceived:
-      "Aglyn's own release artifacts: the signed app bundle, its version code and the testing track, under the publisher service account's short-lived token. No customer, member or visitor record.",
+      "The platform's own release artifacts: the signed app bundle, its version code and the testing track, under the publisher service account's short-lived token. No customer, member or visitor record.",
   },
   'iamcredentials.googleapis.com': {
     disposition: 'not-a-subprocessor',
