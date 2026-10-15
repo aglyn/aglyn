@@ -63,8 +63,44 @@ runs:
         node-version-file: .nvmrc
         cache: 'npm'
 
-    - run: npm ci
+    # THE ROOT INSTALL RETRIES ON FAILURE (AGL-3797).
+    #
+    # The registry occasionally drops the connection mid-install
+    # (`npm error code ECONNRESET`), which reds the whole job for a reason
+    # unrelated to the commit and costs a `gh run rerun --failed`. So the
+    # install gets up to three attempts, 15s and then 45s apart, and each
+    # retry starts from an empty node_modules so a half-extracted tree from
+    # the failed attempt cannot leak into the next one.
+    #
+    # Every failure is retried, not only network ones: npm's exit code does
+    # not reliably tell an ECONNRESET from anything else. A deterministic
+    # failure therefore costs at most two extra installs plus 60s of sleep
+    # before it reds with npm's own exit code, which is the bound.
+    - name: npm ci (with retry)
       shell: bash
+      run: |
+        # `shell: bash` runs with -e already; `|| status=$?` keeps a failed
+        # attempt from ending the step before the retry can happen.
+        set -euo pipefail
+        delays=(15 45)
+        max_attempts=$(( ${#delays[@]} + 1 ))
+        attempt=1
+        while true; do
+          status=0
+          npm ci || status=$?
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "::error::npm ci failed on all $max_attempts attempts (exit $status)"
+            exit "$status"
+          fi
+          delay=${delays[$(( attempt - 1 ))]}
+          echo "::warning::npm ci attempt $attempt failed (exit $status), retrying in ${delay}s"
+          rm -rf node_modules
+          sleep "$delay"
+          attempt=$(( attempt + 1 ))
+        done
 
     # cloud/functions is a SEPARATE npm package, not a workspace of the root
     # one — the root package.json has no `workspaces` key and its postinstall

@@ -22,7 +22,8 @@ never writes another plugin's documents itself.
 1. **The site job** (`jobs/ai-job-site-step.ts`, `aiSiteJobUnits`) builds a
    whole site from a confirmed plan, one unit per pass, in this order: the look
    (theme), the layout, the form, the datasets (this PR), a blog's first three
-   posts or a store's first three to six products (paid plans only), the pages,
+   posts (one on the Free plan) or a store's first three to six products (paid
+   plans only), the pages,
    a paid store's own account, cart and policy pages (written by code, outside
    the plan's page count, `jobs/ai-job-site-store-pages.ts`), then the welcome
    email. It writes the site's search title and description at
@@ -178,7 +179,7 @@ gap.
 | Theme builder | colors, fonts, light and dark | yes: the site look; theme proposals |
 | Menus and navigation | dropdown, mega menu, drawer | yes (AGL-3728): a build's `navigation` op adds, removes, renames, relinks and reorders header and footer items and puts items under a dropdown; a guided start adds its header links at publish through the same code (AGL-3747); no mega menu panels or new drawers |
 | Bindings and logic | variables, functions | yes (`variable`, `function`) |
-| Templates and blog | page templates, blog collections, entries | partial: entry, product and author templates; a blog start's first 3 posts; no collection create, authors or scheduled posts outside a site start |
+| Templates and blog | page templates, blog collections, entries | partial: entry, product and author templates; a blog start's first 3 posts (1 on Free); no collection create, authors or scheduled posts outside a site start |
 | Site backup and packages | export, import, merge | no, by design: a person's decision |
 | Custom domains | connect and verify a domain | no, by design (out of scope) |
 | Redirects | rules, loop checks, hit counts | yes (AGL-3745): a build's `redirect` op creates, updates and removes rules; no hit counts or import |

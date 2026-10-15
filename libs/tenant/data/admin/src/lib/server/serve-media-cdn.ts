@@ -80,6 +80,7 @@ import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
 import { serveMediaCdnIcon } from './media-cdn-icon'
+import { openStorageReadStream } from './storage-read-stream'
 
 /**
  * Variant widths generated at upload (AGL-175).
@@ -2138,9 +2139,14 @@ export async function serveMediaCdn(
     // rather than `pipe` because streaming needs teardown in both directions,
     // which `pipe` does not give — a failed Storage read must fail the
     // response, and a client that stops reading must stop the Storage read.
+    // Opened through `openStorageReadStream`, so the Storage client's own
+    // fixed listener fan-out stops tripping the leak warning (AGL-3795).
     try {
       await pipeline(
-        file.createReadStream(partial ? { start: range.start, end: range.end } : {}),
+        openStorageReadStream(
+          file,
+          partial ? { start: range.start, end: range.end } : {},
+        ),
         res,
       )
     } finally {
