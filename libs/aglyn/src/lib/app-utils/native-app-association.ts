@@ -62,10 +62,12 @@ export function nativeAppAssociationRoute(pathname: string): string | null {
 
 /**
  * The console's top-level sections the native apps have no screen for, so a
- * link to one stays in the browser. They are the sign-in and verification
- * flows (an emailed verify or reset link opened by an app that cannot finish
- * it would strand the person), the sign-out page, the site admin bar's
- * connect page and a plugin's public device pages.
+ * link to one stays in the browser: the sign-in page and SSO (the system
+ * auth session opens them for the app, and a universal link there would loop
+ * back into the app), the native hand-off and other `/auth` pages, the
+ * sign-out page, the site admin bar's connect page and a plugin's public
+ * device pages. The sections the apps finish natively are
+ * {@link NATIVE_AUTH_LINK_SEGMENTS}.
  *
  * The rest of the console's top-level sections (`admin`, `billing`,
  * `manage`, `support`) and every workspace path are what the native
@@ -75,15 +77,25 @@ export function nativeAppAssociationRoute(pathname: string): string | null {
  * this list to the console's route set and the native link specs.
  */
 export const NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS: readonly string[] = [
-  'account-recovery',
   'auth',
   'edit-access',
   'kiosk',
-  'reset-password',
   'signin',
   'signout',
-  'signup',
   'sso',
+]
+
+/**
+ * The pre-sign-in sections whose exact page the apps finish natively: sign-up
+ * (with its `?plan=`), an emailed verification link, an emailed password
+ * reset and account recovery (`AuthFlow.swift`; Android's console intent
+ * filter lists the same four paths). Only the page itself opens the app;
+ * anything under it stays in the browser, where the console handles it.
+ */
+export const NATIVE_AUTH_LINK_SEGMENTS: readonly string[] = [
+  'account-recovery',
+  'reset-password',
+  'signup',
   'verify-email',
 ]
 
@@ -108,6 +120,9 @@ export function consoleAppLinksComponents(): AppLinksComponent[] {
   ]
   for (const segment of NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS) {
     excluded.push({ '/': `/${segment}`, exclude: true }, { '/': `/${segment}/*`, exclude: true })
+  }
+  for (const segment of NATIVE_AUTH_LINK_SEGMENTS) {
+    excluded.push({ '/': `/${segment}/*`, exclude: true })
   }
   return [
     ...excluded,
