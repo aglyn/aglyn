@@ -396,11 +396,60 @@ How this shapes the code:
   `CredDeleteW` on `Advapi32`, a generic credential per app and Firebase
   project), restored with `securetoken` and `accounts:lookup` at launch. A
   macOS or Linux development run of the JVM build keeps it in memory.
-- **App Check enforcement on Firestore must wait** until a desktop custom
-  provider exists, because Windows has no built-in attestation. Turning it
-  on earlier would lock Windows out.
+- **App Check is enforced in production** on Authentication and Firestore,
+  so every Firebase call carries a token (next section). Windows has no
+  built-in attestation, so the desktop build has no provider yet and its
+  sign-in goes through a console hand-off instead.
 - **The macOS app is the SwiftUI build,** so the JVM desktop target ships
   only for Windows (and Linux, which is not committed).
+
+### App Check (AGL-3818)
+
+Production (`aglyn-main`) enforces App Check on Authentication and Firestore:
+a call without a valid `X-Firebase-AppCheck` token is refused before any rule
+runs (`401 "Firebase App Check token is invalid."` from Identity Toolkit, a
+permission error from Firestore). The emulator stack does not enforce it, so
+`AGLYN_APP_CHECK` (on in Release, off in the emulator configs, and off by
+default whenever an emulator or a local console is set) turns it on or off.
+
+| platform | provider | how |
+| -- | -- | -- |
+| iPhone, iPad | **App Attest** (`DCAppAttestService`) | Firebase's `AppAttestProvider` from `FirebaseAppCheck`, a product of the firebase-ios-sdk the kit already links (its `app-check` dependency was already resolved). It generates the key, attests it once, keeps the key id and artifact in the Keychain, then sends an assertion over a fresh challenge; `DCError.invalidKey` resets the key and re-attests. Entitlement `com.apple.developer.devicecheck.appattest-environment = production` (TestFlight and the App Store use production regardless). |
+| Mac | **DeviceCheck** (`DCDevice`) | `DCAppAttestService.isSupported` is false on every Mac, so `DeviceCheckProvider` (`exchangeDeviceCheckToken`). The App Attest entitlement does not exist on macOS. |
+| Simulator | none | Neither is supported; the app sends no token, which only the emulator stack accepts. |
+| Android phone, tablet | **Play Integrity** (`com.google.android.play:integrity`, approved 2026-10-15) | `firebase-appcheck-playintegrity` (BoM 34.19.0): `generatePlayIntegrityChallenge`, a classic Play Integrity request with that challenge as the nonce and the project number, then `exchangePlayIntegrityToken`. Installed on every Firebase app, including a support session's named app. |
+| Windows (Compose Desktop) | none yet | `NoAppCheck`; the header plumbing is in place (`withAppCheck` on Ktor, `x-firebase-appcheck` metadata on `GrpcFirestoreListen`), so a desktop provider plugs in at one line of `DesktopShell`. |
+
+The SDKs (Auth and Firestore on Apple and Android) read the token through
+`FirebaseAppCheck` on their own, which is why the official providers are used
+rather than a hand-written REST client: the SDKs accept a token only through
+that interop. Their core caches the token for its TTL, refreshes it before it
+lapses and shares one in-flight exchange among concurrent callers. The kit's
+REST and gRPC clients (Identity Toolkit and Secure Token for the unsigned Mac
+build and support sessions, Firestore REST, the Google link's
+`signInWithIdp`) take the same token through `AppCheckTokenProvider`:
+`AppCheckTransport` in Swift (adds the header to Firebase hosts only, and
+resends once with a forced refresh on an App Check refusal) and
+`HttpClient.withAppCheck` in Kotlin. Console API routes are not App Check
+gated; they take the Firebase ID token as before. A refusal reads "This copy
+of the app could not be verified. Update the app or try again." instead of the
+generic sign-in failure.
+
+Done (2026-10-15): the App Attest capability on `com.aglyn.app` and
+`com.aglyn.pos`; App Attest registered in Firebase App Check for both Apple
+apps (team R3B7G75SWA, 1 h TTL); Play Integrity registered for both Android
+apps, with the Play app-signing SHA-256 on each Firebase Android app and both
+Play apps linked to Cloud project `aglyn-main` (543499566626). Still owed:
+DeviceCheck registration (a DeviceCheck `.p8` key and its Key ID) for both
+Apple apps in Firebase App Check, which the Mac builds need; until then a Mac
+build against production cannot sign in.
+
+Sources: [App Check REST reference](https://firebase.google.com/docs/reference/appcheck/rest),
+[App Attest provider](https://firebase.google.com/docs/app-check/ios/app-attest-provider),
+[DeviceCheck provider](https://firebase.google.com/docs/app-check/ios/devicecheck-provider),
+[Play Integrity provider](https://firebase.google.com/docs/app-check/android/play-integrity-provider),
+[App Attest environment entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.devicecheck.appattest-environment),
+[`DCAppAttestService.isSupported`](https://developer.apple.com/documentation/devicecheck/dcappattestservice/issupported).
 
 Sources:
 
