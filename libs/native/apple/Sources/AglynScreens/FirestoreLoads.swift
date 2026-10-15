@@ -145,6 +145,24 @@ enum FirestoreLoads {
   /// How many rows a query load reads to start with: the spec's `limit`, or fifty.
   static func queryLimit(_ spec: JSONValue) -> Int { ScreenValues.number(spec["limit"]).map { Int($0) } ?? 50 }
 
+  /// A where value as the readers take it: a number, bool or string, or a `{ "$date": ISO }` as a Date.
+  static func plainValue(_ value: JSONValue) -> Any {
+    switch value {
+    case .bool(let flag): return flag
+    case .number(let number): return number == number.rounded() && abs(number) < 9_007_199_254_740_992 ? Int64(number) : number
+    case .object(let record):
+      if let iso = record["$date"]?.stringValue {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: iso) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: iso) { return date }
+      }
+      return ScreenValues.text(value)
+    default: return ScreenValues.text(value)
+    }
+  }
+
   /// A collection query, read once: `{ "items": [...] }`.
   /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. `limit` replaces the spec's
   /// own when a list has been asked for more rows (a growing window, as the console's lists page).
@@ -158,6 +176,8 @@ enum FirestoreLoads {
       if case .null = raw { return NSNull() }
       if case .number(let number) = raw { return number }
       if case .bool(let flag) = raw { return flag }
+      // `{ "$date": ISO }`: a timestamp.
+      if case .object = raw { return Self.plainValue(raw) }
       // `@now.ms-7d`: a time or number computed from the context, the way a condition's right side is.
       if let text = raw.stringValue?.trimmingCharacters(in: .whitespaces), text.hasPrefix("@"),
         let computed = ScreenValues.operand(text, in: context)
@@ -196,7 +216,16 @@ enum FirestoreLoads {
       var whole = query
       whole.limit = nil
       var result: [String: JSONValue] = ["items": .array([])]
-      if aggregate["count"]?.boolValue == true, let count = try await reader.count(whole) { result["count"] = .number(Double(count)) }
+      if aggregate["count"]?.boolValue == true {
+        if let count = try await reader.count(whole) {
+          result["count"] = .number(Double(count))
+        } else if let ceiling = ScreenValues.number(aggregate["rows"]) {
+          // `rows: <ceiling>`: where the reader cannot count, the rows are read up to the ceiling and counted (a usage meter).
+          var capped = query
+          capped.limit = Int(ceiling)
+          result["count"] = .number(Double(try await documents(reader, capped).count))
+        }
+      }
       if let field = aggregate["sum"]?.stringValue, let total = try await reader.sum(whole, field: field) { result["sum"] = .number(total) }
       return .object(result)
     }

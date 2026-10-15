@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynHardware
 import AglynUI
 import SwiftUI
 
@@ -16,6 +17,15 @@ struct AglynPOSApp: App {
 
   init() {
     AglynFonts.register()
+    // A card typed in at the register goes into Stripe's own card form, on iPhone and iPad only.
+    #if os(iOS) && canImport(StripePaymentSheet)
+      DeviceKeyedCardEntry.shared = StripeKeyedCardEntry()
+    #endif
+    // This device's card reader (Tap to Pay on iPhone, Bluetooth readers), on iPhone and iPad only:
+    // the register, the readers screen and any plugin's counter payment take cards through it.
+    #if os(iOS) && canImport(StripeTerminal)
+      DeviceCardReaders.shared = StripeTerminalCollector.shared
+    #endif
     #if DEBUG && os(macOS)
       DebugSnapshot.scheduleIfAsked()
     #endif

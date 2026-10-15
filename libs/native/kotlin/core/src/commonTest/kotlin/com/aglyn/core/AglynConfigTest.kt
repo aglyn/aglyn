@@ -3,6 +3,7 @@ package com.aglyn.core
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -52,5 +53,42 @@ class AglynConfigTest {
     assertEquals(4, config.problems().size)
     assertEquals("Aglyn", config.brandName)
     assertEquals("aglyn-pos", config.app.wire)
+  }
+
+  @Test
+  fun passkeysNeedALinkedDomainNotAnAddress() {
+    assertNull(AglynConfig.read(AglynEnv(), AglynAppId.AGLYN).passkeyRelyingParty)
+    assertEquals("aglyn.com", AglynConfig.read(AglynEnv(passkeyRpId = " Aglyn.com "), AglynAppId.AGLYN).passkeyRelyingParty)
+    // An origin, a port, a path or a local host is not a relying party.
+    for (wrong in listOf("https://aglyn.com", "aglyn.com:443", "aglyn.com/app", "localhost", "127.0.0.1", "10.0.2.2", "aglyn")) {
+      assertNull(AglynConfig.read(AglynEnv(passkeyRpId = wrong), AglynAppId.AGLYN).passkeyRelyingParty, wrong)
+    }
+  }
+
+  @Test
+  fun googleSignInClientsAreReadTrimmedAndAbsentWhenBlank() {
+    val none = AglynConfig.read(AglynEnv(googleWebClientId = " ", googleDesktopClientId = ""), AglynAppId.AGLYN)
+    assertNull(none.googleWebClientId)
+    assertNull(none.googleDesktopClientId)
+    val set = AglynConfig.read(
+      AglynEnv(googleWebClientId = " web.apps.googleusercontent.com ", googleDesktopClientId = "desk", googleDesktopClientSecret = "shh"),
+      AglynAppId.AGLYN,
+    )
+    assertEquals("web.apps.googleusercontent.com", set.googleWebClientId)
+    assertEquals("desk", set.googleDesktopClientId)
+    assertEquals("shh", set.googleDesktopClientSecret)
+  }
+
+  @Test
+  fun appCheckIsOnForProductionAndOffForTheEmulatorStack() {
+    val production = AglynEnv(
+      firebaseApiKey = "key", firebaseAuthDomain = "x.firebaseapp.com", firebaseProjectId = "x", firebaseAppId = "1:1:android:1",
+    )
+    assertTrue(AglynConfig.read(production, AglynAppId.AGLYN).appCheck)
+    val emulator = production.copy(consoleUrl = "http://10.0.2.2:4200", authEmulatorHost = "10.0.2.2:9099")
+    assertFalse(AglynConfig.read(emulator, AglynAppId.AGLYN).appCheck)
+    assertTrue(AglynConfig.read(emulator.copy(appCheck = "on"), AglynAppId.AGLYN).appCheck)
+    assertFalse(AglynConfig.read(production.copy(appCheck = " OFF "), AglynAppId.POS).appCheck)
+    assertFailsWith<IllegalArgumentException> { AglynConfig.read(production.copy(appCheck = "maybe"), AglynAppId.AGLYN) }
   }
 }

@@ -120,20 +120,50 @@ struct ListBlock: View {
   let selection: Binding<ListSelection?>?
   let open: (String, NativeParams) -> Void
   let trigger: (ActionSpec, JSONValue) -> Void
+  /// The choice made in the list's `chips` filter; empty shows every row.
+  @State private var chosen = ""
+  /// How many more pages of a `page`d list "Show more" has revealed.
+  @State private var revealed = 0
 
   var body: some View {
-    let rows = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
-      .filter { ScreenValues.condition(block["filter"]?.stringValue, in: ScreenContext.with(context, item: $0)) }
+    let key = ListColumns.key(of: block)
+    let columns = ListColumns.columns(of: block)
+    let asked = model.order[key]
+    let column = asked.flatMap { order in columns.first { $0.id == order.column } }
+    // `chips: { field, from, label }`: a picker over the values in `from`, narrowing the rows to
+    // those whose `field` equals the choice (the forum's category filter).
+    let chips = block["chips"]
+    let chipField = chips?["field"]?.stringValue
+    let chipValues = chips.map { ScreenValues.lookup($0["from"]?.stringValue ?? "", in: context).array.map { ScreenValues.text($0) } } ?? []
+    let rows = rowScopes(chipField: chipField, column: column, asked: asked)
+    let picked = model.shownColumns(of: key, in: columns)
     let loadKey = block["load"]?.stringValue
+    // `page: N`: the first N rows, then Show more for N more (a list the screen holds whole, such as a diff).
+    let page = block["page"]?.numberValue.map { Int($0) } ?? 0
+    let shown = page > 0 ? Array(rows.prefix(page * (1 + revealed))) : rows
     Section {
+      if !chipValues.isEmpty {
+        Picker(chips?["label"]?.stringValue ?? "Filter", selection: $chosen) {
+          Text("All").tag("")
+          ForEach(chipValues, id: \.self) { Text($0).tag($0) }
+        }
+        .accessibilityIdentifier("list-chips")
+      }
       if rows.isEmpty {
         Text(ScreenValues.render(block["empty"]?.stringValue ?? "Nothing here yet.", in: context))
           .font(AglynFont.subheadline).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.vertical, AglynSpace.one)
       }
-      ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-        ListRow(block: block, scope: ScreenContext.with(context, item: row), selection: selection, open: open, trigger: trigger)
+      ForEach(Array(shown.enumerated()), id: \.offset) { _, scope in
+        ListRow(
+          block: block, scope: scope, columnsLine: ListColumns.line(columns, shown: picked, in: scope), selection: selection, open: open,
+          trigger: trigger)
+      }
+      if page > 0, rows.count > shown.count {
+        Button("Show more") { revealed += 1 }
+          .frame(maxWidth: .infinity)
+          .accessibilityIdentifier("show-more")
       }
       if let loadKey, model.cursors[loadKey] != nil {
         Button {
@@ -148,22 +178,105 @@ struct ListBlock: View {
         .accessibilityIdentifier("load-more-\(loadKey)")
       }
     } header: {
-      if let title, !title.isEmpty {
+      let sortable = columns.filter(\.sortable)
+      let pickable = columns.filter { !$0.always }
+      if !(title ?? "").isEmpty || !sortable.isEmpty || !pickable.isEmpty {
         HStack {
-          Text(title)
+          Text(title ?? "")
           Spacer()
-          if block["count"] != .bool(false), !rows.isEmpty { Text("\(rows.count)").monospacedDigit() }
+          if block["count"] != .bool(false), !rows.isEmpty, title != nil { Text("\(rows.count)").monospacedDigit() }
+          if !sortable.isEmpty { sortMenu(key: key, columns: sortable, asked: asked, chosen: column) }
+          if !pickable.isEmpty { columnsMenu(key: key, columns: pickable, shown: picked) }
         }
       }
     } footer: {
       if let footer, !footer.isEmpty { Text(footer) }
     }
   }
+
+  /// Each row as the scope it is drawn in (`item`, its `index`, and with `within` the outer row as `parent`): `flatten` walks
+  /// rows a level or more down, `filter` and the chosen chip keep some, `sort` orders them, and then a `page` column the person
+  /// asked for (a `route` column already came back from the route in its order).
+  private func rowScopes(chipField: String?, column: ListColumn?, asked: ListOrder?) -> [JSONValue] {
+    let items = block["items"]?.stringValue ?? ""
+    var found: [(scope: JSONValue, row: JSONValue)]
+    if let through = block["flatten"]?.stringValue {
+      found = ScreenValues.flatten(ScreenValues.rows(ScreenValues.lookup(items, in: context)), through: through).enumerated().map {
+        (ScreenContext.with(ScreenContext.with(context, item: $0.element), "index", .number(Double($0.offset))), $0.element)
+      }.filter { ScreenValues.condition(block["filter"]?.stringValue, in: $0.scope) }
+    } else {
+      found = ScreenValues.scopes(
+        items: items, within: block["within"]?.stringValue, filter: block["filter"]?.stringValue, in: context
+      ).map { ($0, $0["item"] ?? .null) }
+    }
+    if let chipField, !chosen.isEmpty {
+      found = found.filter { ScreenValues.text(ScreenValues.lookup("item.\(chipField)", in: $0.scope)) == chosen }
+    }
+    if let sort = block["sort"]?.stringValue {
+      let order = ScreenValues.order(found.map(\.row), by: sort)
+      found = order.map { found[$0] }
+    }
+    if let column, column.page != nil, let asked {
+      let order = ListColumns.order(found.map(\.row), by: column, descending: asked.descending, in: context)
+      found = order.map { found[$0] }
+    }
+    return found.map(\.scope)
+  }
+
+  /// The header sort: a tap on a column asks for its first order, a second for the other, a third for the default again.
+  private func sortMenu(key: String, columns: [ListColumn], asked: ListOrder?, chosen: ListColumn?) -> some View {
+    Menu {
+      Button {
+        Task { await model.ask(nil, of: key, routed: chosen?.route != nil) }
+      } label: {
+        if asked == nil { Label("Default order", systemImage: "checkmark") } else { Text("Default order") }
+      }
+      ForEach(columns) { column in
+        let active = asked?.column == column.id ? asked : nil
+        Button {
+          Task { await model.ask(ListColumns.next(after: asked, tapping: column), of: key, routed: column.route != nil || chosen?.route != nil) }
+        } label: {
+          if let active {
+            Label("\(column.label) \(active.descending ? "\u{2193}" : "\u{2191}")", systemImage: "checkmark")
+          } else {
+            Text(column.label)
+          }
+        }
+      }
+    } label: {
+      Image(systemName: "arrow.up.arrow.down").foregroundStyle(asked == nil ? Color.secondary : AglynColor.tint)
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Sort")
+    .accessibilityIdentifier("sort-\(key)")
+  }
+
+  /// The column picker: which facts each row shows.
+  private func columnsMenu(key: String, columns: [ListColumn], shown: Set<String>) -> some View {
+    Menu {
+      ForEach(columns) { column in
+        Toggle(
+          column.label,
+          isOn: Binding(
+            get: { shown.contains(column.id) },
+            set: { on in model.shown[key] = on ? shown.union([column.id]) : shown.subtracting([column.id]) }))
+      }
+    } label: {
+      Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Columns")
+    .accessibilityIdentifier("columns-\(key)")
+  }
 }
 
 struct ListRow: View {
   let block: BlockSpec
   let scope: JSONValue
+  /// The row's picked columns as one line (`columns`), empty for a list without them.
+  var columnsLine: String = ""
   let selection: Binding<ListSelection?>?
   let open: (String, NativeParams) -> Void
   let trigger: (ActionSpec, JSONValue) -> Void
@@ -198,6 +311,9 @@ struct ListRow: View {
         Text(primary.isEmpty ? "—" : primary).font(AglynFont.body).lineLimit(2)
         if let secondary, !secondary.isEmpty {
           Text(secondary).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
+        }
+        if !columnsLine.isEmpty {
+          Text(columnsLine).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(3)
         }
         if let tertiary, !tertiary.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
@@ -292,11 +408,14 @@ struct ListRow: View {
 enum FieldValue: Equatable {
   case text(String)
   case flag(Bool)
+  /// A chosen file: its name, and its text.
+  case file(name: String, text: String)
 
   var json: JSONValue {
     switch self {
     case .text(let text): .string(text)
     case .flag(let flag): .bool(flag)
+    case .file(_, let text): .string(text)
     }
   }
 }
@@ -309,15 +428,40 @@ func visibleOnly(_ filled: JSONValue, _ fields: [FieldSpec]) -> JSONValue {
   return ScreenContext.with(filled, "form", .object(form.filter { keep.contains($0.key) }))
 }
 
+/// The `form` a block hands its action: every field's value, and for a chosen file also `<key>Name`.
+func formObject(_ fields: [FieldSpec], _ value: (FieldSpec) -> FieldValue?) -> [String: JSONValue] {
+  var form: [String: JSONValue] = [:]
+  for field in fields {
+    let held = value(field)
+    form[field.key] = fieldJSON(field, held)
+    if case .file(let name, _)? = held { form[field.key + "Name"] = .string(name) }
+  }
+  return form
+}
+
 func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   switch (field.kind, value) {
   case ("toggle", .flag(let flag)?): return .bool(flag)
+  case ("multiselect", .text(let text)?):
+    // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
+    let chosen = text.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
+    return chosen.isEmpty ? .null : .array(chosen.map(JSONValue.string))
+  case ("file", .text(let text)?), ("file", .file(_, let text)?):
+    if text.isEmpty { return .null }
+    return field.parse == "json" ? (JSONValue.decode(Data(text.utf8)) ?? .null) : .string(text)
+  case ("upload", .text(let text)?):
+    // What the upload step reads out of the chosen file or pasted rows, kept as JSON text while it is edited.
+    return JSONValue.decode(Data(text.utf8)) ?? .null
+  case ("lines", .text(let text)?):
+    // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
+    return .array(text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map(JSONValue.string))
   case ("number", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
     return trimmed.isEmpty ? .null : Double(trimmed).map { .number(field.integer ? $0.rounded() : $0) } ?? .string(trimmed)
   case (_, .text(let text)?):
     return .string(field.kind == "multiline" || field.kind == "password" ? text : text.trimmingCharacters(in: .whitespaces))
   case (_, .flag(let flag)?): return .bool(flag)
+  case (_, .file(_, let text)?): return .string(text)
   case (_, nil): return field.kind == "toggle" ? .bool(false) : .null
   }
 }
@@ -325,6 +469,8 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
 func initialValue(_ field: FieldSpec, in context: JSONValue) -> FieldValue {
   let resolved = field.initial.map { ScreenValues.resolve($0, in: context) } ?? .null
   if field.kind == "toggle" { return .flag(ScreenValues.truthy(resolved)) }
+  if field.kind == "multiselect" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
+  if field.kind == "lines" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
   if field.kind == "date", let millis = ScreenValues.epochMillis(resolved) {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
@@ -338,9 +484,22 @@ struct FieldInput: View {
   let field: FieldSpec
   let context: JSONValue
   @Binding var value: FieldValue
+  @State private var picking: PickSource?
 
   private var text: Binding<String> {
-    Binding(get: { if case .text(let t) = value { t } else { "" } }, set: { value = .text($0) })
+    Binding(
+      get: {
+        switch value {
+        case .text(let t): t
+        case .file(_, let t): t
+        case .flag: ""
+        }
+      }, set: { value = .text($0) })
+  }
+
+  private var fileNameShown: String {
+    if case .file(let name, _) = value { return name }
+    return "File chosen"
   }
 
   private var flag: Binding<Bool> {
@@ -348,31 +507,73 @@ struct FieldInput: View {
   }
 
   var body: some View {
+    // A label can name what the loaded data does (a registration number's name for the jurisdiction in force).
+    let label = ScreenValues.render(field.label, in: context)
     VStack(alignment: .leading, spacing: 4) {
       switch field.kind {
       case "toggle":
-        Toggle(field.label, isOn: flag)
-      case "select":
-        Picker(field.label, selection: text) {
+        Toggle(label, isOn: flag)
+      case "select", "country":
+        Picker(label, selection: text) {
           ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
         }
       case "hours":
         HoursInput(field: field, text: text)
-      case "multiline":
-        TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
+      case "multiselect":
+        // Each choice a switch; the chosen ids are kept one per line.
+        let chosen = Set(text.wrappedValue.split(separator: "\n").map(String.init))
+        VStack(alignment: .leading, spacing: 4) {
+          Text(field.label).font(AglynFont.subheadline)
+          ForEach(field.choices(in: context), id: \.value) { choice in
+            Toggle(
+              choice.label,
+              isOn: Binding(
+                get: { chosen.contains(choice.value) },
+                set: { on in
+                  var next = field.choices(in: context).map(\.value).filter { $0 == choice.value ? on : chosen.contains($0) }
+                  // Keep ids the list no longer offers rather than silently dropping them.
+                  next += chosen.filter { id in !field.choices(in: context).contains { $0.value == id } }
+                  text.wrappedValue = next.joined(separator: "\n")
+                }))
+          }
+        }
+      case "file":
+        HStack {
+          Button(text.wrappedValue.isEmpty ? "Choose a file" : "Choose a different file") { picking = .files }
+          if !text.wrappedValue.isEmpty {
+            Text(fileNameShown).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
+          }
+        }
+        .aglynMediaPicker($picking, multiple: false) { files in
+          guard let file = files.first else { return }
+          value = .file(name: file.name, text: ScreenValues.decodeFileText(file.data))
+        }
+      case "upload":
+        UploadFieldView(field: field, context: context, value: $value)
+      case "media":
+        MediaFieldView(field: field, value: $value)
+      case "multiline", "lines":
+        TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
           .lineLimit(3...8)
       case "password":
-        SecureField(field.label, text: text, prompt: field.placeholder.map { Text($0) })
+        SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
           .textContentType(.password)
       default:
-        TextField(field.label, text: text, prompt: Text(field.placeholder ?? field.label))
+        TextField(label, text: text, prompt: Text(field.placeholder ?? label))
           #if os(iOS)
             .keyboardType(keyboard)
             .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
           #endif
           .autocorrectionDisabled(field.kind != "text")
       }
-      if let help = field.help {
+      if field.generate != nil {
+        Button("Generate") { text.wrappedValue = field.generatedValue(in: context) ?? "" }
+          .buttonStyle(.borderless)
+          .accessibilityIdentifier("generate-\(field.key)")
+      }
+      if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.mismatches(.string(text.wrappedValue), in: context) {
+        Text(ScreenValues.render(mismatch, in: context)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
+      } else if let help = field.help {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }
@@ -411,9 +612,7 @@ struct FormBlock: View {
   }
 
   private var filled: JSONValue {
-    var form: [String: JSONValue] = [:]
-    for field in fields { form[field.key] = fieldJSON(field, values[field.key]) }
-    return ScreenContext.with(scope, "form", .object(form))
+    ScreenContext.with(scope, "form", .object(formObject(fields) { values[$0.key] }))
   }
 
   private var missing: Bool {
@@ -466,16 +665,19 @@ struct FormBlock: View {
 struct ActionInputSheet: View {
   let pending: PendingAction
   let context: JSONValue
+  /// Finds the records a `lookup` field offers for the words typed.
+  var search: (LookupGroup, String) async throws -> [JSONValue] = { _, _ in [] }
   let run: (JSONValue) -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var values: [String: FieldValue] = [:]
+  /// What each `lookup` field last picked, as the person reads it.
+  @State private var picked: [String: String] = [:]
 
   private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
 
   private var filled: JSONValue {
-    var form: [String: JSONValue] = [:]
-    for field in inputs { form[field.key] = fieldJSON(field, values[field.key] ?? initialValue(field, in: pending.scope)) }
-    return ScreenContext.with(pending.scope, "form", .object(form))
+    ScreenContext.with(
+      pending.scope, "form", .object(formObject(inputs) { values[$0.key] ?? initialValue($0, in: pending.scope) }))
   }
 
   /// A field the person cannot see (its `when` fails) never holds up the action.
@@ -495,10 +697,20 @@ struct ActionInputSheet: View {
         }
         Section {
           ForEach(inputs.filter { ScreenValues.condition($0.when, in: filled) }) { field in
-            FieldInput(
-              field: field, context: pending.scope,
-              value: Binding(
-                get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+            if field.kind == "lookup" {
+              LookupRow(field: field, context: pending.scope, picked: picked[field.key], search: search) { group, row in
+                picked[field.key] = group.heading(for: row, in: pending.scope)
+                // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
+                for fill in group.fills(for: row, in: pending.scope, among: Set(inputs.map(\.key))) {
+                  values[fill.key] = .text(fill.value)
+                }
+              }
+            } else {
+              FieldInput(
+                field: field, context: pending.scope,
+                value: Binding(
+                  get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+            }
           }
         }
       }
@@ -520,6 +732,107 @@ struct ActionInputSheet: View {
     }
     .frame(minWidth: 360, minHeight: 280)
     .presentationDetents([.medium, .large])
+  }
+}
+
+/// A `lookup` field: a row that opens a search over the kinds of record its groups name. Picking one fills the form's other
+/// fields (the system email test's "Populate from").
+struct LookupRow: View {
+  let field: FieldSpec
+  let context: JSONValue
+  let picked: String?
+  let search: (LookupGroup, String) async throws -> [JSONValue]
+  let pick: (LookupGroup, JSONValue) -> Void
+  @State private var open = false
+
+  var body: some View {
+    let label = ScreenValues.render(field.label, in: context)
+    VStack(alignment: .leading, spacing: 4) {
+      Button {
+        open = true
+      } label: {
+        LabeledContent(label) { Text(picked ?? "Choose").foregroundStyle(picked == nil ? .secondary : .primary) }
+      }
+      .accessibilityIdentifier("lookup-\(field.key)")
+      if let help = field.help {
+        Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
+      }
+    }
+    .sheet(isPresented: $open) {
+      LookupSheet(field: field, context: context, search: search) { group, row in
+        pick(group, row)
+        open = false
+      }
+    }
+  }
+}
+
+/// The search behind a `lookup` field: one section per kind of record, filled as words are typed.
+struct LookupSheet: View {
+  let field: FieldSpec
+  let context: JSONValue
+  let search: (LookupGroup, String) async throws -> [JSONValue]
+  let pick: (LookupGroup, JSONValue) -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var words = ""
+  @State private var found: [String: [JSONValue]] = [:]
+  @State private var failed: [String] = []
+  @State private var loading = false
+
+  var body: some View {
+    NavigationStack {
+      List {
+        ForEach(field.groups) { group in
+          let rows = found[group.id] ?? []
+          Section(group.label) {
+            if rows.isEmpty && !loading {
+              Text(words.isEmpty ? "Nothing yet." : "Nothing found.").foregroundStyle(.secondary)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+              Button {
+                pick(group, row)
+              } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(group.heading(for: row, in: context)).foregroundStyle(.primary)
+                  if let detail = group.detail(for: row, in: context) {
+                    Text(detail).font(AglynFont.caption).foregroundStyle(.secondary)
+                  }
+                }
+              }
+            }
+          }
+        }
+        if !failed.isEmpty {
+          Section { AglynNotice("Could not search \(failed.joined(separator: ", ")). Try again.", tone: .warning) }
+        }
+      }
+      .searchable(text: $words, prompt: "Search by name or email")
+      .navigationTitle(ScreenValues.render(field.label, in: context))
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+      // A short wait after the last key, so a name typed quickly is one search and not one per letter.
+      .task(id: words) {
+        if !words.isEmpty { try? await Task.sleep(nanoseconds: 300_000_000) }
+        guard !Task.isCancelled else { return }
+        await load()
+      }
+    }
+    .frame(minWidth: 360, minHeight: 360)
+  }
+
+  private func load() async {
+    loading = true
+    var next: [String: [JSONValue]] = [:]
+    var missed: [String] = []
+    for group in field.groups {
+      do { next[group.id] = try await search(group, words) } catch { missed.append(group.label.lowercased()) }
+      if Task.isCancelled { return }
+    }
+    found = next
+    failed = missed
+    loading = false
   }
 }
 

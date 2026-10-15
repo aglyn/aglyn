@@ -56,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -147,12 +148,12 @@ fun RegisterScreen(context: NativePluginContext) {
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
-  RegisterContent(model, onOpenReaders = { context.navigate(COMMERCE_CARD_READERS_SCREEN) })
+  RegisterContent(model, onOpenReaders = { context.navigate(COMMERCE_CARD_READERS_SCREEN) }, ordersZone = { PosOrdersZone(context) })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
+fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone: @Composable () -> Unit = {}) {
   val wide = currentWidthClass() != WidthClass.COMPACT
   var query by remember { mutableStateOf("") }
   val searchFocus = remember { FocusRequester() }
@@ -255,7 +256,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
     if (wide) {
       Row(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
-          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true })
+          CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, ordersZone = ordersZone)
           // The basket is the sale now: the grid rests until it is paid or canceled.
           if (checkout != null) {
             Box(
@@ -283,7 +284,7 @@ fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit) {
       Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { CheckoutPane(model, checkout, onOpenReaders) }
     } else {
       Column(Modifier.fillMaxSize()) {
-        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true })
+        CatalogPane(model, query, { query = it; model.search(it) }, searchFocus, { codeOpen = true }, Modifier.weight(1f), onCamera = camera?.let { { cameraOpen = true } }, onOps = { opsOpen = true }, ordersZone = ordersZone)
         BasketBar(model) { basketOpen = true }
       }
     }
@@ -344,6 +345,8 @@ private fun CatalogPane(
   onCamera: (() -> Unit)? = null,
   /** Opens the Register sheet: the cashier, the shift and the drawer. */
   onOps: () -> Unit = {},
+  /** What other plugins put in the register's `posOrders` zone, above the grid. */
+  ordersZone: @Composable () -> Unit = {},
 ) {
   Column(modifier.fillMaxHeight()) {
     Row(
@@ -381,6 +384,7 @@ private fun CatalogPane(
     }
     RegisterOfflineBanner(model)
     KioskQueueCard(model)
+    ordersZone()
     val selected = when {
       model.args.search.isNotBlank() -> null
       model.args.quickKeys -> "quick"
@@ -828,4 +832,21 @@ private fun CodeDialog(onDismiss: () -> Unit, onCode: (String) -> Unit) {
     confirmButton = { TextButton(onClick = { onCode(code) }, enabled = code.isNotBlank()) { Text("Look up") } },
     dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
   )
+}
+
+/** The register's `posOrders` zone: what other plugins put above the till (a delivery app's orders, say). */
+const val COMMERCE_POS_ORDERS_SLOT = "posOrders"
+
+/**
+ * The console register hosts the same zone above its product grid. The plugins that put a widget here are never named:
+ * the zone draws whatever the POS app's registry holds for it, and nothing when no plugin contributes (or a
+ * contribution draws nothing). A long queue scrolls in its own band instead of pushing the grid off the screen.
+ */
+@Composable
+internal fun PosOrdersZone(context: NativePluginContext) {
+  val widgets = context.slotWidgets(COMMERCE_POS_ORDERS_SLOT)
+  if (widgets.isEmpty()) return
+  Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()).testTag("pos-orders-zone")) {
+    for (widget in widgets) key(widget.id) { widget.content(context) }
+  }
 }

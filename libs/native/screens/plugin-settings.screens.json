@@ -47,7 +47,7 @@
           "type": "form",
           "id": "settings",
           "object": "data.settings",
-          "footer": "A site can override these on its own plugin page in the console.",
+          "footer": "A site can override these on its own plugin page.",
           "fields": [
             {
               "key": "provider",
@@ -1144,6 +1144,1467 @@
       ]
     },
     {
+      "id": "core.sitePluginSettings.ai",
+      "title": "AI settings for this site",
+      "label": "Settings for this site",
+      "subtitle": "Override a workspace value on this site",
+      "icon": "gearshape|settings",
+      "scope": "site",
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "requires": "org.manager && params.pluginId == ai",
+      "constants": {
+        "defaults": {
+          "provider": "platform",
+          "chatModel": "platform",
+          "copyElementModel": "platform",
+          "copySectionModel": "platform",
+          "copyBlogModel": "platform",
+          "generateModel": "platform",
+          "jobComponentModel": "platform",
+          "jobCrmModel": "platform",
+          "jobExperimentModel": "platform",
+          "jobFormModel": "platform",
+          "jobInsightModel": "platform",
+          "jobLayoutModel": "platform",
+          "jobLogicModel": "platform",
+          "jobEditModel": "platform",
+          "jobTemplateModel": "platform",
+          "jobPageModel": "platform",
+          "jobProductsModel": "platform",
+          "jobSeoModel": "platform",
+          "jobTextModel": "platform",
+          "jobThemeModel": "platform",
+          "jobPlanModel": "platform",
+          "jobEmailModel": "platform",
+          "jobCampaignModel": "platform",
+          "jobWorkflowModel": "platform"
+        }
+      },
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}/pluginSettings/ai",
+          "optional": true
+        },
+        "site": {
+          "doc": "hosts/{site.id}/pluginSettings/ai",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "settings",
+          "footer": "A field you do not override follows the workspace value.",
+          "fields": [
+            {
+              "key": "ov_provider",
+              "label": "Override AI provider for this site",
+              "kind": "toggle",
+              "initial": "{data.site.provider:present}"
+            },
+            {
+              "key": "provider",
+              "label": "AI provider",
+              "kind": "select",
+              "initial": "{data.site.provider ?? data.org.provider ?? const.defaults.provider}",
+              "when": "form.ov_provider",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "anthropic",
+                  "label": "Anthropic"
+                },
+                {
+                  "value": "openai-compatible",
+                  "label": "OpenAI-compatible endpoint"
+                }
+              ],
+              "help": "Which provider answers this workspace. A model chosen below must be one the provider serves; otherwise the provider’s default for that kind of step is used."
+            },
+            {
+              "key": "ov_chatModel",
+              "label": "Override Assistant model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.chatModel:present}"
+            },
+            {
+              "key": "chatModel",
+              "label": "Assistant model",
+              "kind": "select",
+              "initial": "{data.site.chatModel ?? data.org.chatModel ?? const.defaults.chatModel}",
+              "when": "form.ov_chatModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "The in-console assistant’s answers."
+            },
+            {
+              "key": "ov_copyElementModel",
+              "label": "Override Copy assistant (element) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.copyElementModel:present}"
+            },
+            {
+              "key": "copyElementModel",
+              "label": "Copy assistant (element) model",
+              "kind": "select",
+              "initial": "{data.site.copyElementModel ?? data.org.copyElementModel ?? const.defaults.copyElementModel}",
+              "when": "form.ov_copyElementModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Rewriting one element’s text."
+            },
+            {
+              "key": "ov_copySectionModel",
+              "label": "Override Copy assistant (section) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.copySectionModel:present}"
+            },
+            {
+              "key": "copySectionModel",
+              "label": "Copy assistant (section) model",
+              "kind": "select",
+              "initial": "{data.site.copySectionModel ?? data.org.copySectionModel ?? const.defaults.copySectionModel}",
+              "when": "form.ov_copySectionModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Writing a section’s copy."
+            },
+            {
+              "key": "ov_copyBlogModel",
+              "label": "Override Copy assistant (blog) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.copyBlogModel:present}"
+            },
+            {
+              "key": "copyBlogModel",
+              "label": "Copy assistant (blog) model",
+              "kind": "select",
+              "initial": "{data.site.copyBlogModel ?? data.org.copyBlogModel ?? const.defaults.copyBlogModel}",
+              "when": "form.ov_copyBlogModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Drafting a blog post."
+            },
+            {
+              "key": "ov_generateModel",
+              "label": "Override Section generation model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.generateModel:present}"
+            },
+            {
+              "key": "generateModel",
+              "label": "Section generation model",
+              "kind": "select",
+              "initial": "{data.site.generateModel ?? data.org.generateModel ?? const.defaults.generateModel}",
+              "when": "form.ov_generateModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Generating a section’s structure."
+            },
+            {
+              "key": "ov_jobComponentModel",
+              "label": "Override Generation job (component) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobComponentModel:present}"
+            },
+            {
+              "key": "jobComponentModel",
+              "label": "Generation job (component) model",
+              "kind": "select",
+              "initial": "{data.site.jobComponentModel ?? data.org.jobComponentModel ?? const.defaults.jobComponentModel}",
+              "when": "form.ov_jobComponentModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Generating a reusable component and its properties."
+            },
+            {
+              "key": "ov_jobCrmModel",
+              "label": "Override Generation job (CRM) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobCrmModel:present}"
+            },
+            {
+              "key": "jobCrmModel",
+              "label": "Generation job (CRM) model",
+              "kind": "select",
+              "initial": "{data.site.jobCrmModel ?? data.org.jobCrmModel ?? const.defaults.jobCrmModel}",
+              "when": "form.ov_jobCrmModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "CRM record summaries and next steps, email drafts and import column matches."
+            },
+            {
+              "key": "ov_jobExperimentModel",
+              "label": "Override Generation job (A/B test) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobExperimentModel:present}"
+            },
+            {
+              "key": "jobExperimentModel",
+              "label": "Generation job (A/B test) model",
+              "kind": "select",
+              "initial": "{data.site.jobExperimentModel ?? data.org.jobExperimentModel ?? const.defaults.jobExperimentModel}",
+              "when": "form.ov_jobExperimentModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Writing variants for an A/B test, and explaining what a test’s result means."
+            },
+            {
+              "key": "ov_jobFormModel",
+              "label": "Override Generation job (form) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobFormModel:present}"
+            },
+            {
+              "key": "jobFormModel",
+              "label": "Generation job (form) model",
+              "kind": "select",
+              "initial": "{data.site.jobFormModel ?? data.org.jobFormModel ?? const.defaults.jobFormModel}",
+              "when": "form.ov_jobFormModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Generating a form from a confirmed plan."
+            },
+            {
+              "key": "ov_jobInsightModel",
+              "label": "Override Insights model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobInsightModel:present}"
+            },
+            {
+              "key": "jobInsightModel",
+              "label": "Insights model",
+              "kind": "select",
+              "initial": "{data.site.jobInsightModel ?? data.org.jobInsightModel ?? const.defaults.jobInsightModel}",
+              "when": "form.ov_jobInsightModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Answering a question about the site’s figures, and the weekly insights."
+            },
+            {
+              "key": "ov_jobLayoutModel",
+              "label": "Override Generation job (layout) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobLayoutModel:present}"
+            },
+            {
+              "key": "jobLayoutModel",
+              "label": "Generation job (layout) model",
+              "kind": "select",
+              "initial": "{data.site.jobLayoutModel ?? data.org.jobLayoutModel ?? const.defaults.jobLayoutModel}",
+              "when": "form.ov_jobLayoutModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Generating a shared layout from a confirmed plan."
+            },
+            {
+              "key": "ov_jobLogicModel",
+              "label": "Override Generation job (logic) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobLogicModel:present}"
+            },
+            {
+              "key": "jobLogicModel",
+              "label": "Generation job (logic) model",
+              "kind": "select",
+              "initial": "{data.site.jobLogicModel ?? data.org.jobLogicModel ?? const.defaults.jobLogicModel}",
+              "when": "form.ov_jobLogicModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Proposing a site function or variable, and explaining a function."
+            },
+            {
+              "key": "ov_jobEditModel",
+              "label": "Override Generation job (edit) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobEditModel:present}"
+            },
+            {
+              "key": "jobEditModel",
+              "label": "Generation job (edit) model",
+              "kind": "select",
+              "initial": "{data.site.jobEditModel ?? data.org.jobEditModel ?? const.defaults.jobEditModel}",
+              "when": "form.ov_jobEditModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Changing a page or layout the site already has, into a version visitors do not see."
+            },
+            {
+              "key": "ov_jobTemplateModel",
+              "label": "Override Generation job (template) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobTemplateModel:present}"
+            },
+            {
+              "key": "jobTemplateModel",
+              "label": "Generation job (template) model",
+              "kind": "select",
+              "initial": "{data.site.jobTemplateModel ?? data.org.jobTemplateModel ?? const.defaults.jobTemplateModel}",
+              "when": "form.ov_jobTemplateModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Generating a page template from a confirmed plan."
+            },
+            {
+              "key": "ov_jobPageModel",
+              "label": "Override Generation job (page) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobPageModel:present}"
+            },
+            {
+              "key": "jobPageModel",
+              "label": "Generation job (page) model",
+              "kind": "select",
+              "initial": "{data.site.jobPageModel ?? data.org.jobPageModel ?? const.defaults.jobPageModel}",
+              "when": "form.ov_jobPageModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Generating a page, one section at a time, from a confirmed plan."
+            },
+            {
+              "key": "ov_jobProductsModel",
+              "label": "Override Generation job (products) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobProductsModel:present}"
+            },
+            {
+              "key": "jobProductsModel",
+              "label": "Generation job (products) model",
+              "kind": "select",
+              "initial": "{data.site.jobProductsModel ?? data.org.jobProductsModel ?? const.defaults.jobProductsModel}",
+              "when": "form.ov_jobProductsModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Writing product copy, and proposing products, categories and discounts for a store."
+            },
+            {
+              "key": "ov_jobSeoModel",
+              "label": "Override Generation job (SEO) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobSeoModel:present}"
+            },
+            {
+              "key": "jobSeoModel",
+              "label": "Generation job (SEO) model",
+              "kind": "select",
+              "initial": "{data.site.jobSeoModel ?? data.org.jobSeoModel ?? const.defaults.jobSeoModel}",
+              "when": "form.ov_jobSeoModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Search listings, image descriptions and a site audit’s fixes."
+            },
+            {
+              "key": "ov_jobTextModel",
+              "label": "Override Generation job (text) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobTextModel:present}"
+            },
+            {
+              "key": "jobTextModel",
+              "label": "Generation job (text) model",
+              "kind": "select",
+              "initial": "{data.site.jobTextModel ?? data.org.jobTextModel ?? const.defaults.jobTextModel}",
+              "when": "form.ov_jobTextModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "The text step of a generation job."
+            },
+            {
+              "key": "ov_jobThemeModel",
+              "label": "Override Generation job (theme) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobThemeModel:present}"
+            },
+            {
+              "key": "jobThemeModel",
+              "label": "Generation job (theme) model",
+              "kind": "select",
+              "initial": "{data.site.jobThemeModel ?? data.org.jobThemeModel ?? const.defaults.jobThemeModel}",
+              "when": "form.ov_jobThemeModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Proposing a change to a site’s theme."
+            },
+            {
+              "key": "ov_jobPlanModel",
+              "label": "Override Generation job (plan) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobPlanModel:present}"
+            },
+            {
+              "key": "jobPlanModel",
+              "label": "Generation job (plan) model",
+              "kind": "select",
+              "initial": "{data.site.jobPlanModel ?? data.org.jobPlanModel ?? const.defaults.jobPlanModel}",
+              "when": "form.ov_jobPlanModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "The plan step of a generation job."
+            },
+            {
+              "key": "ov_jobEmailModel",
+              "label": "Override Generation job (email) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobEmailModel:present}"
+            },
+            {
+              "key": "jobEmailModel",
+              "label": "Generation job (email) model",
+              "kind": "select",
+              "initial": "{data.site.jobEmailModel ?? data.org.jobEmailModel ?? const.defaults.jobEmailModel}",
+              "when": "form.ov_jobEmailModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Generating an email design from a confirmed plan."
+            },
+            {
+              "key": "ov_jobCampaignModel",
+              "label": "Override Generation job (campaign) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobCampaignModel:present}"
+            },
+            {
+              "key": "jobCampaignModel",
+              "label": "Generation job (campaign) model",
+              "kind": "select",
+              "initial": "{data.site.jobCampaignModel ?? data.org.jobCampaignModel ?? const.defaults.jobCampaignModel}",
+              "when": "form.ov_jobCampaignModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Drafting a campaign and its email from a brief."
+            },
+            {
+              "key": "ov_jobWorkflowModel",
+              "label": "Override Generation job (automation) model for this site",
+              "kind": "toggle",
+              "initial": "{data.site.jobWorkflowModel:present}"
+            },
+            {
+              "key": "jobWorkflowModel",
+              "label": "Generation job (automation) model",
+              "kind": "select",
+              "initial": "{data.site.jobWorkflowModel ?? data.org.jobWorkflowModel ?? const.defaults.jobWorkflowModel}",
+              "when": "form.ov_jobWorkflowModel",
+              "options": [
+                {
+                  "value": "platform",
+                  "label": "Platform default"
+                },
+                {
+                  "value": "claude-sonnet-5-5",
+                  "label": "Claude Sonnet 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-sonnet-4-6",
+                  "label": "Claude Sonnet 4.6 (anthropic)"
+                },
+                {
+                  "value": "claude-haiku-5-5",
+                  "label": "Claude Haiku 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5",
+                  "label": "Claude Opus 5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-5-5",
+                  "label": "Claude Opus 5.5 (anthropic)"
+                },
+                {
+                  "value": "claude-opus-4-8",
+                  "label": "Claude Opus 4.8 (anthropic)"
+                },
+                {
+                  "value": "gpt-5",
+                  "label": "GPT-5 (openai-compatible)"
+                },
+                {
+                  "value": "gpt-5-mini",
+                  "label": "GPT-5 mini (openai-compatible)"
+                }
+              ],
+              "help": "Drafting an automation from a description, and explaining one."
+            }
+          ],
+          "submit": {
+            "label": "Save settings",
+            "write": {
+              "doc": "hosts/{site.id}/pluginSettings/ai",
+              "fields": {
+                "updatedBy": "{user.uid}",
+                "provider": {
+                  "$if": "form.ov_provider",
+                  "then": "{form.provider}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "chatModel": {
+                  "$if": "form.ov_chatModel",
+                  "then": "{form.chatModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "copyElementModel": {
+                  "$if": "form.ov_copyElementModel",
+                  "then": "{form.copyElementModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "copySectionModel": {
+                  "$if": "form.ov_copySectionModel",
+                  "then": "{form.copySectionModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "copyBlogModel": {
+                  "$if": "form.ov_copyBlogModel",
+                  "then": "{form.copyBlogModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "generateModel": {
+                  "$if": "form.ov_generateModel",
+                  "then": "{form.generateModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobComponentModel": {
+                  "$if": "form.ov_jobComponentModel",
+                  "then": "{form.jobComponentModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobCrmModel": {
+                  "$if": "form.ov_jobCrmModel",
+                  "then": "{form.jobCrmModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobExperimentModel": {
+                  "$if": "form.ov_jobExperimentModel",
+                  "then": "{form.jobExperimentModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobFormModel": {
+                  "$if": "form.ov_jobFormModel",
+                  "then": "{form.jobFormModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobInsightModel": {
+                  "$if": "form.ov_jobInsightModel",
+                  "then": "{form.jobInsightModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobLayoutModel": {
+                  "$if": "form.ov_jobLayoutModel",
+                  "then": "{form.jobLayoutModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobLogicModel": {
+                  "$if": "form.ov_jobLogicModel",
+                  "then": "{form.jobLogicModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobEditModel": {
+                  "$if": "form.ov_jobEditModel",
+                  "then": "{form.jobEditModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobTemplateModel": {
+                  "$if": "form.ov_jobTemplateModel",
+                  "then": "{form.jobTemplateModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobPageModel": {
+                  "$if": "form.ov_jobPageModel",
+                  "then": "{form.jobPageModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobProductsModel": {
+                  "$if": "form.ov_jobProductsModel",
+                  "then": "{form.jobProductsModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobSeoModel": {
+                  "$if": "form.ov_jobSeoModel",
+                  "then": "{form.jobSeoModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobTextModel": {
+                  "$if": "form.ov_jobTextModel",
+                  "then": "{form.jobTextModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobThemeModel": {
+                  "$if": "form.ov_jobThemeModel",
+                  "then": "{form.jobThemeModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobPlanModel": {
+                  "$if": "form.ov_jobPlanModel",
+                  "then": "{form.jobPlanModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobEmailModel": {
+                  "$if": "form.ov_jobEmailModel",
+                  "then": "{form.jobEmailModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobCampaignModel": {
+                  "$if": "form.ov_jobCampaignModel",
+                  "then": "{form.jobCampaignModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "jobWorkflowModel": {
+                  "$if": "form.ov_jobWorkflowModel",
+                  "then": "{form.jobWorkflowModel}",
+                  "else": {
+                    "$delete": true
+                  }
+                }
+              }
+            },
+            "success": "Settings saved"
+          }
+        }
+      ]
+    },
+    {
       "id": "core.pluginSettings.commerce",
       "title": "Commerce settings",
       "subtitle": "How Commerce behaves for this workspace",
@@ -1179,7 +2640,7 @@
           "type": "form",
           "id": "settings",
           "object": "data.settings",
-          "footer": "A site can override these on its own plugin page in the console.",
+          "footer": "A site can override these on its own plugin page.",
           "fields": [
             {
               "key": "posMaxDiscountPct",
@@ -1322,6 +2783,373 @@
       ]
     },
     {
+      "id": "core.sitePluginSettings.commerce",
+      "title": "Commerce settings for this site",
+      "label": "Settings for this site",
+      "subtitle": "Override a workspace value on this site",
+      "icon": "gearshape|settings",
+      "scope": "site",
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "requires": "org.manager && params.pluginId == commerce",
+      "constants": {
+        "defaults": {
+          "posMaxDiscountPct": 100,
+          "posTippingEnabled": false,
+          "posTipPercentages": "15, 18, 20, 25",
+          "posReceiptDefault": "ask",
+          "posDisplayMessage": "",
+          "posDisplayMarketingOptIn": true,
+          "posRequireOpenShift": false,
+          "posRefundLimit": 0,
+          "posAutoLockMinutes": 0,
+          "posReceiptAddress": "",
+          "posReturnPolicy": "",
+          "posKioskPayAtCounter": true,
+          "posKioskIdleSeconds": 90,
+          "posKioskWelcome": ""
+        }
+      },
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}/pluginSettings/commerce",
+          "optional": true
+        },
+        "site": {
+          "doc": "hosts/{site.id}/pluginSettings/commerce",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "settings",
+          "footer": "A field you do not override follows the workspace value.",
+          "fields": [
+            {
+              "key": "ov_posMaxDiscountPct",
+              "label": "Override Maximum register discount (%) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posMaxDiscountPct:present}"
+            },
+            {
+              "key": "posMaxDiscountPct",
+              "label": "Maximum register discount (%)",
+              "kind": "number",
+              "initial": "{data.site.posMaxDiscountPct ?? data.org.posMaxDiscountPct ?? const.defaults.posMaxDiscountPct}",
+              "when": "form.ov_posMaxDiscountPct",
+              "help": "The largest discount the point of sale will accept on a sale. A register that asks for more is refused, and the sale is not rung up. Set to 0 to stop staff discounting at the register entirely. Between 0 and 100."
+            },
+            {
+              "key": "ov_posTippingEnabled",
+              "label": "Override Ask for tips at the register for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posTippingEnabled:present}"
+            },
+            {
+              "key": "posTippingEnabled",
+              "label": "Ask for tips at the register",
+              "kind": "toggle",
+              "initial": "{data.site.posTippingEnabled ?? data.org.posTippingEnabled ?? const.defaults.posTippingEnabled}",
+              "when": "form.ov_posTippingEnabled",
+              "help": "Offers the customer a tip on the card reader and on the customer display. Tips are yours: they are not counted as sales and carry no platform fee."
+            },
+            {
+              "key": "ov_posTipPercentages",
+              "label": "Override Tip choices (%) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posTipPercentages:present}"
+            },
+            {
+              "key": "posTipPercentages",
+              "label": "Tip choices (%)",
+              "kind": "text",
+              "initial": "{data.site.posTipPercentages ?? data.org.posTipPercentages ?? const.defaults.posTipPercentages}",
+              "when": "form.ov_posTipPercentages",
+              "help": "Up to four percentages, separated by commas, shown to the customer as tip buttons. The customer can also enter an amount or choose no tip."
+            },
+            {
+              "key": "ov_posReceiptDefault",
+              "label": "Override Receipts at the register for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posReceiptDefault:present}"
+            },
+            {
+              "key": "posReceiptDefault",
+              "label": "Receipts at the register",
+              "kind": "select",
+              "initial": "{data.site.posReceiptDefault ?? data.org.posReceiptDefault ?? const.defaults.posReceiptDefault}",
+              "when": "form.ov_posReceiptDefault",
+              "options": [
+                {
+                  "value": "ask",
+                  "label": "Ask the customer"
+                },
+                {
+                  "value": "print",
+                  "label": "Always print"
+                },
+                {
+                  "value": "none",
+                  "label": "No receipt unless asked"
+                }
+              ],
+              "help": "With a customer display paired, \"Ask the customer\" lets them choose email, print or no receipt on their own screen."
+            },
+            {
+              "key": "ov_posDisplayMessage",
+              "label": "Override Customer display welcome for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posDisplayMessage:present}"
+            },
+            {
+              "key": "posDisplayMessage",
+              "label": "Customer display welcome",
+              "kind": "text",
+              "initial": "{data.site.posDisplayMessage ?? data.org.posDisplayMessage ?? const.defaults.posDisplayMessage}",
+              "when": "form.ov_posDisplayMessage",
+              "help": "The line the customer display shows under your store name between sales. Leave blank for \"Welcome\"."
+            },
+            {
+              "key": "ov_posDisplayMarketingOptIn",
+              "label": "Override Offer email sign-up on the customer display for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posDisplayMarketingOptIn:present}"
+            },
+            {
+              "key": "posDisplayMarketingOptIn",
+              "label": "Offer email sign-up on the customer display",
+              "kind": "toggle",
+              "initial": "{data.site.posDisplayMarketingOptIn ?? data.org.posDisplayMarketingOptIn ?? const.defaults.posDisplayMarketingOptIn}",
+              "when": "form.ov_posDisplayMarketingOptIn",
+              "help": "Shows an unticked \"Email me news and offers\" box when a customer asks for an email receipt. Only a ticked box adds them to your marketing audience."
+            },
+            {
+              "key": "ov_posRequireOpenShift",
+              "label": "Override Require an open shift to sell for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posRequireOpenShift:present}"
+            },
+            {
+              "key": "posRequireOpenShift",
+              "label": "Require an open shift to sell",
+              "kind": "toggle",
+              "initial": "{data.site.posRequireOpenShift ?? data.org.posRequireOpenShift ?? const.defaults.posRequireOpenShift}",
+              "when": "form.ov_posRequireOpenShift",
+              "help": "A register refuses sales and cash refunds until someone opens a shift with a starting float, so every sale is counted in a drawer."
+            },
+            {
+              "key": "ov_posRefundLimit",
+              "label": "Override Cashier refund limit ($) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posRefundLimit:present}"
+            },
+            {
+              "key": "posRefundLimit",
+              "label": "Cashier refund limit ($)",
+              "kind": "number",
+              "initial": "{data.site.posRefundLimit ?? data.org.posRefundLimit ?? const.defaults.posRefundLimit}",
+              "when": "form.ov_posRefundLimit",
+              "help": "The largest return a cashier may refund at the register without a manager entering their PIN. Workspace admins have no limit. Set to 0 to have a manager approve every register refund. Between 0 and 100000."
+            },
+            {
+              "key": "ov_posAutoLockMinutes",
+              "label": "Override Lock the register after (minutes idle) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posAutoLockMinutes:present}"
+            },
+            {
+              "key": "posAutoLockMinutes",
+              "label": "Lock the register after (minutes idle)",
+              "kind": "number",
+              "initial": "{data.site.posAutoLockMinutes ?? data.org.posAutoLockMinutes ?? const.defaults.posAutoLockMinutes}",
+              "when": "form.ov_posAutoLockMinutes",
+              "help": "After this many minutes without a tap the register locks and asks for a staff PIN. Set to 0 to never lock. Between 0 and 240."
+            },
+            {
+              "key": "ov_posReceiptAddress",
+              "label": "Override Address on printed receipts for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posReceiptAddress:present}"
+            },
+            {
+              "key": "posReceiptAddress",
+              "label": "Address on printed receipts",
+              "kind": "text",
+              "initial": "{data.site.posReceiptAddress ?? data.org.posReceiptAddress ?? const.defaults.posReceiptAddress}",
+              "when": "form.ov_posReceiptAddress",
+              "help": "Printed under your store name. Put each line on its own line."
+            },
+            {
+              "key": "ov_posReturnPolicy",
+              "label": "Override Return policy on printed receipts for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posReturnPolicy:present}"
+            },
+            {
+              "key": "posReturnPolicy",
+              "label": "Return policy on printed receipts",
+              "kind": "text",
+              "initial": "{data.site.posReturnPolicy ?? data.org.posReturnPolicy ?? const.defaults.posReturnPolicy}",
+              "when": "form.ov_posReturnPolicy",
+              "help": "Printed at the foot of every receipt and gift receipt."
+            },
+            {
+              "key": "ov_posKioskPayAtCounter",
+              "label": "Override Kiosk: let customers pay at the counter for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posKioskPayAtCounter:present}"
+            },
+            {
+              "key": "posKioskPayAtCounter",
+              "label": "Kiosk: let customers pay at the counter",
+              "kind": "toggle",
+              "initial": "{data.site.posKioskPayAtCounter ?? data.org.posKioskPayAtCounter ?? const.defaults.posKioskPayAtCounter}",
+              "when": "form.ov_posKioskPayAtCounter",
+              "help": "Adds \"Pay at counter\" to the self-service kiosk. The order goes to the register’s queue with its number, and a cashier takes payment there."
+            },
+            {
+              "key": "ov_posKioskIdleSeconds",
+              "label": "Override Kiosk: start over after (seconds idle) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posKioskIdleSeconds:present}"
+            },
+            {
+              "key": "posKioskIdleSeconds",
+              "label": "Kiosk: start over after (seconds idle)",
+              "kind": "number",
+              "initial": "{data.site.posKioskIdleSeconds ?? data.org.posKioskIdleSeconds ?? const.defaults.posKioskIdleSeconds}",
+              "when": "form.ov_posKioskIdleSeconds",
+              "help": "After this long without a touch the kiosk asks \"Still there?\", then clears the cart and anything the customer typed. Between 30 and 600."
+            },
+            {
+              "key": "ov_posKioskWelcome",
+              "label": "Override Kiosk welcome for this site",
+              "kind": "toggle",
+              "initial": "{data.site.posKioskWelcome:present}"
+            },
+            {
+              "key": "posKioskWelcome",
+              "label": "Kiosk welcome",
+              "kind": "text",
+              "initial": "{data.site.posKioskWelcome ?? data.org.posKioskWelcome ?? const.defaults.posKioskWelcome}",
+              "when": "form.ov_posKioskWelcome",
+              "help": "The line the kiosk’s start screen shows under your store name. Leave blank for \"Order here\"."
+            }
+          ],
+          "submit": {
+            "label": "Save settings",
+            "write": {
+              "doc": "hosts/{site.id}/pluginSettings/commerce",
+              "fields": {
+                "updatedBy": "{user.uid}",
+                "posMaxDiscountPct": {
+                  "$if": "form.ov_posMaxDiscountPct",
+                  "then": "{form.posMaxDiscountPct}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posTippingEnabled": {
+                  "$if": "form.ov_posTippingEnabled",
+                  "then": "{form.posTippingEnabled}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posTipPercentages": {
+                  "$if": "form.ov_posTipPercentages",
+                  "then": "{form.posTipPercentages}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posReceiptDefault": {
+                  "$if": "form.ov_posReceiptDefault",
+                  "then": "{form.posReceiptDefault}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posDisplayMessage": {
+                  "$if": "form.ov_posDisplayMessage",
+                  "then": "{form.posDisplayMessage}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posDisplayMarketingOptIn": {
+                  "$if": "form.ov_posDisplayMarketingOptIn",
+                  "then": "{form.posDisplayMarketingOptIn}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posRequireOpenShift": {
+                  "$if": "form.ov_posRequireOpenShift",
+                  "then": "{form.posRequireOpenShift}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posRefundLimit": {
+                  "$if": "form.ov_posRefundLimit",
+                  "then": "{form.posRefundLimit}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posAutoLockMinutes": {
+                  "$if": "form.ov_posAutoLockMinutes",
+                  "then": "{form.posAutoLockMinutes}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posReceiptAddress": {
+                  "$if": "form.ov_posReceiptAddress",
+                  "then": "{form.posReceiptAddress}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posReturnPolicy": {
+                  "$if": "form.ov_posReturnPolicy",
+                  "then": "{form.posReturnPolicy}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posKioskPayAtCounter": {
+                  "$if": "form.ov_posKioskPayAtCounter",
+                  "then": "{form.posKioskPayAtCounter}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posKioskIdleSeconds": {
+                  "$if": "form.ov_posKioskIdleSeconds",
+                  "then": "{form.posKioskIdleSeconds}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "posKioskWelcome": {
+                  "$if": "form.ov_posKioskWelcome",
+                  "then": "{form.posKioskWelcome}",
+                  "else": {
+                    "$delete": true
+                  }
+                }
+              }
+            },
+            "success": "Settings saved"
+          }
+        }
+      ]
+    },
+    {
       "id": "core.pluginSettings.bookings",
       "title": "Bookings settings",
       "subtitle": "How Bookings behaves for this workspace",
@@ -1345,7 +3173,7 @@
           "type": "form",
           "id": "settings",
           "object": "data.settings",
-          "footer": "A site can override these on its own plugin page in the console.",
+          "footer": "A site can override these on its own plugin page.",
           "fields": [
             {
               "key": "maxDaysAhead",
@@ -1370,6 +3198,95 @@
                 "maxDaysAhead": "{form.maxDaysAhead}",
                 "bookingPath": "{form.bookingPath}",
                 "updatedBy": "{user.uid}"
+              }
+            },
+            "success": "Settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.sitePluginSettings.bookings",
+      "title": "Bookings settings for this site",
+      "label": "Settings for this site",
+      "subtitle": "Override a workspace value on this site",
+      "icon": "gearshape|settings",
+      "scope": "site",
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "requires": "org.manager && params.pluginId == bookings",
+      "constants": {
+        "defaults": {
+          "maxDaysAhead": 60,
+          "bookingPath": "/"
+        }
+      },
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}/pluginSettings/bookings",
+          "optional": true
+        },
+        "site": {
+          "doc": "hosts/{site.id}/pluginSettings/bookings",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "settings",
+          "footer": "A field you do not override follows the workspace value.",
+          "fields": [
+            {
+              "key": "ov_maxDaysAhead",
+              "label": "Override Booking horizon (days) for this site",
+              "kind": "toggle",
+              "initial": "{data.site.maxDaysAhead:present}"
+            },
+            {
+              "key": "maxDaysAhead",
+              "label": "Booking horizon (days)",
+              "kind": "number",
+              "initial": "{data.site.maxDaysAhead ?? data.org.maxDaysAhead ?? const.defaults.maxDaysAhead}",
+              "when": "form.ov_maxDaysAhead",
+              "help": "How far ahead visitors can book. Slots beyond this many days from now are not offered. Between 1 and 365."
+            },
+            {
+              "key": "ov_bookingPath",
+              "label": "Override Booking page path for this site",
+              "kind": "toggle",
+              "initial": "{data.site.bookingPath:present}"
+            },
+            {
+              "key": "bookingPath",
+              "label": "Booking page path",
+              "kind": "text",
+              "initial": "{data.site.bookingPath ?? data.org.bookingPath ?? const.defaults.bookingPath}",
+              "when": "form.ov_bookingPath",
+              "help": "The page on your site that holds the Booking block, e.g. /book. Booking links from the CRM open this page with the service preselected."
+            }
+          ],
+          "submit": {
+            "label": "Save settings",
+            "write": {
+              "doc": "hosts/{site.id}/pluginSettings/bookings",
+              "fields": {
+                "updatedBy": "{user.uid}",
+                "maxDaysAhead": {
+                  "$if": "form.ov_maxDaysAhead",
+                  "then": "{form.maxDaysAhead}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "bookingPath": {
+                  "$if": "form.ov_bookingPath",
+                  "then": "{form.bookingPath}",
+                  "else": {
+                    "$delete": true
+                  }
+                }
               }
             },
             "success": "Settings saved"

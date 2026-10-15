@@ -1,0 +1,1464 @@
+{
+  "$comment": "Importing a site package (AGL-3671): the console's wizard over /api/hosts/import and /api/hosts/export. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.site.import",
+      "title": "Import a site package",
+      "icon": "square.and.arrow.down|upload",
+      "scope": "site",
+      "requires": "org.manager",
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "An import shows each item against this site’s copy and asks how to handle it before it writes anything."
+        },
+        {
+          "type": "form",
+          "id": "package",
+          "fields": [
+            {
+              "key": "package",
+              "label": "Site package",
+              "kind": "file",
+              "parse": "json",
+              "required": true,
+              "help": "A backup or an export file (JSON) made in Aglyn."
+            }
+          ],
+          "submit": {
+            "label": "Review the import",
+            "url": "/api/hosts/import",
+            "body": {
+              "hostId": "{site.id}",
+              "action": "plan",
+              "package": "{form.package}"
+            },
+            "stash": {
+              "package": "{form.package}",
+              "plan": "{response}",
+              "bulk": {
+                "new": "create",
+                "differs": "",
+                "identical": "skip"
+              },
+              "overrides": {},
+              "depChoices": {},
+              "merge": {},
+              "review": null,
+              "prompts": null,
+              "warnCodes": null,
+              "result": null
+            },
+            "after": {
+              "label": "Decide",
+              "stash": {
+                "decisions": {
+                  "$merge": [
+                    {
+                      "$index": {
+                        "rows": "stash.plan.plan.items",
+                        "key": "{item.key}",
+                        "value": "{item.proposed}",
+                        "filter": "item.comparison != differs"
+                      }
+                    },
+                    {
+                      "$index": {
+                        "rows": "stash.plan.plan.items",
+                        "key": "{item.key}",
+                        "value": "{stash.bulk.new}",
+                        "filter": "item.comparison == new && stash.bulk.new && item.choices ~= @stash.bulk.new"
+                      }
+                    },
+                    {
+                      "$index": {
+                        "rows": "stash.plan.plan.items",
+                        "key": "{item.key}",
+                        "value": "{stash.bulk.differs}",
+                        "filter": "item.comparison == differs && stash.bulk.differs && item.choices ~= @stash.bulk.differs"
+                      }
+                    },
+                    {
+                      "$index": {
+                        "rows": "stash.plan.plan.items",
+                        "key": "{item.key}",
+                        "value": "{stash.bulk.identical}",
+                        "filter": "item.comparison == identical && stash.bulk.identical && item.choices ~= @stash.bulk.identical"
+                      }
+                    },
+                    {
+                      "$index": {
+                        "rows": "stash.plan.plan.items",
+                        "key": "{item.key}",
+                        "value": "{stash.overrides[@item.key]}",
+                        "filter": "stash.overrides[@item.key] && item.choices ~= @stash.overrides[@item.key]"
+                      }
+                    }
+                  ]
+                }
+              },
+              "reload": false,
+              "after": {
+                "label": "Wait",
+                "stash": {
+                  "undecided": {
+                    "$index": {
+                      "rows": "stash.plan.plan.items",
+                      "key": "{item.key}",
+                      "value": "{item.key}",
+                      "filter": "item.comparison == differs && !stash.decisions[@item.key]"
+                    }
+                  }
+                },
+                "reload": false
+              }
+            },
+            "navigate": {
+              "screen": "core.site.import.review"
+            },
+            "reload": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.review",
+      "title": "Review the import",
+      "icon": "checklist|inventory_2",
+      "scope": "site",
+      "requires": "org.manager",
+      "constants": {
+        "status": {
+          "new": "New",
+          "identical": "Already on this site",
+          "differs": "Differs",
+          "missingDependency": "Needs something"
+        },
+        "decision": {
+          "create": "Add",
+          "replace": "Replace",
+          "keepBoth": "Keep both",
+          "skip": "Skip",
+          "merge": "Merge"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "{stash.plan.capRefusal} A plan limit refuses this import. Skip some new items, or upgrade.",
+          "when": "stash.plan.capRefusal"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Items this site cannot read: {stash.plan.unknownKinds}. Switch on the plugin that keeps them to import them. They are left out.",
+          "when": "stash.plan.unknownKinds"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Emails this platform does not send: {stash.plan.notSent}. They are left out.",
+          "when": "stash.plan.notSent"
+        },
+        {
+          "type": "fields",
+          "title": "In the file",
+          "when": "stash.plan",
+          "rows": [
+            {
+              "label": "New",
+              "value": "{stash.plan.plan.counts.new ?? '0'}"
+            },
+            {
+              "label": "Already on this site",
+              "value": "{stash.plan.plan.counts.identical ?? '0'}"
+            },
+            {
+              "label": "Differs",
+              "value": "{stash.plan.plan.counts.differs ?? '0'}"
+            },
+            {
+              "label": "Needs something",
+              "value": "{stash.plan.plan.counts.missingDependency ?? '0'}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "stash.plan",
+          "items": [
+            {
+              "id": "bulk",
+              "label": "Set a default for each kind of change",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "new",
+                  "label": "New items",
+                  "kind": "select",
+                  "initial": "{stash.bulk.new}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Decide each one"
+                    },
+                    {
+                      "value": "create",
+                      "label": "Add"
+                    },
+                    {
+                      "value": "skip",
+                      "label": "Skip"
+                    }
+                  ]
+                },
+                {
+                  "key": "differs",
+                  "label": "Items that differ from this site’s",
+                  "kind": "select",
+                  "initial": "{stash.bulk.differs}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Decide each one"
+                    },
+                    {
+                      "value": "skip",
+                      "label": "Skip"
+                    },
+                    {
+                      "value": "replace",
+                      "label": "Replace"
+                    },
+                    {
+                      "value": "keepBoth",
+                      "label": "Keep both"
+                    }
+                  ]
+                },
+                {
+                  "key": "identical",
+                  "label": "Items already on this site",
+                  "kind": "select",
+                  "initial": "{stash.bulk.identical}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Decide each one"
+                    },
+                    {
+                      "value": "skip",
+                      "label": "Skip"
+                    },
+                    {
+                      "value": "replace",
+                      "label": "Replace"
+                    },
+                    {
+                      "value": "keepBoth",
+                      "label": "Keep both"
+                    }
+                  ]
+                }
+              ],
+              "stash": {
+                "bulk": {
+                  "new": "{form.new}",
+                  "differs": "{form.differs}",
+                  "identical": "{form.identical}"
+                }
+              },
+              "after": {
+                "label": "Decide",
+                "stash": {
+                  "decisions": {
+                    "$merge": [
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{item.proposed}",
+                          "filter": "item.comparison != differs"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.bulk.new}",
+                          "filter": "item.comparison == new && stash.bulk.new && item.choices ~= @stash.bulk.new"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.bulk.differs}",
+                          "filter": "item.comparison == differs && stash.bulk.differs && item.choices ~= @stash.bulk.differs"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.bulk.identical}",
+                          "filter": "item.comparison == identical && stash.bulk.identical && item.choices ~= @stash.bulk.identical"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.overrides[@item.key]}",
+                          "filter": "stash.overrides[@item.key] && item.choices ~= @stash.overrides[@item.key]"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "reload": false,
+                "after": {
+                  "label": "Wait",
+                  "stash": {
+                    "undecided": {
+                      "$index": {
+                        "rows": "stash.plan.plan.items",
+                        "key": "{item.key}",
+                        "value": "{item.key}",
+                        "filter": "item.comparison == differs && !stash.decisions[@item.key]"
+                      }
+                    }
+                  },
+                  "reload": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Waiting for your choice",
+          "when": "stash.undecided",
+          "items": "stash.undecided",
+          "count": true,
+          "primary": "{stash.plan.plan.items[key=item.key].name|stash.plan.plan.items[key=item.key].slug|item.key}",
+          "secondary": "{stash.plan.plan.items[key=item.key].kind:title}",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "title": "Items",
+          "when": "stash.plan",
+          "items": "stash.plan.plan.items",
+          "count": true,
+          "primary": "{item.name|item.slug|item.id}",
+          "secondary": "{item.kind:title}: {const.status[@item.status]}",
+          "trailing": "{const.decision[@stash.decisions[@item.key]]|'Choose'}",
+          "icon": "doc.on.doc|content_copy",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose what happens",
+              "icon": "slider.horizontal.3|tune",
+              "when": "item.choices.1",
+              "prompt": [
+                {
+                  "key": "decision",
+                  "label": "What to do with it",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.decisions[@item.key]}",
+                  "optionsFrom": {
+                    "items": "item.choices",
+                    "value": "{item}",
+                    "label": "{const.decision[@item]}"
+                  },
+                  "help": "Add: Adds the file’s item to this site. Replace: Writes the file’s copy over this site’s. Pages, layouts and emails get it as a new version. Keep both: Adds the file’s copy beside this site’s, under a new ID and address. Skip: Leaves this site’s item as it is. Merge: Keeps this site’s values and fills in what it has not set; choose key by key."
+                }
+              ],
+              "stash": {
+                "overrides": {
+                  "$put": {
+                    "map": "{stash.overrides}",
+                    "key": "{item.key}",
+                    "value": "{form.decision}"
+                  }
+                }
+              },
+              "after": {
+                "label": "Decide",
+                "stash": {
+                  "decisions": {
+                    "$merge": [
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{item.proposed}",
+                          "filter": "item.comparison != differs"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.bulk.new}",
+                          "filter": "item.comparison == new && stash.bulk.new && item.choices ~= @stash.bulk.new"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.bulk.differs}",
+                          "filter": "item.comparison == differs && stash.bulk.differs && item.choices ~= @stash.bulk.differs"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.bulk.identical}",
+                          "filter": "item.comparison == identical && stash.bulk.identical && item.choices ~= @stash.bulk.identical"
+                        }
+                      },
+                      {
+                        "$index": {
+                          "rows": "stash.plan.plan.items",
+                          "key": "{item.key}",
+                          "value": "{stash.overrides[@item.key]}",
+                          "filter": "stash.overrides[@item.key] && item.choices ~= @stash.overrides[@item.key]"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "reload": false,
+                "after": {
+                  "label": "Wait",
+                  "stash": {
+                    "undecided": {
+                      "$index": {
+                        "rows": "stash.plan.plan.items",
+                        "key": "{item.key}",
+                        "value": "{item.key}",
+                        "filter": "item.comparison == differs && !stash.decisions[@item.key]"
+                      }
+                    }
+                  },
+                  "reload": false
+                }
+              }
+            }
+          ],
+          "empty": "The file holds nothing this site can read."
+        },
+        {
+          "type": "actions",
+          "when": "stash.plan && !stash.undecided",
+          "items": [
+            {
+              "id": "next",
+              "label": "Continue",
+              "icon": "arrow.right|arrow_forward",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "plan",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": "{stash.depChoices}",
+                "mergeChoices?": "{stash.merge}"
+              },
+              "stash": {
+                "review": "{response}",
+                "prompts": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.dependency}",
+                    "value": "{item}",
+                    "filter": "item.code == danglingReference,droppedReference,mappedReference"
+                  }
+                },
+                "warnCodes": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.code}",
+                    "value": "{item.code}"
+                  }
+                },
+                "by": {
+                  "create": {
+                    "$index": {
+                      "rows": "stash.plan.plan.items",
+                      "key": "{item.key}",
+                      "value": "{item.key}",
+                      "filter": "stash.decisions[@item.key] == create"
+                    }
+                  },
+                  "replace": {
+                    "$index": {
+                      "rows": "stash.plan.plan.items",
+                      "key": "{item.key}",
+                      "value": "{item.key}",
+                      "filter": "stash.decisions[@item.key] == replace"
+                    }
+                  },
+                  "keepBoth": {
+                    "$index": {
+                      "rows": "stash.plan.plan.items",
+                      "key": "{item.key}",
+                      "value": "{item.key}",
+                      "filter": "stash.decisions[@item.key] == keepBoth"
+                    }
+                  },
+                  "merge": {
+                    "$index": {
+                      "rows": "stash.plan.plan.items",
+                      "key": "{item.key}",
+                      "value": "{item.key}",
+                      "filter": "stash.decisions[@item.key] == merge"
+                    }
+                  },
+                  "skip": {
+                    "$index": {
+                      "rows": "stash.plan.plan.items",
+                      "key": "{item.key}",
+                      "value": "{item.key}",
+                      "filter": "stash.decisions[@item.key] == skip"
+                    }
+                  }
+                }
+              },
+              "navigate": {
+                "screen": "core.site.import.deps"
+              },
+              "reload": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.deps",
+      "title": "Missing items",
+      "icon": "link.badge.plus|link",
+      "scope": "site",
+      "requires": "org.manager",
+      "constants": {
+        "code": {
+          "danglingReference": "Points at nothing",
+          "droppedReference": "Reference removed",
+          "mappedReference": "Points at an item you picked"
+        },
+        "answer": {
+          "import": "Import it from the file",
+          "drop": "Remove the reference",
+          "keep": "Leave it pointing at nothing"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every item you are importing has what it needs.",
+          "when": "!stash.prompts && !stash.depChoices"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "These items are named by what you are importing, and this site does not hold them. Choose what to do about each.",
+          "when": "stash.prompts"
+        },
+        {
+          "type": "list",
+          "title": "Missing items",
+          "when": "stash.prompts",
+          "items": "stash.prompts",
+          "count": true,
+          "primary": "{stash.plan.plan.items[key=item.key].name|stash.plan.plan.items[key=item.key].slug|item.key}",
+          "secondary": "{item.value.message}",
+          "trailing": "{const.code[@item.value.code]|''}",
+          "icon": "link.badge.plus|link",
+          "actions": [
+            {
+              "id": "import",
+              "label": "Import it from the file",
+              "icon": "square.and.arrow.down|upload",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "plan",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": "import"
+                  }
+                },
+                "mergeChoices?": "{stash.merge}"
+              },
+              "stash": {
+                "review": "{response}",
+                "prompts": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.dependency}",
+                    "value": "{item}",
+                    "filter": "item.code == danglingReference,droppedReference,mappedReference"
+                  }
+                },
+                "warnCodes": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.code}",
+                    "value": "{item.code}"
+                  }
+                },
+                "depChoices": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": "import"
+                  }
+                }
+              },
+              "reload": false,
+              "when": "stash.plan.plan.items[key=item.key]"
+            },
+            {
+              "id": "mapTo",
+              "label": "Use an item this site has",
+              "icon": "arrow.triangle.swap|swap_horiz",
+              "navigate": {
+                "screen": "core.site.import.pick",
+                "params": {
+                  "dep": "{item.key}",
+                  "kind": "{item.key:head}"
+                }
+              }
+            },
+            {
+              "id": "drop",
+              "label": "Remove the reference",
+              "icon": "minus.circle|remove",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "plan",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": "drop"
+                  }
+                },
+                "mergeChoices?": "{stash.merge}"
+              },
+              "stash": {
+                "review": "{response}",
+                "prompts": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.dependency}",
+                    "value": "{item}",
+                    "filter": "item.code == danglingReference,droppedReference,mappedReference"
+                  }
+                },
+                "warnCodes": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.code}",
+                    "value": "{item.code}"
+                  }
+                },
+                "depChoices": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": "drop"
+                  }
+                }
+              },
+              "reload": false
+            },
+            {
+              "id": "keep",
+              "label": "Leave it pointing at nothing",
+              "icon": "exclamationmark.triangle|warning",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "plan",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": "keep"
+                  }
+                },
+                "mergeChoices?": "{stash.merge}"
+              },
+              "stash": {
+                "review": "{response}",
+                "prompts": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.dependency}",
+                    "value": "{item}",
+                    "filter": "item.code == danglingReference,droppedReference,mappedReference"
+                  }
+                },
+                "warnCodes": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.code}",
+                    "value": "{item.code}"
+                  }
+                },
+                "depChoices": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": "keep"
+                  }
+                }
+              },
+              "reload": false
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Your choices",
+          "when": "stash.depChoices",
+          "items": "stash.depChoices",
+          "count": false,
+          "primary": "{item.key}",
+          "secondary": "{item.value.mapTo}",
+          "trailing": "{const.answer[@item.value]|'Use an item this site has'}",
+          "icon": "checkmark|check",
+          "actions": [
+            {
+              "id": "clear",
+              "label": "Choose again",
+              "icon": "arrow.uturn.backward|undo",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "plan",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": null
+                  }
+                },
+                "mergeChoices?": "{stash.merge}"
+              },
+              "stash": {
+                "review": "{response}",
+                "prompts": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.dependency}",
+                    "value": "{item}",
+                    "filter": "item.code == danglingReference,droppedReference,mappedReference"
+                  }
+                },
+                "warnCodes": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.code}",
+                    "value": "{item.code}"
+                  }
+                },
+                "depChoices": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{item.key}",
+                    "value": null
+                  }
+                }
+              },
+              "reload": false
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "next",
+              "label": "Continue",
+              "icon": "arrow.right|arrow_forward",
+              "navigate": {
+                "screen": "core.site.import.changes"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.pick",
+      "title": "Use an item this site has",
+      "icon": "arrow.triangle.swap|swap_horiz",
+      "scope": "site",
+      "requires": "org.manager",
+      "load": {
+        "catalog": {
+          "url": "/api/hosts/export",
+          "method": "POST",
+          "body": {
+            "hostId": "{site.id}",
+            "list": true
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every reference to {params.dep} will point at the item you pick."
+        },
+        {
+          "type": "list",
+          "title": "On this site",
+          "items": "data.catalog.manifest.items",
+          "filter": "item.kind == @params.kind",
+          "count": true,
+          "primary": "{item.name|item.slug|item.$id}",
+          "secondary": "{item.kind:title}",
+          "icon": "doc.on.doc|content_copy",
+          "actions": [
+            {
+              "id": "use",
+              "label": "Use this one",
+              "icon": "checkmark|check",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "plan",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{params.dep}",
+                    "value": {
+                      "mapTo": "{item.$id}"
+                    }
+                  }
+                },
+                "mergeChoices?": "{stash.merge}"
+              },
+              "stash": {
+                "review": "{response}",
+                "prompts": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.dependency}",
+                    "value": "{item}",
+                    "filter": "item.code == danglingReference,droppedReference,mappedReference"
+                  }
+                },
+                "warnCodes": {
+                  "$index": {
+                    "rows": "response.warnings",
+                    "key": "{item.code}",
+                    "value": "{item.code}"
+                  }
+                },
+                "depChoices": {
+                  "$put": {
+                    "map": "{stash.depChoices}",
+                    "key": "{params.dep}",
+                    "value": {
+                      "mapTo": "{item.$id}"
+                    }
+                  }
+                }
+              },
+              "back": true,
+              "reload": false
+            }
+          ],
+          "empty": "This site holds no item of that kind."
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.changes",
+      "title": "What changes",
+      "icon": "arrow.left.arrow.right|swap_horiz",
+      "scope": "site",
+      "requires": "org.manager",
+      "constants": {
+        "decision": {
+          "create": "Add",
+          "replace": "Replace",
+          "keepBoth": "Keep both",
+          "skip": "Skip",
+          "merge": "Merge"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Open an item to see each value it changes against this site’s copy. A merged item is chosen key by key.",
+          "when": "stash.plan"
+        },
+        {
+          "type": "list",
+          "title": "Items that change this site’s copy",
+          "when": "stash.plan",
+          "items": "stash.plan.plan.items",
+          "filter": "item.comparison == differs && stash.decisions[@item.key] != skip",
+          "count": true,
+          "primary": "{item.name|item.slug|item.id}",
+          "secondary": "{item.kind:title}",
+          "trailing": "{const.decision[@stash.decisions[@item.key]]|'Choose'}",
+          "icon": "doc.on.doc|content_copy",
+          "open": {
+            "screen": "core.site.import.item",
+            "params": {
+              "key": "{item.key}"
+            }
+          },
+          "empty": "Nothing the file holds differs from this site’s copy, or every changed item is skipped."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "next",
+              "label": "Continue",
+              "icon": "arrow.right|arrow_forward",
+              "navigate": {
+                "screen": "core.site.import.apply"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.item",
+      "title": "{params.key}",
+      "icon": "doc.text.magnifyingglass|search",
+      "scope": "site",
+      "requires": "org.manager",
+      "constants": {
+        "decision": {
+          "create": "Add",
+          "replace": "Replace",
+          "keepBoth": "Keep both",
+          "skip": "Skip",
+          "merge": "Merge"
+        },
+        "side": {
+          "site": "This site’s value",
+          "package": "The file’s value"
+        },
+        "recordStatus": {
+          "added": "New",
+          "removed": "Not in the file",
+          "changed": "Changed"
+        }
+      },
+      "load": {
+        "cmp": {
+          "url": "/api/hosts/import",
+          "method": "POST",
+          "body": {
+            "hostId": "{site.id}",
+            "action": "compare",
+            "package": "{stash.package}",
+            "keys": [
+              "{params.key}"
+            ]
+          }
+        },
+        "diff": {
+          "compute": "packageItemChanges",
+          "args": [
+            "data.cmp.items.0.existing.content",
+            "data.cmp.items.0.incoming",
+            "200",
+            "1000000"
+          ]
+        },
+        "keys": {
+          "compute": "packageMergeKeys",
+          "args": [
+            "data.cmp.items.0.existing.content",
+            "data.cmp.items.0.incoming"
+          ]
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "rows": [
+            {
+              "label": "Decision",
+              "value": "{const.decision[@stash.decisions[@params.key]]|'Choose'}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "This item is new to the site, so there is nothing to compare it with.",
+          "when": "data.cmp && !data.cmp.items.0.existing"
+        },
+        {
+          "type": "list",
+          "title": "Records",
+          "when": "data.diff.records.changes",
+          "items": "data.diff.records.changes",
+          "count": true,
+          "primary": "{item.label}",
+          "secondary": "Now: {item.before:json}",
+          "tertiary": "File: {item.after:json}",
+          "trailing": "{const.recordStatus[@item.status]}",
+          "icon": "list.bullet.rectangle|view_agenda",
+          "footer": "{data.diff.records.summary}",
+          "page": 50
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "{data.diff.records.summary}. Every record in the file matches this site’s.",
+          "when": "data.diff.records && !data.diff.records.changes"
+        },
+        {
+          "type": "list",
+          "title": "Values that change",
+          "when": "data.diff.changes && stash.decisions[@params.key] != merge",
+          "items": "data.diff.changes",
+          "count": true,
+          "primary": "{item.label}",
+          "secondary": "Now: {item.before:json}",
+          "tertiary": "File: {item.after:json}",
+          "icon": "arrow.left.arrow.right|swap_horiz",
+          "page": 50
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "And {data.diff.more} more values that differ.",
+          "when": "data.diff.more && stash.decisions[@params.key] != merge"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "The file’s copy matches this site’s.",
+          "when": "data.cmp.items.0.existing && !data.diff.changes && !data.diff.recordField && stash.decisions[@params.key] != merge"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every value but the records matches this site’s.",
+          "when": "data.cmp.items.0.existing && !data.diff.changes && data.diff.recordField && stash.decisions[@params.key] != merge"
+        },
+        {
+          "type": "list",
+          "title": "Choose each value",
+          "when": "stash.decisions[@params.key] == merge",
+          "items": "data.keys",
+          "count": true,
+          "primary": "{item.key}",
+          "secondary": "This site: {item.site:json}",
+          "tertiary": "File: {item.file:json}",
+          "trailing": "{const.side[@stash.merge[@params.key][@item.key]]|const.side[@item.merged]}",
+          "icon": "switch.2|tune",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose whose value",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "side",
+                  "label": "Keep",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.merge[@params.key][@item.key]|item.merged}",
+                  "options": [
+                    {
+                      "value": "site",
+                      "label": "This site’s value"
+                    },
+                    {
+                      "value": "package",
+                      "label": "The file’s value"
+                    }
+                  ]
+                }
+              ],
+              "stash": {
+                "merge": {
+                  "$put": {
+                    "map": "{stash.merge}",
+                    "key": "{params.key}",
+                    "value": {
+                      "$put": {
+                        "map": "{stash.merge[@params.key]}",
+                        "key": "{item.key}",
+                        "value": "{form.side}"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "empty": "Nothing differs key by key."
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.apply",
+      "title": "Import the package",
+      "icon": "square.and.arrow.down|upload",
+      "scope": "site",
+      "requires": "org.manager",
+      "constants": {
+        "ack": [
+          {
+            "id": "overwrite",
+            "title": "Items written over",
+            "description": "This site’s copy is replaced or merged into. What it held is kept, and you can undo the import for seven days."
+          },
+          {
+            "id": "droppedReference",
+            "title": "References removed",
+            "description": "These items named something this site does not hold; the reference is taken out."
+          },
+          {
+            "id": "mappedReference",
+            "title": "References pointed at this site’s items",
+            "description": "These items now name the item you picked instead."
+          },
+          {
+            "id": "danglingReference",
+            "title": "References that point at nothing",
+            "description": "These items name something this site does not hold, until it does."
+          },
+          {
+            "id": "moreWarnings",
+            "title": "More reference warnings",
+            "description": "The list above shows the first of them."
+          }
+        ],
+        "code": {
+          "danglingReference": "Points at nothing",
+          "droppedReference": "Reference removed",
+          "mappedReference": "Points at an item you picked"
+        }
+      },
+      "derive": [
+        {
+          "name": "needsAck",
+          "when": "stash.by.replace || stash.by.merge || stash.warnCodes || stash.review.warningsTotal > stash.review.warnings.length"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "{stash.review.capRefusal} A plan limit refuses this import. Go back and skip some new items, or upgrade.",
+          "when": "stash.review.capRefusal"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Items this site cannot read: {stash.review.unknownKinds}. Switch on the plugin that keeps them to import them. They are left out.",
+          "when": "stash.review.unknownKinds"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Emails this platform does not send: {stash.review.notSent}. They are left out.",
+          "when": "stash.review.notSent"
+        },
+        {
+          "type": "fields",
+          "title": "What the import does",
+          "rows": [
+            {
+              "label": "Add",
+              "value": "{stash.by.create:count}"
+            },
+            {
+              "label": "Replace",
+              "value": "{stash.by.replace:count}"
+            },
+            {
+              "label": "Keep both",
+              "value": "{stash.by.keepBoth:count}"
+            },
+            {
+              "label": "Merge",
+              "value": "{stash.by.merge:count}"
+            },
+            {
+              "label": "Skip",
+              "value": "{stash.by.skip:count}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "References",
+          "when": "stash.review.warnings",
+          "items": "stash.review.warnings",
+          "count": true,
+          "primary": "{item.message}",
+          "trailing": "{const.code[@item.code]|''}",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "apply",
+              "label": "Import into this site",
+              "icon": "square.and.arrow.down|upload",
+              "when": "is.needsAck && !stash.review.capRefusal",
+              "confirm": "Import this package into the site? Replaced items keep what they had for seven days, so the import can be undone.",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "apply",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": "{stash.depChoices}",
+                "mergeChoices?": {
+                  "$index": {
+                    "rows": "stash.merge",
+                    "key": "{item.key}",
+                    "value": "{item.value}",
+                    "filter": "stash.decisions[@item.key] == merge"
+                  }
+                }
+              },
+              "stash": {
+                "result": "{response}"
+              },
+              "navigate": {
+                "screen": "core.site.import.done"
+              },
+              "reload": false,
+              "prompt": [
+                {
+                  "key": "ack",
+                  "label": "Before importing",
+                  "kind": "multiselect",
+                  "coversAll": true,
+                  "optionsFrom": {
+                    "items": "const.ack",
+                    "value": "{item.id}",
+                    "label": "{item.title}: {item.description}",
+                    "filter": "item.id == overwrite && stash.by.replace || item.id == overwrite && stash.by.merge || item.id != overwrite && item.id != moreWarnings && stash.warnCodes[@item.id] || item.id == moreWarnings && stash.review.warningsTotal > stash.review.warnings.length"
+                  },
+                  "help": "Tick each one to confirm you understand it."
+                }
+              ]
+            },
+            {
+              "id": "applyNow",
+              "label": "Import into this site",
+              "icon": "square.and.arrow.down|upload",
+              "when": "!is.needsAck && !stash.review.capRefusal",
+              "confirm": "Import this package into the site? Replaced items keep what they had for seven days, so the import can be undone.",
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "apply",
+                "package": "{stash.package}",
+                "decisions": "{stash.decisions}",
+                "dependencyChoices?": "{stash.depChoices}",
+                "mergeChoices?": {
+                  "$index": {
+                    "rows": "stash.merge",
+                    "key": "{item.key}",
+                    "value": "{item.value}",
+                    "filter": "stash.decisions[@item.key] == merge"
+                  }
+                }
+              },
+              "stash": {
+                "result": "{response}"
+              },
+              "navigate": {
+                "screen": "core.site.import.done"
+              },
+              "reload": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.done",
+      "title": "Imported",
+      "icon": "checkmark.circle|check_circle",
+      "scope": "site",
+      "requires": "org.manager",
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "stash.result",
+          "text": "{stash.result.written ?? '0'} items written."
+        },
+        {
+          "type": "list",
+          "title": "By kind",
+          "when": "stash.result.counts",
+          "items": "stash.result.counts",
+          "count": false,
+          "primary": "{item.key:title}",
+          "trailing": "{item.value}"
+        },
+        {
+          "type": "list",
+          "title": "Warnings",
+          "when": "stash.result.warnings",
+          "items": "stash.result.warnings",
+          "count": true,
+          "primary": "{item.message}",
+          "secondary": "{item.item}"
+        },
+        {
+          "type": "actions",
+          "when": "stash.result.importId",
+          "items": [
+            {
+              "id": "undo",
+              "label": "Undo this import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "navigate": {
+                "screen": "core.site.import.undo",
+                "params": {
+                  "importId": "{stash.result.importId}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.import.undo",
+      "title": "Undo the import",
+      "icon": "arrow.uturn.backward|undo",
+      "scope": "site",
+      "requires": "org.manager",
+      "load": {
+        "undo": {
+          "url": "/api/hosts/import",
+          "method": "POST",
+          "body": {
+            "hostId": "{site.id}",
+            "action": "undoPlan",
+            "importId": "{params.importId}"
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.undo",
+          "text": "This import can no longer be checked. Imports can be undone for seven days."
+        },
+        {
+          "type": "fields",
+          "title": "What undoing does",
+          "when": "data.undo",
+          "rows": [
+            {
+              "label": "Items put back as they were",
+              "value": "{data.undo.counts.restore ?? '0'}"
+            },
+            {
+              "label": "Items the import added, removed",
+              "value": "{data.undo.counts.delete ?? '0'}"
+            },
+            {
+              "label": "Edited since the import",
+              "value": "{data.undo.counts.conflict ?? '0'}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Edited since the import",
+          "when": "data.undo.conflicts",
+          "items": "data.undo.conflicts",
+          "count": false,
+          "primary": "{item.name|item.targetId}",
+          "secondary": "{item.kind:title}: {item.step:title}"
+        },
+        {
+          "type": "actions",
+          "when": "data.undo",
+          "items": [
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "prompt": [
+                {
+                  "key": "otherwise",
+                  "label": "Items edited since",
+                  "kind": "select",
+                  "initial": "keep",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "Keep my edits"
+                    },
+                    {
+                      "value": "revert",
+                      "label": "Revert them too"
+                    }
+                  ]
+                }
+              ],
+              "url": "/api/hosts/import",
+              "body": {
+                "hostId": "{site.id}",
+                "action": "undo",
+                "importId": "{params.importId}",
+                "otherwise": "{form.otherwise}",
+                "decisions": {}
+              },
+              "success": "Undone",
+              "back": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

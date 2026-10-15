@@ -9,6 +9,7 @@ import com.aglyn.core.JavaPreferencesStore
 import com.aglyn.core.RestFirestoreReader
 import com.aglyn.core.WorkspaceStore
 import com.aglyn.core.defaultHttpClient
+import com.aglyn.core.withAppCheck
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.NativePluginManifestEntry
 import com.aglyn.pluginhost.NativePluginRegistry
@@ -44,7 +45,12 @@ object DesktopShell {
         val port = address.substringAfterLast(':', "").toIntOrNull() ?: com.aglyn.hardware.NetworkReceiptPrinter.DEFAULT_PORT
         com.aglyn.hardware.NetworkReceiptPrinter("Receipt printer", host, port)
       }
-    return com.aglyn.hardware.StaticPeripherals(printers = listOfNotNull(printer), hidScanner = com.aglyn.hardware.HidBurstDetector())
+    return com.aglyn.hardware.StaticPeripherals(
+      printers = listOfNotNull(printer),
+      hidScanner = com.aglyn.hardware.HidBurstDetector(),
+      // A receipt with no printer of its own goes to the desktop's print dialog, as the console's goes to the browser's.
+      systemPrinter = com.aglyn.hardware.AwtSystemPrinter(),
+    )
   }
 
   fun envFromSystem(): AglynEnv {
@@ -60,7 +66,20 @@ object DesktopShell {
       firebaseAppId = read("firebaseAppId", "1:000000000000:web:emulator"),
       authEmulatorHost = read("authEmulatorHost", "127.0.0.1:9099"),
       firestoreEmulatorHost = read("firestoreEmulatorHost", "127.0.0.1:8082"),
+      googleDesktopClientId = read("googleDesktopClientId", null),
+      googleDesktopClientSecret = read("googleDesktopClientSecret", null),
+      appCheck = read("appCheck", null),
     )
+  }
+
+  /** Google sign-in through the system browser and a loopback return, once the desktop OAuth client is configured; null until then. */
+  fun googleSource(config: AglynConfig, http: io.ktor.client.HttpClient = defaultHttpClient()): com.aglyn.core.GoogleCredentialSource? {
+    val id = config.googleDesktopClientId ?: return null
+    val secret = config.googleDesktopClientSecret ?: return null
+    return com.aglyn.core.GoogleLoopback(http, id, secret, openBrowser = { url ->
+      runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+        .onFailure { throw com.aglyn.core.GoogleLinkError("The browser could not be opened. Try again.", it) }
+    })
   }
 
   fun services(
@@ -71,7 +90,10 @@ object DesktopShell {
   ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { System.err.println("Aglyn: $it") }
-    val http = defaultHttpClient()
+    // Firebase App Check: Compose Desktop has no attestation provider yet, so its Firebase calls carry none; a desktop
+    // provider plugs in here, and every Firebase call below picks it up.
+    val appCheck: com.aglyn.core.AppCheckTokenProvider = com.aglyn.core.NoAppCheck
+    val http = defaultHttpClient().let { if (config.appCheck) it.withAppCheck(appCheck) else it }
     // One kept session per app and Firebase project, so an emulator run never restores into production.
     val auth = IdentityToolkitAuthSession(
       http,
@@ -85,7 +107,9 @@ object DesktopShell {
       config.firebase.projectId,
       config.firestoreEmulatorHost,
       { auth.idToken(false) },
-      listen = com.aglyn.core.GrpcFirestoreListen(config.firebase.projectId, config.firestoreEmulatorHost),
+      listen = com.aglyn.core.GrpcFirestoreListen(
+        config.firebase.projectId, config.firestoreEmulatorHost, if (config.appCheck) appCheck else com.aglyn.core.NoAppCheck,
+      ),
       freshIdToken = { auth.idToken(true) },
     )
     val prefs = JavaPreferencesStore(if (app == NativeApp.POS) "com/aglyn/pos" else "com/aglyn/app")

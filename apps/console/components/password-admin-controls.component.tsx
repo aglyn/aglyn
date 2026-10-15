@@ -21,17 +21,17 @@ import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Divider, Stack, TextField, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
+import {
+  PASSWORD_GENERATOR_ALPHABET,
+  PASSWORD_GENERATOR_LENGTH,
+} from '../utils/password-generator'
 
-/** Unambiguous alphabet: no O/0, l/1/I — these get read aloud and retyped. */
-const GENERATOR_ALPHABET =
-  'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
-
-function generatePassword(length = 20): string {
+function generatePassword(length = PASSWORD_GENERATOR_LENGTH): string {
   const values = new Uint32Array(length)
   crypto.getRandomValues(values)
   return Array.from(
     values,
-    (value) => GENERATOR_ALPHABET[value % GENERATOR_ALPHABET.length],
+    (value) => PASSWORD_GENERATOR_ALPHABET[value % PASSWORD_GENERATOR_ALPHABET.length],
   ).join('')
 }
 

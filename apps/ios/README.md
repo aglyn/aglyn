@@ -79,7 +79,7 @@ Links: `aglyn://<console path>` (and `aglyn-pos://` for the register) opens a
 console path, natively when a plugin answers it, otherwise in the console WebView:
 
 ```bash
-xcrun simctl openurl booted 'aglyn://demo-workspace/hosts/demo-site/redirects'
+xcrun simctl openurl booted 'aglyn://juniper-street/hosts/juniper-street/redirects'
 ```
 
 From the command line (the build directory is git-ignored):
@@ -93,6 +93,22 @@ xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -destination 'platform=m
 ```
 
 After you change a plugin's `mobile` block, run `npm run generate:plugin-manifests`.
+
+Aglyn POS (and only Aglyn POS) links Stripe's card form for a card typed in at the
+register: the `StripePaymentSheet` product of `stripe-ios-spm`, pinned exact in
+`Aglyn.xcodeproj`, filtered to iOS (the Mac build never sees it). The first build
+resolves it from GitHub. The Aglyn app target does not link it, and
+`check-mobile-isolation` keeps it that way.
+
+The Stripe Terminal SDK (Tap to Pay on iPhone, Bluetooth readers) is placed the
+same way: the `StripeTerminal` product of `stripe-terminal-ios`, pinned exact in
+`Aglyn.xcodeproj`, filtered to iOS and linked by Aglyn POS alone.
+`AglynPOS/StripeTerminalCollector.swift` binds it to the hardware kit's
+`CardCollector`, and the app publishes it as `DeviceCardReaders.shared` at
+launch, which is where the commerce register finds it. No plugin package may
+depend on it: both apps link the plugin manifest, so that would put the SDK
+(and its location and Bluetooth references) in the Aglyn app, which declares no
+purpose strings for them.
 
 ## Test
 
@@ -134,6 +150,12 @@ Settings → Accounts.
 | Aglyn | `aps-environment`, `applinks:app.aglyn.com`, `webcredentials:aglyn.com` | App Sandbox, outgoing network, user-selected files read-write, `aps-environment`, the same associated domains, the app's own Keychain group (the Firebase SDK keeps its user there) |
 | Aglyn POS | `aps-environment`, `applinks:app.aglyn.com` | App Sandbox, outgoing network, user-selected files read-write, `aps-environment`, `applinks:app.aglyn.com`, the app's own Keychain group |
 
+The iOS and iPadOS entitlements also carry
+`com.apple.developer.devicecheck.appattest-environment = production` for
+Firebase App Check (AGL-3818). The Mac files do not: App Attest is not offered
+on a Mac, which uses DeviceCheck instead (`docs/mobile/native-architecture.md`,
+"App Check").
+
 `aps-environment` says `development` in the files; the App Store export signs
 it as `production`. Card readers (Stripe Terminal) and the barcode camera are
 iOS only, so the Mac apps ask for neither Bluetooth nor the camera.
@@ -145,6 +167,19 @@ xcodebuild lock, to `/private/tmp/aglyn-release/`:
 node tools/scripts/native-release.mjs ios-archive Aglyn ios       # or AglynPOS, and macos
 node tools/scripts/native-release.mjs ios-upload /private/tmp/aglyn-release/Aglyn-ios-<build>.xcarchive
 ```
+
+Archives sign with a development profile, which Apple issues only to a team
+with a registered device. This Mac is registered; on another Mac, register it
+once by building against it:
+
+```bash
+cd apps/ios && xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -configuration Release \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration
+```
+
+The upload re-signs for the App Store (cloud-managed distribution signing), so
+testers' devices never need registering.
 
 The build number (`CURRENT_PROJECT_VERSION`) is the UTC time as
 `yyyyMMddHHmm`, so every archive outnumbers the last; `MARKETING_VERSION`
@@ -160,6 +195,10 @@ Done: the Apple Developer Program (team R3B7G75SWA), the App IDs
 and `com.aglyn.pos` (Push Notifications, Associated Domains), the Firebase
 Apple app registrations in `aglyn-main` (their values are in
 `Config/Release.xcconfig`), and the App Store Connect records.
+
+App Check (AGL-3818), done 2026-10-15: the App Attest capability on both App
+IDs (profiles regenerate on the next archive), and App Attest registered for
+both apps in Firebase App Check (team R3B7G75SWA, 1 h TTL).
 
 Still owed:
 
@@ -177,5 +216,22 @@ Still owed:
    `https://app.aglyn.com/.well-known/apple-app-site-association` (`applinks`,
    both apps: `R3B7G75SWA.com.aglyn.app`, `R3B7G75SWA.com.aglyn.pos`) and at
    `https://aglyn.com/.well-known/apple-app-site-association` (`webcredentials`
-   for `R3B7G75SWA.com.aglyn.app`, for passkeys).
+   for `R3B7G75SWA.com.aglyn.app`, for passkeys; template: `docs/mobile/well-known/`).
+   Then `AGLYN_PASSKEY_RP_ID = aglyn.com` in `Config/Release.xcconfig`; until
+   then "Set up a passkey" is hidden.
 7. **TestFlight**: listing, privacy labels and a tester group per app.
+8. **DeviceCheck in Firebase App Check** for both apps (a DeviceCheck `.p8`
+   key, its Key ID and the team), which the Mac builds use; until then a Mac
+   build against production is refused at sign-in.
+9. **Sign in with Apple** (AGL-3816): both apps offer it beside Google
+   (`AGLYN_APPLE_SIGN_IN = YES`, `com.apple.developer.applesignin` in every
+   entitlements file), as App Store guideline 4.8 asks. Owed: the Sign in with
+   Apple capability on the `com.aglyn.pos` App ID; and the **Apple provider in
+   Firebase Auth** (`aglyn-main` → Authentication → Sign-in method → Apple),
+   with a Services ID (e.g. `com.aglyn.app.signin`) whose return URL is
+   `https://aglyn-main.firebaseapp.com/__/auth/handler`, a Sign in with Apple
+   key (`.p8`, Key ID) and the team R3B7G75SWA. The apps sign in with the
+   native flow, so the bundle ids `com.aglyn.app` and `com.aglyn.pos` are the
+   token audiences Firebase must accept; the Services ID is only for the web
+   flow. Until the provider is on, Firebase refuses an Apple sign-in and the
+   app shows the error.

@@ -37,7 +37,7 @@ import {
   type AiLayoutPictureSource,
 } from '../layout-language/ai-layout-pictures'
 import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
-import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
+import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import type { AiBuildPlan } from '../model/ai-build-plan'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiStockBusinessNoun } from './ai-stock-business-nouns'
@@ -1861,6 +1861,54 @@ export function aiStockForgetJobPhotos(): void {
   JOB_PHOTOS.clear()
 }
 
+/** The longest description of a photo written from the library's own words. */
+const AI_STOCK_ALT_MAX = 160
+
+/**
+ * THE WORDS A PLACED STOCK PHOTO IS DESCRIBED BY (AGL-3805).
+ *
+ * A slot's alt text is the model's, written for the picture the page asked
+ * for before any photo was found, and a slot is filled by whatever the
+ * library answers for its search: a hero searched by the business, a gallery
+ * picture by its subject, a site in another language by English words alone.
+ * Kept as written, it described a photo the page does not show: the beta.253
+ * Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
+ * dusted "HOME MADE" on a cloth "Conchas recién horneadas sobre una charola en
+ * el mostrador de la panadería", and none of its nine photos showed what its
+ * words said: a birthday cake with candles was "the family kneading pan
+ * dulce", a plate of macarons the shop's display case.
+ *
+ * So the photo placed answers for its own words. `null` keeps the slot's: on
+ * an English site whose words name what the photo is OF — a word of their
+ * subject (`aiStockSubjectWords`: the noun phrase they open with, before any
+ * setting) among the hit's first tags or its page's address, so "conchas on
+ * a tray at the bakery counter" is never kept for a loaf tagged "bakery".
+ * Otherwise the photo is described by the
+ * library's own words: its description where it writes one (a Pexels hit's
+ * `alt`), else its first tags, the things it shows. The libraries write in
+ * English, and no model translates them, so a site in another language takes
+ * the platform's own words for an illustrative photo in its language
+ * (`aiLayoutLabel`), true of any photo, as does a hit with no words at all.
+ */
+export function aiStockPhotoAlt(
+  photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>,
+  slot: Pick<AiLayoutPictureSlot, 'alt' | 'product'>,
+  input: { language?: string; sectionName?: string } = {},
+): string | null {
+  if (aiLayoutSpeaksOtherThanEnglish(input.language)) return aiLayoutLabel('illustrativePhoto', input.language)
+  const { lead } = hitWords(photo)
+  const named = [slot.alt, ...(slot.product?.subjects ?? [])].flatMap((words) =>
+    stemList(aiStockSubjectWords(words, input.sectionName ?? '')),
+  )
+  if (named.some((word) => lead.has(word))) return null
+  const own = (photo.alt ?? '').replace(/\s+/g, ' ').trim()
+  if (own) return own.length > AI_STOCK_ALT_MAX ? `${own.slice(0, AI_STOCK_ALT_MAX).replace(/\s+\S*$/, '')}…` : own
+  const tags = [...new Set((photo.tags ?? []).map((tag) => tag.replace(/\s+/g, ' ').trim().toLowerCase()).filter(Boolean))].slice(0, 3)
+  if (!tags.length) return aiLayoutLabel('illustrativePhoto', input.language)
+  const said = tags.join(', ')
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}`
+}
+
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -2076,6 +2124,12 @@ export function aiLayoutStockPhotoSource(
       answers.set(key, asked)
       return asked
     }
+    /** The photo's own words where the slot's do not describe it ({@link aiStockPhotoAlt}). */
+    const altFor = (photo: StockPhoto, slot: AiLayoutPictureSlot) =>
+      aiStockPhotoAlt(photo, slot, {
+        ...(input.language ? { language: input.language } : {}),
+        sectionName: input.sectionNames[slot.sectionIndex] ?? '',
+      })
     /** The photo placed in the site's library, a copy it holds or a new one; `null` when it cannot be placed. */
     const keep = async (
       photo: StockPhoto,
@@ -2084,6 +2138,8 @@ export function aiLayoutStockPhotoSource(
       repeat = false,
     ): Promise<AiLayoutPicturePhoto | null> => {
       const sourceKey = stockPhotoSourceKey(photo)
+      const alt = altFor(photo, slot)
+      const described = alt === null ? {} : { alt }
       try {
         const kept = await ingest.findStockPhoto({
           hostId: input.hostId,
@@ -2098,6 +2154,7 @@ export function aiLayoutStockPhotoSource(
             src: kept.src,
             width: kept.width ?? photo.width,
             height: kept.height ?? photo.height,
+            ...described,
           }
         }
         // A refusal to store (the storage band, a lockdown) holds for the
@@ -2115,7 +2172,7 @@ export function aiLayoutStockPhotoSource(
           fileName: `${photo.provider}-${photo.id}.${EXTENSIONS[bytes.contentType] ?? 'jpg'}`,
           contentType: bytes.contentType,
           bytes: bytes.bytes,
-          alt: slot.alt,
+          alt: alt ?? slot.alt,
           description: credit.text,
           stockPhoto: {
             key: sourceKey,
@@ -2139,6 +2196,7 @@ export function aiLayoutStockPhotoSource(
             src: stored.src,
             width: stored.width ?? photo.width,
             height: stored.height ?? photo.height,
+            ...described,
           }
         }
         storing = false
@@ -2322,8 +2380,12 @@ export function aiLayoutStockPhotoSource(
         if (signal.aborted) return
         const key = stockPhotoSourceKey(candidate)
         if (choice.repeat) {
-          const placed =
-            placedByKey.get(key) ?? (await keep(candidate, slot, choice.query, true))
+          // Placed for another slot, it is described for this one.
+          const shown = placedByKey.get(key)
+          const alt = shown ? altFor(candidate, slot) : null
+          const placed = shown
+            ? { src: shown.src, width: shown.width, height: shown.height, ...(alt === null ? {} : { alt }) }
+            : await keep(candidate, slot, choice.query, true)
           if (placed) {
             photos[index] = placed
             return

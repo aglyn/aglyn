@@ -1,6 +1,8 @@
 package com.aglyn.plugins.email
 
 import com.aglyn.pluginhost.NativePluginRegistrar
+import com.aglyn.screens.ScreenSpec
+import com.aglyn.screens.SpecScreens
 
 /**
  * The Email plugin's native registration: the same ids its
@@ -21,4 +23,6 @@ fun registerEmailNative(r: NativePluginRegistrar) {
   for (section in EmailSection.entries) r.deepLink("email.${section.key}-page", path = "/emails/${section.key}", screen = section.screen)
   r.deepLink("email.message-page", path = "/emails/messages/:message", screen = EmailSection.MESSAGES.screen)
   r.deepLink("email.list-page", path = "/emails/audiences/:list", screen = EmailSection.AUDIENCES.screen)
+  // The import wizard's steps for a list's members: whether the file may change contacts already held, and the statement of permission.
+  SpecScreens.register(EmailScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
 }

@@ -1,6 +1,8 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import DeviceCheck
+import FirebaseAppCheck
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
@@ -10,12 +12,19 @@ import Foundation
 /// `GoogleService-Info.plist`, which is also how a self-hosted build is set up.
 public enum AglynFirebase {
   @MainActor private static var configured = false
+  /// Where the REST clients take their App Check token: Firebase's, once `configure` installed it.
+  @MainActor public private(set) static var appCheck: AppCheckTokenProvider = NoAppCheck()
 
   @MainActor
   public static func configure(_ config: AglynConfig) {
     AglynBrand.name = config.brandName
     guard !configured else { return }
     configured = true
+    // App Check goes in before the app is configured: Auth and Firestore look it up when they start.
+    if config.appCheck {
+      AppCheck.setAppCheckProviderFactory(AglynAppCheckProviderFactory())
+      appCheck = FirebaseAppCheckTokens()
+    }
     let options = FirebaseOptions(
       googleAppID: config.firebase.appID,
       gcmSenderID: config.firebase.messagingSenderID ?? "000000000000")
@@ -40,6 +49,32 @@ public enum AglynFirebase {
     guard let colon = hostPort.lastIndex(of: ":"), let port = Int(hostPort[hostPort.index(after: colon)...])
     else { return nil }
     return (String(hostPort[..<colon]), port)
+  }
+}
+
+/// Firebase App Check's provider for this device: App Attest on iPhone and iPad, DeviceCheck on a Mac
+/// (App Attest is not offered there). Firebase's providers keep the attested key and its artifact,
+/// re-attest after `DCError.invalidKey`, cache the token for its lifetime, refresh it before it lapses
+/// and share one exchange among concurrent callers.
+final class AglynAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+  func createProvider(with app: FirebaseApp) -> AppCheckProvider? {
+    let attestation = AppCheckAttestation.choose(
+      appAttestSupported: DCAppAttestService.shared.isSupported, deviceCheckSupported: DCDevice.current.isSupported)
+    switch attestation {
+    case .appAttest: return AppAttestProvider(app: app)
+    case .deviceCheck: return DeviceCheckProvider(app: app)
+    case nil:
+      print("Aglyn: this device offers neither App Attest nor DeviceCheck, so Firebase App Check sends no token.")
+      return nil
+    }
+  }
+}
+
+/// Firebase App Check's current token, for the REST clients.
+struct FirebaseAppCheckTokens: AppCheckTokenProvider {
+  func token(forceRefresh: Bool) async throws -> String? {
+    guard let app = FirebaseApp.app(), let appCheck = AppCheck.appCheck(app: app) else { return nil }
+    return try await appCheck.token(forcingRefresh: forceRefresh).token
   }
 }
 

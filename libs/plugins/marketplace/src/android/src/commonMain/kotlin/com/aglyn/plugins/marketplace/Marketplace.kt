@@ -336,6 +336,19 @@ class MarketplaceApi(private val api: ConsoleApiClient) {
     return InstallOutcome(message, answer.field("hostAbiWarning"))
   }
 
+  /**
+   * Installs (or moves to the newest approved version) a plugin's pin: on [hostId] ([scope] host), or for the whole workspace
+   * through that site ([scope] org). The console's plugin pages send no version; the route picks the newest.
+   */
+  suspend fun installPlugin(listingId: String, hostId: String, scope: InstallTarget): InstallOutcome {
+    val answer = api.request(
+      "/api/marketplace/install-plugin",
+      ApiMethod.POST,
+      jsonBody("listingId" to listingId, "hostId" to hostId, "scope" to if (scope == InstallTarget.ORG) "org" else null),
+    )
+    return InstallOutcome("", answer.field("hostAbiWarning"))
+  }
+
   /** Removes a plugin's pin from [hostId], or from the workspace with [scope] org. */
   suspend fun uninstall(listingId: String, hostId: String, scope: InstallTarget) {
     api.request(

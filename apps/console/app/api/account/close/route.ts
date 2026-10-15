@@ -25,6 +25,7 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { operatorContactLine } from '@aglyn/aglyn/app-utils/operator-identity'
 
 /**
  * Close your own account (AGL-1140).
@@ -127,6 +128,22 @@ async function handler(request: Request): Promise<Response> {
           { status: 409 },
         )
       }
+      if (result.skippedReason === 'shared-address') {
+        // Nothing was erased, so this must not read as success: the client
+        // signs the person out on any 2xx, which would leave them believing a
+        // closure that never happened. A second account holds one of their
+        // addresses, so erasing its mail history could destroy that account's
+        // too — a decision about two customers that staff make, not this route.
+        // No address and no other uid ride along: the other account's holder
+        // is the person this refusal protects.
+        return Response.json(
+          {
+            error: sharedAddressRefusal(),
+            skippedReason: 'shared-address',
+          },
+          { status: 409 },
+        )
+      }
       // Nothing to erase. Reported as success: the caller asked for the
       // account to be gone and it is, and an error here would send someone
       // to support over an outcome they already have.
@@ -152,6 +169,20 @@ async function handler(request: Request): Promise<Response> {
     console.error('[account/close] failed', error)
     return Response.json({ error: 'Closing the account failed' }, { status: 500 })
   }
+}
+
+/**
+ * The 409 copy for a closure staff must finish. The address is this
+ * deployment's legal contact, so a self-hosted console never sends its
+ * customers to Aglyn about an account only its own operator holds.
+ */
+function sharedAddressRefusal(): string {
+  const lead =
+    'Your account shares an email address with another account, so it cannot be closed here yet.'
+  const address = operatorContactLine('legal').address
+  return address
+    ? `${lead} Email ${address} and we will finish it for you.`
+    : `${lead} Contact the operator of this site and they will finish it for you.`
 }
 
 export const dynamic = 'force-dynamic'

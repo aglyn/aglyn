@@ -436,6 +436,14 @@ describe('AGL-1687 · the gates that already existed still hold', () => {
     expect(response.status).toBe(409)
     expect((await response.json()).error).toContain('full')
   })
+
+  it('sends the line the page keeps under "Actions taken in this session" (AGL-3667)', async () => {
+    seedAsset()
+    const disabled = await (await post(mediaBody())).json()
+    expect(disabled.logLines).toEqual([{ text: `Disabled ${MEDIA} (1 key)`, confirmed: true }])
+    const released = await (await post({ action: 'release', by: 'media', orgId: ORG, mediaId: MEDIA })).json()
+    expect(released.logLines).toEqual([{ text: expect.stringMatching(new RegExp(`^Released ${MEDIA} \\(\\d+ keys?\\)$`)), confirmed: true }])
+  })
 })
 
 describe('AGL-1687 · the unwritten lookup', () => {
@@ -455,6 +463,23 @@ describe('AGL-1687 · the unwritten lookup', () => {
     expect(payload.keys[1].state.reason).toBe('dmca')
     expect(payload.maxEntries).toBe(MEDIA_QUARANTINE_MAX_ENTRIES)
     expect(payload.count).toBe(1)
+  })
+
+  it('says when the deny list is full, and that a file not on it cannot be disabled (AGL-3667)', async () => {
+    seedAsset()
+    const fill = () =>
+      Object.fromEntries(
+        Array.from({ length: MEDIA_QUARANTINE_MAX_ENTRIES }, (_unused, index) => [`hash--full${index}`, { reason: 'manual' }]),
+      )
+    mockStore[INDEX_PATH] = { entries: fill() }
+    const full = await (await get(`?orgId=${ORG}&mediaId=${MEDIA}`)).json()
+    expect(full).toMatchObject({ count: MEDIA_QUARANTINE_MAX_ENTRIES, full: true, takedownBlocked: true })
+    // A file already on the list can still be released or re-set: the full list blocks only a NEW entry.
+    mockStore[INDEX_PATH] = { entries: { ...fill(), [LEGACY_KEY]: { reason: 'dmca' } } }
+    const listed = await (await get(`?orgId=${ORG}&mediaId=${MEDIA}`)).json()
+    expect(listed).toMatchObject({ quarantined: true, full: true, takedownBlocked: false })
+    mockStore[INDEX_PATH] = { entries: { [LEGACY_KEY]: { reason: 'dmca' } } }
+    expect(await (await get(`?orgId=${ORG}&mediaId=${MEDIA}`)).json()).toMatchObject({ full: false, takedownBlocked: false })
   })
 
   it('carries the staff note — this route is staff-gated end to end', async () => {

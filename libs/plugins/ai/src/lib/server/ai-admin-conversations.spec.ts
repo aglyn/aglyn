@@ -391,3 +391,72 @@ describe('one job, for a row that links to it (AGL-3660)', () => {
     })
   })
 })
+
+describe('one row by id, and the rows as the card prints them (AGL-3667)', () => {
+  it('serves one Assist exchange with its signal, and records the read without the words', async () => {
+    mockDocsByPath['orgs/org-1/assistExchanges/ex-1'] = {
+      uid: 'uid-1',
+      question: QUESTION,
+      answer: 'Secret answer',
+      createdAt: 1791388000000,
+    }
+    mockDocsByPath['orgs/org-1/assistSignals/ex-1'] = { route: 'analytics', model: 'claude-sonnet-5', estCostUsd: 0.0235, feedback: 'down' }
+    staff()
+    const body = await (await get('orgId=org-1&kind=assist&id=ex-1')).json()
+    expect(body.rows).toEqual([expect.objectContaining({ id: 'ex-1', orgId: 'org-1', question: QUESTION, feedback: 'down' })])
+    const [, entry] = mockAddAdminAudit.mock.calls[0] as [unknown, Record<string, unknown>]
+    expect(entry).toMatchObject({ after: { kind: 'assist', rows: 1, exchangeId: 'ex-1' } })
+    expect(JSON.stringify(entry)).not.toContain('Secret answer')
+  })
+
+  it('reads an id of kind jobs as that job, and an exchange that is gone as an empty page', async () => {
+    mockDocsByPath['orgs/org-1/aiJobs/job-1'] = { kind: 'page', status: 'done', brief: 'An about page', createdBy: 'uid-1', createdAt: 1 }
+    staff()
+    expect((await (await get('orgId=org-1&kind=jobs&id=job-1')).json()).rows[0]).toMatchObject({ id: 'job-1' })
+    staff()
+    expect(await (await get('orgId=org-1&kind=assist&id=gone')).json()).toEqual({ kind: 'assist', rows: [], next: null })
+  })
+
+  it('sends each row with who asked and the lines under it for ?view=prepared', async () => {
+    mockQueryDocs['orgs/org-1/assistExchanges'] = [
+      { id: 'ex-1', data: { uid: 'uid-1', question: QUESTION, answer: 'Your site is live.', createdAt: 1 } },
+    ]
+    mockDocsByPath['orgs/org-1/assistSignals/ex-1'] = { route: 'analytics', model: 'claude-sonnet-5', estCostUsd: 0.0235, feedback: 'down' }
+    mockQueryDocs['orgs/org-1/aiJobs'] = [
+      {
+        id: 'job-1',
+        data: {
+          kind: 'page',
+          status: 'failed',
+          brief: 'An about page',
+          inputs: { tone: 'warm' },
+          createdBy: 'uid-9',
+          creditsSpent: 1500,
+          createdAt: 1,
+          outputs: [{ label: 'About', note: 'draft' }],
+        },
+      },
+    ]
+    staff()
+    const assist = await (await get('orgId=org-1&kind=assist&view=prepared')).json()
+    expect(assist.rows[0].view).toEqual({
+      who: 'molly@example.com',
+      meta: 'analytics · claude-sonnet-5 · $0.0235 · Rated down',
+      chips: ['analytics', 'claude-sonnet-5', '$0.0235', 'Rated down'],
+      filledIn: '',
+      resultLabel: '',
+      resultText: '',
+      made: '',
+    })
+    staff()
+    const jobs = await (await get('orgId=org-1&kind=jobs&view=prepared')).json()
+    expect(jobs.rows[0].view).toMatchObject({
+      who: 'uid uid-9',
+      meta: 'page · failed · 1,500 credits',
+      filledIn: 'Tone: warm',
+      made: 'About — draft',
+    })
+    staff()
+    expect((await (await get('orgId=org-1&kind=assist')).json()).rows[0].view).toBeUndefined()
+  })
+})

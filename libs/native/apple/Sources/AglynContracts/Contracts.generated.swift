@@ -4004,6 +4004,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let templateListQuery: ListQueryDeclaration
   public let tenantEmailCollection: String
   public let tenantEmails: [TenantEmailEntry]
+  public let timeZoneChoices: [String]
+  public let timeZoneDefaultLabel: String
   public let workflowMaxSteps: Int
 
   enum CodingKeys: String, CodingKey {
@@ -4228,6 +4230,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case templateListQuery = "TEMPLATE_LIST_QUERY"
     case tenantEmailCollection = "TENANT_EMAIL_COLLECTION"
     case tenantEmails = "TENANT_EMAILS"
+    case timeZoneChoices = "TIME_ZONE_CHOICES"
+    case timeZoneDefaultLabel = "TIME_ZONE_DEFAULT_LABEL"
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
   }
 }

@@ -28,6 +28,7 @@ import {
   listingArtifactType,
 } from '../model/marketplace'
 import {
+  installPlanOutcome,
   marketplaceInstallEndpoint,
   marketplaceLandingMessage,
 } from '../model/marketplace-catalog'
@@ -327,34 +328,21 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
           }
           return
         }
-        const orgWide = steps.some((step) => step.scope === 'org')
-        const updating = options?.intent === 'update'
-        const noun = updating
-          ? 'Updated'
-          : marketplaceLandingMessage(artifactType, '')
-            ? 'Saved'
-            : 'Installed'
-        const toVersion =
-          updating && options?.version != null ? ` to v${options.version}` : ''
-        if (installed && !errors.length) {
-          enqueueSnackbar(
-            orgWide
-              ? `${noun} "${listing.displayName}"${toVersion} for the whole organization`
-              : `${noun} "${listing.displayName}"${toVersion} on ${installed} site` +
-                (installed === 1 ? '' : 's'),
-            { variant: 'success', persist: false },
-          )
-        } else if (installed && errors.length) {
-          enqueueSnackbar(
-            `${noun} on ${installed} site(s); ${errors.length} failed — ${errors[0]}`,
-            { variant: 'warning', allowDuplicate: true },
-          )
-        } else {
-          enqueueSnackbar(errors[0] ?? 'Install failed', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
-        }
+        const outcome = installPlanOutcome({
+          name: listing.displayName,
+          installed,
+          errors,
+          orgWide: steps.some((step) => step.scope === 'org'),
+          updating: options?.intent === 'update',
+          version: options?.version != null ? String(options.version) : null,
+          saved: Boolean(marketplaceLandingMessage(artifactType, '')),
+        })
+        enqueueSnackbar(
+          outcome.text,
+          outcome.tone === 'success'
+            ? { variant: 'success', persist: false }
+            : { variant: outcome.tone, allowDuplicate: true },
+        )
         for (const warning of abiWarnings) {
           enqueueSnackbar(warning, { variant: 'warning', allowDuplicate: true })
         }

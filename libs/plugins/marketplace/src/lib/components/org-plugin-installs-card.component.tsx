@@ -38,6 +38,7 @@ import {
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
+import { installedPluginCaption } from '../model/marketplace-catalog'
 import { resolveUpdateState, updateStateLabel } from '../model/update-state'
 
 /** One installation: its org pin, or the sites that pin it. */
@@ -221,14 +222,7 @@ export function OrgPluginInstallsCard(props: ConsoleOrgPluginInstallsZoneProps) 
                   pluginRef: install.$id,
                 })}
                 label={install.displayName ?? install.pluginId ?? install.$id}
-                caption={
-                  `v${install.version} · ` +
-                  (install.orgWide
-                    ? 'every site in this organization'
-                    : install.siteLabels.length === 1
-                      ? install.siteLabels[0]
-                      : `${install.siteLabels.length} sites`)
-                }
+                caption={installedPluginCaption(install)}
                 trailing={
                   status.state === 'update-available' ? (
                     <Chip

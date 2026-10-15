@@ -26,8 +26,10 @@ pinned in the catalog:
 | dependency | used by | license |
 | -- | -- | -- |
 | Stripe Terminal Android SDK (`stripeterminal`, `stripeterminal-taptopay`) | `:pos` only: Tap to Pay and Bluetooth readers | MIT |
+| Stripe Android SDK (`com.stripe:paymentsheet`, approved 2026-10-14) | `:pos` only: the card form for a card typed in at the register | MIT |
 | CameraX (`camera-camera2`, `camera-lifecycle`, `camera-view`) | `:native-camera`, Android only | Apache-2.0 |
 | ML Kit barcode scanning (bundled model) | `:native-camera`, Android only | ML Kit Terms of Service |
+| Google Play Integrity (`com.google.android.play:integrity`, approved 2026-10-15) with Firebase App Check's `firebase-appcheck-playintegrity` | `:native-core` on Android: the App Check token production requires on Auth and Firestore (AGL-3818) | Android SDK License / Apache-2.0 |
 | JNA | desktop: Windows Credential Manager, WebView2 over COM | Apache-2.0 / LGPL-2.1 |
 | grpc-java (`grpc-okhttp`, `grpc-stub`) + `proto-google-cloud-firestore-v1` | desktop: Firestore `Listen` | Apache-2.0 |
 | Microsoft Edge WebView2 SDK (`Microsoft.Web.WebView2`, NuGet): `WebView2Loader.dll` only | desktop on Windows: the Besigner, on the Evergreen runtime Windows keeps updated | Microsoft BSD-style (packaged as `licenses/WebView2-LICENSE.txt`) |
@@ -138,6 +140,14 @@ switched on with `-Paglyn.terminalLiveReaders=true` on a release build, which
 needs Stripe Terminal live mode. Tap to Pay's PIN screens run in the SDK's
 `:stripetaptopay` process, where the app does nothing on start.
 
+A card typed in at the register ("Type card", offered when the site has a Stripe
+publishable key) goes into Stripe's own PaymentSheet (`com.stripe:paymentsheet`,
+`:pos` only): the number is typed into Stripe's fields and never reaches our
+code. The server makes the PaymentIntent (`card-keyed`) and reads the payment back
+from Stripe; the sheet is built by `MainActivity` in `onCreate` and bound through
+the hardware kit's `KeyedCardEntry`. The Aglyn app and the desktop shell do not
+carry the SDK.
+
 The register's camera button scans barcodes with CameraX and ML Kit's bundled
 model (`libs/native/kotlin/camera`, provided to the kit's `BarcodeScanSheet`
 through `LocalCameraScanner`). Each code goes through the same barcode-then-SKU
@@ -199,7 +209,12 @@ and properties files from the plugin's `mobile.android` block; the apps load
 
 Done: the Firebase Android app registrations for `com.aglyn.app` and
 `com.aglyn.pos` in `aglyn-main` (their app ids are the release defaults), and
-the upload key with its fingerprints on both.
+the upload key with its fingerprints on both. App Check (AGL-3818, 2026-10-15):
+Play Integrity registered for both apps in Firebase App Check, the Play
+app-signing SHA-256 on each Firebase Android app, and both Play apps linked to
+Cloud project `aglyn-main` (543499566626) for the Integrity API. Release builds
+have `APP_CHECK` on (`-Paglyn.appCheck=off` turns it off for a project that
+does not enforce it); debug builds, on the emulators, have it off.
 
 - Google Play Console apps `com.aglyn.app` and `com.aglyn.pos`, enrolled in Play
   App Signing with the upload certificate above, and an internal testing track;
@@ -209,5 +224,15 @@ the upload key with its fingerprints on both.
 - `assetlinks.json` at `https://app.aglyn.com/.well-known/assetlinks.json`
   (app links, both apps) and `https://aglyn.com/.well-known/assetlinks.json`
   (passkeys, `com.aglyn.app`), with the Play app signing certificates' SHA-256.
+  Passkeys also need the `delegate_permission/common.get_login_creds` relation for `com.aglyn.app` in the apex
+  file (template: `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the
+  certificate's hash is listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden.
+- Google sign-in ("Continue with Google" on both apps' sign-in and sign-up, and "Connect Google"): release builds carry
+  the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId` overrides it). Owed: an Android OAuth client in
+  Google Cloud project `aglyn-main` for each of `com.aglyn.app` and `com.aglyn.pos`, with the SHA-1 of the Play app
+  signing key (and one with the upload key's SHA-1, for sideloaded release builds); until then Google refuses the
+  Credential Manager request. On Windows a Desktop OAuth client (`AGLYN_GOOGLE_DESKTOP_CLIENT_ID` and
+  `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET`), used against the emulator stack only: production desktop sign-in goes through
+  the console (AGL-3816).
 - Desktop (Windows): code signing (Azure Trusted Signing or an EV certificate)
   and/or a Microsoft Store account.

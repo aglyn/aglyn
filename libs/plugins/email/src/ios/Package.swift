@@ -1,8 +1,10 @@
 // swift-tools-version: 5.10
 //
 // The Email plugin's Apple code: a site's emails and their reports, designs,
-// audiences, topics, sending and suppressions. The apps reach it only through
-// the generated plugin manifest (apps/ios/PluginManifest).
+// audiences, topics, sending and suppressions, and the import wizard's steps for
+// a list's members (Resources/email-import.screens.json, which src/android/screens
+// links to). The apps reach it only through the generated plugin manifest
+// (apps/ios/PluginManifest).
 
 import Foundation
 import PackageDescription
@@ -30,7 +32,9 @@ let package = Package(
         .product(name: "AglynCore", package: "apple"),
         .product(name: "AglynUI", package: "apple"),
         .product(name: "AglynPluginHost", package: "apple"),
-      ]
+        .product(name: "AglynScreens", package: "apple"),
+      ],
+      resources: [.copy("Resources/email-import.screens.json")]
     ),
     .testTarget(name: "AglynEmailPluginTests", dependencies: ["AglynEmailPlugin"]),
   ]

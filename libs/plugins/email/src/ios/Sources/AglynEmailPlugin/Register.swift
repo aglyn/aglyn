@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynPluginHost
+import AglynScreens
 
 /// Registers the ids `plugins.config.json` declares under the plugin's
 /// `mobile.contributes`: each section of the console's Emails page as a
@@ -22,4 +23,6 @@ public func registerEmailNative(_ r: NativePluginRegistrar) {
   }
   r.deepLink("email.message-page", path: "/emails/messages/:message", screen: EmailSection.messages.screen)
   r.deepLink("email.list-page", path: "/emails/audiences/:list", screen: EmailSection.audiences.screen)
+  // The import wizard's steps for a list's members: whether the file may change contacts already held, and the statement of permission.
+  SpecScreens.register(ScreenCatalog.load(from: .module), into: r)
 }

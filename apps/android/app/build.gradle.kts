@@ -28,6 +28,9 @@ android {
     versionCode = setting("versionCode", "1").toInt()
     versionName = "0.1.0"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // The console host whose sign-up, verification and reset links open the app (App Links, verified by the console's
+    // assetlinks.json).
+    manifestPlaceholders["consoleHost"] = setting("consoleUrl", "https://app.aglyn.com").substringAfter("://").substringBefore("/").substringBefore(":")
   }
 
   // The upload key (Play App Signing re-signs for the store). Applied only when the
@@ -59,7 +62,11 @@ android {
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "000000000000")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(setting("authEmulatorHost", "10.0.2.2:9099")))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(setting("firestoreEmulatorHost", "10.0.2.2:8082")))
+      // Firebase App Check: off, since the emulators do not enforce it (there is no App Check emulator).
+      buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "off")))
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
+      buildConfigField("String", "PASSKEY_RP_ID", quoted(""))
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(""))
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
       buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
     }
@@ -77,6 +84,16 @@ android {
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "543499566626")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(""))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(""))
+      // Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a release build attests itself
+      // through Play Integrity.
+      buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "on")))
+      // The domain passkeys are made for (aglyn.com). Set -Paglyn.passkeyRpId only once aglyn.com serves an
+      // assetlinks.json that names this app's signing certificate (apps/android/README.md, "What Zach owes").
+      buildConfigField("String", "PASSKEY_RP_ID", quoted(setting("passkeyRpId", "")))
+      // The Firebase project's Web OAuth client id, the audience of Google's ID token for "Continue with Google" and "Connect
+      // Google" (-Paglyn.googleWebClientId overrides it). Google also needs an Android OAuth client for com.aglyn.app and its
+      // signing certificates (apps/android/README.md, "What Zach owes").
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("googleWebClientId", "543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com")))
       buildConfigField("String", "DEBUG_EMAIL", quoted(""))
       buildConfigField("String", "DEBUG_PASSWORD", quoted(""))
     }

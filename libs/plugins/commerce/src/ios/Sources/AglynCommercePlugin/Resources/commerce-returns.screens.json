@@ -996,7 +996,6 @@
             "label": "Save return settings",
             "write": {
               "doc": "hosts/{site.id}/settings/store",
-              "siteWide": true,
               "fields": {
                 "returns": {
                   "enabled": "{form.enabled}",
@@ -1011,6 +1010,7 @@
                 }
               }
             },
+            "siteWide": true,
             "success": "Return settings saved"
           }
         }

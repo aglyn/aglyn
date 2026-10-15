@@ -196,11 +196,12 @@ public final class SimulatedCardCollector: CardCollector {
   public func cancel() async { canceled = true }
 }
 
-/// This device's own card reader, as the plugin that drives it publishes it
-/// (the commerce plugin's Stripe Terminal collector on iPhone and iPad), so
-/// another plugin's screen (a booking paid at the counter) collects on the
-/// same reader without naming that plugin. Nil where the device takes no
-/// cards itself.
+/// This device's own card reader, as the app that links the reader SDK
+/// publishes it at launch (Aglyn POS's Stripe Terminal collector on iPhone
+/// and iPad), so the commerce register and another plugin's screen (a
+/// booking paid at the counter) collect on the same reader without naming
+/// the SDK. Nil where the device takes no cards itself: the Mac, and the
+/// Aglyn app, which links no card reader SDK.
 @MainActor
 public enum DeviceCardReaders {
   public static var shared: CardCollector?

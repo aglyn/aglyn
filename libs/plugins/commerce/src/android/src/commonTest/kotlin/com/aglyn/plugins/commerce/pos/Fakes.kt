@@ -24,11 +24,14 @@ class ScriptedSaleApi(script: Map<String, List<Any>> = emptyMap()) : PosSaleApi 
   /** Counts the calls to the context route, which a register reads at launch. */
   var contextCalls = 0
 
+  /** The Stripe publishable key the context carries; empty is a site without one. */
+  var publishableKey = ""
+
   override suspend fun context(): PosContext {
     contextCalls += 1
     val next = queues["context"]?.removeFirstOrNull()
     if (next is Throwable) throw next
-    return PosContext(PosRegisterSettings(), terminalAvailable = true, testMode = true, readers = emptyList(), smsReceipts = false)
+    return PosContext(PosRegisterSettings(), terminalAvailable = true, testMode = true, readers = emptyList(), smsReceipts = false, publishableKey = publishableKey)
   }
 
   override suspend fun openSale(registerId: String, locationId: String?, cart: Cart, attemptKey: String) = opened

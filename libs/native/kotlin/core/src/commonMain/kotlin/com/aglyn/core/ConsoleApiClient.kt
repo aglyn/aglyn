@@ -81,7 +81,7 @@ class ConsoleApiClient(
     idempotencyKey: String? = null,
     anonymous: Boolean = false,
     rawBody: RawBody? = null,
-    /** A paired device's own credential (the customer display's token), where there is no signed-in member. */
+    /** Headers a route reads beyond the usual ones: an action's `headers`, a paired device's own credential, the ceremony's `Origin` on the passkey routes. */
     headers: Map<String, String> = emptyMap(),
   ): JsonElement? {
     // A write that names its own `Idempotency-Key` (a spec action's `headers`) is as safe to retry as one given `idempotencyKey`.
@@ -147,14 +147,16 @@ class ConsoleApiClient(
    * and the file name its `Content-Disposition` gives. A refusal is a
    * [ConsoleApiError] with the route's own words, as [request] throws it.
    */
-  suspend fun download(path: String, body: JsonElement): DownloadedFile {
+  suspend fun download(path: String, body: JsonElement? = null, method: ApiMethod = ApiMethod.POST): DownloadedFile {
     val bearer = getIdToken(false) ?: throw ConsoleApiError("Sign in to continue.", 401, null)
     val response = try {
       http.request(urlFor(path)) {
-        this.method = HttpMethod.Post
+        this.method = HttpMethod.parse(method.name)
         header("Authorization", "Bearer $bearer")
-        contentType(ContentType.Application.Json)
-        setBody(body.toString())
+        if (body != null) {
+          contentType(ContentType.Application.Json)
+          setBody(body.toString())
+        }
       }
     } catch (error: CancellationException) {
       throw error

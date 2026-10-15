@@ -51,9 +51,7 @@ struct StorePicker: View {
     Group {
       if let workspace = model.workspace, workspace.ready {
         if workspace.orgs.isEmpty {
-          AglynEmptyState(
-            "No workspaces yet", systemImage: "building.2",
-            message: "Create a workspace in the \(model.brandName) console, then come back here.")
+          FirstRunView()
         } else {
           List {
             Section {

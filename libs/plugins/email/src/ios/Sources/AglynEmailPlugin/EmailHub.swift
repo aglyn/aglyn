@@ -563,6 +563,11 @@ struct ListDetail: View {
       ToolbarItem(placement: .primaryAction) {
         Menu {
           Button("Add people", systemImage: "person.badge.plus") { adding = true }
+          // The console's Import and Export on a list's page: the records wizard and export sheet, on this list.
+          Button("Import and export", systemImage: "arrow.up.arrow.down") {
+            context.navigate("email.list.transfer", ["list": listID, "name": row?.name ?? "this list", "resource": "email.list-members:\(listID)"])
+          }
+          .accessibilityIdentifier("list-transfer")
           Button("Rename", systemImage: "pencil") { renaming = true }
           Button("Delete list", systemImage: "trash", role: .destructive) { confirmDelete = true }
         } label: {

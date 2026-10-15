@@ -35,6 +35,7 @@ import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-job
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
 import {
+  aiDanglingWord,
   aiSettleMechanicalRules,
   aiSettleUnrelatedScreenLinks,
   validateAiDoctrineTree,
@@ -342,13 +343,29 @@ export function aiPageDraftLayoutId(
   return aiSiteDefaultLayoutId(inventory)
 }
 
-/** A plan's listing value held to the length the SEO editor guides it to, cut at a word. */
+/** Punctuation that joins a phrase to the next one, left at a cut line's end. */
+const LISTING_TRAILING_JOINERS = /[\s,;:|/&—–-]+$/
+
+/**
+ * A plan's listing value held to the length the SEO editor guides it to, cut
+ * at a word. A cut that leaves a joining word or mark at the end ("…Practice
+ * Areas and", "…across Springfield,") takes it off too, so a search result
+ * never shows a phrase that stops mid-thought (AGL-3813).
+ */
 function clip(value: string, max: number): string {
   const text = value.trim()
   if (text.length <= max) return text
   const cut = text.slice(0, max + 1)
   const space = cut.lastIndexOf(' ')
-  return (space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).trim()
+  let clipped = (space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).replace(LISTING_TRAILING_JOINERS, '').trim()
+  for (let guard = 0; guard < 6; guard += 1) {
+    const word = aiDanglingWord(clipped)
+    if (!word) break
+    const shorter = clipped.slice(0, clipped.length - word.length).replace(LISTING_TRAILING_JOINERS, '').trim()
+    if (!shorter) break
+    clipped = shorter
+  }
+  return clipped
 }
 
 /** The site's name as its visitors see it, read the way the SEO step reads it. */

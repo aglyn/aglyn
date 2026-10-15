@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { providerRequest, type ProviderHttp } from './http'
+import { ProviderError, providerRequest, type ProviderHttp } from './http'
 import {
-  e164OrNull,
   toAmount,
   type MarketingEventName,
   type MarketingProvider,
@@ -31,8 +30,16 @@ import {
  * connects through its OAuth install.
  *
  * - **Out:** a person the site may market to is subscribed to email
- *   marketing (`POST /subscriptions`); one it may not is unsubscribed
- *   (`POST /subscriptions/unsubscribe`).
+ *   marketing (`POST /subscriptions`) only when Attentive does not know them
+ *   yet: `GET /subscriptions?email=` answers 404 for a stranger, and anyone
+ *   it answers for is left exactly as Attentive has them. That is
+ *   Mailchimp's `status_if_new` by other means (AGL-3810): Attentive cannot
+ *   list who unsubscribed there, and its subscribe opts a person in again,
+ *   so without the check a record edit on the site would subscribe someone
+ *   who left in Attentive. One the site may not market to is unsubscribed
+ *   (`POST /subscriptions/unsubscribe`). Only the email is sent: Attentive
+ *   picks the channels from the identifiers in `user`, and a phone there
+ *   would opt the person into text messages.
  * - **Back:** none. Attentive's API has no way to list who unsubscribed, so
  *   Attentive is one-way for consent, and the page says so.
  * - **Events:** a purchase through the e-commerce purchase event; the other
@@ -66,6 +73,21 @@ export function createAttentiveProvider(http: ProviderHttp): MarketingProvider {
       body,
     })
 
+  /**
+   * Whether Attentive already holds a subscriber for this address. Its
+   * eligibility read answers 404 for an address it has never seen; any
+   * answer at all, eligible or not, means the person is Attentive's to keep.
+   */
+  const knownToAttentive = async (credential: ProviderCredential, email: string): Promise<boolean> => {
+    try {
+      await call(credential, 'GET', `/subscriptions?email=${encodeURIComponent(email)}`)
+      return true
+    } catch (error) {
+      if (error instanceof ProviderError && error.status === 404) return false
+      throw error
+    }
+  }
+
   return {
     id: 'attentive',
 
@@ -76,19 +98,21 @@ export function createAttentiveProvider(http: ProviderHttp): MarketingProvider {
     },
 
     async pushContacts(credential, _target, contacts) {
+      let pushed = 0
       for (const contact of contacts) {
-        const phone = e164OrNull(contact.phone)
-        const user = { email: contact.email, ...(phone ? { phone } : {}) }
+        const user = { email: contact.email }
         if (contact.status === 'subscribed') {
-          await call(credential, 'POST', '/subscriptions', { user, subscriptionType: 'MARKETING', channel: 'EMAIL' })
+          if (await knownToAttentive(credential, contact.email)) continue
+          await call(credential, 'POST', '/subscriptions', { user, subscriptionType: 'MARKETING' })
         } else {
           await call(credential, 'POST', '/subscriptions/unsubscribe', {
-            user: { email: contact.email },
+            user,
             subscriptions: [{ type: 'MARKETING', channel: 'EMAIL' }],
           })
         }
+        pushed += 1
       }
-      return { pushed: contacts.length, skipped: [] }
+      return { pushed, skipped: [] }
     },
 
     async pullConsent() {

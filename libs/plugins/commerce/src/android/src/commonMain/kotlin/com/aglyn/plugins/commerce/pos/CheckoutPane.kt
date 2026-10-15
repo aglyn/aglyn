@@ -47,6 +47,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aglyn.hardware.SystemPrintResult
 import com.aglyn.hardware.renderText
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AmountRow
@@ -173,6 +174,17 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
           Icon(AglynIcons.named("contactless"), null)
           Spacer(Modifier.width(space(1f)))
           Text("Card on ${reader.label}", style = MaterialTheme.typography.titleSmall)
+        }
+      }
+      model.keyedCard?.let { keyed ->
+        Button(
+          onClick = { model.act { checkout.payCard(keyed) } },
+          enabled = state.canTender,
+          modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("tender-card-${keyed.id}"),
+        ) {
+          Icon(AglynIcons.named("credit_card"), null)
+          Spacer(Modifier.width(space(1f)))
+          Text(keyed.label, style = MaterialTheme.typography.titleSmall)
         }
       }
       if (model.readers.isEmpty()) {
@@ -471,7 +483,8 @@ private fun QrStep(model: RegisterModel, checkout: Checkout, state: CheckoutStat
 
 @Composable
 private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutState, step: CheckoutStep.Card, fmt: (Long) -> String) {
-  val reader = model.readers.firstOrNull { it.label == step.readerLabel }
+  val reader = model.cardService(step.readerLabel)
+  val typed = reader is KeyedCardService
   // A device reader says what it wants ("Insert the card."); a smart reader shows it on its own screen.
   val devicePrompt by (
     (if (reader is DeviceReaderService) model.cardCollector?.deviceReaders?.prompt else null)
@@ -484,11 +497,15 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
   ) {
     Box(contentAlignment = Alignment.Center) {
       CircularProgressIndicator(Modifier.size(88.dp), strokeWidth = 4.dp)
-      Icon(AglynIcons.named("contactless"), null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+      Icon(AglynIcons.named(if (typed) "credit_card" else "contactless"), null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
     }
     Text(fmt(state.amountCents + state.tipCents), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
     Text(
-      if (step.paymentId == null) "Sending the payment to ${step.readerLabel}…" else "Ask the customer to tap, insert or swipe on ${step.readerLabel}.",
+      when {
+        step.paymentId == null -> "Sending the payment to ${step.readerLabel}…"
+        reader is KeyedCardService -> reader.prompt
+        else -> "Ask the customer to tap, insert or swipe on ${step.readerLabel}."
+      },
       style = MaterialTheme.typography.bodyLarge,
       textAlign = TextAlign.Center,
     )
@@ -573,21 +590,39 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
   var printProblem by remember { mutableStateOf<String?>(null) }
   printProblem?.let { NoticeBanner(it, StatusTone.ERROR) }
   Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-    if (model.peripherals.printers.isNotEmpty() || model.lastReceipt.hasPrinter) {
+    if (model.canPrintReceipt) {
       OutlinedButton(
         onClick = {
           model.display.cancelAsk()
           model.act {
-            printProblem = model.printReceipt(checkout)
-            if (printProblem == null) model.finished()
+            when (val result = model.printReceipt(checkout)) {
+              SystemPrintResult.Printed -> model.finished()
+              SystemPrintResult.Canceled -> printProblem = null
+              is SystemPrintResult.Failed -> printProblem = result.message
+            }
           }
         },
-        enabled = (model.receipt != null || model.peripherals.printers.isEmpty()) && !state.busy,
+        enabled = (model.receipt != null || (model.peripherals.printers.isEmpty() && model.lastReceipt.hasPrinter)) && !state.busy,
         modifier = Modifier.heightIn(min = 52.dp).testTag("pos-print-receipt"),
       ) {
         Icon(AglynIcons.named("print"), null)
         Spacer(Modifier.width(space(0.5f)))
         Text("Print")
+      }
+    }
+    if (model.peripherals.printers.isNotEmpty() || model.peripherals.systemPrinter != null) {
+      // The items and the barcode a recipient returns with, and no price.
+      OutlinedButton(
+        onClick = {
+          model.display.cancelAsk()
+          model.act { (model.printReceipt(checkout, gift = true) as? SystemPrintResult.Failed)?.let { printProblem = it.message } }
+        },
+        enabled = model.receipt != null && !state.busy,
+        modifier = Modifier.heightIn(min = 52.dp).testTag("pos-gift-receipt"),
+      ) {
+        Icon(AglynIcons.named("card_giftcard"), null)
+        Spacer(Modifier.width(space(0.5f)))
+        Text("Gift receipt")
       }
     }
     Button(

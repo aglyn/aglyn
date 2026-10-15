@@ -21,6 +21,8 @@ final class AppModel {
   let auth: AuthSession?
   let reader: FirestoreReader?
   let api: ConsoleAPIClient?
+  /// The transport the REST calls to Firebase go over: it adds the App Check token.
+  let firebaseHTTP: HTTPTransport
   let registry = NativePluginRegistry()
   let push: PushCenter
   private(set) var pluginFailures: [NativePluginLoadFailure] = []
@@ -32,6 +34,12 @@ final class AppModel {
   /// The screen this tablet was set up as instead of a register (a customer display or a self-service
   /// kiosk), remembered across launches so it comes back with nobody signed in. The POS app only.
   private(set) var deviceModeID: String?
+  /// The signed-out screens and what a sign-up carries across them.
+  let authFlow = AuthFlow()
+  /// The first verified session's workspace settling (the held sign-up name, AGL-2590).
+  var firstRun: FirstRunState = .idle
+  /// Whose first run has been settled, so it runs once per person per launch.
+  @ObservationIgnored var firstRunSettledFor: String?
 
   static let deviceModeKey = "aglyn.pos.deviceMode"
 
@@ -54,21 +62,28 @@ final class AppModel {
     if let config, problems.isEmpty {
       self.config = config
       AglynFirebase.configure(config)
-      let auth = AuthSession.make(config)
+      // Every REST call to Firebase carries the App Check token production enforces (AGL-3818).
+      let firebaseHTTP = AppCheckTransport(appCheck: AglynFirebase.appCheck)
+      self.firebaseHTTP = firebaseHTTP
+      let auth = AuthSession.make(config, appCheck: AglynFirebase.appCheck)
       self.auth = auth
       // A REST sign-in has no SDK user for Firestore to read as, so Firestore goes over REST too.
+      let rest = RestFirestoreReader(
+        projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost, transport: firebaseHTTP,
+        idToken: { try await auth.idToken(forceRefresh: false) })
+      // The SDK reads as the SDK's signed-in person, the staff member; a support session (signed in as a customer, over REST)
+      // reads through the customer's own token instead, so the rules treat the staff member exactly as they treat the customer.
       self.reader =
         auth.transport == .rest
-        ? RestFirestoreReader(
-          projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost,
-          idToken: { try await auth.idToken(forceRefresh: false) })
-        : FirebaseFirestoreReader()
+        ? rest
+        : SwitchingFirestoreReader(normal: FirebaseFirestoreReader(), impersonated: rest, flag: auth.impersonationFlag)
       self.api = ConsoleAPIClient(origin: config.consoleOrigin) { force in
         try await auth.idToken(forceRefresh: force)
       }
       auth.onBeforeSignOut { await push.signingOut() }
     } else {
       self.config = nil
+      self.firebaseHTTP = URLSession.shared
       self.auth = nil
       self.reader = nil
       self.api = nil
@@ -97,7 +112,8 @@ final class AppModel {
     guard user?.uid != workspace?.uid else { return }
     workspace?.stop()
     workspace = nil
-    push.signedIn(uid: user?.uid, reader: reader)
+    // A support session reads the customer's workspaces but never registers this device's notifications under their account.
+    if auth?.impersonation == nil { push.signedIn(uid: user?.uid, reader: reader) }
     claims = TokenClaims()
     Task { await refreshClaims(force: false) }
     guard let user, let reader else { return }
@@ -127,16 +143,37 @@ final class AppModel {
         try await self?.auth?.signIn(email: email, password: password)
       },
       refreshClaims: { [weak self] in await self?.refreshClaims(force: true) },
+      impersonate: { [weak self] token, tenantId in
+        try await self?.auth?.beginImpersonation(token: token, tenantId: tenantId)
+      },
       account: AccountOperations(
         changePassword: { [weak self] current, new in
           try await self?.auth?.changePassword(current: current, new: new)
         },
         updateDisplayName: { [weak self] name in try await self?.auth?.updateDisplayName(name) },
-        message: { passwordChangeMessage($0) }))
+        unlinkProvider: { [weak self] provider in
+          try await self?.auth?.unlinkProvider(provider)
+          await self?.refreshClaims(force: true)
+        },
+        linkGoogle: { [weak self] authenticate in
+          let parts = await MainActor.run { (self?.config, self?.auth, self?.auth?.user?.email, self?.firebaseHTTP) }
+          guard let config = parts.0, let client = config.google, let auth = parts.1, let http = parts.3 else {
+            throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
+          }
+          try await GoogleLink.link(
+            iosClientID: client.iosClientID, apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost,
+            loginHint: parts.2, transport: http,
+            firebaseIDToken: { try await auth.idToken(forceRefresh: true) }, authenticate: authenticate)
+          await self?.refreshClaims(force: true)
+        },
+        message: { passwordChangeMessage($0) }),
+      googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty)
   }
 
   func signOut() async {
     await auth?.signOut()
+    authFlow.reset()
+    authFlow.pendingVerificationCode = nil
   }
 
   /// The whole-screen modes a plugin offers this tablet at sign-in (the POS app only).
@@ -185,7 +222,11 @@ final class AppModel {
         guard let navigation else { return }
         _ = navigation.paths[navigation.section]?.popLast()
       },
-      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) })
+      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) },
+      openLink: { [weak self, weak navigation] link in
+        guard let self, let navigation else { return }
+        self.open(link, in: navigation)
+      })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's

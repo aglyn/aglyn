@@ -24,6 +24,20 @@
         "usage": {
           "url": "/api/billing/host-usage?orgId={org.id}",
           "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "siteTraffic": {
+          "url": "/api/billing/host-usage?hostId={item.hostId}",
+          "each": "data.collab.sites",
+          "optional": true
         }
       },
       "blocks": [
@@ -77,20 +91,20 @@
         },
         {
           "type": "fields",
-          "title": "This month",
+          "title": "This month, all sites",
           "when": "data.usage",
           "rows": [
             {
               "label": "Page views",
-              "value": "{data.usage.monthPageViews:number}"
+              "value": "{data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?:number}"
             },
             {
               "label": "Bandwidth",
-              "value": "{data.usage.bandwidthGb:number} GB"
+              "value": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?:number} GB"
             },
             {
               "label": "Media delivered",
-              "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
+              "value": "{data.siteTraffic.*.monthMediaBandwidthBytes + data.usage.monthMediaBandwidthBytes?:bytes}"
             }
           ]
         },
@@ -211,19 +225,212 @@
         {
           "type": "notice",
           "tone": "info",
-          "text": "Pick a plan to continue on Stripe's secure checkout, where the price and terms are shown. A workspace already on a paid plan changes it under Manage subscription."
+          "text": "A workspace with a plan changes it here: you see what it would cost or credit first, then confirm. A new subscription continues on Stripe's secure checkout, where the price and terms are shown."
         },
         {
           "type": "list",
           "items": "const.plans",
+          "count": false,
           "primary": "{item.label}",
           "secondary": "{item.blurb}",
           "icon": "sparkles|workspace_premium",
+          "badges": [
+            {
+              "text": "Current plan",
+              "when": "item.id == @data.org.plan",
+              "tone": "success"
+            }
+          ],
           "actions": [
+            {
+              "id": "switch",
+              "label": "Switch to this plan",
+              "icon": "arrow.left.arrow.right|swap_horiz",
+              "when": "org.manager && data.org.subscription.status == active,trialing,past_due && item.id != free && item.id != @data.org.plan",
+              "check": {
+                "label": "Preview",
+                "url": "/api/billing/subscription",
+                "body": {
+                  "orgId": "{org.id}",
+                  "action": "preview",
+                  "plan": "{item.id}",
+                  "interval": "{data.billing.subscription.interval|data.org.subscription.interval}"
+                }
+              },
+              "confirm": [
+                {
+                  "when": "preview.downgrade",
+                  "text": "Move down to {item.label}? Nothing is charged today, and nothing changes yet. You keep {const.labels[@data.org.plan]|'your current plan'} — and everything you've already paid for — until {preview.periodEnd|'the end of your billing period':date}, when this organization moves to {item.label}. You can keep your current plan any time before then."
+                },
+                {
+                  "when": "!preview.downgrade",
+                  "text": "Switch to {item.label}? "
+                },
+                {
+                  "when": "!preview.downgrade && !preview.prorationCents && preview.prorationCents != 0 && preview.chargesNow",
+                  "text": "You'll be charged the prorated difference for the rest of this period as soon as you confirm, and your plan changes once the payment goes through."
+                },
+                {
+                  "when": "!preview.downgrade && !preview.prorationCents && preview.prorationCents != 0 && !preview.chargesNow",
+                  "text": "The change is prorated for the rest of this period and billed on your next invoice on {preview.periodEnd|'the end of your billing period':date}."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0",
+                  "text": "You'll be charged {preview.chargedNowCents:cents/preview.currency} {preview.currency|'usd':upper} now for the rest of this period, and your plan changes as soon as the payment goes through."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete == false",
+                  "text": " Tax is calculated once we have your billing address. This total does not include it yet."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.prorationTaxCents > 0",
+                  "text": " That includes {preview.prorationTaxCents:cents/preview.currency} {preview.currency|'usd':upper} tax."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.taxReason == reverse_charge && !preview.prorationTaxCents",
+                  "text": " No tax charged — reverse charge applies, so you account for it under your own registration."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.taxReason == customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax charged — this account is registered as tax-exempt."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.taxReason != reverse_charge,customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax applies to this charge in your location."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0",
+                  "text": "Prorated for the rest of this period: {preview.prorationCents:cents/preview.currency} {preview.currency|'usd':upper}, billed on your next invoice on {preview.periodEnd|'the end of your billing period':date}."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0",
+                  "text": "Unused time credits {0 - preview.prorationCents:cents/preview.currency} {preview.currency|'usd':upper} back on your next invoice on {preview.periodEnd|'the end of your billing period':date}."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete == false",
+                  "text": " Tax is calculated once we have your billing address. This total does not include it yet."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.prorationTaxCents > 0",
+                  "text": " Plus {preview.prorationTaxCents:cents/preview.currency} {preview.currency|'usd':upper} tax."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.taxReason == reverse_charge && !preview.prorationTaxCents",
+                  "text": " No tax charged — reverse charge applies, so you account for it under your own registration."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.taxReason == customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax charged — this account is registered as tax-exempt."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.taxReason != reverse_charge,customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax applies to this charge in your location."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete == false",
+                  "text": " Tax is calculated once we have your billing address. This total does not include it yet."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.prorationTaxCents > 0",
+                  "text": " Plus {preview.prorationTaxCents:cents/preview.currency} {preview.currency|'usd':upper} tax."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.taxReason == reverse_charge && !preview.prorationTaxCents",
+                  "text": " No tax charged — reverse charge applies, so you account for it under your own registration."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.taxReason == customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax charged — this account is registered as tax-exempt."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.taxReason != reverse_charge,customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax applies to this charge in your location."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon && !const.aiPrice[@item.id]",
+                  "text": " Your Aglyn AI add-on is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon && const.aiPrice[@item.id] && preview.droppedAddons ~= aiAddon",
+                  "text": " Your Aglyn AI add-on is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon && const.aiPrice[@item.id] && preview.droppedAddons !~= aiAddon",
+                  "text": " Your Aglyn AI add-on carries over at ${const.aiPrice[@item.id]}/mo on {item.label}, billed with the plan."
+                },
+                {
+                  "when": "data.billing.subscription.cancelAtPeriodEnd",
+                  "text": " This also cancels your scheduled cancellation: the subscription continues on {item.label} instead of ending. You can cancel again at any time."
+                },
+                {
+                  "when": "data.collab.sites.length > const.limits[@item.id].hostLimit",
+                  "text": " Heads up — you'll be over the {item.label} plan on: {data.collab.sites:count} sites ({item.label} includes {const.limits[@item.id].hostLimit})."
+                },
+                {
+                  "when": "data.seats.managerSeats > const.limits[@item.id].managersPerOrg",
+                  "text": " Heads up — you'll be over the {item.label} plan on: {data.seats.managerSeats} team members ({item.label} includes {const.limits[@item.id].managersPerOrg})."
+                },
+                {
+                  "when": "data.datasets.count > const.limits[@item.id].datasetsPerOrg",
+                  "text": " Heads up — you'll be over the {item.label} plan on: {data.datasets.count} datasets ({item.label} includes {const.limits[@item.id].datasetsPerOrg})."
+                },
+                {
+                  "when": "data.collab.sites.length > const.limits[@item.id].hostLimit || data.seats.managerSeats > const.limits[@item.id].managersPerOrg || data.datasets.count > const.limits[@item.id].datasetsPerOrg",
+                  "text": " Nothing is deleted and these keep working, but you can't add more until you're back under the limit."
+                }
+              ],
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "switch",
+                "plan": "{item.id}",
+                "interval": "{data.billing.subscription.interval|data.org.subscription.interval}"
+              },
+              "instead": [
+                {
+                  "when": "response.paymentPending && response.requiresAction && response.hostedInvoiceUrl",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment. Finish it on the invoice page we just opened; you move to {item.label} once it is paid.",
+                  "open": "hostedInvoiceUrl"
+                },
+                {
+                  "when": "response.paymentPending && response.requiresAction",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment, but it cannot be finished here. Nothing has changed and nothing has been charged."
+                },
+                {
+                  "when": "response.declined",
+                  "title": "Card declined",
+                  "text": "Your saved card was declined, so nothing has changed. Update your payment method under Billing details and try again."
+                },
+                {
+                  "when": "response.paymentPending",
+                  "title": "Payment did not go through",
+                  "text": "The payment did not go through, so nothing has changed. Try again in a moment."
+                },
+                {
+                  "when": "response.scheduled",
+                  "title": "Plan change scheduled",
+                  "text": "Moving to {item.label} on {response.effectiveAt:date} — you keep your current plan until then."
+                }
+              ],
+              "success": "Plan switched to {item.label}"
+            },
+            {
+              "id": "leave",
+              "label": "Cancel my plan",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "org.manager && data.org.subscription.status == active,trialing,past_due && item.id == free && !data.billing.subscription.cancelAtPeriodEnd",
+              "navigate": {
+                "screen": "core.billing.cancel"
+              }
+            },
             {
               "id": "monthly",
               "label": "Continue, billed monthly",
               "icon": "calendar|event",
+              "when": "org.manager && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -237,6 +444,7 @@
               "id": "yearly",
               "label": "Continue, billed yearly",
               "icon": "calendar.badge.clock|event",
+              "when": "org.manager && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -252,26 +460,133 @@
       "constants": {
         "plans": [
           {
+            "id": "free",
+            "label": "Free",
+            "blurb": "1 site, 1 team member, 0 datasets"
+          },
+          {
             "id": "starter",
             "label": "Starter",
-            "blurb": "One site, the essentials"
+            "blurb": "1 site, 2 team members, 2 datasets"
           },
           {
             "id": "pro",
             "label": "Pro",
-            "blurb": "More sites, store and forms"
+            "blurb": "3 sites, 3 team members, 5 datasets"
           },
           {
             "id": "business",
             "label": "Business",
-            "blurb": "Teams and higher limits"
+            "blurb": "10 sites, 5 team members, 10 datasets"
+          },
+          {
+            "id": "scale",
+            "label": "Scale",
+            "blurb": "15 sites, 5 team members, 15 datasets"
+          },
+          {
+            "id": "advanced",
+            "label": "Advanced",
+            "blurb": "25 sites, 10 team members, 25 datasets"
           },
           {
             "id": "agency",
             "label": "Agency",
-            "blurb": "Client workspaces and white-label"
+            "blurb": "100 sites, 10 team members, 50 datasets"
           }
-        ]
+        ],
+        "labels": {
+          "free": "Free",
+          "starter": "Starter",
+          "pro": "Pro",
+          "business": "Business",
+          "scale": "Scale",
+          "advanced": "Advanced",
+          "agency": "Agency",
+          "enterprise": "Enterprise"
+        },
+        "limits": {
+          "free": {
+            "hostLimit": 1,
+            "managersPerOrg": 1,
+            "datasetsPerOrg": 0
+          },
+          "starter": {
+            "hostLimit": 1,
+            "managersPerOrg": 2,
+            "datasetsPerOrg": 2
+          },
+          "pro": {
+            "hostLimit": 3,
+            "managersPerOrg": 3,
+            "datasetsPerOrg": 5
+          },
+          "business": {
+            "hostLimit": 10,
+            "managersPerOrg": 5,
+            "datasetsPerOrg": 10
+          },
+          "scale": {
+            "hostLimit": 15,
+            "managersPerOrg": 5,
+            "datasetsPerOrg": 15
+          },
+          "advanced": {
+            "hostLimit": 25,
+            "managersPerOrg": 10,
+            "datasetsPerOrg": 25
+          },
+          "agency": {
+            "hostLimit": 100,
+            "managersPerOrg": 10,
+            "datasetsPerOrg": 50
+          },
+          "enterprise": {
+            "hostLimit": 200,
+            "managersPerOrg": 20,
+            "datasetsPerOrg": 100
+          }
+        },
+        "aiPrice": {
+          "starter": 9,
+          "pro": 19,
+          "business": 39,
+          "scale": 69,
+          "advanced": 99,
+          "agency": 299
+        }
+      },
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}"
+        },
+        "billing": {
+          "doc": "orgs/{org.id}/billing/stripe",
+          "optional": true
+        },
+        "seats": {
+          "url": "/api/orgs/members?orgId={org.id}&counts=1",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "datasets": {
+          "query": {
+            "collection": "orgs/{org.id}/datasets",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        }
       }
     },
     {
@@ -386,26 +701,300 @@
             "limit": 12
           },
           "optional": true
+        },
+        "ent": {
+          "url": "/api/orgs/entitlements?orgId={org.id}",
+          "optional": true
+        },
+        "org": {
+          "doc": "orgs/{org.id}",
+          "optional": true
+        },
+        "seats": {
+          "url": "/api/orgs/members?orgId={org.id}&counts=1",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "siteTraffic": {
+          "url": "/api/billing/host-usage?hostId={item.hostId}",
+          "each": "data.collab.sites",
+          "optional": true
+        },
+        "datasets": {
+          "query": {
+            "collection": "orgs/{org.id}/datasets",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "contacts": {
+          "query": {
+            "collection": "orgs/{org.id}/contacts",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "companies": {
+          "query": {
+            "collection": "orgs/{org.id}/companies",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "deals": {
+          "query": {
+            "collection": "orgs/{org.id}/deals",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "api": {
+          "doc": "orgs/{org.id}/apiUsage/{now.month}",
+          "optional": true
+        },
+        "crmEmails": {
+          "doc": "orgs/{org.id}/crmEmailUsage/{now.day}",
+          "optional": true
+        },
+        "campaignCounter": {
+          "doc": "orgs/{org.id}/counters/campaignEmailSends",
+          "optional": true
+        },
+        "workflowCounter": {
+          "doc": "orgs/{org.id}/counters/workflowRuns",
+          "optional": true
+        },
+        "actionCounter": {
+          "doc": "orgs/{org.id}/counters/actionRuns",
+          "optional": true
+        },
+        "rollup": {
+          "doc": "orgs/{org.id}/usage/{now.month}",
+          "optional": true
+        },
+        "rollupBefore": {
+          "doc": "orgs/{org.id}/usage/{now.prevMonth}",
+          "optional": true
+        },
+        "band": {
+          "url": "/api/media/storage?orgId={org.id}",
+          "optional": true
         }
       },
       "blocks": [
         {
+          "type": "meters",
+          "title": "Your plan",
+          "footer": "What this workspace uses of what its plan includes. Storage is shown under Storage over the plan.",
+          "meters": [
+            {
+              "label": "Sites",
+              "used": "{data.collab.sites:count}",
+              "limit": "{data.ent.quotas.hostLimit}",
+              "format": "number",
+              "when": "data.ent && data.collab"
+            },
+            {
+              "label": "Team seats (incl. you)",
+              "used": "{data.seats.managerSeats}",
+              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
+              "format": "number",
+              "when": "data.ent && data.seats && !data.seats.pendingManagerSeats"
+            },
+            {
+              "label": "Team seats (incl. you + {data.seats.pendingManagerSeats} invited)",
+              "used": "{data.seats.managerSeats}",
+              "limit": "{data.ent.quotas.managersPerOrg + data.org.seatAddons.managers?}",
+              "format": "number",
+              "when": "data.ent && data.seats && data.seats.pendingManagerSeats"
+            },
+            {
+              "label": "Datasets (organization)",
+              "used": "{data.datasets.count}",
+              "limit": "{data.ent.quotas.datasetsPerOrg + data.org.seatAddons.datasets?}",
+              "format": "number",
+              "when": "data.ent && data.datasets"
+            },
+            {
+              "label": "Storage (organization), MB",
+              "used": "{data.band.usedBytes:megabytes}",
+              "limit": "{data.band.allowanceMb}",
+              "format": "number",
+              "when": "data.band && !data.band.unlimited"
+            },
+            {
+              "label": "Data storage (organization), MB",
+              "used": "{data.rollup.dataStorageMb}",
+              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
+              "format": "number",
+              "when": "data.ent && data.rollup.dataStorageMb"
+            },
+            {
+              "label": "Data storage (organization), MB",
+              "used": "{data.rollupBefore.dataStorageMb}",
+              "limit": "{data.ent.quotas.dataStorageMbPerOrg}",
+              "format": "number",
+              "when": "data.ent && !data.rollup.dataStorageMb && data.rollupBefore.dataStorageMb"
+            },
+            {
+              "label": "CRM records (organization)",
+              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
+              "limit": "{data.ent.quotas.contactsPerHost}",
+              "format": "number",
+              "when": "data.ent.features.crm && data.contacts && data.companies && data.deals"
+            },
+            {
+              "label": "Stored records (organization)",
+              "used": "{data.contacts.count + data.companies.count + data.deals.count}",
+              "limit": "{data.ent.quotas.contactsPerHost}",
+              "format": "number",
+              "when": "data.ent && !data.ent.features.crm && data.contacts && data.companies && data.deals"
+            },
+            {
+              "label": "One-to-one emails (today)",
+              "used": "{data.crmEmails.count ?? '0'}",
+              "limit": "{data.ent.quotas.crmEmailsPerDay}",
+              "format": "number",
+              "when": "data.ent.quotas.crmEmailsPerDay"
+            },
+            {
+              "label": "API requests (this month)",
+              "used": "{data.api.count ?? '0'}",
+              "limit": "{data.ent.quotas.apiRequestsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.apiRequestsPerMonth"
+            },
+            {
+              "label": "Workflow runs (this month, organization)",
+              "used": "{data.workflowCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.workflowRunsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.workflowRunsPerMonth"
+            },
+            {
+              "label": "Action runs (this month, organization)",
+              "used": "{data.actionCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.actionRunsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.actionRunsPerMonth"
+            },
+            {
+              "label": "Bandwidth (this month, organization), GB",
+              "used": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?}",
+              "limit": "{data.ent.quotas.bandwidthGb}",
+              "format": "number",
+              "when": "data.ent && data.siteTraffic"
+            },
+            {
+              "label": "Campaign emails (this month, organization)",
+              "used": "{data.campaignCounter[@now.month] ?? '0'}",
+              "limit": "{data.ent.quotas.emailSendsPerMonth}",
+              "format": "number",
+              "when": "data.ent.quotas.emailSendsPerMonth"
+            }
+          ]
+        },
+        {
           "type": "fields",
-          "title": "This month",
+          "title": "Storage (organization)",
+          "when": "data.band",
+          "footer": "Every site's media library and the organization library share this one allowance.",
+          "rows": [
+            {
+              "label": "Used",
+              "value": "{data.band.usedBytes:bytes} (unlimited)",
+              "when": "data.band.unlimited"
+            },
+            {
+              "label": "In the organization library",
+              "value": "{data.band.scopeBytes:bytes}",
+              "when": "data.band.scopeBytes"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage && !data.storage.metered",
+          "text": "Uploads stop when your workspace reaches it. Free up space or upgrade to add more."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage.metered && !data.band.hardBand",
+          "text": "Past it, extra storage is billed on your invoice unless you set a storage cap."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage.metered && data.band.hardBand",
+          "text": "Past it, extra storage is billed on your invoice unless you set a storage cap. Uploads to the organization library stop at it for now, because its storage is not billed yet."
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Charges past your plan",
+              "subtitle": "What this month's usage costs beyond what the plan includes",
+              "icon": "dollarsign.circle|payments",
+              "screen": "core.billing.overage"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "This month, all sites",
           "rows": [
             {
               "label": "Page views",
-              "value": "{data.usage.monthPageViews:number}"
+              "value": "{data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?:number}"
             },
             {
               "label": "Bandwidth",
-              "value": "{data.usage.bandwidthGb:number} GB"
+              "value": "{data.siteTraffic.*.bandwidthGb + data.usage.bandwidthGb?:number} GB"
             },
             {
               "label": "Media delivered",
-              "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
+              "value": "{data.siteTraffic.*.monthMediaBandwidthBytes + data.usage.monthMediaBandwidthBytes?:bytes}"
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Usage by site",
+          "when": "data.collab.sites",
+          "items": "data.collab.sites",
+          "count": false,
+          "primary": "{item.displayName|item.hostId}",
+          "icon": "globe|language",
+          "empty": "No sites yet.",
+          "open": {
+            "screen": "core.billing.usage.site",
+            "params": {
+              "siteId": "{item.hostId}",
+              "siteName": "{item.displayName|item.hostId}"
+            }
+          }
         },
         {
           "type": "fields",
@@ -1461,6 +2050,181 @@
           "enterprise": 298000
         }
       }
+    },
+    {
+      "id": "core.billing.usage.site",
+      "title": "{params.siteName|'Site usage'}",
+      "icon": "chart.bar|bar_chart",
+      "scope": "org",
+      "load": {
+        "ent": {
+          "url": "/api/orgs/entitlements?orgId={org.id}",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "pages": {
+          "url": "/api/hosts/usage?hostId={params.siteId}",
+          "optional": true
+        },
+        "layouts": {
+          "query": {
+            "collection": "hosts/{params.siteId}/layouts",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "variables": {
+          "query": {
+            "collection": "hosts/{params.siteId}/variables",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "functions": {
+          "query": {
+            "collection": "hosts/{params.siteId}/functions",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "forms": {
+          "query": {
+            "collection": "hosts/{params.siteId}/forms",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "componentsAll": {
+          "query": {
+            "collection": "hosts/{params.siteId}/components",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "componentsGone": {
+          "query": {
+            "collection": "hosts/{params.siteId}/components",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            },
+            "where": [
+              [
+                "deletedAt",
+                ">",
+                {
+                  "$date": "1970-01-01T00:00:00Z"
+                }
+              ]
+            ]
+          },
+          "optional": true
+        },
+        "media": {
+          "doc": "hosts/{params.siteId}/counters/media",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "meters",
+          "title": "This site",
+          "footer": "Per-site collaborators, not end-user accounts, which are never metered.",
+          "meters": [
+            {
+              "label": "Pages",
+              "used": "{data.pages.screens}",
+              "limit": "{data.ent.quotas.screensPerHost}",
+              "format": "number",
+              "when": "data.ent && data.pages"
+            },
+            {
+              "label": "Shared layouts",
+              "used": "{data.layouts.count}",
+              "limit": "{data.ent.quotas.sharedLayoutsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.layouts"
+            },
+            {
+              "label": "Site collaborators",
+              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
+              "limit": "{data.collab.sites[hostId=params.siteId].cap}",
+              "format": "number",
+              "when": "data.collab.sites[hostId=params.siteId] && !data.collab.sites[hostId=params.siteId].capUnlimited"
+            },
+            {
+              "label": "Site collaborators",
+              "used": "{data.collab.sites[hostId=params.siteId].collaborators}",
+              "limit": "",
+              "format": "number",
+              "when": "data.collab.sites[hostId=params.siteId].capUnlimited"
+            },
+            {
+              "label": "Saved forms",
+              "used": "{data.forms.count}",
+              "limit": "{data.ent.quotas.formsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.forms"
+            },
+            {
+              "label": "Reusable components",
+              "used": "{data.componentsAll.count - data.componentsGone.count}",
+              "limit": "{data.ent.quotas.componentsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.componentsAll && data.componentsGone"
+            },
+            {
+              "label": "Variables",
+              "used": "{data.variables.count}",
+              "limit": "{data.ent.quotas.variablesPerHost}",
+              "format": "number",
+              "when": "data.ent && data.variables"
+            },
+            {
+              "label": "Functions",
+              "used": "{data.functions.count}",
+              "limit": "{data.ent.quotas.functionsPerHost}",
+              "format": "number",
+              "when": "data.ent && data.functions"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Storage on this site",
+          "footer": "A share of the workspace's storage, not a meter of its own.",
+          "rows": [
+            {
+              "label": "Media",
+              "value": "{data.media.bytes ?? '0':bytes}",
+              "when": "data.media || data.ent"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "core.billing.cancel",

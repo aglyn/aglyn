@@ -38,6 +38,9 @@ final class RegisterModel {
   let hostID: String
   private(set) var storeName = "Store"
   private(set) var currency = "usd"
+  private(set) var timeZone: String?
+  /// The paid sale's receipt, read from the order as stored, for the screen and the printer.
+  private(set) var receipt: ReceiptData?
   private(set) var registers: Load<[PosRegister]> = .loading
   private(set) var register: PosRegister?
   private(set) var categories: [PosCategory] = []
@@ -55,13 +58,34 @@ final class RegisterModel {
   /// The checked-in stays a sale can be charged to.
   private(set) var stays: [PosStay] = []
 
+  /// "Type card", as the console offers it with the site's publishable key,
+  /// where this app has Stripe's card form. Not offered while offline: a card
+  /// needs the server's intent.
+  var keyedCard: KeyedCardService? {
+    guard online, let entry = keyedEntry, let key = context?.publishableKey, !key.isEmpty else { return nil }
+    return KeyedCardService(entry: entry, publishableKey: key, merchantName: storeName)
+  }
+
+  /// The card tender a payment step names by label, to cancel or to read what it asks for.
+  func cardService(labeled label: String) -> (any CardReaderService)? {
+    if let reader = readers.first(where: { $0.label == label }) { return reader }
+    if let keyed = keyedCard, keyed.label == label { return keyed }
+    return nil
+  }
+
   @ObservationIgnored private let reader: FirestoreReader
   @ObservationIgnored private let api: PosSaleAPI
   @ObservationIgnored let terminal: CommerceTerminalConnection
   @ObservationIgnored let collector: CardCollector?
+  /// Stripe's card form, where this app carries it (Aglyn POS on iPhone and iPad): a typed card.
+  @ObservationIgnored let keyedEntry: KeyedCardEntry?
   @ObservationIgnored private let store: RegisterStore
   @ObservationIgnored private var openAttempt = AttemptKeys()
   @ObservationIgnored private var listeners: [String: FirestoreListening] = [:]
+  /// This device's print sheet; a test hands its own.
+  @ObservationIgnored var systemPrint: (String, String) async -> SystemPrintResult = { text, job in
+    await SystemPrinter.printText(text, jobName: job)
+  }
   @ObservationIgnored private var reconnecting: Task<Void, Never>?
   @ObservationIgnored private var keepingTheTill: Task<Void, Never>?
   /// How long an offline register waits between tries to reach the console.
@@ -96,6 +120,7 @@ final class RegisterModel {
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
+    keyedEntry: KeyedCardEntry? = nil,
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
     uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil,
     displayAPI: PosDisplayAPI? = nil, kioskQueueAPI: PosKioskQueueAPI? = nil
@@ -107,6 +132,7 @@ final class RegisterModel {
     self.opsAPI = opsAPI ?? ConsolePosOpsAPI(api: api, hostID: hostID)
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
+    self.keyedEntry = keyedEntry
     store = RegisterStore(defaults: defaults, hostID: hostID)
     customers = PosCustomerModel(api: customersAPI ?? ConsolePosCustomersAPI(api: api, hostID: hostID))
     lastReceipt = PosLastReceiptModel(reader: reader, api: sale, store: store, hostID: hostID)
@@ -144,6 +170,7 @@ final class RegisterModel {
         }
       }
       if let currency = host.string("currency"), !currency.isEmpty { self.currency = currency }
+      if let zone = host.string("timeZone"), !zone.isEmpty { timeZone = zone }
     }
     listen("registers", registersQuery(hostID), failed: { [weak self] in
       self?.registers = .failed("The registers could not be loaded. Check the connection and try again.")
@@ -502,17 +529,69 @@ final class RegisterModel {
       done = await paid.sendReceipt(channel: "sms", to: phone)
     case .print?:
       // The register's cloud printer prints it; with none, the choice is only recorded.
-      done = lastReceipt.hasPrinter ? await paid.printToCloud() : await paid.sendReceipt(channel: "print")
+      if canPrintReceipt {
+        done = await printReceipt(paid) == .printed
+      } else {
+        done = await paid.sendReceipt(channel: "print")
+      }
     default: done = await paid.sendReceipt(channel: "none")
     }
     if done, checkout === paid { finished() }
   }
 
+  /// The paid sale's receipt, read from the order as stored; kept up to date until the sale is finished.
+  func watchReceipt(orderID: String) {
+    listeners["receipt"]?.remove()
+    receipt = nil
+    listeners["receipt"] = reader.listenDocument(["hosts", hostID, "orders", orderID]) { [weak self] result in
+      guard let self, case .success(let order?) = result else { return }
+      receipt = receiptDataFromOrder(orderID: orderID, order: order.data, context: receiptContext(), nowMs: nowMs())
+    }
+  }
+
+  private func stopWatchingReceipt() {
+    listeners["receipt"]?.remove()
+    listeners["receipt"] = nil
+    receipt = nil
+  }
+
+  /// The store's receipt header, address and return policy as this register prints them.
+  private func receiptContext() -> ReceiptContext {
+    let rules = context?.ops
+    return ReceiptContext(
+      storeName: storeName,
+      storeLines: (rules?.receiptAddress ?? "").split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty },
+      registerName: register?.name, timeZone: timeZone, currency: currency,
+      footer: rules?.returnPolicy.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty)
+  }
+
+  /// Whether the receipt can go anywhere this register prints: its cloud printer, or this device's print sheet.
+  var canPrintReceipt: Bool { lastReceipt.hasPrinter || SystemPrinter.isAvailable }
+
+  /// Prints the paid sale's receipt where this register prints, as the console does: the register's cloud printer when
+  /// it has one, else this device's print sheet (the console's `window.print()`). A gift receipt drops every price and
+  /// is only ever printed on the sheet (the cloud queue prints the customer's receipt). The words are the notice when
+  /// it did not go; a person closing the sheet is not a failure.
+  func printReceipt(_ paid: Checkout, gift: Bool = false) async -> SystemPrintResult {
+    if lastReceipt.hasPrinter, !gift {
+      return await paid.printToCloud() ? .printed : .failed(paid.notice?.message ?? "The receipt did not print.")
+    }
+    guard let receipt else { return .failed("The receipt is still loading. Try again in a moment.") }
+    let cash = paid.sale.payments.contains { $0.method == "cash" && $0.status == "succeeded" }
+    let text = renderText(layoutReceipt(receipt, ReceiptLayoutOptions(columns: PaperColumns.mm80, openDrawer: cash && !gift, gift: gift)))
+    let result = await systemPrint(text, "\(gift ? "Gift receipt" : "Receipt") \(receipt.orderNumber)")
+    if result == .printed, !gift { await paid.markPrinted() }
+    return result
+  }
+
   /// A store that always prints: the receipt goes to the register's printer as soon as the sale is paid, once. The cashier
   /// still ends the sale (a copy by email can follow).
   func printReceiptByDefault(_ paid: Checkout) async {
-    guard context?.settings.receiptDefault == .print, lastReceipt.hasPrinter, !paid.printed else { return }
-    _ = await paid.printToCloud()
+    guard context?.settings.receiptDefault == .print, !paid.printed, canPrintReceipt else { return }
+    // The device's print sheet prints from the stored sale, so it waits for that read.
+    if !lastReceipt.hasPrinter, receipt == nil { return }
+    if case .failed(let words) = await printReceipt(paid) { toast = CheckoutNotice(tone: .error, message: words) }
   }
 
   /// The sale was voided: back to the basket, which is kept for another try.
@@ -523,6 +602,7 @@ final class RegisterModel {
 
   /// The sale is paid and the receipt chosen: the next customer.
   func finished() {
+    stopWatchingReceipt()
     if let paid = checkout?.opened.orderID { lastReceipt.remember(orderID: paid) }
     if let register { store.savePendingSale(register.id, nil) }
     updateCart(.empty)

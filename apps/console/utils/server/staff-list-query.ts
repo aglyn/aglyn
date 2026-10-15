@@ -143,21 +143,25 @@ export function planStaffListQuery(
  * a cursor after the last row read. Reads one row past the page so "is there
  * more" is an observation, not a guess.
  *
- * `collection` is the collection (or collection group) the list reads; the
- * cursor is a document path under it, resolved with `firestore.doc`. A cursor
+ * `collection` is the collection (or collection group) the list reads, or a
+ * collection's path, which this reads and never writes (the staff audit log
+ * names `adminAudit` this way, where a reference to it is held to the stamped
+ * writes, AGL-3321); the cursor is a document path under it, resolved with
+ * `firestore.doc`. A cursor
  * that names a document that no longer exists starts the list over rather
  * than failing, since a row deleted between pages is ordinary on a staff
  * queue.
  */
 export async function runStaffListQuery<Row>(options: {
   firestore: FirebaseFirestore.Firestore
-  collection: FirebaseFirestore.Query
+  collection: FirebaseFirestore.Query | string
   declaration: ListQueryDeclaration
   request: StaffListQueryRequest
   base?: readonly ListQueryFilter[]
   row: (doc: FirebaseFirestore.QueryDocumentSnapshot) => Row
 }): Promise<StaffListQueryPage<Row>> {
-  const { firestore, collection, declaration, request, base = [], row } = options
+  const { firestore, declaration, request, base = [], row } = options
+  const collection = typeof options.collection === 'string' ? firestore.collection(options.collection) : options.collection
   const plan = planStaffListQuery(declaration, request, base)
   let query = applyListQuery(collection, plan)
   if (request.cursor) {

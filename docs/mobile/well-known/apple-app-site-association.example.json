@@ -1,0 +1,20 @@
+{
+  "webcredentials": {
+    "apps": ["<APPLE_TEAM_ID>.com.aglyn.app", "<APPLE_TEAM_ID>.com.aglyn.pos"]
+  },
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["<APPLE_TEAM_ID>.com.aglyn.app"],
+        "components": [
+          { "/": "/_*", "exclude": true },
+          { "/": "/api/*", "exclude": true },
+          { "/": "/signin", "exclude": true },
+          { "/": "/signin/*", "exclude": true },
+          { "/": "/*" }
+        ]
+      }
+    ]
+  }
+}

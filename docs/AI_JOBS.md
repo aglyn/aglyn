@@ -358,6 +358,16 @@ vendor, and it does not move as a conversation grows.
   block stranded after the last breakpoint, and refuses a step that quotes
   cache reads in `AI_STEP_NOMINAL_USAGE` for a prefix its model will not cache.
 
+- **A generation that continues (AGL-3809).** A lookup round and a re-ask
+  re-send the first turn and the inventory. A door whose generations usually
+  continue passes `cacheConversation: true` to `runValidatedGeneration`, and
+  the last turn of each request is marked as well. That marker is one of the
+  four allowed and is dropped first where the system blocks hold all four.
+  On a single-call generation it costs a 0.25× write on the tail, so only a
+  door measured to continue may turn it on. Today that is the plan alone; the
+  cache spec lists the doors. The audit behind it, and the levers left as
+  proposals, are in `docs/AI_CACHE_AUDIT_2026-10.md`.
+
 Two consequences worth knowing before writing a prompt. A door on the fast
 tier has the HIGHEST minimum on the platform, so a step moved there to save
 per-token money can cost more per request; and on a door that cannot cache,
@@ -873,6 +883,16 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   is one the rule reads as a region and it places nothing, or only a layout. One that
   places a form or a component, and a page whose every section is a region, are
   re-asked as before; a home left under its fewest sections is the thin-home check's.
+- **A section that places the page's layout has it taken out (AGL-3807).** Rule 2's
+  `plan-layout-in-section` answers "name it as the page's layout, and take it out of the
+  section's uses", so `aiSettlePlanLayoutsInSections` does that, right after the refs are
+  settled and before every other rule reads the plan: the live Free dental start of
+  2026-10-15 put both pages in the site's `laySite` and named it again in each section
+  that placed no form, on both attempts. A layout is what the rule reads as one (a site
+  layout's id, or a `new:` layout the plan creates). Where the page already names that
+  layout, it only comes out of the sections; where the page names none, or a reference
+  that resolves to nothing, the page is put in it. A page in a different layout (or a
+  record of another kind), or whose sections name two layouts, is re-asked as before.
 - **A section that shows the work gets its fewest pieces (AGL-3754).** A site start's
   `plan-empty-gallery` names one answer, "plan it with 3 to 6 items", so
   `aiSettlePlanGalleries` raises a gallery, portfolio or selected-works section (by the
@@ -2548,6 +2568,18 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   provider caches each search 24 hours (`stockPhotoSearches`) and keeps the
   library's rate limit. No AI model is called, and the guided start's credit
   estimate is unchanged.
+- **Alt text that says what the photo shows (AGL-3805).** The slot's alt text is the model's,
+  written before any photo was found, so a stock photo placed in it answers for its own
+  words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
+  their subject is among the hit's first tags or its page's address; otherwise the photo
+  is described by the library's own description where it writes one (Pexels' `alt`),
+  else its first three tags ("Cake, homemade, dessert"). The libraries write in English
+  and no model translates them, so a site in another language takes the platform's own
+  phrase in its language (`illustrativePhoto` in `ai-layout-labels.ts`: "Foto
+  ilustrativa"), true of any photo. The library's asset keeps the same words. The
+  beta.253 Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
+  dusted "HOME MADE" as conchas on a tray, and none of its nine photos showed what its
+  words said. `ai-stock-photo-alt.spec.ts` replays its recorded "bakery" answer.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 
@@ -2760,6 +2792,16 @@ the same way, in a Grid with a row direction and no container.
   The platform reaches no section of another page by anchor (AGL-2867), so the link
   names the page. The layout language's page and layout checks and the page's last pass
   (which stores it) all repair.
+- **The form's page is not Home when another page places it (AGL-3805).** `aiLayoutFormPageOfPlan`
+  (`jobs/ai-job-page-language.ts`) names the page every such call to action goes to: the
+  first page of the plan placing the form that is not Home, and Home only when no other
+  page does. A plan lists Home first, and a home page that closes on "visit us or order"
+  places the form too, so the header's button and the footer's linked the home page on
+  every page, itself included: a Spanish bakery's "Pide tu pastel" and "Contáctanos"
+  (beta.253, job eg4maZMGtN) while /pasteles and /visitanos held the form, and eight of
+  the 21 newest AI-built sites the same way. A page that places the form itself still
+  scrolls to its own section. `ai-job-layout-form-page.spec.ts` holds the plan's choice,
+  the frame's buttons and a page's targets.
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the

@@ -8,6 +8,9 @@ import Security
 /// (`INVALID_LOGIN_CREDENTIALS`, `TOO_MANY_ATTEMPTS_TRY_LATER`, …), or nil
 /// when nothing answered.
 public struct IdentityToolkitError: Error, Equatable, Sendable {
+  /// The code a refusal for the App Check token gets (the server says "Firebase App Check token is invalid.").
+  public static let appCheckRefused = "APP_CHECK_TOKEN_INVALID"
+
   public let code: String?
   public let status: Int
 
@@ -123,8 +126,8 @@ func withoutKeychainPrompts<T>(_ body: () -> T) -> T {
   return body()
 }
 
-/// Firebase Auth over its REST APIs: `accounts:signInWithPassword`,
-/// `accounts:sendOobCode` and the Secure Token refresh, against the Auth
+/// Firebase Auth over its REST APIs: `accounts:signInWithPassword`, `accounts:signUp`,
+/// `accounts:signInWithIdp`, the action-code calls and the Secure Token refresh, against the Auth
 /// emulator when one is set.
 ///
 /// The Mac app uses it when it is not team-signed: the Firebase SDK keeps its
@@ -197,17 +200,101 @@ public actor IdentityToolkitAuth {
       case .string(let refreshToken)? = body["refreshToken"]
     else { throw IdentityToolkitError(code: nil, status: 200) }
     let user = AglynUser(uid: uid, email: body["email"]?.stringValue, displayName: body["displayName"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
-    accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
-    return user
+    return accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
   }
 
-  public func sendPasswordReset(email: String) async throws {
-    _ = try await post(
-      "\(identityBase)/v1/accounts:sendOobCode?key=\(apiKey)",
+  /// Signs in with a Firebase custom token: one the server mints for a passkey that signed its challenge, or one a support
+  /// session's `/api/admin/impersonate` minted for a customer. `tenantId` is the identity pool the token was minted in (an SSO
+  /// account lives in its workspace's tenant), because a custom token exchanged in another pool is a cross-pool exchange. The
+  /// person is read off the ID token the exchange answers with.
+  @discardableResult
+  public func signIn(customToken: String, tenantId: String? = nil) async throws -> AglynUser {
+    var json: [String: JSONValue] = ["token": .string(customToken), "returnSecureToken": .bool(true)]
+    if let tenantId, !tenantId.isEmpty { json["tenantId"] = .string(tenantId) }
+    let body = try await post("\(identityBase)/v1/accounts:signInWithCustomToken?key=\(apiKey)", json: json)
+    guard case .string(let idToken)? = body["idToken"], case .string(let refreshToken)? = body["refreshToken"] else {
+      throw IdentityToolkitError(code: nil, status: 200)
+    }
+    let claims = TokenClaims(idToken: idToken).values
+    guard let uid = claims["user_id"]?.stringValue ?? claims["sub"]?.stringValue else { throw IdentityToolkitError(code: nil, status: 200) }
+    let user = AglynUser(uid: uid, email: claims["email"]?.stringValue, displayName: claims["name"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
+    return accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+  }
+
+  /// Creates an email and password account (`accounts:signUp`) and signs in as it, as the console's
+  /// `createUserWithEmailAndPassword` does. The project pool's `beforeUserCreated` blocking function and the
+  /// abuse checks run on it exactly as they run on the console's.
+  @discardableResult
+  public func signUp(email: String, password: String) async throws -> AglynUser {
+    let body = try await post(
+      "\(identityBase)/v1/accounts:signUp?key=\(apiKey)",
       json: [
-        "requestType": .string("PASSWORD_RESET"),
         "email": .string(email.trimmingCharacters(in: .whitespacesAndNewlines)),
+        "password": .string(password),
+        "returnSecureToken": .bool(true),
       ])
+    guard case .string(let uid)? = body["localId"], case .string(let idToken)? = body["idToken"],
+      case .string(let refreshToken)? = body["refreshToken"]
+    else { throw IdentityToolkitError(code: nil, status: 200) }
+    let user = AglynUser(uid: uid, email: body["email"]?.stringValue, displayName: nil)
+    return accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+  }
+
+  /// Signs in with an identity provider's credential (`accounts:signInWithIdp`): Google's ID token or Apple's, as
+  /// `postBody` names it. It signs up a person the project has not seen, so the answer says whether it did.
+  public func signIn(idpPostBody: String) async throws -> (user: AglynUser, isNewUser: Bool) {
+    let body = try await post(
+      "\(identityBase)/v1/accounts:signInWithIdp?key=\(apiKey)",
+      json: [
+        "postBody": .string(idpPostBody), "requestUri": .string("http://localhost"),
+        "returnSecureToken": .bool(true), "returnIdpCredential": .bool(true),
+      ])
+    guard case .string(let uid)? = body["localId"], case .string(let idToken)? = body["idToken"],
+      case .string(let refreshToken)? = body["refreshToken"]
+    else {
+      // `needConfirmation` answers a credential whose address another sign-in method already holds.
+      throw IdentityToolkitError(code: body["needConfirmation"] == .bool(true) ? "NEED_CONFIRMATION" : nil, status: 200)
+    }
+    let name = body["displayName"]?.stringValue ?? body["fullName"]?.stringValue
+    let user = AglynUser(uid: uid, email: body["email"]?.stringValue, displayName: name.flatMap { $0.isEmpty ? nil : $0 })
+    let accepted = accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+    return (accepted, body["isNewUser"] == .bool(true))
+  }
+
+  /// Re-reads the account with a fresh token, as the console's `user.reload()` does when it asks whether the address
+  /// has been confirmed since.
+  public func reload() async throws -> AglynUser? {
+    guard let current = session else { return nil }
+    try await refresh(user: current.user, refreshToken: current.refreshToken)
+    return session?.user
+  }
+
+  /// The sign-in providers the account holds (`accounts:lookup`'s `providerUserInfo`), as the SDK's `providerData`.
+  public func providerIDs() async throws -> [String] {
+    guard let current = session else { return [] }
+    let body = try await post("\(identityBase)/v1/accounts:lookup?key=\(apiKey)", json: ["idToken": .string(current.idToken)])
+    guard case .array(let users)? = body["users"], case .object(let account)? = users.first,
+      case .array(let providers)? = account["providerUserInfo"]
+    else { return [] }
+    return providers.compactMap { $0["providerId"]?.stringValue }
+  }
+
+  /// Confirms an address with the one-time code an emailed verification link carries (`applyActionCode`).
+  public func applyActionCode(_ code: String) async throws {
+    _ = try await post("\(identityBase)/v1/accounts:update?key=\(apiKey)", json: ["oobCode": .string(code)])
+  }
+
+  /// The address a password reset code is for (`verifyPasswordResetCode`); throws when the code is spent or expired.
+  public func verifyPasswordResetCode(_ code: String) async throws -> String {
+    let body = try await post("\(identityBase)/v1/accounts:resetPassword?key=\(apiKey)", json: ["oobCode": .string(code)])
+    return body["email"]?.stringValue ?? ""
+  }
+
+  /// Sets a new password with a reset code (`confirmPasswordReset`).
+  public func confirmPasswordReset(code: String, newPassword: String) async throws {
+    _ = try await post(
+      "\(identityBase)/v1/accounts:resetPassword?key=\(apiKey)",
+      json: ["oobCode": .string(code), "newPassword": .string(newPassword)])
   }
 
   /// Changes the password: signing in with the current one proves it and
@@ -222,8 +309,7 @@ public actor IdentityToolkitAuth {
       json: ["idToken": .string(token), "password": .string(new), "returnSecureToken": .bool(true)])
     guard case .string(let idToken)? = body["idToken"], case .string(let refreshToken)? = body["refreshToken"]
     else { throw IdentityToolkitError(code: nil, status: 200) }
-    accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
-    return user
+    return accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
   }
 
   /// Sets the display name on the account, as the console does when the name changes.
@@ -234,10 +320,23 @@ public actor IdentityToolkitAuth {
       "\(identityBase)/v1/accounts:update?key=\(apiKey)",
       json: ["idToken": .string(current.idToken), "displayName": .string(name), "returnSecureToken": .bool(true)])
     let user = AglynUser(uid: current.user.uid, email: current.user.email, displayName: name.isEmpty ? nil : name)
-    accept(
+    return accept(
       user: user, idToken: body["idToken"]?.stringValue ?? current.idToken,
       refreshToken: body["refreshToken"]?.stringValue ?? current.refreshToken, expiresIn: body["expiresIn"])
-    return user
+  }
+
+  /// Removes a sign-in provider from the account (`accounts:update` with `deleteProvider`), as the
+  /// console's `unlink` does, and keeps the fresh tokens the answer carries.
+  public func deleteProvider(_ providerID: String) async throws {
+    guard let current = session else { throw IdentityToolkitError(code: nil, status: 401) }
+    let body = try await post(
+      "\(identityBase)/v1/accounts:update?key=\(apiKey)",
+      json: [
+        "idToken": .string(current.idToken), "deleteProvider": .array([.string(providerID)]), "returnSecureToken": .bool(true),
+      ])
+    accept(
+      user: current.user, idToken: body["idToken"]?.stringValue ?? current.idToken,
+      refreshToken: body["refreshToken"]?.stringValue ?? current.refreshToken, expiresIn: body["expiresIn"])
   }
 
   /// The current ID token, refreshed a minute before it expires; nil when signed out.
@@ -271,13 +370,17 @@ public actor IdentityToolkitAuth {
     accept(user: user, idToken: idToken, refreshToken: refreshed, expiresIn: body["expires_in"])
   }
 
-  private func accept(user: AglynUser, idToken: String, refreshToken: String, expiresIn: JSONValue?) {
+  /// Keeps the tokens, and reads whether the address is confirmed off the ID token (`email_verified`), as the routes do.
+  @discardableResult
+  private func accept(user: AglynUser, idToken: String, refreshToken: String, expiresIn: JSONValue?) -> AglynUser {
     let seconds = expiresIn?.textValue.flatMap(Double.init) ?? 3600
+    let user = user.verified(TokenClaims(idToken: idToken).emailVerified)
     session = Session(
       user: user, idToken: idToken, refreshToken: refreshToken,
       expiresAt: now().addingTimeInterval(seconds))
     store.save(
       StoredAuthSession(uid: user.uid, email: user.email, displayName: user.displayName, refreshToken: refreshToken))
+    return user
   }
 
   private func post(_ url: String, json: [String: JSONValue]) async throws -> [String: JSONValue] {
@@ -302,8 +405,9 @@ public actor IdentityToolkitAuth {
       if case .object(let record)? = body, case .object(let error)? = record["error"],
         case .string(let message)? = error["message"]
       {
-        // "TOO_MANY_ATTEMPTS_TRY_LATER : Access to this account…" carries a detail after the code.
-        code = message.components(separatedBy: " ").first
+        // "TOO_MANY_ATTEMPTS_TRY_LATER : Access to this account…" carries a detail after the code; an
+        // App Check refusal is a sentence instead of a code.
+        code = isAppCheckRefusalText(message) ? IdentityToolkitError.appCheckRefused : message.components(separatedBy: " ").first
       }
       throw IdentityToolkitError(code: code, status: response.statusCode)
     }

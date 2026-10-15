@@ -53,7 +53,7 @@ async function staffAccount(auth, project) {
     body: JSON.stringify({
       localId,
       emailVerified: true,
-      displayName: 'Mobile Staff',
+      displayName: 'Riley Staff',
       customAttributes: JSON.stringify({ staff: true, staffRole: 'super' }),
     }),
   })
@@ -67,7 +67,7 @@ export async function seedAccount({ put, uid, orgId, hostId, now, auth, project 
     `orgs/${orgId}`,
     {
       timeZone: 'America/Chicago',
-      contact: { email: 'hello@demo.example.test', phone: '+1 512 555 0100', website: 'https://demo.example.test' },
+      contact: { email: 'hello@juniperstreet.example', phone: '+1 512 555 0100', website: 'https://juniperstreet.example' },
       defaultMediaScope: 'host',
       defaultResourceScope: 'host',
       subscription: { status: 'active', interval: 'month', currentPeriodEnd: new Date(now.getTime() + 21 * day) },
@@ -88,11 +88,11 @@ export async function seedAccount({ put, uid, orgId, hostId, now, auth, project 
     { merge: true },
   )
   await put(`users/${uid}`, { firstName: 'Mobile', lastName: 'Owner', phoneNumber: '+1 512 555 0101' }, { merge: true })
-  await put(`orgs/${orgId}/members/${uid}`, { email: 'mobile-owner@example.test', displayName: 'Mobile Owner', title: 'Founder' }, { merge: true })
+  await put(`orgs/${orgId}/members/${uid}`, { email: 'mobile-owner@example.test', displayName: 'Hannah Reyes', title: 'Founder' }, { merge: true })
   await put(`hosts/${hostId}/members/${uid}`, {
     uid,
     email: 'mobile-owner@example.test',
-    displayName: 'Mobile Owner',
+    displayName: 'Hannah Reyes',
     role: 'admin',
     owner: true,
     status: 'active',
@@ -108,7 +108,7 @@ export async function seedAccount({ put, uid, orgId, hostId, now, auth, project 
   })
   const activity = [
     ['Published page', { type: 'screen', name: 'Home' }, 2],
-    ['Updated host settings', { type: 'host', name: 'Demo Site' }, 26],
+    ['Updated host settings', { type: 'host', name: 'Juniper Street Bakery' }, 26],
     ['Added redirect', { type: 'redirect', name: '/fall' }, 50],
   ]
   for (const [index, [action, target, hours]] of activity.entries()) {
@@ -123,6 +123,6 @@ export async function seedAccount({ put, uid, orgId, hostId, now, auth, project 
   if (!auth || !project) return null
   await verifyEmail(auth, project, uid)
   const staff = await staffAccount(auth, project)
-  await put(`users/${staff.uid}`, { email: STAFF_EMAIL, displayName: 'Mobile Staff', createdAt: now })
+  await put(`users/${staff.uid}`, { email: STAFF_EMAIL, displayName: 'Riley Staff', createdAt: now })
   return staff
 }

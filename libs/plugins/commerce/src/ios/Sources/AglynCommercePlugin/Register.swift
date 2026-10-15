@@ -33,8 +33,6 @@ public let commerceSettingsScreen = "commerce.settings"
 /// ship-orders, new-product and scan quick actions.
 @MainActor
 public func registerCommerceNative(_ r: NativePluginRegistrar) {
-  // The device's reader, for any plugin's counter payment (a booking's).
-  if DeviceCardReaders.shared == nil { DeviceCardReaders.shared = DeviceCardCollector.make() }
   r.screen(
     commerceRegisterScreen, title: "Register", requiresSite: true, apps: [.pos], icon: "dollarsign.circle",
     placement: .register

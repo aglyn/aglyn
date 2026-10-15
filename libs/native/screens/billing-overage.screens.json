@@ -1,0 +1,310 @@
+{
+  "$comment": "Charges past the plan (AGL-3671): the console's metered estimate and overage captions, from the same counters, quotas and rates. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.billing.overage",
+      "title": "Past your plan",
+      "subtitle": "What usage beyond the plan costs this month",
+      "icon": "dollarsign.circle|payments",
+      "scope": "org",
+      "constants": {
+        "pricing": {
+          "free": {
+            "extraApiRequestsUsdPer1k": null,
+            "extraContactsUsdPer1k": null,
+            "extraEmailSendsUsdPer1k": null,
+            "meteredInfraPassThrough": false
+          },
+          "starter": {
+            "extraApiRequestsUsdPer1k": null,
+            "extraContactsUsdPer1k": 1,
+            "extraEmailSendsUsdPer1k": null,
+            "meteredInfraPassThrough": true
+          },
+          "pro": {
+            "extraApiRequestsUsdPer1k": null,
+            "extraContactsUsdPer1k": 0.75,
+            "extraEmailSendsUsdPer1k": 2.25,
+            "meteredInfraPassThrough": true
+          },
+          "business": {
+            "extraApiRequestsUsdPer1k": 0.5,
+            "extraContactsUsdPer1k": 0.5,
+            "extraEmailSendsUsdPer1k": 2,
+            "meteredInfraPassThrough": true
+          },
+          "advanced": {
+            "extraApiRequestsUsdPer1k": 0.25,
+            "extraContactsUsdPer1k": 0.4,
+            "extraEmailSendsUsdPer1k": 1.85,
+            "meteredInfraPassThrough": true
+          },
+          "enterprise": {
+            "extraApiRequestsUsdPer1k": null,
+            "extraContactsUsdPer1k": null,
+            "extraEmailSendsUsdPer1k": null,
+            "meteredInfraPassThrough": false
+          }
+        },
+        "billed": {
+          "storagePerGbMonth": 0.0349,
+          "perPageView": 0.00083,
+          "perFormSubmission": 8.3e-05
+        }
+      },
+      "derive": [
+        {
+          "name": "ready",
+          "when": "data.ent && data.collab && data.siteTraffic"
+        },
+        {
+          "name": "comp",
+          "when": "data.org.entitlements.planComp.plan != free && data.org.entitlements.planComp.plan && !data.org.subscription.status || data.org.entitlements.planComp.plan != free && data.org.entitlements.planComp.plan && data.org.subscription.status == canceled,unpaid,incomplete,incomplete_expired"
+        },
+        {
+          "name": "billed",
+          "when": "is.ready && !is.comp && const.pricing[@data.ent.plan].meteredInfraPassThrough"
+        },
+        {
+          "name": "libraryBilled",
+          "when": "!data.config || data.config.orgLibraryBilledFrom ~= - && data.config.orgLibraryBilledFrom <= now.month"
+        },
+        {
+          "name": "annual",
+          "when": "data.org.subscription.interval == year"
+        }
+      ],
+      "load": {
+        "ent": {
+          "url": "/api/orgs/entitlements?orgId={org.id}",
+          "optional": true
+        },
+        "org": {
+          "doc": "orgs/{org.id}",
+          "optional": true
+        },
+        "usage": {
+          "url": "/api/billing/host-usage?orgId={org.id}",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "siteTraffic": {
+          "url": "/api/billing/host-usage?hostId={item.hostId}",
+          "each": "data.collab.sites",
+          "optional": true
+        },
+        "hostMedia": {
+          "doc": "hosts/{item.hostId}/counters/media",
+          "each": "data.collab.sites",
+          "optional": true
+        },
+        "hostForms": {
+          "doc": "hosts/{item.hostId}/counters/formSubmissions",
+          "each": "data.collab.sites",
+          "optional": true
+        },
+        "orgMedia": {
+          "doc": "orgs/{org.id}/counters/media",
+          "optional": true
+        },
+        "config": {
+          "url": "/api/billing/usage-config",
+          "optional": true
+        },
+        "contacts": {
+          "query": {
+            "collection": "orgs/{org.id}/contacts",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "companies": {
+          "query": {
+            "collection": "orgs/{org.id}/companies",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "deals": {
+          "query": {
+            "collection": "orgs/{org.id}/deals",
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
+          },
+          "optional": true
+        },
+        "api": {
+          "doc": "orgs/{org.id}/apiUsage/{now.month}",
+          "optional": true
+        },
+        "emails": {
+          "doc": "orgs/{org.id}/counters/emailSends",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.ready && !is.billed",
+          "text": "Your plan’s storage, bandwidth and form submissions are included caps, not meters — no usage charges. What is used is under Usage."
+        },
+        {
+          "type": "fields",
+          "title": "Estimated charges, month to date ({now.month})",
+          "when": "is.billed && is.libraryBilled",
+          "footer": "Only usage beyond your plan’s included storage, bandwidth and form submissions is metered, at our cost + 30% after card fees.",
+          "rows": [
+            {
+              "label": "Estimated",
+              "value": "{round((max(0, (data.hostMedia.*.bytes + data.orgMedia.bytes?) / 1073741824 - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024)) * const.billed.storagePerGbMonth + max(0, (data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?) - (data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2)) * const.billed.perPageView + max(0, (data.hostForms.*.[@now.month]) - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth)) * const.billed.perFormSubmission) * 100) / 100:usd}"
+            },
+            {
+              "label": "Storage",
+              "value": "{(data.hostMedia.*.bytes + data.orgMedia.bytes?) / 1073741824:number} of {(max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024):number} GB"
+            },
+            {
+              "label": "Storage past the allowance",
+              "value": "{max(0, (data.hostMedia.*.bytes + data.orgMedia.bytes?) / 1073741824 - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024)):number} GB · {max(0, (data.hostMedia.*.bytes + data.orgMedia.bytes?) / 1073741824 - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024)) * const.billed.storagePerGbMonth:usd}"
+            },
+            {
+              "label": "Page views",
+              "value": "{(data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?):number} of {(data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2):number}"
+            },
+            {
+              "label": "Page views past the allowance",
+              "value": "{ceil(max(0, (data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?) - (data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2))):number} · {max(0, (data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?) - (data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2)) * const.billed.perPageView:usd}"
+            },
+            {
+              "label": "Form submissions",
+              "value": "{(data.hostForms.*.[@now.month]):number} of {(max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth):number}"
+            },
+            {
+              "label": "Form submissions past the allowance",
+              "value": "{ceil(max(0, (data.hostForms.*.[@now.month]) - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth))):number} · {max(0, (data.hostForms.*.[@now.month]) - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth)) * const.billed.perFormSubmission:usd}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Estimated charges, month to date ({now.month})",
+          "when": "is.billed && !is.libraryBilled",
+          "footer": "Only usage beyond your plan’s included storage, bandwidth and form submissions is metered, at our cost + 30% after card fees.",
+          "rows": [
+            {
+              "label": "Estimated",
+              "value": "{round((max(0, (data.hostMedia.*.bytes) / 1073741824 - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024)) * const.billed.storagePerGbMonth + max(0, (data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?) - (data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2)) * const.billed.perPageView + max(0, (data.hostForms.*.[@now.month]) - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth)) * const.billed.perFormSubmission) * 100) / 100:usd}"
+            },
+            {
+              "label": "Storage",
+              "value": "{(data.hostMedia.*.bytes) / 1073741824:number} of {(max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024):number} GB"
+            },
+            {
+              "label": "Storage past the allowance",
+              "value": "{max(0, (data.hostMedia.*.bytes) / 1073741824 - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024)):number} GB · {max(0, (data.hostMedia.*.bytes) / 1073741824 - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.storagePerHostMb / 1024)) * const.billed.storagePerGbMonth:usd}"
+            },
+            {
+              "label": "Page views",
+              "value": "{(data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?):number} of {(data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2):number}"
+            },
+            {
+              "label": "Page views past the allowance",
+              "value": "{ceil(max(0, (data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?) - (data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2))):number} · {max(0, (data.siteTraffic.*.monthPageViews + data.usage.monthPageViews?) - (data.ent.quotas.bandwidthGb * 1073741824 / 1037107.2)) * const.billed.perPageView:usd}"
+            },
+            {
+              "label": "Form submissions",
+              "value": "{(data.hostForms.*.[@now.month]):number} of {(max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth):number}"
+            },
+            {
+              "label": "Form submissions past the allowance",
+              "value": "{ceil(max(0, (data.hostForms.*.[@now.month]) - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth))):number} · {max(0, (data.hostForms.*.[@now.month]) - (max(1, data.ent.quotas.hostLimit) * data.ent.quotas.formSubmissionsPerMonth)) * const.billed.perFormSubmission:usd}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Rates past the allowance",
+          "when": "is.billed",
+          "rows": [
+            {
+              "label": "Storage",
+              "value": "$0.0349/GB-month"
+            },
+            {
+              "label": "Page views",
+              "value": "$0.83 per 1,000"
+            },
+            {
+              "label": "Form submissions",
+              "value": "$0.083 per 1,000"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.billed && data.orgMedia.bytes > 0 && is.libraryBilled",
+          "text": "Storage includes {data.orgMedia.bytes / 1073741824:number} GB in your organization library, which shares this allowance with your sites."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.billed && data.orgMedia.bytes > 0 && !is.libraryBilled",
+          "text": "{data.orgMedia.bytes / 1073741824:number} GB in your organization library shares the storage allowance with your sites. It is measured but not yet billed, so uploads into it stop at the allowance for now."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.billed && data.siteTraffic.*.monthMediaBandwidthBytes + data.usage.monthMediaBandwidthBytes? > 0",
+          "text": "Page views include {(data.siteTraffic.*.monthMediaBandwidthBytes + data.usage.monthMediaBandwidthBytes?) / 1073741824:number} GB of video, audio and files served from your media library, which count 1.6x toward bandwidth because serving them costs more than serving pages."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!is.comp && const.pricing[@data.ent.plan].extraContactsUsdPer1k && data.contacts.count + data.companies.count + data.deals.count > data.ent.quotas.contactsPerHost",
+          "text": "Records overage: {max(0, data.contacts.count + data.companies.count + data.deals.count - data.ent.quotas.contactsPerHost):number} over the included band at ${const.pricing[@data.ent.plan].extraContactsUsdPer1k}/1,000 — ≈{round(max(0, data.contacts.count + data.companies.count + data.deals.count - data.ent.quotas.contactsPerHost) / 1000 * const.pricing[@data.ent.plan].extraContactsUsdPer1k * 100) / 100:dollars} if your CRM ends the month at this size."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!is.comp && const.pricing[@data.ent.plan].extraApiRequestsUsdPer1k && data.api.count > data.ent.quotas.apiRequestsPerMonth",
+          "text": "API overage: {max(0, data.api.count - data.ent.quotas.apiRequestsPerMonth):number} requests over the included band at {const.pricing[@data.ent.plan].extraApiRequestsUsdPer1k:dollars}/1,000 — ≈{round(max(0, data.api.count - data.ent.quotas.apiRequestsPerMonth) / 1000 * const.pricing[@data.ent.plan].extraApiRequestsUsdPer1k * 100) / 100:dollars} on this month's invoice."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!is.comp && const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k && data.ent.quotas.emailSendsPerMonth > 0 && data.emails[@now.month] > data.ent.quotas.emailSendsPerMonth",
+          "text": "{max(0, data.emails[@now.month] - data.ent.quotas.emailSendsPerMonth):number} emails over your included {data.ent.quotas.emailSendsPerMonth:number} this month at {const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k:dollars}/1,000 — ≈{round(max(0, data.emails[@now.month] - data.ent.quotas.emailSendsPerMonth) / 1000 * const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k * 100) / 100:dollars} on this month's invoice. Transactional mail — receipts, invites, password resets — is never refused at the cap, so it is what takes an organization past the band."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.billed && !is.annual",
+          "text": "Metered charges settle on the same invoice as your monthly subscription."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.billed && is.annual",
+          "text": "Your subscription is annual, so usage accrues across the year and settles on your renewal invoice."
+        }
+      ]
+    }
+  ]
+}

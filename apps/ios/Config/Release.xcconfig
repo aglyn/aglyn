@@ -17,6 +17,9 @@ AGLYN_FIREBASE_STORAGE_BUCKET = aglyn-main.appspot.com
 AGLYN_AUTH_EMULATOR_HOST =
 AGLYN_FIRESTORE_EMULATOR_HOST =
 AGLYN_BRAND_NAME = Aglyn
+// Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a
+// Release build attests itself (App Attest on iPhone and iPad, DeviceCheck on a Mac).
+AGLYN_APP_CHECK = on
 
 // Per app: the Firebase Apple app and the iOS OAuth client registered for
 // each bundle (com.aglyn.app, com.aglyn.pos). Test targets get neither.
@@ -34,6 +37,12 @@ AGLYN_GOOGLE_WEB_CLIENT_ID = 543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.
 // (docs/mobile/well-known); the entitlement webcredentials:aglyn.com is
 // already on the Aglyn target.
 AGLYN_PASSKEY_RP_ID =
+
+// The published Terms of Service and Privacy Policy the sign-up links to (<origin>/legal/terms, /legal/privacy).
+AGLYN_LEGAL_ORIGIN = https:/$()/aglyn.com
+// Sign in with Apple (AGL-3816), offered beside Google as App Store guideline 4.8 asks: needs each App ID's Sign in
+// with Apple capability (com.aglyn.app has it; com.aglyn.pos needs it) and the Apple provider in Firebase Auth.
+AGLYN_APPLE_SIGN_IN = YES
 
 AGLYN_DEBUG_EMAIL =
 AGLYN_DEBUG_PASSWORD =

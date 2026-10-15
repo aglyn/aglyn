@@ -33,6 +33,10 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  staffOrgUsageRowView,
+  type StaffOrgUsageMonth,
+} from '../../../../utils/staff-org-usage-view'
 
 /**
  * "The rollup did not record this" and "the rollup recorded zero/false" are
@@ -238,6 +242,19 @@ async function handler(request: Request): Promise<Response> {
           : null,
       }
     })
+    // Each row as the table prints it, for a client that draws no table (the staff apps).
+    if (String(query.view ?? '') === 'prepared') {
+      return Response.json(
+        {
+          months: withDeltas.map((row) => ({
+            ...row,
+            view: staffOrgUsageRowView(row as unknown as StaffOrgUsageMonth),
+          })),
+          latest,
+        },
+        { status: 200 },
+      )
+    }
     return Response.json({ months: withDeltas, latest }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

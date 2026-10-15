@@ -59,10 +59,18 @@ class ShellServices(
   /** Where an export goes ([com.aglyn.ui.LocalFileExporter]); the entry point binds it. */
   val fileExporter: com.aglyn.ui.FileExporter? = null,
 ) {
+  /** The signed-out screens and what a sign-up carries across them. */
+  val authFlow = AuthFlow()
+
+  /** The console routes and account writes every sign-up door makes. */
+  val signUp: com.aglyn.core.SignUpService by lazy { com.aglyn.core.SignUpService(api, writer, firestore) }
+
   /** Removes this install's device row, then signs out, so no push follows the person out. */
   suspend fun signOut() {
     (auth.state.value as? com.aglyn.core.AuthState.SignedIn)?.let { push.unregister(it.user.uid) }
     auth.signOut()
+    authFlow.reset()
+    authFlow.pendingVerificationCode = null
   }
 }
 
@@ -210,13 +218,14 @@ internal class ShellPluginContext(
     if (link != null) openLink(link)
   }
 
-  fun openLink(link: String) {
+  override fun openLink(link: String): Boolean {
     when (val target = DeepLinks.resolve(link, services.registry.deepLinks())) {
       is NativeLinkTarget.Screen -> navigator.push(Route.Screen(target.screen, target.params))
       is NativeLinkTarget.Besigner -> navigator.push(Route.Besigner(target.path))
       is NativeLinkTarget.Unmatched -> nativeFor(target.path)
-      null -> Unit
+      null -> return false
     }
+    return true
   }
 
   /** The shell's own native answer to a console page no plugin claims. */

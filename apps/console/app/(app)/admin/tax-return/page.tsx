@@ -125,6 +125,11 @@ import {
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
 import StaffTableHead from '../../../../components/staff-table-head.component'
+import {
+  TAX_RETURN_COPY,
+  taxReturnExcludedNote,
+  taxReturnVerdictTitle,
+} from '../../../../utils/tax-return-view'
 
 /**
  * ONE FACILITATED-SALES SOURCE on the return (AGL-2163, AGL-3080).
@@ -267,8 +272,7 @@ function TaxReturnSourceCard({ section }: TaxReturnSourceCardProps) {
         contentGutterY
       >
         <Alert severity="error">
-          {`${section.reason} None of its sales are in any figure on this ` +
-            'page. Do not file from this.'}
+          {TAX_RETURN_COPY.sourceRefused(section.reason)}
         </Alert>
       </CardDisplay>
     )
@@ -315,8 +319,7 @@ function TaxReturnSourceCard({ section }: TaxReturnSourceCardProps) {
       ) : null}
       {section.truncated ? (
         <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-          {`${section.name} rows exceeded the row cap — these figures are ` +
-            'a lower bound.'}
+          {TAX_RETURN_COPY.sourceTruncated(section.name)}
         </Typography>
       ) : null}
     </CardDisplay>
@@ -462,29 +465,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
    * looks exactly like a rule that broke. Null when neither removed anything,
    * so a genuinely clean period says nothing extra.
    */
-  const excludedNote = useMemo(() => {
-    const internal = Number(payload?.summary?.internal?.transactionCount ?? 0)
-    const beforeObligation = Number(
-      payload?.summary?.attention?.untaxedRowsBeforeObligation ?? 0,
-    )
-    const parts: string[] = []
-    if (internal) {
-      parts.push(
-        `${internal} ${internal === 1 ? 'row is' : 'rows are'} Aglyn’s own ` +
-          'purchases and are excluded from every figure below',
-      )
-    }
-    if (beforeObligation) {
-      parts.push(
-        `${beforeObligation} untaxed ${
-          beforeObligation === 1 ? 'row was' : 'rows were'
-        } paid before the obligation began, so nothing was under-collected on ` +
-          'them',
-      )
-    }
-    if (!parts.length) return null
-    return `${parts.join('; ')}. Both are listed on the findings card below.`
-  }, [payload])
+  const excludedNote = useMemo(() => taxReturnExcludedNote(payload), [payload])
 
   const handleExport = useCallback(() => {
     const csv = taxReturnCsv(payload)
@@ -618,10 +599,10 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
             {payload ? (
               verdict.clean ? (
                 <Alert severity="success">
-                  <AlertTitle>{'Every row read cleanly'}</AlertTitle>
-                  {`All ${payload.summary?.transactionCount ?? 0} invoices in ` +
-                    'this period were fully readable — no row was dropped, ' +
-                    'and no figure below is a lower bound.'}
+                  <AlertTitle>{TAX_RETURN_COPY.cleanTitle}</AlertTitle>
+                  {TAX_RETURN_COPY.cleanMessage(
+                    Number(payload.summary?.transactionCount ?? 0),
+                  )}
                   {/*
                     …AND WHAT WAS TAKEN OUT TO GET HERE. A clean verdict
                     reached by removing rows is not the same as a clean
@@ -638,15 +619,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 </Alert>
               ) : (
                 <Alert severity={verdict.blocking ? 'error' : 'warning'}>
-                  <AlertTitle>
-                    {verdict.blocking
-                      ? `Do not file — ${verdict.total} ${
-                          verdict.total === 1 ? 'row needs' : 'rows need'
-                        } attention`
-                      : `${verdict.total} ${
-                          verdict.total === 1 ? 'row needs' : 'rows need'
-                        } attention before filing`}
-                  </AlertTitle>
+                  <AlertTitle>{taxReturnVerdictTitle(verdict)}</AlertTitle>
                   <Stack spacing={1.5} sx={{ mt: 1 }}>
                     {verdict.items.map((item) => (
                       <Stack key={item.id} spacing={0.5}>
@@ -715,13 +688,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               {payload && filing.form !== 'tx-webfile' ? (
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <AlertTitle>
-                    {`A breakdown for manual filing — not a ${filing.code} return`}
+                    {TAX_RETURN_COPY.breakdownTitle(filing.code)}
                   </AlertTitle>
-                  {'These are the figures a return is assembled from: what ' +
-                    'was collected in this jurisdiction, and on what base. ' +
-                    'No form for this jurisdiction is known here, so nothing ' +
-                    'below is a form line — transcribe them onto the return ' +
-                    'the authority asks for.'}
+                  {TAX_RETURN_COPY.breakdownText}
                 </Alert>
               ) : null}
               {/*
@@ -801,10 +770,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               </Box>
               {payload && verdict.blocking ? (
                 <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-                  {'These figures are incomplete — see the findings above. ' +
-                    (filing.form === 'tx-webfile'
-                      ? 'Do not type them into Webfile.'
-                      : 'Do not file from them.')}
+                  {TAX_RETURN_COPY.blockedNote(filing.form === 'tx-webfile')}
                 </Typography>
               ) : null}
             </CardDisplay>
@@ -842,11 +808,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       <Stack spacing={1}>
                         <Typography variant="body2" color="text.secondary">
-                          {'Stated, not netted. A row keeps only its latest ' +
-                            'refund stamp, so two refunds in different ' +
-                            'quarters cannot be split apart from the row — ' +
-                            'applying these to the return is a judgment, ' +
-                            'not a computation.'}
+                          {TAX_RETURN_COPY.refundsNote}
                         </Typography>
                         {[
                           {
@@ -899,8 +861,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       <Stack spacing={1}>
                         <Typography variant="body2" color="text.secondary">
-                          {'The exact window swept, echoed so a filed return ' +
-                            'can be reproduced from the same bounds later.'}
+                          {TAX_RETURN_COPY.boundsNote}
                         </Typography>
                         {[
                           {
@@ -987,13 +948,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 color="text.secondary"
                 sx={{ mb: 1.5 }}
               >
-                {'Aglyn’s own subscription and add-on revenue, by the ' +
-                  `customer’s state. ${filingName} is the return; the other ` +
-                  'rows are the record of why the rest of the period is not ' +
-                  'on it. ' +
-                  'For nexus from MERCHANTS’ sales, read “Facilitated sales ' +
-                  'by buyer state” above — a different taxpayer’s money, and ' +
-                  'never summed with this.'}
+                {TAX_RETURN_COPY.ownSalesIntro(filingName)}
               </Typography>
               <ScrollTable size="small">
                 <StaffTableHead>
@@ -1187,13 +1142,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 color="text.secondary"
                 sx={{ display: 'block', mt: 1.5 }}
               >
-                {'“Excluded (internal)” is Aglyn’s own purchases (AGL-1582) — ' +
-                  'marked at checkout, kept out of every other column here and ' +
-                  'out of the filing figures above, because a purchase the ' +
-                  'platform made from itself is not a sale to a state. It is ' +
-                  'stated rather than subtracted quietly so the figures can be ' +
-                  'checked. The mark is written when the purchase is made and ' +
-                  'cannot be added afterwards.'}
+                {TAX_RETURN_COPY.ownSalesFootnote}
               </Typography>
             </CardDisplay>
           </Stack>

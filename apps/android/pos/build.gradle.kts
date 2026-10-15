@@ -62,7 +62,10 @@ android {
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "000000000000")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(setting("authEmulatorHost", "10.0.2.2:9099")))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(setting("firestoreEmulatorHost", "10.0.2.2:8082")))
+      // Firebase App Check: off, since the emulators do not enforce it (there is no App Check emulator).
+      buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "off")))
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(""))
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
       buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
       buildConfigField("boolean", "TERMINAL_LIVE_READERS", "false")
@@ -81,6 +84,12 @@ android {
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "543499566626")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(""))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(""))
+      // Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a release build attests itself
+      // through Play Integrity.
+      buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "on")))
+      // The Firebase project's Web OAuth client id, the audience of Google's ID token for "Continue with Google". Google also
+      // needs an Android OAuth client for com.aglyn.pos and its signing certificates (apps/android/README.md, "What Zach owes").
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("googleWebClientId", "543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com")))
       buildConfigField("String", "DEBUG_EMAIL", quoted(""))
       buildConfigField("String", "DEBUG_PASSWORD", quoted(""))
       buildConfigField("boolean", "TERMINAL_LIVE_READERS", liveReaders)
@@ -100,6 +109,9 @@ dependencies {
   // Card-on-device: Tap to Pay and Bluetooth readers (Aglyn POS only, never the Aglyn app).
   implementation(libs.stripe.terminal)
   implementation(libs.stripe.terminal.taptopay)
+  // Card-not-present: Stripe's own card form takes a card typed in at the register, so the number never
+  // touches our code (Aglyn POS only, never the Aglyn app).
+  implementation(libs.stripe.paymentsheet)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
 }

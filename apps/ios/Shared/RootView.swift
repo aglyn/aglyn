@@ -30,12 +30,30 @@ struct RootView<Shell: View>: View {
         // relaunch goes from the launch screen straight to the shell.
         if !auth.ready {
           AglynLaunchView(name: model.brandName, caption: model.app == .pos ? "POS" : nil)
-        } else if auth.user == nil {
-          SignInView()
+        } else if auth.user == nil || model.authFlow.landing {
+          // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
+          SignedOutView()
+        } else if auth.user?.emailVerified == false && auth.impersonation == nil {
+          // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
+          VerifyEmailView()
         } else {
           shell(navigation)
             .environment(navigation)
             .focusedSceneValue(\.shellNavigation, navigation)
+            // A support session says so on every screen, with its way back to the staff member's own session.
+            // The first verified session of an account with no workspace creates the one its sign-up asked for.
+            .task(id: "\(auth.user?.uid ?? ""):\(model.workspace?.ready == true)") { await model.settleFirstRun() }
+            .safeAreaInset(edge: .top, spacing: 0) {
+              if let impersonation = auth.impersonation {
+                AglynNotice(
+                  impersonation.banner, tone: .warning, actionTitle: "Exit impersonation",
+                  action: { Task { await auth.endImpersonation() } }
+                )
+                .padding(AglynSpace.one)
+                .background(.bar)
+                .accessibilityIdentifier("impersonation-banner")
+              }
+            }
         }
       }
     }
@@ -45,7 +63,24 @@ struct RootView<Shell: View>: View {
       model.userChanged(user)
       openPendingPush()
     }
-    .onOpenURL { url in model.open(url.absoluteString, in: navigation) }
+    // Entering or leaving a support session starts from home: nothing open belonged to the other person.
+    .onChange(of: model.auth?.impersonation) {
+      navigation.paths = [:]
+      navigation.section = .home
+      navigation.showSwitcher = false
+      navigation.pendingInvite = nil
+    }
+    .onOpenURL { url in
+      // A sign-up, sign-in, reset or verification link opens its own screen; any other link the signed-in shell.
+      let signedIn = model.auth?.user != nil
+      if model.authFlow.open(url.absoluteString, signedIn: signedIn, onPlan: { plan in
+        if let slug = model.workspace?.org?.slug { model.open(plan.destination(orgSlug: slug), in: navigation) }
+      }) {
+        if model.auth?.user?.emailVerified == true { model.authFlow.pendingVerificationCode = nil }
+        return
+      }
+      model.open(url.absoluteString, in: navigation)
+    }
     .onChange(of: model.push.pendingLink) { openPendingPush() }
     .task { await DebugLaunch.autoSignIn(model) }
   }

@@ -1148,7 +1148,9 @@ environment variable.
 | `AGLYN_FIREBASE_APP_ID` | `firebaseAppId` | Required | As above. |
 | `AGLYN_FIREBASE_MESSAGING_SENDER_ID` | `firebaseMessagingSenderId` | Optional | As above. |
 | `AGLYN_FIREBASE_STORAGE_BUCKET` | — | Optional | As above. |
-| `AGLYN_GOOGLE_IOS_CLIENT_ID`, `AGLYN_GOOGLE_WEB_CLIENT_ID` | — | Optional | Google sign-in's OAuth client ids. The Google button is hidden until both are set. |
+| `AGLYN_GOOGLE_IOS_CLIENT_ID`, `AGLYN_GOOGLE_WEB_CLIENT_ID` | `googleWebClientId` | Optional | Google sign-in's OAuth client ids, used by "Connect Google" on the Account page. On Apple both are needed; on Android only the Web client id, and the Firebase project needs an Android OAuth client for the app's package and signing certificate. The action is hidden until they are set. |
+| — | `AGLYN_GOOGLE_DESKTOP_CLIENT_ID`, `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET` | Optional | The Windows app's OAuth client, for "Connect Google" through the system browser. Google requires the secret of a desktop client and does not treat it as confidential. Environment variables, or `-Daglyn.googleDesktopClientId` and `-Daglyn.googleDesktopClientSecret`. |
+| `AGLYN_PASSKEY_RP_ID` | `passkeyRpId` | Optional | The domain passkeys are made for: your `NEXT_PUBLIC_WORKSPACE_DOMAIN`, bare (`example.com`). "Set up a passkey" is hidden until it is set. Set it only once the app is linked to that domain: an `apple-app-site-association` file and the `webcredentials:` Associated Domains entry for Apple, an `assetlinks.json` naming the app's signing certificate for Android. |
 | `AGLYN_AUTH_EMULATOR_HOST` | `authEmulatorHost` | Development | `host:port` of a local Auth emulator. Never set in a store build. |
 | `AGLYN_FIRESTORE_EMULATOR_HOST` | `firestoreEmulatorHost` | Development | `host:port` of a local Firestore emulator. Never set in a store build. |
 
@@ -1160,6 +1162,21 @@ The server side of push is configured in your containers:
 | `APNS_KEY_P8` | Feature | Runtime, console and tenant | Your Apple Push Notification service key (the `.p8` file from your Apple Developer account): its PEM text, or that PEM base64-encoded. Without it, and the two below, iOS and macOS devices are not sent a push, and the server logs that once. A secret. |
 | `APNS_KEY_ID` | Feature | Runtime, console and tenant | The 10-character id of that key. |
 | `APNS_TEAM_ID` | Feature | Runtime, console and tenant | Your Apple Developer team id. |
+
+Passkeys set up from the Android app are checked against the app's signing certificate:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `PASSKEY_ANDROID_APK_KEY_HASHES` | Feature | Runtime, console | Comma-separated SHA-256 hashes of the signing certificates of your Android builds, each as base64url without padding (43 characters). An Android passkey is accepted only from an app whose hash is listed; unset, Android passkeys are refused and the web console's are unaffected. |
+
+The two files that link your apps to your domains are served from these, by both containers:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `NATIVE_APPLE_APP_IDS` | Feature | Runtime, console and tenant | Comma-separated Apple app ids, `<team id>.<bundle id>`, the preferred app first. They become `/.well-known/apple-app-site-association`: on the console's own host with `webcredentials` and the console paths the apps open (`applinks`), and on the host of `NEXT_PUBLIC_PLATFORM_HOME_URL` with `webcredentials` only. Unset, the file answers 404. |
+| `NATIVE_ANDROID_APPS` | Feature | Runtime, console and tenant | `;`-separated `<package>=<sha256>,<sha256>` entries, each fingerprint the colon-separated SHA-256 of a signing certificate as Play Console prints it (list the Play app signing key and your upload key). They become `/.well-known/assetlinks.json` on the same two hosts, granting each package app links and passkeys. Unset, the file answers 404. |
+
+Every other host either container serves, a customer's site or a white-label console, answers 404 for both files.
 
 A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone, iPad or Mac and to Firebase Cloud Messaging for an Android device. The server sends to APNs directly with the key above, and to FCM with the Firebase project credentials it already holds, so FCM needs no variable of its own. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
 

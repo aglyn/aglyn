@@ -300,7 +300,7 @@
               ],
               "optionsFrom": {
                 "items": "data.options.accounts",
-                "where": "item.classification == income",
+                "filter": "item.classification == income",
                 "value": "{item.id}",
                 "label": "{item.name}"
               },
@@ -319,7 +319,7 @@
               ],
               "optionsFrom": {
                 "items": "data.options.accounts",
-                "where": "item.classification == income",
+                "filter": "item.classification == income",
                 "value": "{item.id}",
                 "label": "{item.name}"
               },
@@ -338,7 +338,7 @@
               ],
               "optionsFrom": {
                 "items": "data.options.accounts",
-                "where": "item.classification == bank",
+                "filter": "item.classification == bank",
                 "value": "{item.id}",
                 "label": "{item.name}"
               },
@@ -357,7 +357,7 @@
               ],
               "optionsFrom": {
                 "items": "data.options.accounts",
-                "where": "item.classification == expense",
+                "filter": "item.classification == expense",
                 "value": "{item.id}",
                 "label": "{item.name}"
               },
@@ -376,7 +376,7 @@
               ],
               "optionsFrom": {
                 "items": "data.options.accounts",
-                "where": "item.classification == bank",
+                "filter": "item.classification == bank",
                 "value": "{item.id}",
                 "label": "{item.name}"
               },
@@ -395,7 +395,7 @@
               ],
               "optionsFrom": {
                 "items": "data.options.accounts",
-                "where": "item.classification == liability",
+                "filter": "item.classification == liability",
                 "value": "{item.id}",
                 "label": "{item.name}"
               },

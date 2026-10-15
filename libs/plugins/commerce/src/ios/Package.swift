@@ -3,7 +3,9 @@
 // The Commerce plugin's Apple code: the Aglyn POS register (item grid,
 // basket, checkout and receipt), its card readers screen, and the Aglyn
 // app's store screens. The apps reach it only through the generated plugin
-// manifest (apps/ios/PluginManifest).
+// manifest (apps/ios/PluginManifest), which both apps link, so this package
+// names no card SDK: the register reaches this device's reader through
+// AglynHardware's `CardCollector` seam, which Aglyn POS fills at launch.
 
 import Foundation
 import PackageDescription
@@ -22,9 +24,6 @@ let package = Package(
   ],
   dependencies: [
     .package(path: kit),
-    // Tap to Pay on iPhone and Bluetooth readers. iPhone and iPad only: the
-    // Mac register takes cards on smart readers, which the server drives.
-    .package(url: "https://github.com/stripe/stripe-terminal-ios", exact: "6.0.0"),
   ],
   targets: [
     .target(
@@ -37,9 +36,8 @@ let package = Package(
         .product(name: "AglynPluginHost", package: "apple"),
         .product(name: "AglynScreens", package: "apple"),
         .product(name: "AglynSite", package: "apple"),
-        .product(name: "StripeTerminal", package: "stripe-terminal-ios", condition: .when(platforms: [.iOS])),
       ],
-      resources: [.copy("Resources/commerce-catalog.screens.json"), .copy("Resources/commerce-promotions.screens.json"), .copy("Resources/commerce-queues.screens.json"), .copy("Resources/commerce-returns.screens.json"), .copy("Resources/commerce-stock.screens.json"), .copy("Resources/commerce-store.screens.json"), .copy("Resources/commerce-store2.screens.json"), .copy("Resources/commerce.screens.json")]
+      resources: [.copy("Resources/commerce-catalog.screens.json"), .copy("Resources/commerce-import.screens.json"), .copy("Resources/commerce-promotions.screens.json"), .copy("Resources/commerce-queues.screens.json"), .copy("Resources/commerce-returns.screens.json"), .copy("Resources/commerce-stock.screens.json"), .copy("Resources/commerce-store.screens.json"), .copy("Resources/commerce-store2.screens.json"), .copy("Resources/commerce.screens.json")]
     ),
     .testTarget(name: "AglynCommercePluginTests", dependencies: ["AglynCommercePlugin"]),
   ]

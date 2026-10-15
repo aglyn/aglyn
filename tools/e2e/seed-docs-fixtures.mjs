@@ -47,6 +47,14 @@ import { messageSearchFields } from '../scripts/lib/message-search.mjs'
 import { nameSearchTokens } from '../scripts/lib/name-search-tokens.mjs'
 // A staff audit row's index fields, as `withAdminAuditIndex` stamps them.
 import { stampAdminAuditIndex } from '../scripts/lib/admin-audit-index.mjs'
+// The builders the store-review workspace seeds from too (AGL-3812).
+import {
+  aiMemoryFixtures,
+  apiKeyFixtures,
+  businessProfileFixtures,
+  chargebackOrder,
+  trafficDays,
+} from '../scripts/lib/docs-fixture-builders.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -96,66 +104,18 @@ const daysAgo = (days) =>
 // minting real keys through the API — that reintroduces exactly the hazard the
 // plan spends a paragraph on.
 console.log('API keys (A8):')
-const apiKeys = [
-  {
-    // 64 hex chars, deterministic, and deliberately not the hash of anything.
-    id: 'd0c5'.repeat(16),
-    keyId: 'key_docsZapierA',
-    name: 'zapier-orders-sync',
-    keyPrefix: 'aglyn_sk_7f3a9c…',
-    scopes: ['orders:read', 'products:read'],
-    createdAt: daysAgo(38),
-    // A key in daily use — the caption's populated half.
-    lastUsedAt: Timestamp.fromMillis(now.toMillis() - 3 * 60 * 60 * 1000),
-  },
-  {
-    id: 'e1b7'.repeat(16),
-    keyId: 'key_docsFormsB',
-    name: 'nightly-forms-export',
-    keyPrefix: 'aglyn_sk_2c81e4…',
-    scopes: ['forms:read', 'datasets:read'],
-    createdAt: daysAgo(6),
-    // Never used: renders `Last used —`. Both halves of the caption in one
-    // frame, which is what callout ③ is pointing at.
-    lastUsedAt: null,
-  },
-]
-for (const key of apiKeys) {
-  await put(firestore.collection('apiKeys').doc(key.id), {
-    keyId: key.keyId,
-    orgId,
-    name: key.name,
-    keyPrefix: key.keyPrefix,
-    scopes: key.scopes,
-    createdBy: 'e2e-owner',
-    createdAt: key.createdAt,
-    lastUsedAt: key.lastUsedAt,
-    revokedAt: null,
-    expiresAt: null,
-  })
-}
-
-// A REVOKED key, seeded on purpose and expected NOT to render.
-//
-// The plan asks A8 to show "one revoked so the revoked state is visible".
-// There is no such state: `OrgApiKeysCard` filters the list with
-// `keys.filter((key) => !key.revokedAt)` before it maps rows, so a revoked key
-// leaves the card entirely. This document is the negative control that proves
-// it — seed it, shoot the card, and the row count says whether the filter is
-// still there. Without it the correction in SCREENSHOT_PLAN.md would be a
-// claim about code rather than something the capture itself demonstrates.
-await put(firestore.collection('apiKeys').doc('a9f2'.repeat(16)), {
-  keyId: 'key_docsRevokedC',
+// The third is REVOKED, seeded on purpose and expected NOT to render: there
+// is no revoked state on the card. `OrgApiKeysCard` filters the list with
+// `keys.filter((key) => !key.revokedAt)` before it maps rows, so this row is
+// the negative control that proves the filter is still there.
+for (const key of apiKeyFixtures({
   orgId,
-  name: 'old-migration-script',
-  keyPrefix: 'aglyn_sk_9b40df…',
-  scopes: ['datasets:read', 'datasets:write'],
   createdBy: 'e2e-owner',
-  createdAt: daysAgo(120),
-  lastUsedAt: daysAgo(96),
-  revokedAt: daysAgo(95),
-  expiresAt: null,
-})
+  nowMs: now.toMillis(),
+  at: Timestamp.fromMillis,
+})) {
+  await put(firestore.collection('apiKeys').doc(key.id), key.data)
+}
 
 // ── A11. A site-scoped collaborator ─────────────────────────────────────────
 // The distinction the shot exists to show is NOT a role value — managers and
@@ -259,47 +219,16 @@ const orderAt = (days) => ({
   createdAt: daysAgo(days),
 })
 
-await putOrder('docs-order-chargeback', {
-  number: 1042,
-  status: 'refunded',
-  channel: 'online',
-  customerEmail: 'jordan.avery@example.com',
-  customerName: 'Jordan Avery',
-  lineItems: [
-    {
-      productId: 'seed-product-sourdough',
-      name: 'Sourdough loaf — subscription box',
-      quantity: 2,
-      unitAmountCents: 2600,
-    },
-  ],
-  totals: {
-    itemsCents: 5200,
-    shippingCents: 600,
-    taxCents: 400,
-    discountCents: 0,
-    totalCents: 6200,
-    feeCents: 210,
-  },
-  // Reversals land in the same field a merchant refund does (AGL-1787); the
-  // dispute block is what tells the two apart.
-  refundedCents: 6200,
-  dispute: {
-    id: 'dp_docsfixture',
-    // Both, and both `lost`: `describeOrderDispute` reads `outcome ?? status`,
-    // and the webhook overwrites `status` with the outcome when it closes.
-    status: 'lost',
-    outcome: 'lost',
-    reason: 'product_not_received',
-    amountCents: 6200,
-    openedAtMs: daysAgo(11).toMillis(),
-    // Still set after close, deliberately — it is not an open/closed test.
-    evidenceDueByMs: daysAgo(4).toMillis(),
-    closedAtMs: daysAgo(3).toMillis(),
-    reversedCents: 6200,
-  },
-  ...orderAt(14),
-})
+await putOrder(
+  'docs-order-chargeback',
+  chargebackOrder({
+    number: 1042,
+    nowMs: now.toMillis(),
+    productId: 'seed-product-sourdough',
+    productName: 'Sourdough loaf — subscription box',
+    at: Timestamp.fromMillis,
+  }),
+)
 
 // Ordinary neighbours. With zero orders the card renders its empty-state
 // invitation and neither the filter row nor the table exists at all, so the
@@ -561,43 +490,8 @@ console.log(`  orgs/${orgId}`)
 // spring-menu campaign in the last fortnight.
 console.log('Traffic:')
 const analyticsRef = firestore.collection('hosts').doc(hostId).collection('analytics')
-const DAY_MS = 24 * 60 * 60 * 1000
-for (let back = 0; back < 60; back += 1) {
-  const at = now.toMillis() - back * DAY_MS
-  const day = new Date(at).toISOString().slice(0, 10)
-  const weekday = new Date(at).getUTCDay()
-  const weekend = weekday === 0 || weekday === 6
-  const trend = 1 + (60 - back) / 90
-  const campaign = back < 14 ? 1.25 : 1
-  const wobble = 1 + (((back * 37) % 11) - 5) / 40
-  const total = Math.round(120 * trend * campaign * wobble * (weekend ? 1.35 : 1))
-  const share = (fraction) => Math.max(1, Math.round(total * fraction))
-  await analyticsRef.doc(day).set({
-    total,
-    visitors: Math.round(total * 0.62),
-    paths: {
-      '/': share(0.38),
-      '/menu': share(0.24),
-      '/order': share(0.14),
-      '/blog/spring-menu': share(back < 14 ? 0.12 : 0.03),
-      '/about': share(0.07),
-      '/visit': share(0.05),
-    },
-    referrers: {
-      'www_google_com': share(0.21),
-      'instagram_com': share(0.12),
-      'www_yelp_com': share(0.06),
-      'l_facebook_com': share(0.04),
-    },
-    devices: { mobile: share(0.58), desktop: share(0.36), tablet: share(0.06) },
-    ...(back < 14 && {
-      utm: {
-        source: { instagram: share(0.07), newsletter: share(0.05) },
-        medium: { social: share(0.07), email: share(0.05) },
-        campaign: { 'spring-menu': share(0.12) },
-      },
-    }),
-  })
+for (const day of trafficDays(now.toMillis())) {
+  await analyticsRef.doc(day.id).set(day.data)
 }
 console.log(`  hosts/${hostId}/analytics (60 days)`)
 
@@ -787,28 +681,12 @@ await put(firestore.collection('hosts').doc(hostId), {
     },
   },
 })
-await firestore.doc(`hosts/${hostId}/businessProfile/profile`).set({
-  whatYouDo: 'A neighborhood bakery baking sourdough, pastries and cakes to order every morning',
-  services: ['Sourdough loaves', 'Morning pastries', 'Custom celebration cakes', 'Wholesale for cafés'],
-  audience: 'Neighbors who want fresh bread and families planning a celebration',
-  tone: 'friendly',
-  sources: { whatYouDo: 'start', services: 'start', audience: 'ai', tone: 'ai' },
-  updatedAt: now,
-  updatedBy: null,
-})
-await firestore.doc(`orgs/${orgId}/businessProfile/defaults`).set({
-  serviceArea: 'Austin, Texas',
-  toneNotes: 'Warm and plain. No exclamation marks.',
-  sources: { serviceArea: 'owner', toneNotes: 'owner' },
-  updatedAt: now,
-})
+const businessProfile = businessProfileFixtures({ at: now })
+await firestore.doc(`hosts/${hostId}/businessProfile/profile`).set(businessProfile.profile)
+await firestore.doc(`orgs/${orgId}/businessProfile/defaults`).set(businessProfile.defaults)
 const aiMemory = firestore.collection('hosts').doc(hostId).collection('aiMemory')
-for (const [id, group, text, count, ageDays] of [
-  ['copy-short', 'length', 'Prefers short, concise copy', 3, 0],
-  ['removes-testimonials', 'removes-testimonials', 'Removes testimonial and review sections', 2, 1],
-  ['no-emoji', 'emoji', 'Does not want emoji in copy', 1, 2],
-]) {
-  await aiMemory.doc(id).set({ group, text, count, lastSeenAtMs: daysAgo(ageDays).toMillis(), source: 'assist-edit' })
+for (const row of aiMemoryFixtures({ nowMs: daysAgo(0).toMillis() })) {
+  await aiMemory.doc(row.id).set(row.data)
 }
 
 // ── Names a reader sees (AGL-3319) ────────────────────────────────────────

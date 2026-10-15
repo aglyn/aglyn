@@ -29,6 +29,18 @@
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="aglyn" />
       </intent-filter>
+      <!-- The console's emailed sign-up, verification and password reset links open the app, which finishes them. -->
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="https" />
+        <data android:host="${consoleHost}" />
+        <data android:path="/signup" />
+        <data android:path="/verify-email" />
+        <data android:path="/reset-password" />
+        <data android:path="/account-recovery" />
+      </intent-filter>
     </activity>
     <service
       android:name=".MessagingService"

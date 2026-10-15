@@ -360,6 +360,16 @@ export interface AiRequestBase {
    * request within the hour pays for the prefix.
    */
   cacheTtl?: '1h'
+  /**
+   * Cache the conversation through its last message as well as the system
+   * blocks (AGL-3809), for a request the door expects to continue: a
+   * generation that looks the site up or is asked again re-sends its whole
+   * first turn, which without this is billed at the full input rate on every
+   * continuation. One more breakpoint, on the last message, counted against
+   * the same limit as the system's; a provider without a cache ignores it.
+   * It changes no answer, so a replay key does not read it.
+   */
+  cacheConversation?: boolean
 }
 
 /** The request an adapter receives: the runtime has already validated it. */

@@ -28,6 +28,7 @@ import com.aglyn.core.FirestorePage
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
+import com.aglyn.core.Impersonation
 import com.aglyn.core.InMemoryKeyValueStore
 import com.aglyn.core.Live
 import com.aglyn.core.WorkspaceStore
@@ -51,10 +52,22 @@ import kotlin.test.assertEquals
 private class FakeAuth : AuthSession {
   private val mutable = MutableStateFlow<AuthState>(AuthState.SignedOut)
   override val state: StateFlow<AuthState> = mutable
+  val support = MutableStateFlow<Impersonation?>(null)
+  var ended = 0
+  override val impersonation: StateFlow<Impersonation?> = support
+  override suspend fun endImpersonation() {
+    ended++
+    support.value = null
+  }
   override suspend fun idToken(forceRefresh: Boolean) = if (mutable.value is AuthState.SignedIn) "token" else null
   override suspend fun signInWithEmail(email: String, password: String) {
     if (password != "right") throw AuthError("That email and password do not match.")
     mutable.value = AuthState.SignedIn(AuthUser("u1", email, "Dana"))
+  }
+  override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
+    val created = AuthUser("u2", email, null, emailVerified = false)
+    mutable.value = AuthState.SignedIn(created)
+    return created
   }
   override suspend fun signOut() {
     mutable.value = AuthState.SignedOut
@@ -74,6 +87,7 @@ class ShellUiTest {
   private fun services(
     userDoc: Map<String, Any?>? = null,
     writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+    apiCalls: MutableList<String> = mutableListOf(),
   ): ShellServices {
     val auth = FakeAuth()
     val firestore = FakeFirestore(
@@ -99,7 +113,7 @@ class ShellUiTest {
       config = config,
       auth = auth,
       firestore = firestore,
-      api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { respondOk() }), auth::idToken),
+      api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { request -> apiCalls += request.url.encodedPath; respondOk() }), auth::idToken),
       workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
       prefs = prefs,
       registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
@@ -132,6 +146,38 @@ class ShellUiTest {
     onNodeWithTag("quick-action-site.pages-open").assertIsDisplayed()
     onNodeWithText("New order #1042").assertIsDisplayed()
     onNodeWithText("5 min ago").assertIsDisplayed()
+  }
+
+  /** Sign-up is the console's: the form, the agreement it is gated on, the console's routes, then the verification step. */
+  @Test
+  fun signsUpThroughTheConsolesRoutesAndThenAsksForTheAddressToBeConfirmed() = runComposeUiTest {
+    val calls = mutableListOf<String>()
+    val merges = mutableListOf<String>()
+    val writer = object : com.aglyn.core.FirestoreWriter {
+      override suspend fun merge(path: String, data: Map<String, Any?>) { merges += "$path ${data.keys.sorted()}" }
+    }
+    val services = services(writer = writer, apiCalls = calls)
+    setContent { AglynShell(services) }
+    onNodeWithTag("sign-in-create-account").performClick()
+    onNodeWithTag("sign-up-first-name").performTextInput("Ada")
+    onNodeWithTag("sign-up-last-name").performTextInput("Lovelace")
+    onNodeWithTag("sign-up-organization").performTextInput("Analytical Engines")
+    onNodeWithTag("sign-up-email").performTextInput("ada@example.test")
+    onNodeWithTag("sign-up-password").performTextInput("Passw0rd!")
+    onNodeWithTag("sign-up-confirm").performTextInput("Passw0rd!")
+    // Without the agreement nothing is created.
+    onNodeWithTag("sign-up-submit").performScrollTo().performClick()
+    onNodeWithText("Please accept the Terms of Service and Privacy Policy to continue.").assertExists()
+    onNodeWithTag("sign-up-consent").performScrollTo().performClick()
+    onNodeWithTag("sign-up-submit").performScrollTo().performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("verify-continue") > 0 }
+    onNodeWithText("Verify your email").assertIsDisplayed()
+    assertEquals(
+      listOf("/api/lockdown-status", "/api/auth/legal-acceptance", "/api/auth/acquisition"),
+      calls.take(3),
+    )
+    waitUntil(timeoutMillis = 3_000) { "/api/auth/send-verification" in calls }
+    assertEquals(true, merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it })
   }
 
   @Test
@@ -261,6 +307,27 @@ class ShellUiTest {
     waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
     assertEquals("users/u1/notifications/n1", writer.writes.single().first)
     assertEquals(true, writer.writes.single().second["read"])
+  }
+
+  /** A support session wears the band on every screen, and its exit brings the staff member's own session back. */
+  @Test
+  fun aSupportSessionWearsABannerWithAWayBack() = runComposeUiTest {
+    val services = services()
+    val auth = services.auth as FakeAuth
+    setContent { AglynShell(services) }
+    onNodeWithTag("sign-in-email").performTextInput("dana@example.test")
+    onNodeWithTag("sign-in-password").performTextInput("right")
+    onNodeWithTag("sign-in-submit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-header") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("impersonation-banner"))
+
+    runOnIdle { auth.support.value = Impersonation(AuthUser("c1", "cass@example.test", "Cass"), "ops@example.test") }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("impersonation-banner") > 0 }
+    onNodeWithText("You are impersonating cass@example.test (staff: ops@example.test). Actions are audited.").assertIsDisplayed()
+
+    onNodeWithTag("impersonation-exit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("impersonation-banner") == 0 }
+    assertEquals(1, auth.ended)
   }
 
   @Test

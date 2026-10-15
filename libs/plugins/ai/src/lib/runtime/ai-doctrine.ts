@@ -35,6 +35,7 @@ import { aiCutOffFigures, aiStoppedAtCeiling, type AiProvider } from '../provide
 import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
+  aiConversationCacheFits,
   runAiRequest,
   type AiCompletion,
   type AiEffort,
@@ -59,6 +60,7 @@ import {
   aiSettlePlanGalleries,
   aiSettlePlanLayoutRegionSections,
   aiSettlePlanLayouts,
+  aiSettlePlanLayoutsInSections,
   aiSettlePlanRefs,
   aiSettleWrittenGridItems,
   aiSettleWrittenMechanicalRules,
@@ -706,8 +708,10 @@ export function aiDoctrinePlanCheck(
     // A plan past the datasets this job may make keeps the most useful
     // (AGL-3616), once a form's dataset is one it can write to and no page
     // lists it.
+    // A section that places its page's one layout has it taken out, and a
+    // page that names none is put in it (AGL-3807), right after the refs.
     // A page section that is a layout region (header, navigation, footer) is
-    // taken off the page (AGL-3750), first after the refs, so the wall
+    // taken off the page (AGL-3750), first after those, so the wall
     // counts what the page keeps. A site start's section that shows the work
     // with fewer pieces than its fewest is given that many (AGL-3754).
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
@@ -720,7 +724,10 @@ export function aiDoctrinePlanCheck(
           aiSettlePlanDatasets(
             aiSettlePlanFormDatasets(
               aiSettlePlanGalleries(
-                aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
+                aiSettlePlanLayoutRegionSections(
+                  aiSettlePlanLayoutsInSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
+                  inventory,
+                ),
                 inventory,
                 capabilities,
               ),
@@ -902,6 +909,17 @@ interface AiGenerationInputBase {
   signal?: AbortSignal
   /** A provider chosen ahead of every setting; specs use it. */
   provider?: AiProvider
+  /**
+   * Cache the conversation on every request too (AGL-3809), for a door whose
+   * generations usually continue: a lookup round or a re-ask re-sends the
+   * whole first turn and the site's inventory, which the conversation's
+   * breakpoint lets it read back at a cache read's price instead of the full
+   * input rate. The first request pays the cache write on its own tail, so a
+   * door turns it on only where most of its generations continue — the plan
+   * (docs/AI_CACHE_AUDIT_2026-10.md). Dropped where the system blocks already
+   * hold every breakpoint.
+   */
+  cacheConversation?: boolean
 }
 
 export interface AiTreeGenerationInput extends AiGenerationInputBase {
@@ -1117,6 +1135,7 @@ export async function runValidatedGeneration(
   // builds from no site structure — a theme, a listing — passes no inventory
   // and is offered nothing.
   const lookup = input.inventory === undefined ? null : aiInventoryLookupTool()
+  const cacheConversation = Boolean(input.cacheConversation) && aiConversationCacheFits(system)
   const tools = lookup ? [input.tool, lookup] : [input.tool]
   let messages: AiMessage[] = [...input.messages]
   let violations: AiDoctrineViolation[] = []
@@ -1155,6 +1174,7 @@ export async function runValidatedGeneration(
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(effort ? { effort } : {}),
+      ...(cacheConversation ? { cacheConversation } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.settings ? { settings: input.settings } : {}),
       ...(input.provider ? { provider: input.provider } : {}),

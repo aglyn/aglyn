@@ -28,7 +28,9 @@
  *    generators read, proves pure;
  *  - the Swift and Kotlin trees, at the file level: no web file or tsconfig
  *    reaches them, none of their files points outside them or names a
- *    server credential, and no native source lives anywhere else.
+ *    server credential, and no native source lives anywhere else;
+ *  - Stripe's card-entry SDK (PaymentSheet) and the Stripe Terminal SDK are
+ *    linked by Aglyn POS alone.
  *
  * The file list comes from git (tracked and not-yet-tracked, ignored files
  * excluded), never a filesystem walk, so a build output or a nested
@@ -42,6 +44,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   aliasTable,
+  evaluateCardSdkPlacement,
   evaluateNativeToWeb,
   evaluateWebToNative,
   formatFailures,
@@ -88,7 +91,9 @@ const readLink = (path) => {
 // The Swift and Kotlin apps (docs/mobile/native-architecture.md §9), held at the file level.
 const webNative = evaluateWebToNative({ files, read, aliases })
 const nativeWeb = evaluateNativeToWeb({ files, read, readLink })
-const failures = [...proof, ...webNative, ...nativeWeb]
+// Stripe's card-entry and Terminal SDKs stay inside Aglyn POS (docs/mobile/native-architecture.md §10).
+const cardSdk = evaluateCardSdkPlacement({ files, read })
+const failures = [...proof, ...webNative, ...nativeWeb, ...cardSdk]
 
 if (failures.length) {
   console.error(
@@ -105,5 +110,5 @@ if (failures.length) {
 
 console.log(
   `check-mobile-isolation: ok. ${pure.length} proven-pure module(s); ` +
-    'native trees: 0 web→native, 0 native→web, 0 misplaced.',
+    'native trees: 0 web→native, 0 native→web, 0 misplaced; card-entry and Terminal SDKs: Aglyn POS only.',
 )

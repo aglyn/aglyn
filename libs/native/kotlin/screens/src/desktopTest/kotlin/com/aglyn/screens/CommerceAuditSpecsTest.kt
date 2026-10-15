@@ -65,7 +65,7 @@ class CommerceAuditSpecsTest : SpecTestBase() {
     val model = ret("approved")
     assertEquals(listOf("receive", "refund", "close", "order"), model.actionsShown("progress"))
     val receive = model.action("progress", "receive")
-    val fields = receive.inputsFor(model.context)
+    val fields = receive.inputs(model.context)
     assertEquals(listOf("restock_0", "restock_1", "locationId"), fields.map { it.key })
     assertEquals("Restock: Tee (of 2)", fields[0].label)
     assertEquals(ScreenValues.text(ScreenValues.resolve(fields[0].initial!!, ScreenContext.withItem(model.context, model.context.jsonObject["data"]!!.jsonObject["ret"]!!.jsonObject["lines"]!!.jsonArray[0]))), "2", "starts at everything that came back")
@@ -128,7 +128,7 @@ class CommerceAuditSpecsTest : SpecTestBase() {
     assertEquals(listOf(false, true, false), listOf("physical", "digital", "service").map { ScreenValues.truthy(savedInitial(it)) })
     val submit = saved.form("settings")
     assertEquals("hosts/h1/settings/store", ScreenValues.render(submit.write!!.jsonObject["doc"]!!.let { (it as JsonPrimitive).content }, saved.context))
-    assertTrue((submit.write!!.jsonObject["siteWide"] as JsonPrimitive).content == "true")
+    assertTrue(submit.siteWide, "the save republishes the whole site")
     assertEquals(
       json("""{"returns":{"enabled":true,"windowDays":30,"eligibleTypes":["digital","physical"]}}"""),
       ScreenValues.resolveBody(submit.write!!.jsonObject["fields"]!!, ScreenContext.with(saved.context, "form", json("""{"enabled":true,"windowDays":30,"physical":true,"digital":true,"service":false}"""))),

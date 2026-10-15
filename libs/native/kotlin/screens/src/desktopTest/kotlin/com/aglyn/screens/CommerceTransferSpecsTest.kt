@@ -28,6 +28,10 @@ class CommerceTransferSpecsTest : SpecTestBase() {
     )
     assertTrue(actions.all { it.url == null && it.body == null && it.write == null && !it.reload }, "an export makes no request of its own")
     assertTrue(actions.all { it.export.obj("scope") == null }, "the whole list unless a filter is named")
+    // The sheet reads the store's records for the site the list is on.
+    val site = ScreenContext.with(model.context, "site", JsonObject(mapOf("id" to JsonPrimitive("h1"))))
+    assertTrue(actions.all { it.exportRequest(site)?.hostId == "h1" }, "each export names the site")
+    assertEquals(mapOf<String, Any?>("kind" to "all"), actions.first().exportRequest(site)?.scope)
   }
 
   @Test
