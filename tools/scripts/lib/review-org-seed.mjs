@@ -635,8 +635,40 @@ const LOCAL_IMAGE = /^https?:\/\/(?:localhost|127\.0\.0\.1|10\.0\.2\.2)(?::\d+)?
  * @param {string} text
  */
 export function publicImageUrl(text) {
-  return text.replace(LOCAL_IMAGE, (_, name) => `https://picsum.photos/seed/juniper-${name}/800/800`)
+  return text.replace(LOCAL_IMAGE, (_, name) => picsumPhoto(name))
 }
+
+/**
+ * Picsum photos that read as what a bakery and cafe sell, by the screenshot
+ * run's file name. A seeded picsum URL (`/seed/<name>`) is a RANDOM photo —
+ * a mountain for a croissant — so the store's photos are pinned by id.
+ */
+export const PRODUCT_PHOTOS = {
+  mug: 30,
+  'mug-cream': 30,
+  tote: 42,
+  beans: 425,
+  'beans-pos': 766,
+  'house-blend': 766,
+  latte: 431,
+  cappuccino: 431,
+  drip: 63,
+  pour: 1060,
+  'cold-brew': 113,
+  'coldbrew-conc': 312,
+  cookies: 835,
+  cinnamon: 999,
+  cake: 1080,
+  muffin: 102,
+  croissant: 139,
+  sourdough: 490,
+  subscription: 139,
+  gift: 365,
+}
+
+/** @param {string} name */
+export const picsumPhoto = (name) =>
+  PRODUCT_PHOTOS[name] ? `https://picsum.photos/id/${PRODUCT_PHOTOS[name]}/800/800` : `https://picsum.photos/seed/juniper-${name}/800/800`
 
 /* ------------------------------------------------------------------------ */
 /* Disarming                                                                */
@@ -884,6 +916,16 @@ function ownDocuments({ target, nowMs, idMap, siblings }) {
     { existing: true },
   )
   push(`hosts/${hostId}/variables/seed-site-name`, { value: JUNIPER.siteName }, { existing: true })
+  // The brand pack's two products and the CRM book's coffee, pictured like the rest of the store.
+  for (const [id, photo] of [
+    ['seed-prod-1', 'sourdough'],
+    ['seed-prod-2', 'subscription'],
+    [idMap.products?.['seed-crm-product-house-blend'], 'house-blend'],
+  ]) {
+    if (!id) continue
+    const url = picsumPhoto(photo)
+    push(`hosts/${hostId}/products/${id}`, { imageUrl: url, mediaUrls: [url] }, { existing: true })
+  }
 
   // ── Pages ────────────────────────────────────────────────────────────────
   docs.push(
@@ -1112,7 +1154,12 @@ export function buildReviewOrgPlan({ records, target, nowMs, siblings = false })
   }
 
   const dataOf = new Map([...byPath].map(([path, doc]) => [path, doc.data]))
-  const docs = [...byPath.values()].map((doc) => ({ ...doc, data: withListFields(doc.path, doc.data, dataOf) }))
+  // A merge onto an existing document is a patch, not the document: its list
+  // fields are the existing document's, and recomputing them from the patch
+  // would blank them.
+  const docs = [...byPath.values()].map((doc) =>
+    doc.existing ? doc : { ...doc, data: withListFields(doc.path, doc.data, dataOf) },
+  )
   docs.sort((left, right) => left.path.localeCompare(right.path))
   return { docs, skipped }
 }

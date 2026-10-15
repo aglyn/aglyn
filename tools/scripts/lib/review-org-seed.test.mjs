@@ -99,7 +99,8 @@ describe('emailsIn', () => {
 
 describe('publicImageUrl', () => {
   it('turns a screenshot run’s local photo into a public one', () => {
-    assert.equal(publicImageUrl('http://127.0.0.1:8765/cake.jpg'), 'https://picsum.photos/seed/juniper-cake/800/800')
+    assert.equal(publicImageUrl('http://127.0.0.1:8765/cake.jpg'), 'https://picsum.photos/id/1080/800/800')
+    assert.equal(publicImageUrl('http://127.0.0.1:8765/other.jpg'), 'https://picsum.photos/seed/juniper-other/800/800')
     assert.equal(publicImageUrl('https://picsum.photos/seed/x/800/800'), 'https://picsum.photos/seed/x/800/800')
   })
 })
@@ -253,6 +254,10 @@ describe('buildReviewOrgPlan', () => {
     const records = plan.docs.filter((doc) => doc.path.includes('/datasets/') && doc.path.includes('/records/'))
     assert.ok(records.length > 0)
     for (const record of records) assert.ok(Array.isArray(record.data.filterKeys), record.path)
+  })
+
+  it('patches an existing document without recomputing its list fields', () => {
+    assert.deepEqual(Object.keys(byPath.get(`hosts/${TARGET.hostId}/products/seed-prod-1`)).sort(), ['imageUrl', 'mediaUrls'])
   })
 
   it('publishes the About and Contact pages, the contact form bound to the inbox form', () => {
