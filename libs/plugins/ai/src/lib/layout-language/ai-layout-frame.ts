@@ -212,7 +212,7 @@ export function aiCompileLayoutFrame(
     splitAt: -2,
     quotesOnly: [],
   }
-  const name = aiLayoutFitText(plan.siteName, 'heading') || 'Home'
+  const name = aiLayoutFitText(plan.siteName, 'heading', plan.language) || 'Home'
   const header = frame.header ?? { blocks: [] }
   const band = header.band ?? 'plain'
   const look = headerLook(band)
@@ -231,7 +231,7 @@ export function aiCompileLayoutFrame(
       'muiScreenLink',
       {
         children:
-          aiLayoutFitText(entry.label, 'label') || entry.label.slice(0, 28),
+          aiLayoutFitText(entry.label, 'label', plan.language) || entry.label.slice(0, 28),
         // The blog is a path, not a page (AGL-3660).
         ...(entry.href ? { href: entry.href } : { screenId: entry.id }),
         renderAs: 'link',
@@ -305,7 +305,7 @@ export function aiCompileLayoutFrame(
         what: `a ${block.kind} in the header; left out`,
       })
   }
-  const ctaLabel = ctaBlock ? aiLayoutFitText(ctaBlock.text, 'label') : ''
+  const ctaLabel = ctaBlock ? aiLayoutFitText(ctaBlock.text, 'label', plan.language) : ''
   const ctaResolved =
     ctaBlock && ctaLabel
       ? aiLayoutResolveLink(ctaBlock.to, ctaLabel, scope.link, page.targets)
@@ -458,7 +458,7 @@ export function aiCompileLayoutFrame(
   const announcement =
     store && plan.cart && plan.shopId
       ? (() => {
-          const said = aiLayoutFitText(noteBlock?.text, 'note')
+          const said = aiLayoutFitText(noteBlock?.text, 'note', plan.language)
           if (noteBlock && !said) page.settled.push({ at: 'header', what: 'an announcement with no words left; the shop’s own line instead' })
           // The design's line, then the way into the shop; else the way in alone.
           const link = tree.add(

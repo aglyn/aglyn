@@ -352,16 +352,17 @@ const LISTING_TRAILING_JOINERS = /[\s,;:|/&—–-]+$/
  * A plan's listing value held to the length the SEO editor guides it to, cut
  * at a word. A cut that leaves a joining word or mark at the end ("…Practice
  * Areas and", "…across Springfield,") takes it off too, so a search result
- * never shows a phrase that stops mid-thought (AGL-3813).
+ * never shows a phrase that stops mid-thought (AGL-3813), in the plan's
+ * language (AGL-3828): a Spanish title cut to "Pan dulce y" reads "Pan dulce".
  */
-function clip(value: string, max: number): string {
+function clip(value: string, max: number, language?: string): string {
   const text = value.trim()
   if (text.length <= max) return text
   const cut = text.slice(0, max + 1)
   const space = cut.lastIndexOf(' ')
   let clipped = (space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).replace(LISTING_TRAILING_JOINERS, '').trim()
   for (let guard = 0; guard < 6; guard += 1) {
-    const word = aiDanglingWord(clipped)
+    const word = aiDanglingWord(clipped, language)
     if (!word) break
     const shorter = clipped.slice(0, clipped.length - word.length).replace(LISTING_TRAILING_JOINERS, '').trim()
     if (!shorter) break
@@ -782,8 +783,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         // listing cannot be written inside this pass's time on the model the
         // job runs.
         let values = {
-          title: clip(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title),
-          description: clip(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description),
+          title: clip(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title, plan.language),
+          description: clip(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description, plan.language),
         }
         if (
           // A listing is written from the page's own text, with no inventory
