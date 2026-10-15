@@ -17071,6 +17071,819 @@
         ]
       ]
     },
+    "paidMediaScopeBody": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "args": [
+        [
+          "host-1"
+        ],
+        [
+          "org:acme"
+        ],
+        [
+          "org:acme:host-1"
+        ],
+        [
+          "org:"
+        ]
+      ]
+    },
+    "usesBesideProduct": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "args": [
+        [
+          [
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            },
+            {
+              "kind": "page",
+              "id": "pg1",
+              "name": "Home",
+              "hostId": "host-1"
+            },
+            {
+              "kind": "plugin",
+              "id": "p2",
+              "name": "Another product",
+              "hostId": "host-1",
+              "collectionId": "products"
+            },
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-2",
+              "collectionId": "products"
+            }
+          ],
+          {
+            "hostId": "host-1",
+            "productId": "p1"
+          }
+        ],
+        [
+          [
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            }
+          ],
+          {
+            "hostId": "host-1"
+          }
+        ],
+        [
+          [],
+          {
+            "hostId": "host-1",
+            "productId": "p1"
+          }
+        ],
+        [
+          [
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            },
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            }
+          ],
+          {
+            "hostId": "host-1",
+            "productId": "p1"
+          }
+        ]
+      ]
+    },
+    "paidMediaConfirmation": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "args": [
+        [
+          {
+            "others": [],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "failed",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "failed",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "download"
+          }
+        ]
+      ]
+    },
     "mediaPosterSrc": {
       "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
       "args": [
