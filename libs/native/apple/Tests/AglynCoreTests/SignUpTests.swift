@@ -319,4 +319,22 @@ final class ConsoleHandoffTests: XCTestCase {
     XCTAssertTrue(user.emailVerified)
     XCTAssertEqual(exchange.json(0)["tenantId"] as? String, "aglyn-org-y5v14")
   }
+
+  /// A new invitee lands with no workspace; the console's chooser leads with their invitations (AGL-851).
+  func testReadsAndAnswersTheAccountsInvitationsThroughTheConsolesRoute() async throws {
+    let transport = RecordingTransport([
+      (200, #"{"invites":[{"$id":"i1","orgId":"o1","orgName":"Acme","role":"editor"},{"$id":"i2","orgId":"o2","orgName":"Beta","role":"owner","handoff":{"previousOwner":"stay"}},{"$id":"i3","orgId":null}]}"#),
+      (200, "{}"),
+    ])
+    let service = SignUpService(
+      api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "tok" }, transport: transport, sleep: { _ in }),
+      writer: RecordingWriter())
+    let invites = await service.pendingInvites()
+    XCTAssertEqual(transport.requests[0].url?.query, "mine=1")
+    XCTAssertEqual(invites.map(\.id), ["i1", "i2"])
+    XCTAssertEqual(invites[0].sentence, "You've been invited to Acme as editor.")
+    XCTAssertEqual(invites[1].sentence, "You've been invited to take over Beta as its owner.")
+    try await service.answer(invites[0], accept: true)
+    XCTAssertEqual(transport.json(1) as NSDictionary, ["orgId": "o1", "action": "accept", "inviteId": "i1"])
+  }
 }
