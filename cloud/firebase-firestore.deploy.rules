@@ -2379,6 +2379,16 @@ allow read, write: if false;
 }
 
 
+
+
+
+
+
+match /nativeHandoffs/{codeHash} {
+allow read, write: if false;
+}
+
+
 match /hostIndex/{hostId} {
 allow read: if isSignedIn();
 allow write: if false;

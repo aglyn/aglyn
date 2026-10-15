@@ -217,21 +217,17 @@ Still owed:
    both apps: `R3B7G75SWA.com.aglyn.app`, `R3B7G75SWA.com.aglyn.pos`) and at
    `https://aglyn.com/.well-known/apple-app-site-association` (`webcredentials`
    for `R3B7G75SWA.com.aglyn.app`, for passkeys; template: `docs/mobile/well-known/`).
-   Then `AGLYN_PASSKEY_RP_ID = aglyn.com` in `Config/Release.xcconfig`; until
-   then "Set up a passkey" is hidden.
+   `AGLYN_PASSKEY_RP_ID = aglyn.com` is set in `Config/Release.xcconfig` since
+   aglyn.com serves that file (AGL-3817); both targets carry
+   `webcredentials:aglyn.com`.
 7. **TestFlight**: listing, privacy labels and a tester group per app.
 8. **DeviceCheck in Firebase App Check** for both apps (a DeviceCheck `.p8`
    key, its Key ID and the team), which the Mac builds use; until then a Mac
    build against production is refused at sign-in.
 9. **Sign in with Apple** (AGL-3816): both apps offer it beside Google
    (`AGLYN_APPLE_SIGN_IN = YES`, `com.apple.developer.applesignin` in every
-   entitlements file), as App Store guideline 4.8 asks. Owed: the Sign in with
-   Apple capability on the `com.aglyn.pos` App ID; and the **Apple provider in
-   Firebase Auth** (`aglyn-main` → Authentication → Sign-in method → Apple),
-   with a Services ID (e.g. `com.aglyn.app.signin`) whose return URL is
-   `https://aglyn-main.firebaseapp.com/__/auth/handler`, a Sign in with Apple
-   key (`.p8`, Key ID) and the team R3B7G75SWA. The apps sign in with the
-   native flow, so the bundle ids `com.aglyn.app` and `com.aglyn.pos` are the
-   token audiences Firebase must accept; the Services ID is only for the web
-   flow. Until the provider is on, Firebase refuses an Apple sign-in and the
-   app shows the error.
+   entitlements file), as App Store guideline 4.8 asks. Done 2026-10-15: the
+   Apple provider in Firebase Auth (`aglyn-main`, Services ID
+   `com.aglyn.app.signin`, key 5272L5F399, team R3B7G75SWA). Still owed: the
+   Sign in with Apple capability on the `com.aglyn.pos` App ID, unless the
+   next archive's automatic signing adds it.

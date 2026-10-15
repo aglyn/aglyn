@@ -22,6 +22,7 @@ import { createHmac, randomBytes } from 'node:crypto'
 import { FULFILLMENT_NETWORKS_ENV } from '../constants'
 import { networkConnectionId, networkOrderId } from '../model/networks'
 import { ProviderError } from '../providers/http'
+import { FLEXPORT_WEBHOOK_TOKEN_HEADER } from '../providers/flexport'
 import type { FulfillmentNetworkProvider } from '../providers/provider'
 import { createMemoryNetworkStore } from '../testing/memory-store'
 import { mockHttp } from '../testing/mock-http'
@@ -59,9 +60,9 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
       body: { access_token: 'Atza|access', refresh_token: 'Atzr|refresh', expires_in: 3600 },
     },
   ])
-  const webhookTargets: Array<{ prefix: string; url: string | null }> = []
+  const webhookTargets: Array<{ prefix: string; url: string | null; token?: string | null }> = []
   const accountCalls: unknown[] = []
-  const provider = (id: 'shipbob' | 'amazon-mcf' | 'shipmonk'): FulfillmentNetworkProvider =>
+  const provider = (id: 'shipbob' | 'amazon-mcf' | 'shipmonk' | 'flexport'): FulfillmentNetworkProvider =>
     ({
       id,
       account: jest.fn(async (credential: { accessToken: string; storeId?: string | null }) => {
@@ -71,15 +72,23 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
           if (credential.accessToken === 'sm-down-key') throw new ProviderError('transient', 'ShipMonk could not be reached')
           return { accountName: `Store ${credential.storeId}` }
         }
+        if (id === 'flexport') {
+          if (credential.accessToken === 'fx-refused-token') throw new ProviderError('auth', 'Flexport refused the connection: Unauthorized')
+          return { accountName: null }
+        }
         return id === 'shipbob'
           ? { accountName: 'Aglyn channel', channelId: 'ch-5' }
           : { accountName: 'Candles', marketplaces: [{ id: 'ATVPDKIKX0DER', name: 'Amazon.com', countryCode: 'US' }] }
       }),
-      ...(id === 'shipbob'
+      ...(id === 'shipbob' || id === 'flexport'
         ? {
-            syncWebhooks: jest.fn(async (_credential: unknown, target: { prefix: string; url: string | null }) => {
-              webhookTargets.push(target)
-            }),
+            syncWebhooks: jest.fn(
+              async (credential: { accessToken: string }, target: { prefix: string; url: string | null; token?: string | null }) => {
+                if (credential.accessToken === 'fx-no-webhooks-token') throw new ProviderError('auth', 'Flexport refused the connection: Forbidden')
+                if (credential.accessToken === 'fx-webhooks-down-token') throw new ProviderError('transient', 'Flexport had a problem (503)')
+                webhookTargets.push(target)
+              },
+            ),
           }
         : {}),
     }) as unknown as FulfillmentNetworkProvider
@@ -509,5 +518,142 @@ describe('ShipMonk’s webhook (AGL-3697)', () => {
     await connectShipmonk(h)
     const huge = 'x'.repeat(1_000_001)
     expect((await shipmonkHook(h, networkConnectionId(HOST, 'shipmonk'), huge, 'sig')).status).toBe(413)
+  })
+})
+
+const FLEXPORT_ENV = { ...ENV, [FULFILLMENT_NETWORKS_ENV.flexportEnabled]: 'true' }
+
+const connectFlexport = (h: ReturnType<typeof harness>, body: Record<string, unknown> = {}) =>
+  h.routes.connectKey(post('fulfillment-networks/connect-key', { provider: 'flexport', apiKey: 'fx-live-token-1234', ...body }))
+
+const flexportHook = (h: ReturnType<typeof harness>, connection: string, raw: string, token: string | null) =>
+  h.routes.webhookFlexport(
+    new Request(`${CONSOLE}/api/fulfillment-networks/webhooks/flexport?${new URLSearchParams({ connection })}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token === null ? {} : { [FLEXPORT_WEBHOOK_TOKEN_HEADER]: token }) },
+      body: raw,
+    }),
+  )
+
+describe('Flexport: connecting with the merchant’s own API token (AGL-3822)', () => {
+  it('is offered only where the deployment opts in, and never by sign-in', async () => {
+    const off = harness()
+    expect((await connectFlexport(off)).status).toBe(404)
+    const h = harness({ env: FLEXPORT_ENV })
+    const answer = await (await h.routes.list(get('fulfillment-networks/connections'))).json()
+    expect(answer.offered).toContainEqual({ id: 'flexport', sandbox: false })
+    expect(answer.offered.map((offer: { id: string }) => offer.id)).not.toContain('shipmonk')
+    expect((await h.routes.connect(post('fulfillment-networks/connect', { provider: 'flexport' }))).status).toBe(400)
+    // No token key, nothing offered.
+    const keyless = harness({ env: { [FULFILLMENT_NETWORKS_ENV.flexportEnabled]: 'true' } })
+    expect((await (await keyless.routes.list(get('fulfillment-networks/connections'))).json()).offered).toEqual([])
+  })
+
+  it('only an admin connects, with a token alone, and no store id is asked for', async () => {
+    const h = harness({ env: FLEXPORT_ENV, role: 'editor' })
+    expect((await connectFlexport(h)).status).toBe(403)
+    h.setRole('admin')
+    const short = await connectFlexport(h, { apiKey: 'short' })
+    expect(short.status).toBe(400)
+    expect((await short.json()).error).toBe('Paste the Flexport API token')
+    expect(h.accountCalls).toHaveLength(0)
+    expect((await connectFlexport(h, { apiKey: `fx-${'x'.repeat(2_000)}` })).status).toBe(200)
+  })
+
+  it('tries the token, seals it, registers webhooks with a token header, and answers no credential', async () => {
+    const h = harness({ env: FLEXPORT_ENV })
+    const response = await connectFlexport(h)
+    expect(response.status).toBe(200)
+    const answer = await response.json()
+    const id = networkConnectionId(HOST, 'flexport')
+    expect(h.accountCalls).toEqual([{ accessToken: 'fx-live-token-1234', storeId: null }])
+    expect(answer.webhook).toBeNull()
+    expect(answer.connection).toMatchObject({ provider: 'flexport', status: 'active', webhookSecretSet: false, webhooksRegistered: true })
+    const prefix = `${CONSOLE}/api/fulfillment-networks/webhooks/flexport?connection=${id}`
+    expect(h.webhookTargets).toEqual([{ prefix, url: prefix, token: expect.stringMatching(/^[A-Za-z0-9_-]{32}$/) }])
+    const token = h.webhookTargets[0].token as string
+    expect(JSON.stringify(answer)).not.toContain('fx-live-token-1234')
+    expect(JSON.stringify(answer)).not.toContain(token)
+    const stored = h.store.connections.get(id)
+    expect(JSON.stringify(stored)).not.toContain('fx-live-token-1234')
+    expect(JSON.stringify(stored)).not.toContain(token)
+    expect(stored).toMatchObject({ webhookTokenHash: sha256(token), sealedWebhookSecret: null, sealedRefreshToken: null, accessTokenExpiresAtMs: null })
+    const keyring = readFulfillmentNetworksConfig(h.env).keyring as NonNullable<ReturnType<typeof readFulfillmentNetworksConfig>['keyring']>
+    expect(openGrant(stored?.sealedAccessToken as string, id, 'access', keyring).value).toBe('fx-live-token-1234')
+    // Flexport sets up its own webhooks: there is no secret to hand out.
+    expect((await h.routes.webhookSecret(post('fulfillment-networks/webhook-secret', { provider: 'flexport' }))).status).toBe(400)
+  })
+
+  it('refuses a token Flexport refuses, or one that may not manage webhooks, keeping nothing', async () => {
+    const h = harness({ env: FLEXPORT_ENV })
+    const refused = await connectFlexport(h, { apiKey: 'fx-refused-token' })
+    expect(refused.status).toBe(400)
+    expect((await refused.json()).error).toBe('Flexport refused that API token. Check that it is active and has the permissions the guide lists.')
+    expect((await connectFlexport(h, { apiKey: 'fx-no-webhooks-token' })).status).toBe(400)
+    expect(h.store.connections.get(networkConnectionId(HOST, 'flexport'))).toBeUndefined()
+  })
+
+  it('connects without webhooks when Flexport cannot register them now, and reads orders back instead', async () => {
+    const h = harness({ env: FLEXPORT_ENV })
+    const answer = await (await connectFlexport(h, { apiKey: 'fx-webhooks-down-token' })).json()
+    expect(answer.connection).toMatchObject({ status: 'active', webhooksRegistered: false })
+  })
+
+  it('connects again with a new token and a new webhook token, ending the old one', async () => {
+    const h = harness({ env: FLEXPORT_ENV })
+    await connectFlexport(h)
+    const id = networkConnectionId(HOST, 'flexport')
+    const first = h.webhookTargets[0].token as string
+    await h.store.patchConnection(id, { status: 'reconnect', routing: 'manual' })
+    const again = await (await connectFlexport(h, { apiKey: 'fx-new-token-5678' })).json()
+    expect(again.connection).toMatchObject({ status: 'active', routing: 'manual' })
+    const second = h.webhookTargets[1].token as string
+    expect(second).not.toBe(first)
+    const raw = JSON.stringify({ logisticsEventType: 'Order.Shipped', orderId: 'FX-1', externalOrderId: 'agabc' })
+    expect((await flexportHook(h, id, raw, first)).status).toBe(401)
+    expect((await flexportHook(h, id, raw, second)).status).toBe(200)
+  })
+
+  it('disconnects, removing its webhooks and deleting the sealed token', async () => {
+    const h = harness({ env: FLEXPORT_ENV })
+    await connectFlexport(h)
+    const id = networkConnectionId(HOST, 'flexport')
+    const response = await h.routes.connection(post('fulfillment-networks/connection', { provider: 'flexport' }, 'DELETE'))
+    expect(response.status).toBe(200)
+    expect(h.webhookTargets.at(-1)).toEqual({ prefix: `${CONSOLE}/api/fulfillment-networks/webhooks/flexport?connection=${id}`, url: null })
+    expect(h.store.connections.get(id)).toBeUndefined()
+  })
+})
+
+describe('Flexport’s webhook (AGL-3822)', () => {
+  it('acts only on the connection’s own token, read back by the order it names', async () => {
+    const h = harness({ env: FLEXPORT_ENV })
+    await connectFlexport(h)
+    const id = networkConnectionId(HOST, 'flexport')
+    const token = h.webhookTargets[0].token as string
+    const raw = JSON.stringify({
+      logisticsAccountId: 'acct',
+      logisticsEventId: 'evt-1',
+      logisticsEventType: 'Shipment.Shipped',
+      logisticsEventTime: '2026-10-08T12:00:00Z',
+      id: 'SHIP-1',
+      orderId: 'FX-ORDER-1',
+      externalOrderId: 'agabc',
+    })
+    expect((await flexportHook(h, id, raw, null)).status).toBe(401)
+    expect((await flexportHook(h, id, raw, 'guess')).status).toBe(401)
+    expect((await flexportHook(h, 'host-2_flexport', raw, token)).status).toBe(401)
+    expect((await flexportHook(h, networkConnectionId(HOST, 'shipbob'), raw, token)).status).toBe(401)
+    expect(h.engine.applyOrderWebhook).not.toHaveBeenCalled()
+    const answer = await flexportHook(h, id, raw, token)
+    expect(answer.status).toBe(200)
+    expect(h.engine.applyOrderWebhook).toHaveBeenCalledWith(id, 'FX-ORDER-1')
+  })
+
+  it('refuses a body too large to be Flexport’s before reading it', async () => {
+    const h = harness({ env: FLEXPORT_ENV })
+    await connectFlexport(h)
+    const token = h.webhookTargets[0].token as string
+    expect((await flexportHook(h, networkConnectionId(HOST, 'flexport'), 'x'.repeat(1_000_001), token)).status).toBe(413)
   })
 })

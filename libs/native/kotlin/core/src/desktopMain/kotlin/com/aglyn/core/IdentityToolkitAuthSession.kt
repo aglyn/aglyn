@@ -50,7 +50,16 @@ class IdentityToolkitAuthSession(
   )
   override val state: StateFlow<AuthState> = mutable
   private val lock = Mutex()
-  private var tokens: Tokens? = null
+  @Volatile private var tokens: Tokens? = null
+
+  /**
+   * The signed-in person's current ID token, never refreshed and without waiting on a refresh in flight: for a caller that a
+   * refresh itself goes through ([ConsoleMintedAppCheck]). Null when signed out, in a support session, or when it has expired.
+   */
+  fun currentIdToken(): String? {
+    if (support.active) return null
+    return tokens?.takeIf { it.expiresAt > now() }?.idToken
+  }
 
   private fun storedRefreshToken(): String? = runCatching { credentials.read(credentialKey) }.getOrNull()?.ifEmpty { null }
 
@@ -182,6 +191,28 @@ class IdentityToolkitAuthSession(
     if (body["idToken"] == null) throw AuthError(signUpErrorMessage("NEED_CONFIRMATION"), code = "NEED_CONFIRMATION")
     accept(body)
     return body["isNewUser"]?.jsonPrimitive?.content == "true"
+  }
+
+  override suspend fun signInWithCustomToken(token: String) = signInWithCustomToken(token, null)
+
+  /** A custom token (the console hand-off's, a passkey's) in the pool [tenantId] names; the person is read off the ID token. */
+  override suspend fun signInWithCustomToken(token: String, tenantId: String?) {
+    val body = call("accounts:signInWithCustomToken", ::authErrorMessage) {
+      put("token", token)
+      put("returnSecureToken", true)
+      if (!tenantId.isNullOrEmpty()) put("tenantId", tenantId)
+    }
+    val claims = TokenClaims.fromIdToken(body["idToken"]?.jsonPrimitive?.content)
+    val uid = (claims.values["user_id"] as? JsonPrimitive)?.content ?: (claims.values["sub"] as? JsonPrimitive)?.content
+      ?: throw AuthError(authErrorMessage(null))
+    val email = (claims.values["email"] as? JsonPrimitive)?.content
+    val name = (claims.values["name"] as? JsonPrimitive)?.content
+    accept(
+      JsonObject(
+        body + mapOf("localId" to JsonPrimitive(uid)) +
+          listOfNotNull(email?.let { "email" to JsonPrimitive(it) }, name?.let { "displayName" to JsonPrimitive(it) }),
+      ),
+    )
   }
 
   override suspend fun reload() {

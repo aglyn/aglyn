@@ -75,7 +75,7 @@ export interface StoredConnection {
   sealedRefreshToken: string | null
   accessTokenExpiresAtMs: number | null
   tokenKeyId: string | null
-  /** SHA-256 of the token ShipBob's webhook addresses carry. */
+  /** SHA-256 of the token ShipBob's webhook addresses carry, or Flexport's webhooks send in their token header. */
   webhookTokenHash: string | null
   /** The network's last count, by SKU, for the hold a queued order is shown with. */
   stock: Record<string, number>
@@ -206,6 +206,7 @@ export function connectionView(id: string, stored: StoredConnection): NetworkCon
     marketplaces: Array.isArray(stored.marketplaces) ? stored.marketplaces : [],
     storeId: stored.storeId ?? null,
     webhookSecretSet: Boolean(stored.sealedWebhookSecret),
+    webhooksRegistered: Boolean(stored.webhookTokenHash),
     syncInventory: stored.syncInventory === true,
     inventory: { ...EMPTY_INVENTORY, ...(stored.inventory ?? {}) },
     lastError: stored.lastError ?? null,

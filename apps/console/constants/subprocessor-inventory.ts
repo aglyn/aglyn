@@ -812,6 +812,20 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "The Android resource namespace URI (`xmlns:android`) in the vector drawables and adaptive icon `tools/scripts/lib/native-brand.mjs` generates for the native Android app (AGL-3651). An identifier inside the XML the build compiles.",
     dataReceived: 'Nothing. No request is made.',
   },
+  'androidpublisher.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Release tooling, not the product. `tools/scripts/native-release.mjs` (AGL-3800) uploads the team's own signed Android app bundle to a Google Play testing track through the Play Developer API, when a team member runs a release. No customer site, console request or visitor ever reaches it.",
+    dataReceived:
+      "The platform's own release artifacts: the signed app bundle, its version code and the testing track, under the publisher service account's short-lived token. No customer, member or visitor record.",
+  },
+  'iamcredentials.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Release tooling, not the product. `tools/scripts/native-release.mjs` (AGL-3800) asks IAM Credentials for a short-lived access token by impersonating the Play publisher service account, so the release needs no key file. It runs only when a team member runs a release.",
+    dataReceived:
+      "The releasing team member's own Google credential and the publisher service account's name and scope. No customer, member or visitor record.",
+  },
   'www.apple.com': {
     disposition: 'no-request',
     reason:

@@ -2378,6 +2378,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The native apps' console hand-off (AGL-3816). Admin SDK only, for the
+    // same reason as `authHandoffs`: a document here holds the SHA-256 of a
+    // one-time code, the PKCE challenge it is bound to and the uid a custom
+    // token would be minted for. A client that could write one could name any
+    // uid; one that could read one could test a stolen code offline. Both legs
+    // of the flow are server routes.
+    match /nativeHandoffs/{codeHash} {
+      allow read, write: if false;
+    }
+
     // Host → org resolver mirror, server-written beside host create.
     match /hostIndex/{hostId} {
       allow read: if isSignedIn();

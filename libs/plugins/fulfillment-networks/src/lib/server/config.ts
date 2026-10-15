@@ -33,7 +33,8 @@ import type { AmazonRegion } from '../providers/amazon-mcf'
  * developer app, and an Amazon selling-partner app (with its Login with
  * Amazon client). ShipMonk needs none — each merchant pastes their own API
  * key (AGL-3697) — so it is offered only when the deployment opts in with
- * `SHIPMONK_ENABLED=true`. A network is offered only when its variables AND
+ * `SHIPMONK_ENABLED=true`; Flexport likewise takes the merchant's own API
+ * token (AGL-3822) and is offered with `FLEXPORT_ENABLED=true`. A network is offered only when its variables AND
  * the token key are set; with no network configured the plugin draws
  * nothing, page or docs, and every route answers as though it did not exist.
  *
@@ -61,11 +62,21 @@ export interface ShipmonkSetting {
   sandbox: boolean
 }
 
+/**
+ * Flexport: nothing to register. Its sandbox is a separate Seller Portal
+ * account at the same address, so a sandbox token is the merchant's choice
+ * and the deployment never points elsewhere.
+ */
+export interface FlexportSetting {
+  sandbox: false
+}
+
 export interface FulfillmentNetworksConfig {
   keyring: SecretBoxKeyring | null
   shipbob: ShipbobApp | null
   amazon: AmazonApp | null
   shipmonk: ShipmonkSetting | null
+  flexport: FlexportSetting | null
 }
 
 const read = (env: Record<string, string | undefined>, name: string) => String(env[name] ?? '').trim()
@@ -113,6 +124,7 @@ export function readFulfillmentNetworksConfig(
       read(env, FULFILLMENT_NETWORKS_ENV.shipmonkEnabled).toLowerCase() === 'true'
         ? { sandbox: read(env, FULFILLMENT_NETWORKS_ENV.shipmonkEnvironment).toLowerCase() === 'sandbox' }
         : null,
+    flexport: read(env, FULFILLMENT_NETWORKS_ENV.flexportEnabled).toLowerCase() === 'true' ? { sandbox: false } : null,
   }
 }
 
@@ -120,6 +132,7 @@ export function readFulfillmentNetworksConfig(
 function networkSetting(config: FulfillmentNetworksConfig, provider: NetworkProviderId): { sandbox: boolean } | null {
   if (provider === 'shipbob') return config.shipbob
   if (provider === 'amazon-mcf') return config.amazon
+  if (provider === 'flexport') return config.flexport
   return config.shipmonk
 }
 

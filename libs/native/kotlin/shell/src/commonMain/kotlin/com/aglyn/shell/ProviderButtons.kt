@@ -43,7 +43,8 @@ internal fun ProviderSignInButtons(
   val relyingParty = services.config.passkeyRelyingParty
   val passkey = mode == ProviderMode.SIGN_IN && asserter != null && relyingParty != null
   val google = com.aglyn.screens.LocalGoogleCredentialSource.current
-  if (!passkey && google == null) return
+  val singleSignOn = mode == ProviderMode.SIGN_IN && services.consoleHandoff != null
+  if (!passkey && google == null && !singleSignOn) return
   Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       HorizontalDivider(Modifier.weight(1f))
@@ -76,6 +77,26 @@ internal fun ProviderSignInButtons(
         enabled = enabled && !busy,
         modifier = Modifier.fillMaxWidth().height(48.dp).testTag("sign-in-google"),
       ) { Text("Google") }
+    }
+    if (singleSignOn) {
+      OutlinedButton(
+        onClick = {
+          if (busy) return@OutlinedButton
+          onBusy(true)
+          onError(null)
+          scope.launch {
+            try {
+              services.signInThroughConsole(com.aglyn.core.ConsoleHandoff.Start.SINGLE_SIGN_ON)
+            } catch (failure: AuthError) {
+              onError(failure.message)
+            } finally {
+              onBusy(false)
+            }
+          }
+        },
+        enabled = enabled && !busy,
+        modifier = Modifier.fillMaxWidth().height(48.dp).testTag("sign-in-sso"),
+      ) { Text("Single sign-on (SSO)") }
     }
     if (passkey) {
       OutlinedButton(

@@ -278,4 +278,23 @@ class SignUpTest {
     val body = Json.parseToJsonElement(posted[0]) as JsonObject
     assertEquals("id_token=google-id&providerId=google.com", (body["postBody"] as kotlinx.serialization.json.JsonPrimitive).content)
   }
+
+  /** A new invitee lands with no workspace; the console's chooser leads with their invitations (AGL-851). */
+  @Test
+  fun theAccountsInvitationsAreReadAndAnsweredThroughTheConsolesRoute() = runTest {
+    val calls = mutableListOf<Call>()
+    val signUp = service(
+      mutableListOf(
+        HttpStatusCode.OK to """{"invites":[{"${'$'}id":"i1","orgId":"o1","orgName":"Acme","role":"editor"},{"${'$'}id":"i2","orgId":"o2","orgName":"Beta","role":"owner","handoff":{"previousOwner":"stay"}},{"${'$'}id":"i3","orgId":null}]}""",
+        HttpStatusCode.OK to "{}",
+      ),
+      calls,
+    )
+    val invites = signUp.pendingInvites()
+    assertEquals(listOf("i1", "i2"), invites.map { it.id })
+    assertEquals("You've been invited to Acme as editor.", invites[0].sentence)
+    assertEquals("You've been invited to take over Beta as its owner.", invites[1].sentence)
+    signUp.answer(invites[0], accept = true)
+    assertEquals(Json.parseToJsonElement("""{"orgId":"o1","action":"accept","inviteId":"i1"}"""), Json.parseToJsonElement(calls[1].body))
+  }
 }

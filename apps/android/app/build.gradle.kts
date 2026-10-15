@@ -87,9 +87,9 @@ android {
       // Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a release build attests itself
       // through Play Integrity.
       buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "on")))
-      // The domain passkeys are made for (aglyn.com). Set -Paglyn.passkeyRpId only once aglyn.com serves an
-      // assetlinks.json that names this app's signing certificate (apps/android/README.md, "What Zach owes").
-      buildConfigField("String", "PASSKEY_RP_ID", quoted(setting("passkeyRpId", "")))
+      // The domain passkeys are made for: aglyn.com serves an assetlinks.json with get_login_creds for this app's
+      // Play and upload signing certificates (AGL-3817). -Paglyn.passkeyRpId overrides it for another deployment.
+      buildConfigField("String", "PASSKEY_RP_ID", quoted(setting("passkeyRpId", "aglyn.com")))
       // The Firebase project's Web OAuth client id, the audience of Google's ID token for "Continue with Google" and "Connect
       // Google" (-Paglyn.googleWebClientId overrides it). Google also needs an Android OAuth client for com.aglyn.app and its
       // signing certificates (apps/android/README.md, "What Zach owes").
