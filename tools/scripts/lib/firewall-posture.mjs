@@ -756,6 +756,27 @@ export const EXPECTED_POSTURE = Object.freeze([
       }),
       SOCIAL_CRAWLER_BYPASS_RULE,
       AI_AGENT_BYPASS_RULE,
+      Object.freeze({
+        name: 'Store review + app verification bypass',
+        why: "Google Play's and the App Store's URL checks and Apple's and Google's app-association verifiers cannot solve a challenge, so the privacy policy, terms, contact page and /.well-known answered 429 to the reviewers and verifiers the store listings and native apps depend on",
+        // Live since 2026-10-15 (AGL-3804). Store listings link the privacy
+        // policy and contact page; the native apps' passkeys name
+        // `webcredentials:aglyn.com`, so Apple fetches
+        // `/.well-known/apple-app-site-association` here, and Google reads
+        // `/.well-known/assetlinks.json`. None of those clients runs JavaScript.
+        //
+        // Every page admitted is public, read-only and secrets-free. `/legal/`
+        // and `/.well-known/` are PREFIXES ending in a slash, so the bare
+        // `/legal` index and look-alike paths stay challenged; `/support` and
+        // `/contact` are EXACT paths.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'eq', valueAnyOf: Object.freeze(['/support', '/contact']) }),
+        ]),
+        alsoRequiresGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/legal/' }),
+          Object.freeze({ type: 'path', op: 'pre', value: '/.well-known/' }),
+        ]),
+      }),
     ]),
     rateLimitRules: Object.freeze([MEDIA_CDN_RATE_LIMIT_RULE]),
   }),
@@ -779,6 +800,24 @@ export const EXPECTED_POSTURE = Object.freeze([
             type: 'path',
             op: 'eq',
             valueAnyOf: Object.freeze(['/robots.txt', '/sitemap.xml']),
+          }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Store review + app verification bypass',
+        why: "Google Play's Data safety form links this page for account deletion, and Play's URL check cannot solve a challenge, so it answered 429 and the listing was flagged",
+        // Live since 2026-10-15 (AGL-3804). EXACT PATH, both spellings: the
+        // WAF matches the path the client asked for, and the trailing-slash
+        // form answers a 308 to the bare one. The rest of the docs stay
+        // challenged.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze([
+              '/workspace-and-billing/manage-account',
+              '/workspace-and-billing/manage-account/',
+            ]),
           }),
         ]),
       }),
@@ -1042,6 +1081,17 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
         alsoRequiresGroups: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/commerce/shippingeasy/' }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Store review + app verification bypass',
+        why: "Apple's AASA fetcher and Google's Digital Asset Links verifier read /.well-known for the native apps' app links and cannot solve a challenge, so a challenged file means app links never verify",
+        // Live since 2026-10-15 (AGL-3804). The apps' entitlements name
+        // `applinks:app.aglyn.com`. A PREFIX ending in a slash admits only the
+        // `/.well-known/` namespace; the middleware answers each file there or
+        // a 404, and nothing under it is authenticated.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/.well-known/' }),
         ]),
       }),
     ]),
