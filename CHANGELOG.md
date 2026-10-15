@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.256 — 2026-10-15
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.255...v1.0.0-beta.256)
+
+### Added
+
+- **native:** passkeys on for release builds now aglyn.com serves the association files ([AGL-3817](https://linear.app/aglyn/issue/AGL-3817))
+- **native,console:** console-minted App Check for the Windows app's session ([AGL-3816](https://linear.app/aglyn/issue/AGL-3816))
+- **native:** workspace invitations answered in the apps, and their link opens them ([AGL-3819](https://linear.app/aglyn/issue/AGL-3819), [AGL-851](https://linear.app/aglyn/issue/AGL-851))
+- **native,console:** single sign-on and the desktop through a console hand-off ([AGL-3816](https://linear.app/aglyn/issue/AGL-3816), [AGL-1415](https://linear.app/aglyn/issue/AGL-1415))
+- **tools:** upload Android bundles to Play testing tracks without a key file ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **fulfillment-networks:** add flexport as a fulfillment network ([AGL-3822](https://linear.app/aglyn/issue/AGL-3822))
+- **inventory-sync:** add Ordoro, synced on the merchant's own API key ([AGL-3823](https://linear.app/aglyn/issue/AGL-3823))
+
+### Fixed
+
+- **tools:** allow the release script's Play package name in the self-host ratchet ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **console:** sign-up, verify, reset and recovery links open the apps ([AGL-3817](https://linear.app/aglyn/issue/AGL-3817), [AGL-3819](https://linear.app/aglyn/issue/AGL-3819))
+- **fulfillment-networks:** flexport paths without a leading slash ([AGL-3822](https://linear.app/aglyn/issue/AGL-3822))
+- **console:** stop the bell inbox re-reading its last page ([AGL-3821](https://linear.app/aglyn/issue/AGL-3821))
+
+### Documentation
+
+- **fulfillment-networks:** flexport section, rolling out ([AGL-3822](https://linear.app/aglyn/issue/AGL-3822))
+
 ## v1.0.0-beta.255 — 2026-10-15
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.254...v1.0.0-beta.255)
