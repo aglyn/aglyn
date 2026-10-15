@@ -97,7 +97,17 @@ export const CORE_ELEMENTS = {
 export const list = () => import('./components/list')
 export const listItem = () => import('./components/list-item')
 export const listItemText = () => import('./components/list-item-text')
-export const formControls = () => import('./components/form-controls')
+// One import shared by every caller: the form elements' entries and the
+// pickers' (below) each ask for it, and a loader that hands a second caller a
+// module still being evaluated (jiti, in the AI palette and axe guards) would
+// give it empty exports. A browser's module map shares the promise anyway; a
+// failed load is forgotten so the next placement retries.
+let formControlsLoad: Promise<typeof import('./components/form-controls')> | undefined
+export const formControls = () =>
+  (formControlsLoad ??= import('./components/form-controls').catch((error: unknown) => {
+    formControlsLoad = undefined
+    throw error
+  }))
 // The date and time pickers carry MUI X and a date library: their own chunk,
 // fetched only by a page that places one (AGL-3825). It is imported FROM
 // form-controls, never beside it: a picker always sits in a Form Control, and
