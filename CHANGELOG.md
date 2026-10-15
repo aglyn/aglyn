@@ -24,6 +24,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **media:** a storage read stops tripping MaxListenersExceededWarning ([AGL-3795](https://linear.app/aglyn/issue/AGL-3795))
 - **forms:** finish the manager notification before answering a submission ([AGL-3793](https://linear.app/aglyn/issue/AGL-3793))
 - **tenant:** a site's 404 names itself in the tab in the site's language ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791), [AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
 - **ai:** a non-English site's search listing sets no English around its answers ([AGL-3792](https://linear.app/aglyn/issue/AGL-3792))
@@ -34,6 +35,7 @@ content on the marketing site and is written separately.
 <details>
 <summary>Also in this release: 1 test</summary>
 
+- **ci:** nx-ci-setup retries the root npm ci on transient failures (AGL-3797)
 - **ci:** manifests cached in the scratch path; xcodebuild says what it rebuilt (AGL-3783)
 - **marketing:** the conversions card spec loads its module once, outside any test's budget
 
