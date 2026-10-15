@@ -64,7 +64,7 @@ const SITE_SUPPRESSION: Record<string, string> = {
 /** The platform list: what the mailbox did. */
 const PLATFORM_SUPPRESSION: Record<string, string> = {
   bounce: 'hard bounce',
-  soft_bounce: 'bounce on Aglyn mail',
+  soft_bounce: 'soft bounce on platform mail',
   complaint: 'spam complaint',
   staff: 'suppressed by staff',
 }
