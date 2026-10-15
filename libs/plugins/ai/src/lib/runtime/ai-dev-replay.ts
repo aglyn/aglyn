@@ -18,7 +18,8 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { estimateAiProviderCostUsd } from '../providers/catalog'
+import { aiProviderRatesForModel, estimateAiProviderCostUsd } from '../providers/catalog'
+import { aiCacheWriteHourSurchargeUsd } from '../providers/cache-write-hour'
 import type {
   AiProvider,
   AiProviderRequest,
@@ -232,7 +233,8 @@ function round(usd: number): number {
 }
 
 function usageCost(usage: AiResult['usage'], model: string): number {
-  return estimateAiProviderCostUsd(usage, model)
+  // A live run writes hour-long entries, billed above the rate table's write rate (AGL-3830).
+  return round(estimateAiProviderCostUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiProviderRatesForModel(model)))
 }
 
 /** Counts one request a live path sent, at what the provider billed for it; `discount` is a batch's half. */

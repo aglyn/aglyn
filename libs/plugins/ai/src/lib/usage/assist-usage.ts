@@ -59,7 +59,13 @@ import {
 } from './ai-allotments'
 import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { assistMonthlyCeilingUsd } from './assist-ceiling'
-import { estimateAiBilledUsd, estimateAiProviderCostUsd } from '../providers/catalog'
+import {
+  aiBilledRatesForModel,
+  aiProviderRatesForModel,
+  estimateAiBilledUsd,
+  estimateAiProviderCostUsd,
+} from '../providers/catalog'
+import { aiCacheWriteHourSurchargeUsd } from '../providers/cache-write-hour'
 import type { AiImageSize } from '../providers/image-contract'
 import { recordAssistRefusal } from './assist-refusals'
 import {
@@ -237,11 +243,17 @@ export function assistEntitledMonthlyLimit(): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1000
 }
 
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000
+}
+
 export interface AssistTokenUsage {
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  /** How many of `cacheWriteTokens` went to an hour-long entry (AGL-3830); priced at 2x input. */
+  cacheWriteHourTokens?: number
   /**
    * Pictures a door delivered (AGL-3602), priced per picture by the image
    * catalog. Absent on every text exchange.
@@ -275,7 +287,8 @@ export function estimateAssistCostUsd(
   usage: AssistTokenUsage,
   model: string,
 ): number {
-  return estimateAiBilledUsd(usage, model)
+  // An hour-long cache write (AGL-3830) is billed above the rate table's write rate.
+  return roundUsd(estimateAiBilledUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiBilledRatesForModel(model)))
 }
 
 /**
@@ -291,7 +304,9 @@ export function estimateAssistProviderCostUsd(
   usage: AssistTokenUsage,
   model: string,
 ): number {
-  return estimateAiProviderCostUsd(usage, model)
+  return roundUsd(
+    estimateAiProviderCostUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiProviderRatesForModel(model)),
+  )
 }
 
 export interface AssistQuotaVerdict {
