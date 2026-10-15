@@ -20,7 +20,10 @@ import { claimAttempt, type PluginApiHandler } from '@aglyn/aglyn/server'
 // delivery is the record system's entry to move, found by the tags it put on
 // the message.
 import { recordPluginTaggedEmailDelivery } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
-import { normalizeDeliveryEvents } from '@aglyn/shared-util-email'
+import {
+  getSystemEmailTemplate,
+  normalizeDeliveryEvents,
+} from '@aglyn/shared-util-email'
 // By its own path, not the barrel: the check holds a `crypto` HMAC, and the
 // barrel is reached from the browser through the campaign model (AGL-2657).
 import { verifySvixSignature } from '@aglyn/shared-util-email/svix-signature'
@@ -128,15 +131,20 @@ function tagMap(raw: unknown): Record<string, string> {
  *
  * - **Every complaint.** Someone pressed "report spam". There is no reading of
  *   that which permits mailing them again.
- * - **Permanent bounces only.** Resend reports `data.bounce.type` as
- *   `Permanent` or `Transient`. A transient bounce is a full mailbox or a
- *   greylisting server — suppressing on one would unsubscribe a real
- *   subscriber over a temporary condition at their provider, which is a
- *   customer's list being quietly destroyed by our error handling.
- * - An **unrecognised or absent** bounce type does NOT suppress. Guessing in
- *   the suppressing direction is the destructive guess, and the spec asserts
- *   the shape so a payload change fails as itself rather than by silently
- *   ceasing to suppress anything.
+ * - **Every permanent bounce.** Resend reports `data.bounce.type` as
+ *   `Permanent` or `Transient`; a permanent one is a mailbox that does not
+ *   exist.
+ * - **Any other bounce on the platform's own mail** — a send that named no
+ *   site and whose `context` is a system email (verification, the retention
+ *   sweep, usage summaries). It goes on the platform list as `soft_bounce`:
+ *   one undelivered message is enough for Aglyn to stop mailing that address,
+ *   so an address that refused the verification email is not then sent every
+ *   reminder the retention sweep owes it.
+ * - **Not** a transient or untyped bounce on anyone else's mail. On a
+ *   merchant's campaign or receipt it is a full mailbox or a greylisting
+ *   server, and suppressing on one would unsubscribe a real subscriber over a
+ *   temporary condition at their provider — a customer's list quietly
+ *   destroyed by our error handling.
  *
  * The entry is keyed and shaped exactly as the unsubscribe handler's
  * (`suppressionId(email)` → `{ email, createdAt }`), because the reader does
@@ -183,8 +191,23 @@ async function recordDeliveryFailure(args: {
   const complaint = type === 'email.complained'
   const permanent = bounceType.trim().toLowerCase() === 'permanent'
   if (!complaint && !permanent) {
-    // A transient bounce is real information we deliberately do not act on.
-    return res.status(200).json({ ok: true, suppressed: false })
+    if (hostRef || !getSystemEmailTemplate(context)) {
+      // A transient bounce on a merchant's mail is real information we
+      // deliberately do not act on.
+      return res.status(200).json({ ok: true, suppressed: false })
+    }
+    // Platform mail: one bounce of any kind ends it. No reputation counter —
+    // that is per workspace and a send with no site has none.
+    await suppressEmail({
+      email: recipient,
+      reason: 'soft_bounce',
+      context,
+      hostId: null,
+      firestore,
+    })
+    return res
+      .status(200)
+      .json({ ok: true, suppressed: true, scope: 'platform' })
   }
   const reason = complaint ? 'complaint' : 'bounce'
 

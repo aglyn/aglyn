@@ -127,14 +127,23 @@ export const HOST_SUPPRESSIONS_SUBCOLLECTION = 'suppressions'
  * Why an address is suppressed.
  *
  * `bounce` means PERMANENT only. Resend reports `data.bounce.type` as
- * `Permanent` or `Transient`, and a transient bounce is a full mailbox or a
- * greylisting server — recording one here would suppress a real recipient over
- * a temporary condition at their provider. The webhook makes that distinction;
- * this type only names the outcome.
+ * `Permanent` or `Transient`; any other bounce is a `soft_bounce`. The webhook
+ * makes that distinction; this type only names the outcome.
  */
 export type EmailSuppressionReason =
   /** Permanent bounce — the mailbox does not exist. */
   | 'bounce'
+  /**
+   * Any other bounce on the platform's OWN mail — a send that named no site:
+   * verification, the retention sweep, usage summaries. One undelivered
+   * message is enough to stop the platform mailing that address again, so a
+   * sign-up typed with a dead or refusing address is not chased by every
+   * reminder the sweep owes it. Filed only for mail without a site, because
+   * on a merchant's campaign a full mailbox or a greylisting server must not
+   * quietly remove a real subscriber from their list. A completed round trip
+   * releases it, exactly as it does a `bounce`.
+   */
+  | 'soft_bounce'
   /** The recipient pressed "report spam". */
   | 'complaint'
   /** Recorded by staff (a written request, a court order, a correction). */
@@ -189,6 +198,7 @@ export type EmailSuppressionReason =
  */
 export const PLATFORM_SUPPRESSION_REASONS: readonly EmailSuppressionReason[] = [
   'bounce',
+  'soft_bounce',
   'complaint',
   'staff',
   'no_mail_server',
@@ -588,7 +598,7 @@ export async function accountBannedRecipients(
 }
 
 /**
- * The ONLY reason a completed round trip may lift, as a runtime set.
+ * The only reasons a completed round trip may lift, as a runtime set.
  *
  * ## Why a bounce is releasable
  *
@@ -620,6 +630,7 @@ export async function accountBannedRecipients(
  */
 export const OPT_IN_RELEASABLE_REASONS: readonly EmailSuppressionReason[] = [
   'bounce',
+  'soft_bounce',
 ]
 
 /** What a completed double opt-in did to a platform suppression. */
