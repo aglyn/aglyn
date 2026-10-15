@@ -1,7 +1,7 @@
 {
   "id": "calculator",
   "name": "Calculators",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "entry": "plugin.bundle.mjs",
   "hostAbi": 1,
   "description": "Calculators that run a site function, and the receipts, invoices and quotes they save as PDFs.",
