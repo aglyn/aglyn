@@ -99,8 +99,13 @@ export const listItem = () => import('./components/list-item')
 export const listItemText = () => import('./components/list-item-text')
 export const formControls = () => import('./components/form-controls')
 // The date and time pickers carry MUI X and a date library: their own chunk,
-// fetched only by a page that places one (AGL-3825).
-export const formPickers = () => import('./components/form-pickers')
+// fetched only by a page that places one (AGL-3825). It is imported FROM
+// form-controls, never beside it: a picker always sits in a Form Control, and
+// a chunk loaded as a child of form-controls' group is handed only what that
+// group lacks, where a sibling import would carry its own copy of the Form
+// Control, the input pieces and everything they share.
+export const formPickers = () =>
+  formControls().then((module) => module.loadFormPickers())
 export const blocks = () => import('./components/blocks')
 export const dataTable = () => import('./components/data-table')
 // The collection family is one module per element (AGL-3401): a page placing

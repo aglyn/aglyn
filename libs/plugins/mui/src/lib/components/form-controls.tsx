@@ -84,6 +84,12 @@ export const CHOICE_LABEL_ID: Aglyn.ComponentId = 'muiFormControlLabel'
 export const RATING_ID: Aglyn.ComponentId = 'muiRating'
 
 /**
+ * The Date and Time Pickers' module (AGL-3825), loaded from here so its chunk
+ * is a child of this one: see `formPickers` in element-tier.ts.
+ */
+export const loadFormPickers = () => import('./form-pickers')
+
+/**
  * The id a Form Control gives the input inside it, so the Form Label beside
  * that input names it (`for=`) without the author wiring anything.
  */
