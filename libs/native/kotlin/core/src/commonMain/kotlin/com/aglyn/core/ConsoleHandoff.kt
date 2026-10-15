@@ -26,7 +26,11 @@ object ConsoleHandoff {
   /** One sign-in in flight: what the app keeps until the code comes back. */
   data class Pending(val url: String, val verifier: String, val state: String, val redirectUri: String)
 
-  data class Grant(val token: String, val tenantId: String?)
+  /**
+   * A redeemed hand-off: the custom token, its pool, and for the desktop its first App Check token (the custom-token exchange is
+   * refused without one, and the desktop cannot attest itself).
+   */
+  data class Grant(val token: String, val tenantId: String?, val appCheckToken: String? = null, val appCheckExpiresAtMs: Long? = null)
 
   /** The Aglyn app's and Aglyn POS's return addresses on Android. */
   fun appRedirectUri(app: AglynAppId): String = if (app == AglynAppId.POS) "aglyn-pos://auth/handoff" else "aglyn://auth/handoff"
@@ -80,7 +84,12 @@ object ConsoleHandoff {
     }
     val token = (answer?.get("token") as? JsonPrimitive)?.contentOrNull
     if (token.isNullOrEmpty()) throw AuthError("The sign-in did not come back as expected. Try again.")
-    return Grant(token, (answer["tenantId"] as? JsonPrimitive)?.contentOrNull)
+    return Grant(
+      token,
+      (answer["tenantId"] as? JsonPrimitive)?.contentOrNull,
+      (answer["appCheckToken"] as? JsonPrimitive)?.contentOrNull,
+      (answer["appCheckExpiresAtMs"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull(),
+    )
   }
 }
 

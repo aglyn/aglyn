@@ -284,5 +284,7 @@ suspend fun ShellServices.finishConsoleHandoff(callback: String) {
   authFlow.pendingHandoff = null
   val code = com.aglyn.core.ConsoleHandoff.code(callback, pending)
   val grant = com.aglyn.core.ConsoleHandoff.redeem(api, code, pending)
+  // The desktop's first App Check token, which the custom-token exchange below needs.
+  grant.appCheckToken?.let { consoleAppCheck?.seed(it, grant.appCheckExpiresAtMs) }
   auth.signInWithCustomToken(grant.token, grant.tenantId)
 }

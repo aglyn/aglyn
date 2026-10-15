@@ -401,8 +401,17 @@ How this shapes the code:
   macOS or Linux development run of the JVM build keeps it in memory.
 - **App Check is enforced in production** on Authentication and Firestore,
   so every Firebase call carries a token (next section). Windows has no
-  built-in attestation, so the desktop build has no provider yet and its
-  sign-in goes through a console hand-off instead.
+  built-in attestation, so its sign-in goes through a console hand-off and
+  its tokens are minted by the console for that session (next section).
+  Measured against aglyn-main on 2026-10-15 with no token: Identity
+  Toolkit's `accounts:signInWithCustomToken` answers 401 "Firebase App Check
+  token is invalid." before reading the token, while the Secure Token refresh
+  and `accounts:lookup` reach their own validation. So the hand-off's custom
+  token cannot be exchanged without a token (the first one rides the
+  redemption), and an ID token refreshes without one (the mint route needs
+  only that). The order: redeem (code, verifier) → custom token and App
+  Check token → `signInWithCustomToken` with that token → later tokens from
+  `/api/auth/native-app-check`.
 - **The console hand-off** (AGL-3816) is how an app signs in where the
   console has to run the sign-in itself: workspace single sign-on on every
   app, and every sign-in and sign-up on the Windows build against a project
@@ -446,7 +455,7 @@ default whenever an emulator or a local console is set) turns it on or off.
 | Mac | **DeviceCheck** (`DCDevice`) | `DCAppAttestService.isSupported` is false on every Mac, so `DeviceCheckProvider` (`exchangeDeviceCheckToken`). The App Attest entitlement does not exist on macOS. |
 | Simulator | none | Neither is supported; the app sends no token, which only the emulator stack accepts. |
 | Android phone, tablet | **Play Integrity** (`com.google.android.play:integrity`, approved 2026-10-15) | `firebase-appcheck-playintegrity` (BoM 34.19.0): `generatePlayIntegrityChallenge`, a classic Play Integrity request with that challenge as the nonce and the project number, then `exchangePlayIntegrityToken`. Installed on every Firebase app, including a support session's named app. |
-| Windows (Compose Desktop) | none yet | `NoAppCheck`; the header plumbing is in place (`withAppCheck` on Ktor, `x-firebase-appcheck` metadata on `GrpcFirestoreListen`), so a desktop provider plugs in at one line of `DesktopShell`. |
+| Windows (Compose Desktop) | **console-minted** (Zach, 2026-10-15) | `ConsoleMintedAppCheck`: there is no attestation on Windows, so the console mints the tokens (Admin `createToken`, one hour) for a session it signed in. The first rides the hand-off's redemption (`appCheckToken`); after that `POST /api/auth/native-app-check` with the app's current ID token (revoked tokens, disabled accounts and support sessions refused; rate limited per account and install; audited as `user.nativeAppCheck`). Cached, replaced at half-life, one mint at a time, re-minted when Firebase refuses it (`withAppCheck` retries a 401 once with a fresh token), dropped on sign-out. Weaker than App Attest or Play Integrity: it attests a live console session, not a genuine binary. |
 
 The SDKs (Auth and Firestore on Apple and Android) read the token through
 `FirebaseAppCheck` on their own, which is why the official providers are used

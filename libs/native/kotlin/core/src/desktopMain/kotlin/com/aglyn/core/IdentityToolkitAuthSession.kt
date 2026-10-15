@@ -50,7 +50,16 @@ class IdentityToolkitAuthSession(
   )
   override val state: StateFlow<AuthState> = mutable
   private val lock = Mutex()
-  private var tokens: Tokens? = null
+  @Volatile private var tokens: Tokens? = null
+
+  /**
+   * The signed-in person's current ID token, never refreshed and without waiting on a refresh in flight: for a caller that a
+   * refresh itself goes through ([ConsoleMintedAppCheck]). Null when signed out, in a support session, or when it has expired.
+   */
+  fun currentIdToken(): String? {
+    if (support.active) return null
+    return tokens?.takeIf { it.expiresAt > now() }?.idToken
+  }
 
   private fun storedRefreshToken(): String? = runCatching { credentials.read(credentialKey) }.getOrNull()?.ifEmpty { null }
 

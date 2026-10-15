@@ -250,6 +250,8 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'user.acquisition-viewed': 'Viewed where the account came from',
   'user.erased': 'Erased the account',
   'user.impersonate': 'Signed in as the account',
+  'user.nativeAppCheck': 'Verified the desktop app for the account',
+  'user.nativeAppSignIn': 'Signed in to the app through the console',
   'user.sendPasswordReset': 'Sent a password reset',
   'user.setAdAudienceOptOut': 'Changed the ad audience opt-out',
   'user.setPassword': 'Set the password',

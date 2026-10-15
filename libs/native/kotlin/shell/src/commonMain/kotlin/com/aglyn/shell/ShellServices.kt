@@ -68,6 +68,8 @@ class ShellServices(
    * which Compose Desktop cannot attest to (Zach, 2026-10-15).
    */
   val signInThroughConsoleOnly: Boolean = false,
+  /** The Windows build's console-minted App Check (AGL-3816): seeded by the hand-off, dropped on sign-out. */
+  val consoleAppCheck: com.aglyn.core.ConsoleMintedAppCheck? = null,
 ) {
   /** The signed-out screens and what a sign-up carries across them. */
   val authFlow = AuthFlow()
@@ -79,6 +81,7 @@ class ShellServices(
   suspend fun signOut() {
     (auth.state.value as? com.aglyn.core.AuthState.SignedIn)?.let { push.unregister(it.user.uid) }
     auth.signOut()
+    consoleAppCheck?.clear()
     authFlow.reset()
     authFlow.pendingVerificationCode = null
   }

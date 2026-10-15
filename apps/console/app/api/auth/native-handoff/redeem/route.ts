@@ -16,12 +16,16 @@
  */
 
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
-import { authForPool, consumeRateLimit } from '@aglyn/tenant-data-admin'
+import { authForPool, consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
+  isLoopbackRedirect,
   isNativeHandoffRedirect,
   isPkceVerifier,
+  mintNativeAppCheckToken,
   redeemNativeHandoff,
 } from '@aglyn/tenant-data-admin/server/native-handoff'
+import { FieldValue } from 'firebase-admin/firestore'
 
 // lockdown-423: exempt — the app leg of signing in. Its sibling `authorize`
 // answers a lockdown with the 423 before any code exists, so a code reaching
@@ -91,8 +95,36 @@ async function handler(request: Request): Promise<Response> {
       )
     }
     const token = await pool.createCustomToken(granted.uid)
+    // The desktop's first App Check token rides the redemption (AGL-3816):
+    // Identity Toolkit refuses the custom-token exchange without one, and the
+    // desktop has no attestation of its own. Only for the loopback return,
+    // which is the desktop's; the phone apps attest themselves.
+    const desktop = isLoopbackRedirect(redirectUri)
+    const appCheck = desktop
+      ? await mintNativeAppCheckToken().catch((error) => {
+          console.error('[auth/native-handoff/redeem] app check mint failed', error)
+          return null
+        })
+      : null
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: granted.uid,
+      action: 'user.nativeAppSignIn',
+      target: `users/${granted.uid}`,
+      before: null,
+      after: {
+        tenantId: granted.tenantId,
+        app: desktop ? 'desktop' : redirectUri.startsWith('aglyn-pos:') ? 'aglyn-pos' : 'aglyn',
+        appCheckIssued: Boolean(appCheck),
+      },
+      at: FieldValue.serverTimestamp(),
+    }).catch((error) => console.error('[auth/native-handoff/redeem] audit failed', error))
     return Response.json(
-      { ok: true, token, tenantId: granted.tenantId },
+      {
+        ok: true,
+        token,
+        tenantId: granted.tenantId,
+        ...(appCheck ? { appCheckToken: appCheck.token, appCheckExpiresAtMs: appCheck.expiresAtMs } : {}),
+      },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {

@@ -183,6 +183,11 @@ const AUDITED_READS: Record<string, number> = {
   // workspace data. Refusing it under a read-only lock would let a customer
   // read their sites on the web and not in the app.
   'apps/console/app/api/auth/native-handoff/authorize/route.ts': 1,
+  // AGL-3816: the desktop's App Check token, minted for a live, unrevoked
+  // session. Below the verdict it writes only its audit row; without the
+  // token the desktop cannot read anything, so a read-only lock refusing it
+  // would cut the desktop off from data the web keeps readable.
+  'apps/console/app/api/auth/native-app-check/route.ts': 1,
   // Presence lives in RTDB and races no Firestore migration.
   'apps/console/app/api/presence/token/route.ts': 1,
   // AGL-2486: the bulk form of the line above, for list rows and detail
