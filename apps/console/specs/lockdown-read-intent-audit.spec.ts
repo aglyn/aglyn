@@ -176,6 +176,13 @@ const AUDITED_READS: Record<string, number> = {
   // Signing in is how a customer reaches the data read-only keeps readable
   // (mint, then cookie exchange).
   'apps/console/app/api/auth/session/route.ts': 2,
+  // AGL-3816: the native apps' sign-in through the console, the app twin of
+  // the mint above. Audited end to end: below the verdict it writes exactly
+  // one document, this sign-in's own one-time code in the server-only
+  // `nativeHandoffs` collection (TTL-bounded, consumed on redemption), and no
+  // workspace data. Refusing it under a read-only lock would let a customer
+  // read their sites on the web and not in the app.
+  'apps/console/app/api/auth/native-handoff/authorize/route.ts': 1,
   // Presence lives in RTDB and races no Firestore migration.
   'apps/console/app/api/presence/token/route.ts': 1,
   // AGL-2486: the bulk form of the line above, for list rows and detail

@@ -44,7 +44,7 @@ fun SignInScreen(
   fun submit() {
     if (busy) return
     val email = flow.email
-    if (email.isBlank() || password.isEmpty()) {
+    if (email.isBlank()) {
       error = "Enter your email and password."
       return
     }
@@ -52,6 +52,16 @@ fun SignInScreen(
     error = null
     scope.launch {
       try {
+        // Email first, as the console's `/sso` discovers it: an address on a workspace's single sign-on domain lives in that
+        // workspace's identity pool, so it signs in through its identity provider, never with a project-pool password.
+        if (services.consoleHandoff != null && services.signUp.usesSingleSignOn(email)) {
+          services.signInThroughConsole(com.aglyn.core.ConsoleHandoff.Start.SINGLE_SIGN_ON, loginHint = email.trim())
+          return@launch
+        }
+        if (password.isEmpty()) {
+          error = "Enter your email and password."
+          return@launch
+        }
         try {
           services.auth.signInWithEmail(email, password)
         } catch (failure: AuthError) {
@@ -76,6 +86,10 @@ fun SignInScreen(
     }
   }
 
+  if (services.signInThroughConsoleOnly) {
+    ConsoleSignInScreen(services)
+    return
+  }
   AuthCard(
     services,
     if (pos) "Sign in to $brand POS" else "Sign in",
@@ -87,7 +101,7 @@ fun SignInScreen(
   ) {
     AuthTextField("Email", flow.email, { flow.email = it }, "sign-in-email", keyboardType = KeyboardType.Email)
     AuthTextField("Password", password, { password = it }, "sign-in-password", password = true, imeAction = ImeAction.Done)
-    error?.let { AuthErrorText(it) }
+    (error ?: flow.handoffError)?.let { AuthErrorText(it) }
     AuthPrimaryButton("Sign in", busy, "sign-in-submit") { submit() }
     ProviderSignInButtons(services, ProviderMode.SIGN_IN, busy = busy, onBusy = { busy = it }, onError = { error = it })
     LegalLinksText(services, "By continuing, you agree to $brand’s")
@@ -106,5 +120,54 @@ fun SignInScreen(
         ) { Text(mode.title) }
       }
     }
+  }
+}
+
+/**
+ * The Windows build's sign-in against a project that enforces App Check (AGL-3816): every door is the console's, in the
+ * system browser, with the one-time hand-off back to this app. Sign-in, sign-up and single sign-on each start on their own
+ * console page.
+ */
+@Composable
+private fun ConsoleSignInScreen(services: ShellServices) {
+  val flow = services.authFlow
+  var busy by remember { mutableStateOf(false) }
+  val scope = rememberCoroutineScope()
+  val brand = services.config.brandName
+  val pos = services.app == NativeApp.POS
+
+  fun start(page: com.aglyn.core.ConsoleHandoff.Start) {
+    if (busy) return
+    busy = true
+    flow.handoffError = null
+    scope.launch {
+      try {
+        services.signInThroughConsole(page)
+      } catch (failure: AuthError) {
+        flow.handoffError = failure.message
+      } finally {
+        busy = false
+      }
+    }
+  }
+
+  AuthCard(
+    services,
+    if (pos) "Sign in to $brand POS" else "Sign in",
+    "Sign in or create your $brand account in your browser, and this app picks it up.",
+  ) {
+    flow.handoffError?.let { AuthErrorText(it) }
+    AuthPrimaryButton("Sign in with your browser", busy, "sign-in-browser") { start(com.aglyn.core.ConsoleHandoff.Start.SIGN_IN) }
+    OutlinedButton(
+      onClick = { start(com.aglyn.core.ConsoleHandoff.Start.SIGN_UP) },
+      enabled = !busy,
+      modifier = Modifier.fillMaxWidth().height(48.dp).testTag("sign-up-browser"),
+    ) { Text("Create account") }
+    OutlinedButton(
+      onClick = { start(com.aglyn.core.ConsoleHandoff.Start.SINGLE_SIGN_ON) },
+      enabled = !busy,
+      modifier = Modifier.fillMaxWidth().height(48.dp).testTag("sign-in-sso"),
+    ) { Text("Single sign-on (SSO)") }
+    LegalLinksText(services, "By continuing, you agree to $brand’s")
   }
 }

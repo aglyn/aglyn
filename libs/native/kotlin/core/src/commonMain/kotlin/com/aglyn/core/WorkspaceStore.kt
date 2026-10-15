@@ -36,6 +36,11 @@ data class WorkspaceState(
   /** False until the org list (and, with an org, its sites) has arrived once. */
   val ready: Boolean = false,
   val error: String? = null,
+  /**
+   * Whether the workspace window is full, so the list is not known to be complete (the console's `hasMoreOrgs`):
+   * [WorkspaceStore.loadMoreOrgs] grows it.
+   */
+  val hasMoreOrgs: Boolean = false,
 )
 
 /**
@@ -55,25 +60,35 @@ class WorkspaceStore(
   private val picked = MutableStateFlow(WorkspacePick())
   private val restoredFor = MutableStateFlow<String?>(null)
 
+  /** How many memberships the listener holds: a page, not a ceiling (the console's `ORG_PAGE_SIZE`, AGL-2336). */
+  private val orgWindow = MutableStateFlow(ORG_WINDOW)
+
+  /** Whether the last answer filled the window. */
+  private val orgsFull = MutableStateFlow(false)
+
   private val uid = auth.state
     .map { (it as? AuthState.SignedIn)?.user?.uid }
     .distinctUntilChanged()
     .onEach { uid ->
       picked.value = uid?.let { restore(it) } ?: WorkspacePick()
+      orgWindow.value = ORG_WINDOW
       restoredFor.value = uid
     }
     .stateIn(scope, SharingStarted.Eagerly, null)
 
-  private val orgs = uid.flatMapLatest { uid ->
+  private val orgs = combine(uid, orgWindow) { uid, window -> uid to window }.flatMapLatest { (uid, window) ->
     if (uid == null) {
       flowOf<Live<List<WorkspaceOrg>>>(Live.Loading)
     } else {
-      firestore.observe(FirestoreQuery("users/$uid/orgs", limit = ORG_WINDOW)).map { live ->
+      firestore.observe(FirestoreQuery("users/$uid/orgs", limit = window)).map { live ->
         when (live) {
-          is Live.Ready -> Live.Ready(
-            live.value.map { orgFromMembership(it.id, it.data) }
-              .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
-          )
+          is Live.Ready -> {
+            orgsFull.value = live.value.size >= window
+            Live.Ready(
+              live.value.map { orgFromMembership(it.id, it.data) }
+                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
+            )
+          }
           is Live.Failed -> live
           Live.Loading -> Live.Loading
         }
@@ -127,8 +142,14 @@ class WorkspaceStore(
       site = siteList?.firstOrNull { it.id == effective.hostId },
       ready = orgList.isEmpty() || siteList != null,
       error = error,
+      hasMoreOrgs = orgsFull.value,
     )
   }.stateIn(scope, SharingStarted.Eagerly, WorkspaceState())
+
+  /** Grows the workspace window by a page (the console's `loadMoreOrgs`); the listener re-subscribes with it. */
+  fun loadMoreOrgs() {
+    orgWindow.value += ORG_WINDOW
+  }
 
   fun selectOrg(orgId: String) {
     picked.value = WorkspacePick(orgId, null)

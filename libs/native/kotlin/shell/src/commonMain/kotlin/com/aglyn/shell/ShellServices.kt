@@ -58,6 +58,16 @@ class ShellServices(
   val mediaPicker: com.aglyn.ui.MediaPicker? = null,
   /** Where an export goes ([com.aglyn.ui.LocalFileExporter]); the entry point binds it. */
   val fileExporter: com.aglyn.ui.FileExporter? = null,
+  /**
+   * How this platform signs in through the console (AGL-3816): Custom Tabs returning to the app's scheme on Android, the
+   * system browser and a loopback listener on the desktop. Null hides single sign-on.
+   */
+  val consoleHandoff: com.aglyn.core.ConsoleHandoffTransport? = null,
+  /**
+   * Whether every sign-in and sign-up goes through the console: the Windows build against a project that enforces App Check,
+   * which Compose Desktop cannot attest to (Zach, 2026-10-15).
+   */
+  val signInThroughConsoleOnly: Boolean = false,
 ) {
   /** The signed-out screens and what a sign-up carries across them. */
   val authFlow = AuthFlow()

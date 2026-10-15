@@ -8,9 +8,9 @@ import AuthenticationServices
 import SwiftUI
 
 /// The doors under a sign-in or sign-up form besides the password: Google where the build has its OAuth clients, Sign in
-/// with Apple where the build offers it (App Store guideline 4.8 asks for it beside Google), and on sign-in a passkey
-/// where the build has a relying party (the console's sign-in page offers one too). On sign-up each is gated on the
-/// agreement first.
+/// with Apple where the build offers it (App Store guideline 4.8 asks for it beside Google), and on sign-in single
+/// sign-on through the console and a passkey where the build has a relying party (the console's sign-in page offers
+/// both). On sign-up each is gated on the agreement first.
 struct ProviderSignInButtons: View {
   enum Mode { case signIn, signUp }
 
@@ -34,7 +34,7 @@ struct ProviderSignInButtons: View {
   private var passkeyOffered: Bool { mode == .signIn && model.config?.passkeyRelyingParty != nil && model.api != nil }
 
   var body: some View {
-    if googleOffered || appleOffered || passkeyOffered {
+    if googleOffered || appleOffered || passkeyOffered || mode == .signIn {
       VStack(spacing: 8) {
         HStack {
           VStack { Divider() }
@@ -71,6 +71,15 @@ struct ProviderSignInButtons: View {
           }
           .accessibilityIdentifier("sign-in-apple")
         }
+        if mode == .signIn {
+          Button(action: singleSignOn) {
+            Label("Single sign-on (SSO)", systemImage: "key.viewfinder").frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.bordered)
+          .controlSize(.large)
+          .disabled(busy || !enabled)
+          .accessibilityIdentifier("sign-in-sso")
+        }
         if passkeyOffered {
           Button(action: passkey) {
             Label("Passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity)
@@ -91,6 +100,22 @@ struct ProviderSignInButtons: View {
     Task {
       do {
         try await model.continueWithGoogle(signingUp: mode == .signUp, marketing: marketing) { [webAuthentication] url, scheme in
+          try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
+        }
+      } catch {
+        if !isCanceledSignIn(error) { self.error = providerErrorMessage(error) }
+      }
+      busy = false
+    }
+  }
+
+  /// Workspace single sign-on, through the console's `/sso` page and the one-time hand-off back to the app.
+  private func singleSignOn() {
+    busy = true
+    error = nil
+    Task {
+      do {
+        try await model.signInThroughConsole(start: .singleSignOn) { [webAuthentication] url, scheme in
           try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
         }
       } catch {
