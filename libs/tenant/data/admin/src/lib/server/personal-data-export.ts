@@ -267,7 +267,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account (AGL-3634, AGL-3697): network, status, account name, ShipBob channel, ShipMonk store id, Amazon marketplaces, routing and stock settings, the last stock count by SKU and totals. The sealed access and refresh tokens (for ShipMonk, the merchant’s own API key, sealed as the access token), the webhook token’s hash and the id of the key that sealed them carry `token` in their names, and ShipMonk’s sealed webhook signing secret carries `secret` in its name; all are redacted (see redactSecrets). The document id is the site id and the network.',
+    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own ShipBob, ShipMonk, Flexport or Amazon Multi-Channel Fulfillment account (AGL-3634, AGL-3697, AGL-3822): network, status, account name, ShipBob channel, ShipMonk store id, Amazon marketplaces, routing and stock settings, the last stock count by SKU and totals. The sealed access and refresh tokens (for ShipMonk and Flexport, the merchant’s own API key or token, sealed as the access token), the webhook token’s hash and the id of the key that sealed them carry `token` in their names, and ShipMonk’s sealed webhook signing secret carries `secret` in its name; all are redacted (see redactSecrets). The document id is the site id and the network.',
   },
   {
     collection: 'fulfillmentNetworkOrders',

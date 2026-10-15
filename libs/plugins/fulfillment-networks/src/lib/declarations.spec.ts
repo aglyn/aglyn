@@ -49,6 +49,7 @@ describe('the plugin’s boot registrations (AGL-3634)', () => {
       { pluginId: FULFILLMENT_NETWORKS_PLUGIN_ID, id: 'shipbob', label: 'ShipBob' },
       { pluginId: FULFILLMENT_NETWORKS_PLUGIN_ID, id: 'amazon-mcf', label: 'Amazon Multi-Channel Fulfillment' },
       { pluginId: FULFILLMENT_NETWORKS_PLUGIN_ID, id: 'shipmonk', label: 'ShipMonk' },
+      { pluginId: FULFILLMENT_NETWORKS_PLUGIN_ID, id: 'flexport', label: 'Flexport' },
     ])
   })
 

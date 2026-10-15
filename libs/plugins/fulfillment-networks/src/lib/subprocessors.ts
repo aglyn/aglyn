@@ -21,9 +21,10 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 
 /**
- * ShipBob and Amazon (AGL-3634), and ShipMonk (AGL-3697): each the
- * merchant's OWN account, connected by the merchant's own consent (a grant,
- * or for ShipMonk the merchant's own API key), so each is a destination the customer chose
+ * ShipBob and Amazon (AGL-3634), ShipMonk (AGL-3697) and Flexport
+ * (AGL-3822): each the merchant's OWN account, connected by the merchant's
+ * own consent (a grant, or for ShipMonk and Flexport the merchant's own API
+ * key or token), so each is a destination the customer chose
  * rather than a recipient of Aglyn's. Nothing reaches either until a site
  * connects one, and then only that site's orders and stock.
  */
@@ -34,6 +35,7 @@ const ORDER_DATA =
 const SHIPBOB_FILE = '`libs/plugins/fulfillment-networks/src/lib/providers/shipbob.ts`'
 const AMAZON_FILE = '`libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts`'
 const SHIPMONK_FILE = '`libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts`'
+const FLEXPORT_FILE = '`libs/plugins/fulfillment-networks/src/lib/providers/flexport.ts`'
 const OAUTH_FILE = '`libs/plugins/fulfillment-networks/src/lib/server/oauth.ts`'
 
 const api = (host: string, network: string, file: string, sandbox: boolean): PluginEgressHostDeclaration => ({
@@ -82,6 +84,12 @@ export const FULFILLMENT_NETWORKS_HOSTS: PluginEgressHostDeclaration[] = [
     ...api('sandbox.shipmonk.dev', 'ShipMonk', SHIPMONK_FILE, true),
     reason: `Customer-chosen destination. The ShipMonk sandbox API of the store whose own API key a site's admin pastes, reached only from ${SHIPMONK_FILE}. Used only by a deployment pointed at the sandbox (\`SHIPMONK_ENVIRONMENT=sandbox\`), where nothing real ships.`,
     dataReceived: ORDER_DATA.replace('the access token the merchant\'s grant issued', 'the API key the merchant pasted'),
+  },
+  {
+    ...api('logistics-api.flexport.com', 'Flexport Logistics', FLEXPORT_FILE, false),
+    reason: `Customer-chosen destination. The Flexport Logistics API of the account whose own API token a site's admin pastes in the store's settings, reached only from ${FLEXPORT_FILE} with that token, to send the orders the merchant routes to it, read their shipments and stock back, and register the webhooks that tell the store when an order ships. Flexport's sandbox is a separate account at the same address, chosen by the token.`,
+    dataReceived:
+      "For each paid order the merchant's store sends to Flexport: an opaque order reference, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), the ship method, and the items Flexport ships (Flexport's own product id, quantity and unit value for customs). Read back: the merchant's Flexport product list (SKU and Flexport's product id), Flexport's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each product it holds. For each connection, the webhook address and a random token Flexport sends back with each event. Also the API token the merchant pasted, which authenticates each call. No payment details are sent.",
   },
 ]
 
