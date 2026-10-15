@@ -249,6 +249,12 @@ const TENANT_EXEMPT_AUDIT: Record<string, string> = {
     'anonymous browser beacon, aggregate-only write into a platform collection',
   'apps/tenant/app/api/errors/route.ts':
     'anonymous browser beacon, aggregate-only write into a platform collection',
+  // The native apps' domain association (AGL-3817): fetched by Apple's and
+  // Google's verifiers, answered only on the platform's own home host.
+  'apps/tenant/app/api/native-app-association/apple-app-site-association/route.ts':
+    'a public verifier document naming the native apps; no caller identity and no site-scoped action',
+  'apps/tenant/app/api/native-app-association/assetlinks/route.ts':
+    'a public verifier document naming the native apps; no caller identity and no site-scoped action',
   'apps/tenant/app/api/health/route.ts':
     'infrastructure liveness probe; unauthenticated by design so a monitor can reach it',
   'apps/tenant/app/api/health/error-beacon/route.ts':

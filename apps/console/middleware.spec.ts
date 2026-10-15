@@ -800,7 +800,9 @@ describe('the reserved /.well-known namespace (AGL-3016)', () => {
     '/.well-known/oauth-authorization-server',
     '/.well-known/oauth-protected-resource',
     '/.well-known/security.txt',
-    '/.well-known/apple-app-site-association',
+    // Spelled like the two documents served here, and neither of them.
+    '/.well-known/apple-app-site-association.json',
+    '/.well-known/assetlinks',
     '/.well-known/anything-we-do-not-serve',
   ])('answers 404 for %s', async (path) => {
     const response = await middleware(request('app.aglyn.com', path))
@@ -859,6 +861,45 @@ describe('the reserved /.well-known namespace (AGL-3016)', () => {
   it('leaves an ordinary console page alone', async () => {
     const response = await middleware(request('app.aglyn.com', '/signin'))
     expect(response.status).toBe(200)
+  })
+})
+
+describe('the native apps\' association documents (AGL-3817)', () => {
+  /*
+   * The gate above answered 404 for the whole namespace before any route was
+   * looked up, so `apple-app-site-association` and `assetlinks.json` 404'd on
+   * the console no matter what route existed. These two are excepted by
+   * exact path and rewritten to their handlers.
+   */
+  it.each([
+    ['/.well-known/apple-app-site-association', '/api/native-app-association/apple-app-site-association'],
+    ['/.well-known/assetlinks.json', '/api/native-app-association/assetlinks'],
+  ])('rewrites %s to its route handler', async (path, route) => {
+    const response = await middleware(request('app.aglyn.com', path))
+    expect(response.status).toBe(200)
+    expect(new URL(String(response.headers.get('x-middleware-rewrite'))).pathname).toBe(route)
+  })
+
+  it('sets no cookie and no CSP on the verifier\'s response', async () => {
+    const response = await middleware(
+      request('app.aglyn.com', '/.well-known/apple-app-site-association'),
+    )
+    expect(response.headers.get('set-cookie')).toBeNull()
+    expect(response.headers.get('content-security-policy')).toBeNull()
+    expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('spends no verdict lookup, on any host', async () => {
+    await middleware(request('zgover.aglyn.com', '/.well-known/assetlinks.json'))
+    await middleware(request('auth.aglyn.com', '/.well-known/assetlinks.json'))
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('is reached by the matcher', () => {
+    const [pattern] = config.matcher as string[]
+    const source = new RegExp(`^${pattern}$`)
+    expect(source.test('/.well-known/apple-app-site-association')).toBe(true)
+    expect(source.test('/.well-known/assetlinks.json')).toBe(true)
   })
 })
 

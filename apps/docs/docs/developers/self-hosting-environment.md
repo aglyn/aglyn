@@ -1169,6 +1169,15 @@ Passkeys set up from the Android app are checked against the app's signing certi
 | --- | --- | --- | --- |
 | `PASSKEY_ANDROID_APK_KEY_HASHES` | Feature | Runtime, console | Comma-separated SHA-256 hashes of the signing certificates of your Android builds, each as base64url without padding (43 characters). An Android passkey is accepted only from an app whose hash is listed; unset, Android passkeys are refused and the web console's are unaffected. |
 
+The two files that link your apps to your domains are served from these, by both containers:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `NATIVE_APPLE_APP_IDS` | Feature | Runtime, console and tenant | Comma-separated Apple app ids, `<team id>.<bundle id>`, the preferred app first. They become `/.well-known/apple-app-site-association`: on the console's own host with `webcredentials` and the console paths the apps open (`applinks`), and on the host of `NEXT_PUBLIC_PLATFORM_HOME_URL` with `webcredentials` only. Unset, the file answers 404. |
+| `NATIVE_ANDROID_APPS` | Feature | Runtime, console and tenant | `;`-separated `<package>=<sha256>,<sha256>` entries, each fingerprint the colon-separated SHA-256 of a signing certificate as Play Console prints it (list the Play app signing key and your upload key). They become `/.well-known/assetlinks.json` on the same two hosts, granting each package app links and passkeys. Unset, the file answers 404. |
+
+Every other host either container serves, a customer's site or a white-label console, answers 404 for both files.
+
 A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone, iPad or Mac and to Firebase Cloud Messaging for an Android device. The server sends to APNs directly with the key above, and to FCM with the Firebase project credentials it already holds, so FCM needs no variable of its own. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
 
 ---

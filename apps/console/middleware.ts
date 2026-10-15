@@ -36,6 +36,7 @@ import {
 import { readCookie } from './app/api/auth/read-cookie'
 import { parseSignedOut } from './app/api/auth/session/session-tombstone'
 import { enforceSanctionsGeo } from './constants/sanctions-geo'
+import { nativeAppAssociationRoute } from '@aglyn/aglyn/app-utils/native-app-association'
 import {
   isTrackingHostName,
   trackingHostPath,
@@ -131,6 +132,13 @@ const AUTH_PATH_SEGMENTS = new Set([
  * arrives here to be broken. The cost of the blanket rule is that a well-known
  * document we ever do serve — a security contact, an app-site association —
  * must be excepted in the same breath as it is added, or it will 404.
+ *
+ * The native apps' two association documents are that exception (AGL-3817):
+ * `apple-app-site-association` and `assetlinks.json` are rewritten to their
+ * route handlers ahead of the refusal, exactly by name, so the rest of the
+ * namespace still answers 404. Adding a route alone was never enough — this
+ * gate answered before any route was looked up, which is why both paths
+ * 404'd.
  */
 const WELL_KNOWN_PREFIX = '/.well-known'
 
@@ -432,6 +440,14 @@ export async function middleware(request: NextRequest) {
   // whole rule — and it is anchored at the root, leaving `/acme/.well-known/x`
   // to the org routes, where a segment spelled like this one is just a segment.
   const { pathname } = request.nextUrl
+  // The two documents served here, by exact path (AGL-3817). A rewrite, not a
+  // pass-through: the org catch-all would otherwise claim `.well-known` as a
+  // workspace slug. Ahead of the CSP and session code below, so the verifier
+  // gets the route's own headers and no cookie.
+  const associationRoute = nativeAppAssociationRoute(pathname)
+  if (associationRoute) {
+    return NextResponse.rewrite(new URL(associationRoute, request.url))
+  }
   if (
     pathname === WELL_KNOWN_PREFIX ||
     pathname.startsWith(`${WELL_KNOWN_PREFIX}/`)
