@@ -635,6 +635,9 @@ private struct ThemeLoaded: Equatable {
   var catalog: ThemeCatalog
   var stored: ThemeValues
   var presets: [ThemePreset]
+  var changes: [ThemeChange] = []
+  var stale = false
+  var themeName: String?
 }
 
 private struct ThemeSection: View {
@@ -659,12 +662,20 @@ private struct ThemeSection: View {
           load = .ready(loaded)
         }
       })
+    if let loaded = load.value, themeSelection(of: doc.data).kind == "installed" || !loaded.changes.isEmpty {
+      ThemeChangesCard(
+        changes: loaded.changes, stale: loaded.stale, themeName: loaded.themeName ?? "its theme", api: api, canEdit: canEdit,
+        changed: { attempt += 1 })
+    }
   }
 
   private func reload() async {
     do {
-      let (catalog, stored, presets) = try await api.themeEditor()
-      load = .ready(ThemeLoaded(catalog: catalog, stored: stored, presets: presets))
+      let answer = try await api.themeEditor()
+      load = .ready(
+        ThemeLoaded(
+          catalog: answer.catalog, stored: answer.values, presets: answer.presets, changes: answer.changes, stale: answer.stale,
+          themeName: answer.themeName))
     } catch is CancellationError {
     } catch {
       load = .failed((error as? ConsoleAPIError)?.message ?? "The theme could not be loaded.")
@@ -673,6 +684,59 @@ private struct ThemeSection: View {
 
   /// What reloads the editor: the site document changing under it.
   private var reloadKey: String { "\(attempt)-\(doc.date("updatedAt")?.timeIntervalSince1970 ?? 0)-\(hasThemeEdits(doc.data))" }
+}
+
+/// "What you have changed": every value this site set on top of its theme, the
+/// theme's own beside it, and a Reset for each. Shown once the site has a change,
+/// and always for a theme installed from the marketplace.
+private struct ThemeChangesCard: View {
+  let changes: [ThemeChange]
+  let stale: Bool
+  let themeName: String
+  let api: HostSettingsAPI
+  let canEdit: Bool
+  /// Asks the section to read the theme editor again once a change is reset.
+  let changed: () -> Void
+  @State private var runner = ActionRunner()
+
+  var body: some View {
+    Section {
+      if stale {
+        AglynNotice(
+          "These changes were made against a different theme. They still apply, because a brand color usually still means the same thing, but a component style written for another theme often does not. Check them, or clear them all with Undo all edits.",
+          tone: .warning)
+      }
+      if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() } }
+      if changes.isEmpty {
+        Text("Nothing: this site is running \(themeName) exactly as its publisher shipped it. Anything you change is stored as your change on top.")
+          .foregroundStyle(.secondary)
+      } else {
+        Text("\(changes.count) value\(changes.count == 1 ? "" : "s") \(changes.count == 1 ? "differs" : "differ") from \(themeName).")
+          .foregroundStyle(.secondary)
+        ForEach(changes) { change in
+          HStack {
+            VStack(alignment: .leading, spacing: 2) {
+              HStack {
+                Text(change.label)
+                if let scheme = change.scheme { StatusChip(scheme) }
+              }
+              Text("Theme: \(change.themeValue ?? "not set")").font(AglynFont.caption).foregroundStyle(.secondary)
+              Text("Yours: \(change.overrideValue ?? "not set")").font(AglynFont.caption)
+            }
+            Spacer()
+            Button("Reset") {
+              runner.run(onDone: changed) { try await api.resetThemeChange(change.path) }
+            }
+            .buttonStyle(.borderless)
+            .disabled(!canEdit || runner.busy)
+          }
+          .accessibilityIdentifier("theme-change-\(change.path)")
+        }
+      }
+    } header: {
+      Text("What you have changed").accessibilityAddTraits(.isHeader)
+    }
+  }
 }
 
 private struct ThemeLibraryCard: View {

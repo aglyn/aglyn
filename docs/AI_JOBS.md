@@ -466,7 +466,17 @@ request and 16 batched.
   arrive within `AGLYN_LIVE_AI_BATCH_WINDOW_MS` (2 s) of each other — a
   `Promise.all` over the briefs — go as one batch, and the re-asks, asked
   only once their answers are read, gather into the next. Half price, in
-  minutes rather than seconds; the adapter waits up to an hour.
+  minutes rather than seconds.
+- **A slow batch costs part of the discount, never the round** (AGL-3781). A
+  batch is waited on for `AGLYN_LIVE_AI_BATCH_WAIT_MS` (half an hour by
+  default). One still processing then is canceled and read once the cancel
+  has ended it: what it already answered comes back at half price, and each
+  request it never reached is asked on its own, at full price, with the same
+  request and cache breakpoints, the first alone so the rest read the prefix
+  it writes. The run prints one line when it happens, and the ledger counts
+  those requests as `batchFallbacks` rather than `batchedRequests`. A golden
+  run's second batch once sat in progress for over an hour, was canceled
+  whole, and took every grade in it.
 - **The first request over a prefix goes alone.** A cache entry is readable
   only once the request writing it has started answering, so a `Promise.all`
   over N briefs on one prompt wrote the prefix N times and read it none.
@@ -485,9 +495,18 @@ request and 16 batched.
 - **An effort A/B arm.** `AGLYN_AI_EFFORT=job.form:medium,job.text:low` (or
   `*:medium`) asks those step kinds at that effort in a development run, and
   `npm run eval:ai-live` records the arm's answers beside the defaults'
-  (`<case>.<model>.effort-<arm>.json`) and prints one score line a brief, so
-  one round compares two efforts. Production's efforts move only once such a
-  round shows the lower one holds.
+  (`<case>.<model>.effort-<8 hex>.json`, a hash of the parsed arm; the
+  recording's `arm` holds the tag and every effort it named) and prints one
+  score line a brief, `score <case> (<kind>) <model> effort-<8 hex>: …`,
+  which pairs with the default run's line for the same brief. The file name
+  once spelled the whole list out and failed with ENAMETOOLONG. The run's
+  ledger prints after the run, however it ended. Production's efforts move
+  only once such a round shows the lower one holds.
+- **A live run is verbose.** Under an AI agent jest 30 reports through its
+  agent reporter, which prints only a failing file's console, so a passing
+  live run over two spec files printed nothing. `AGLYN_LIVE_AI=1` and the
+  launcher's mark turn jest's verbose mode on (`jest.config.ts`), which
+  writes each test's console straight out.
 
 ## Rules a kind can actually break
 
@@ -703,14 +722,28 @@ Every door reads its row rather than a constant of its own.
   so every Free plan would be refused. The wall has to be re-derived for the
   layout language first.
 - **The layout language thinks.** A page's answer and a site's header and
-  footer are asked with adaptive thinking at `effort: medium`
-  (`AI_LAYOUT_LANGUAGE_THINKING`), and each ceiling carries room for it above
+  footer are asked with adaptive thinking at `effort: low`
+  (`AI_LAYOUT_LANGUAGE_THINKING`; medium until AGL-3781, whose live round of
+  2026-10-14 built 39 of 39 pages and 13 of 13 frames at low, 64 of 65 holding
+  their rules on the first ask and none cut off), and each ceiling carries room for it above
   the answer's own: 2,000 tokens on a page (5,000 in all; the live answers
   ran 683–1,745) and 4,000 on a frame (5,200). The page's room is bounded by
   time, not money: the answer, its re-ask and the follow-up must fit the
   least time a beat gives a step, and `aiJobStepBudget` lowers a ceiling that
-  does not — at 5,000 of room it cut the page ceiling to 879. The theme step already thought
-  adaptively, at the model's default effort, and is unchanged.
+  does not — at 5,000 of room it cut the page ceiling to 879. The room stays sized at
+  medium, and so do the figures priced or measured from it — the Free wall's page and
+  layout, and the measured tables in `ai-credit-estimate.ts` — so none moved: low draws
+  less, and a quote is never under what is drawn.
+- **Three more rows moved after the golden A/B of 2026-10-14** (AGL-3781;
+  arm B against the defaults, one brief a kind): the theme step thinks
+  adaptively at `effort: medium` (its brief passed with the default's scores
+  and half the output tokens; a site start's look keeps its own thinking-off
+  setting), a template asks `effort: medium` with thinking off (both briefs
+  passed, about a third fewer output tokens), and a text answer thinks at
+  `effort: low` (the tagline passed and scored higher). The arm also lowered
+  products, components, forms, email, workflows and logic, and lost
+  quality on the catalog, a component and a workflow, so those rows keep
+  their defaults.
 
 ## Planning, and a job that waits for a person
 
@@ -3181,7 +3214,11 @@ the element budget its request asks for.
   guided start gives a Free site no content part, whatever the wall leaves. On a paid workspace a site plan's one answer comes to at most 86 credits
   for five pages, where the routing table's ceiling with thinking spent 227. (84 before a paid plan could
   create datasets: the record-template plan tool and the dataset sentence, AGL-3616; 85 before a form could
-  write to one: the plan tool's `writesTo` and the form-dataset sentence.)
+  write to one: the plan tool's `writesTo` and the form-dataset sentence.) A paid site's plan
+  asks `effort: medium` (`AI_PAID_SITE_PLAN_EFFORT`, AGL-3781: the live round of 2026-10-14
+  planned 11 of 11 at medium in 16 attempts to the default's 22, $0.129 to $0.164); the 86
+  is priced at the ceiling, which effort does not move, so it stands. A Free site's plan
+  sends no effort and keeps its model's default.
 - **A site start's home reads as a full website (AGL-3660).** A plan is an outline, and
   the only section figure a site plan was told was the Free wall's ceiling, so a local
   Free yoga start (2026-10-07) planned its home with two sections. The site plan's turn

@@ -240,8 +240,8 @@ export function resolveSpecifier(specifier, from, { aliases, exists }) {
  * Rules
  * ------------------------------------------------------------------------- */
 
-/** Platform-neutral packages a pure module may import. */
-const NEUTRAL_PACKAGES = new Set(['react', 'firebase'])
+/** Platform-neutral packages a pure module may import. `@msgpack/msgpack` is plain byte coding: no DOM, no Node. */
+const NEUTRAL_PACKAGES = new Set(['react', 'firebase', '@msgpack/msgpack'])
 
 /** Refused from a pure module by name, with the reason a person reads. */
 export function bannedForPure(specifier) {

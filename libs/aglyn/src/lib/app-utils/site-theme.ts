@@ -26,6 +26,7 @@ import {
   isEmptyOverride,
   overrideConflicts,
   overridePaths,
+  overrideWriteValue,
   readArtifactOverride,
   resolveOverride,
   type ArtifactOverride,
@@ -679,6 +680,47 @@ export function describeThemeOverride(
       overrideValue: readThemePath(resolved, path),
     }
   })
+}
+
+/** Copy-on-write set of a dotted path; `undefined` removes the key. */
+function setThemePath(target: unknown, path: string[], value: unknown): any {
+  const [head, ...rest] = path
+  const container: Record<string, unknown> =
+    target != null && typeof target === 'object' && !Array.isArray(target)
+      ? { ...(target as Record<string, unknown>) }
+      : {}
+  if (!rest.length) {
+    if (value === undefined) delete container[head]
+    else container[head] = value
+    return container
+  }
+  container[head] = setThemePath(container[head], rest, value)
+  return container
+}
+
+/**
+ * The `themeOverride` to store once ONE value is back at the theme's own
+ * (the "Reset" beside a row of "What you have changed").
+ * Computed by resolving the patch, putting the publisher's value back at that
+ * path, and re-diffing — rather than by deleting a key from the patch object.
+ * The two differ whenever a path was reached through a keyed array or a
+ * deletion sentinel, and re-diffing is right in every case because it asks the
+ * same question the save path asks. `undefined` when the site has no override
+ * to change.
+ */
+export function themeOverrideAfterReset(
+  host: ThemeHostDocument | null | undefined,
+  path: string,
+): ArtifactOverride | null | undefined {
+  const override = readThemeOverride(host)
+  if (!override) return undefined
+  const base = (host?.theme ?? {}) as HostTheme
+  const resolved = resolveOverride<HostTheme>(base, override.patch)
+  const restored = setThemePath(resolved, path.split('.'), readThemePath(base, path))
+  return overrideWriteValue(
+    diffOverride(base, restored),
+    host?.themeInstalledFrom?.sha256 ?? null,
+  )
 }
 
 /** Reads a dotted path out of a theme. */

@@ -19,14 +19,9 @@
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { docsHelp } from '../../constants/docs-links'
 import {
-  diffOverride,
-  overrideWriteValue,
-  resolveOverride,
-} from '@aglyn/aglyn/app-utils/artifact-overrides'
-import {
   describeThemeOverride,
   isOverrideForCurrentTheme,
-  readThemeOverride,
+  themeOverrideAfterReset,
   type ThemeOverrideEntry,
 } from '@aglyn/aglyn/app-utils/site-theme'
 import {
@@ -145,23 +140,11 @@ export function ThemeOverridesCard(props: {
    */
   const resetPath = useCallback(
     async (entry: ThemeOverrideEntry) => {
-      const override = readThemeOverride(host)
-      if (!override) return
+      const next = themeOverrideAfterReset(host, entry.path)
+      if (next === undefined) return
       setBusy(true)
       try {
-        const base = (host?.theme ?? {}) as HostTheme
-        const resolved = resolveOverride<HostTheme>(base, override.patch)
-        const restored = setPath(
-          resolved,
-          entry.path.split('.'),
-          readPath(base, entry.path),
-        )
-        const verdict = await onWriteOverride(
-          overrideWriteValue(
-            diffOverride(base, restored),
-            host?.themeInstalledFrom?.sha256 ?? null,
-          ),
-        )
+        const verdict = await onWriteOverride(next)
         // A refused write must not be announced as a reset (AGL-1358): the
         // whole patch is recomputed from `host`, so if that read is stale the
         // "reset" would restore paths the author cleared on purpose.
@@ -330,32 +313,6 @@ export function ThemeOverridesCard(props: {
       </Stack>
     </CardDisplay>
   )
-}
-
-/** Reads a dotted path. */
-function readPath(value: unknown, path: string): unknown {
-  let cursor: unknown = value
-  for (const segment of path.split('.')) {
-    if (cursor == null || typeof cursor !== 'object') return undefined
-    cursor = (cursor as Record<string, unknown>)[segment]
-  }
-  return cursor
-}
-
-/** Copy-on-write set of a dotted path; `undefined` removes the key. */
-function setPath(target: unknown, path: string[], value: unknown): any {
-  const [head, ...rest] = path
-  const container: Record<string, unknown> =
-    target != null && typeof target === 'object' && !Array.isArray(target)
-      ? { ...(target as Record<string, unknown>) }
-      : {}
-  if (!rest.length) {
-    if (value === undefined) delete container[head]
-    else container[head] = value
-    return container
-  }
-  container[head] = setPath(container[head], rest, value)
-  return container
 }
 
 export default ThemeOverridesCard

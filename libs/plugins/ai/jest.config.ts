@@ -30,4 +30,10 @@ export default {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
   coverageDirectory: '../../../coverage/libs/plugins/ai',
+  // A live run prints its ledger and tables as it goes (AGL-3781). Under an
+  // AI agent jest 30 reports through its agent reporter, which prints only a
+  // FAILING file's buffered console, so a passing run of two live spec files
+  // printed nothing at all; one file alone runs verbose and was unaffected.
+  // Verbose writes each test's console straight out instead of buffering it.
+  ...(process.env['AGLYN_LIVE_AI'] === '1' || process.env['AI_EVAL_LIVE_LAUNCHER'] ? { verbose: true } : {}),
 }

@@ -97,9 +97,15 @@ export function aiLayoutRenamedLabel(label: string, destination: AiLayoutDestina
   const name = destination.label.toLowerCase()
   const words = wordsOf(destination.standsInFor)
   if (!words.length) return label
-  // The page's own name, or its words alone, singular or plural.
+  // The page's own name, or its words alone, singular or plural, whole: a
+  // letter in any script continues a word (AGL-3791). `\b` reads "ú" or "í"
+  // as no letter, so it never matched "Menú" and matched "art" inside
+  // "artículos".
   const stems = words.map((word) => word.replace(/s$/, ''))
-  const pattern = new RegExp(`\\b(?:${stems.map((stem) => stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')})s?\\b`, 'giu')
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{M}\\p{N}])(?:${stems.map((stem) => stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')})s?(?![\\p{L}\\p{M}\\p{N}])`,
+    'giu',
+  )
   const renamed = label.replace(pattern, (found) => (found[0] === found[0].toUpperCase() ? destination.label as string : name))
   return renamed
 }

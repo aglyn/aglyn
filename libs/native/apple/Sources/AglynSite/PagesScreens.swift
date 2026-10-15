@@ -52,9 +52,16 @@ enum PageSheet: Identifiable {
   case publish(PageNode, currentSlug: String)
   case duplicate(PageNode)
   case move(PageNode)
+  /// The page templates to start a new page from, then the one chosen.
+  case fromTemplate
+  case useTemplate(ArtifactRow)
+  case saveTemplate(PageNode)
 
   var id: String {
     switch self {
+    case .fromTemplate: "from-template"
+    case .useTemplate(let row): "use-template-\(row.id)"
+    case .saveTemplate(let page): "save-template-\(page.id)"
     case .newPage: "new-page"
     case .newGroup: "new-group"
     case .rename(let page): "rename-\(page.id)"
@@ -117,9 +124,7 @@ struct PagesScreen: View {
           }
         }
         .sheet(item: $sheet) { sheet in
-          PageSheetView(sheet: sheet, model: model, api: api, runner: runner) { id in
-            context.navigate(sitePagesScreen, ["page": id])
-          } close: {
+          PageSheetRouter(context: context, hostID: hostID, sheet: sheet, model: model, api: api, runner: runner, open: { self.sheet = $0 }) {
             self.sheet = nil
           }
         }
@@ -131,6 +136,13 @@ struct PagesScreen: View {
     .navigationTitle("Pages")
     .toolbar {
       ToolbarItemGroup(placement: .primaryAction) {
+        Button {
+          open(.fromTemplate)
+        } label: {
+          Label("From a template", systemImage: "square.grid.2x2")
+        }
+        .disabled(!canEdit)
+        .accessibilityIdentifier("page-from-template")
         Button {
           open(.newGroup)
         } label: {
@@ -275,9 +287,7 @@ struct PageDetail: View {
     if let row = model.row(pageID) {
       content(row)
         .sheet(item: $sheet) { sheet in
-          PageSheetView(sheet: sheet, model: model, api: api, runner: runner) { id in
-            context.navigate(sitePagesScreen, ["page": id])
-          } close: {
+          PageSheetRouter(context: context, hostID: hostID, sheet: sheet, model: model, api: api, runner: runner, open: { self.sheet = $0 }) {
             self.sheet = nil
           }
         }
@@ -338,6 +348,8 @@ struct PageDetail: View {
       .disabled(!canEdit)
       if !page.isGroup {
         Button { open(.duplicate(page)) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+          .disabled(!canEdit)
+        Button { open(.saveTemplate(page)) } label: { Label("Save as template", systemImage: "bookmark") }
           .disabled(!canEdit)
         Button { open(.move(page)) } label: { Label("Move", systemImage: "folder") }
           .disabled(!canPublish)
@@ -492,6 +504,44 @@ struct PageVersionsSection: View {
 }
 
 /// Every page sheet: new page, new group, rename, publish, duplicate and move.
+/// The sheet for a page action: the template sheets, which need the site, or the page form.
+struct PageSheetRouter: View {
+  let context: NativePluginContext
+  let hostID: String
+  let sheet: PageSheet
+  let model: SitePagesModel
+  let api: PagesAPI
+  let runner: ActionRunner
+  let open: (PageSheet) -> Void
+  let close: () -> Void
+
+  var body: some View {
+    switch sheet {
+    case .fromTemplate:
+      TemplateGallerySheet(context: context, hostID: hostID, kind: "page", onChoose: { open(.useTemplate($0)) }, close: close)
+    case .useTemplate(let row):
+      UseTemplateSheet(context: context, hostID: hostID, row: row, onDone: { _, id in
+        close()
+        context.navigate(sitePagesScreen, ["page": id])
+      }, close: close)
+    case .saveTemplate(let page):
+      SaveAsTemplateSheet(
+        context: context, hostID: hostID, kind: "page", defaultName: page.name,
+        load: { templates in try await templates.pageSource(page.id, versionID: page.versionID) },
+        onSaved: { message in
+          runner.notice = message
+          close()
+        }, close: close)
+    default:
+      PageSheetView(sheet: sheet, model: model, api: api, runner: runner) { id in
+        context.navigate(sitePagesScreen, ["page": id])
+      } close: {
+        close()
+      }
+    }
+  }
+}
+
 struct PageSheetView: View {
   let sheet: PageSheet
   let model: SitePagesModel
@@ -516,7 +566,7 @@ struct PageSheetView: View {
         case .publish(_, let slug): text = slug
         case .duplicate(let page): name = "\(page.name) copy".capped(pageNameMax)
         case .move(let page): parent = page.parentID
-        case .newPage, .newGroup: break
+        case .newPage, .newGroup, .fromTemplate, .useTemplate, .saveTemplate: break
         }
       }
   }
@@ -629,6 +679,8 @@ struct PageSheetView: View {
           moveChoice(choice.name, systemImage: choice.isGroup ? SiteSymbols.group : SiteSymbols.page, id: choice.id)
         }
       }
+    case .fromTemplate, .useTemplate, .saveTemplate:
+      EmptyView()
     }
   }
 
