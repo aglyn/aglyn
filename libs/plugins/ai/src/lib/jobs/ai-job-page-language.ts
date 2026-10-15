@@ -24,6 +24,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
+import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import { aiLayoutListingAt, aiLayoutListingsOf, aiLayoutRecordHref, type AiLayoutListing } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
@@ -452,6 +453,15 @@ export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: strin
   return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug) }
 }
 
+/**
+ * The site a page's entrance motion is drawn for (AGL-3838): its design where
+ * the job names a kind of site, else the job's own seed, which moves in the
+ * standard mood — so every page of one site moves alike.
+ */
+export function aiLayoutMotionSiteOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: string): { kind?: string; seed: number } {
+  return aiLayoutDesignOf(job, slug) ?? { seed: aiSiteSeed(aiOriginJobId(job)) }
+}
+
 /** A validated language page, stored as the page keeps it. */
 export interface AiLayoutPageBuilt {
   nodes: NodesMap
@@ -480,6 +490,8 @@ export interface AiLayoutPageCheckInput {
   design?: AiLayoutDesign | null
   /** The site's language, which the compiler's own words are written in (AGL-3760); absent, English. */
   language?: string
+  /** The site the page's entrance motion is drawn for (`aiLayoutMotionSiteOf`); absent, its design. */
+  motion?: { kind?: string; seed: number }
 }
 
 /**
@@ -744,7 +756,10 @@ export function aiLayoutPageCheck(
       value: violations.length
         ? null
         : {
-            nodes,
+            // Entrance motion is the site's, decided here in code and never
+            // asked of the model (AGL-3838): written once the page has passed,
+            // so no check above reads a prop the palette does not list.
+            nodes: aiWithSiteMotion(nodes, input.motion ?? input.design ?? { seed: 0 }, { sectionIds: input.sectionIds }),
             load: report.load,
             settled: [...reading.settled, ...compiled.settled],
             dropped,
@@ -828,6 +843,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
           reusableComponents: input.reusableComponents,
           kept,
           design: aiLayoutDesignOf(input.job, input.screen.slug),
+          motion: aiLayoutMotionSiteOf(input.job, input.screen.slug),
           ...(only ? { only } : {}),
           ...(input.plan.language ? { language: input.plan.language } : {}),
         }),

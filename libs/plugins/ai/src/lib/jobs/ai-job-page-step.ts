@@ -112,9 +112,11 @@ import {
   aiLayoutListingContext,
   aiLayoutPageTargets,
   aiLayoutLeftOutNote,
+  aiLayoutMotionSiteOf,
   aiRunLayoutPage,
   type AiLayoutStartPage,
 } from './ai-job-page-language'
+import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
   aiCreationUnit,
   aiRunJobUnit,
@@ -731,8 +733,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // Portfolio page whose opening photos all loaded eagerly was (2026-10-10).
       // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729),
       // and an item of a list that shows only placeholders is taken out where the list keeps a real one (AGL-3827).
-      const settle = <T extends AiDoctrineTree>(tree: T): T =>
-        aiSettleUnrelatedScreenLinks(
+      // And the site's entrance motion is written on a page built a section at
+      // a time, as on one built whole (AGL-3838); a page that already moves —
+      // by this pass or by its author — comes back as it is, and is not written.
+      const motion = aiLayoutMotionSiteOf(job, screen.slug)
+      const settle = <T extends AiDoctrineTree>(tree: T): T => {
+        const settled = aiSettleUnrelatedScreenLinks(
           aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page'), 'page', context),
           'page',
           {
@@ -740,6 +746,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             ownScreenIds: [screen.id, draftId],
           },
         )
+        const moved = aiWithSiteMotion(settled.nodes, motion, { sectionIds })
+        return moved === settled.nodes ? settled : { ...settled, nodes: moved }
+      }
       const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
       if (settled.nodes !== (page as unknown as AiDoctrineTree['nodes'])) {
         // Never written once the job is canceled (AGL-3616).

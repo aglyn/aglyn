@@ -51,6 +51,8 @@ import { aiTemplateExamplesSystemBlock } from '../runtime/ai-template-examples'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiJobDraftId } from './ai-job-draft-ids'
+import { aiLayoutMotionSiteOf } from './ai-job-page-language'
+import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -586,7 +588,9 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
       uid: job.createdBy,
       org,
       name,
-      nodes: result.value.nodes,
+      // The site's entrance motion, as its pages have (AGL-3838): a post or a
+      // record opens the way the rest of the site does.
+      nodes: aiWithSiteMotion(result.value.nodes, aiLayoutMotionSiteOf(job, ''), { rootId: result.value.rootId }),
       slug: aiTemplateDraftSlug(definition, collection),
       now,
     })
