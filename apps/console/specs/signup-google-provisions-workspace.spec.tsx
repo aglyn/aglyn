@@ -531,3 +531,31 @@ describe('AGL-3578 · a landing sign-up holds the auth layout', () => {
     expect(isSignUpLandingHeld()).toBe(false)
   })
 })
+
+describe('AGL-3806 · an unacknowledged write does not hold a sign-up', () => {
+  afterEach(() => jest.useRealTimers())
+
+  it('lets the password door land once the write deadline passes', async () => {
+    // Another console tab holds the Firestore lease and is asleep in the
+    // background: its writes are queued, and nothing acknowledges them.
+    jest.useFakeTimers()
+    const never = () => new Promise<undefined>(() => undefined)
+    mockRemember.mockImplementationOnce(never)
+    mockRememberWorkspace.mockImplementationOnce(never)
+    render(<SignUp />)
+    await submitForm()
+
+    expect(isSignUpLandingHeld()).toBe(true)
+    // The plan intent, then the held workspace name: one deadline each.
+    for (let i = 0; i < 2; i += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(4_000)
+        await settle()
+      })
+    }
+    // Red before the fix: still held, with the loading overlay up, until
+    // the 20 s hold lapsed and then for as long as the writes took.
+    expect(mockRememberWorkspace).toHaveBeenCalled()
+    expect(isSignUpLandingHeld()).toBe(false)
+  })
+})
