@@ -812,6 +812,12 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       "The Android resource namespace URI (`xmlns:android`) in the vector drawables and adaptive icon `tools/scripts/lib/native-brand.mjs` generates for the native Android app (AGL-3651). An identifier inside the XML the build compiles.",
     dataReceived: 'Nothing. No request is made.',
   },
+  'www.apple.com': {
+    disposition: 'no-request',
+    reason:
+      'The property-list DTD identifier (`<!DOCTYPE plist … "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`) in the export options plist `tools/scripts/native-release.mjs` writes for `xcodebuild -exportArchive` (AGL-3800). A document type identifier, never fetched.',
+    dataReceived: 'Nothing. No request is made.',
+  },
   'ns.adobe.com': {
     disposition: 'no-request',
     reason:

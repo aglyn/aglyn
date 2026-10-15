@@ -572,6 +572,46 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope,
       unlimited = answer.boolField("unlimited") == true,
     )
   }.getOrNull()
+
+  /**
+   * Which of these files staff have disabled, and what the owner is told (`POST /api/media/quarantine`, AGL-1612).
+   * Asked in batches of [MEDIA_QUARANTINE_PROBE_MAX], the most the route takes. Silent on failure, as the console is:
+   * a notice is extra context on a grid that reads fine without it, so a failed probe leaves the grid as it was.
+   */
+  suspend fun quarantine(ids: Collection<String>): Map<String, MediaQuarantineNotice> {
+    val found = mutableMapOf<String, MediaQuarantineNotice>()
+    for (batch in ids.filter { it.isNotBlank() }.distinct().sorted().chunked(MEDIA_QUARANTINE_PROBE_MAX)) {
+      runCatching { api.request("/api/media/quarantine", ApiMethod.POST, body("mediaIds" to batch)) }
+        .onSuccess { found += parseMediaQuarantine(it) }
+    }
+    return found
+  }
+}
+
+/** How many files one `/api/media/quarantine` call may ask about (`MAX_PROBE_IDS`). */
+const val MEDIA_QUARANTINE_PROBE_MAX = 100
+
+/**
+ * Why a file stopped serving, in the words its owner is shown. The staff note (a takedown notice number, a
+ * complainant) is not in what the route answers, so it cannot reach this.
+ */
+data class MediaQuarantineNotice(val reason: String, val title: String, val body: String, val contact: String?) {
+  /** The notice as one line: the body, then the support address in brackets, as the console's tooltip reads. */
+  val message: String get() = contact?.let { "$body ($it)" } ?: body
+}
+
+/** The route's `quarantined` map (media id to notice); none when the answer has no map, as a healthy platform's does. */
+fun parseMediaQuarantine(answer: JsonElement?): Map<String, MediaQuarantineNotice> {
+  val map = (answer as? JsonObject)?.get("quarantined") as? JsonObject ?: return emptyMap()
+  return map.mapNotNull { (id, entry) ->
+    if (entry !is JsonObject) return@mapNotNull null
+    id to MediaQuarantineNotice(
+      reason = entry.field("reason").orEmpty(),
+      title = entry.field("title")?.takeIf { it.isNotBlank() } ?: "Disabled",
+      body = entry.field("body").orEmpty(),
+      contact = entry.field("contact")?.takeIf { it.isNotBlank() },
+    )
+  }.toMap()
 }
 
 /** The most a film's length, or a side of its frame, may be before it is a bug and not a measurement (`MEDIA_VIDEO_MAX_*`). */

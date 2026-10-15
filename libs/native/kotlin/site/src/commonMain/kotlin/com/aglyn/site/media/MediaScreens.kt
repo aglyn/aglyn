@@ -193,6 +193,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val picker = LocalMediaPicker.current
   var uploading by remember { mutableStateOf<String?>(null) }
   var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
+  // Files staff have disabled among those on screen (AGL-1612), asked of the console after each change of the page.
+  var disabled by remember(scope) { mutableStateOf<Map<String, MediaQuarantineNotice>>(emptyMap()) }
 
   var audioBatch by remember { mutableStateOf<List<PickedFile>?>(null) }
 
@@ -267,6 +269,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
         }
         RefreshableBox(model.refreshing, model::refresh) {
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load the library", skeleton = { SkeletonGrid(tiles = 12) }) { rows ->
+            val shown = rows.map { it.id }
+            LaunchedEffect(shown) { disabled = api.quarantine(shown) }
             if (rows.isEmpty()) {
               EmptyState(
                 if (model.search.isBlank() && model.type == null && model.filters.count == 0) "No files here yet" else "No files match",
@@ -287,7 +291,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
                 horizontalArrangement = Arrangement.spacedBy(space(1f)),
                 verticalArrangement = Arrangement.spacedBy(space(1f)),
               ) {
-                items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, item.id == selected) { onSelect(item.id) } }
+                items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, item.id == selected, disabled = item.id in disabled) { onSelect(item.id) } }
                 if (model.hasMore) item(span = { GridItemSpan(maxLineSpan) }) { SkeletonList(rows = 1) }
               }
             }
@@ -475,7 +479,7 @@ private fun FolderPicker(folder: FolderPick, folders: List<MediaFolder>, byId: M
 }
 
 @Composable
-internal fun MediaTile(item: MediaItem, origin: String, selected: Boolean, onClick: () -> Unit) {
+internal fun MediaTile(item: MediaItem, origin: String, selected: Boolean, disabled: Boolean = false, onClick: () -> Unit) {
   Surface(
     Modifier.clip(MaterialTheme.shapes.medium).clickable(onClick = onClick).testTag("media-${item.id}"),
     shape = MaterialTheme.shapes.medium,
@@ -485,8 +489,12 @@ internal fun MediaTile(item: MediaItem, origin: String, selected: Boolean, onCli
     Column {
       Box {
         RemoteImage(item.thumbnail(origin), item.alt.ifBlank { item.fileName }, Modifier.fillMaxWidth().aspectRatio(1f), icon = mediaKindIcon(item.kind))
-        if (item.private) {
-          Box(Modifier.padding(space(0.5f))) { StatusChip("Private", StatusTone.WARNING) }
+        if (item.private || disabled) {
+          Column(Modifier.padding(space(0.5f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+            if (item.private) StatusChip("Private", StatusTone.WARNING)
+            // Not serving to anyone, so an error and not the Private advisory beside it.
+            if (disabled) StatusChip("Disabled", StatusTone.ERROR, Modifier.testTag("media-disabled-${item.id}"))
+          }
         }
       }
       Text(
@@ -618,11 +626,13 @@ private fun MediaDetailBody(
     tags.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() } != item.tags
   val now = remember(item.updatedAt) { nowMillis() }
   val orgWideEditor = scope !is MediaScope.Org || context.orgRole in setOf("owner", "admin")
+  val disabled by produceState<MediaQuarantineNotice?>(null, api, item.id) { value = api.quarantine(listOf(item.id))[item.id] }
 
   Column(
     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("media-detail"),
     verticalArrangement = Arrangement.spacedBy(space(2f)),
   ) {
+    disabled?.let { NoticeBanner("${it.title}. ${it.message}", StatusTone.ERROR, Modifier.testTag("media-quarantine")) }
     SectionCard(null) {
       RemoteImage(
         item.thumbnail(origin, 640),
