@@ -12,6 +12,7 @@
  *   node tools/scripts/native-release.mjs ios-archive <Aglyn|AglynPOS> <ios|macos>
  *   node tools/scripts/native-release.mjs ios-upload <path to .xcarchive>
  *   node tools/scripts/native-release.mjs android-bundle <app|pos>
+ *   node tools/scripts/native-release.mjs android-upload <path to .aab> [track]
  *
  * Every output lands in /private/tmp/aglyn-release (AGLYN_RELEASE_DIR
  * overrides it), named by app, platform and build number.
@@ -34,6 +35,16 @@
  *   Gradle through the environment only, never the command line. The
  *   versionCode is the minutes since 1970 (UTC).
  *
+ * android-upload: sends a bundle to a Play testing track (internal unless
+ *   a track is named) through the Play Developer API: an edit, the bundle,
+ *   the track's release, commit. No key file: the operator's own
+ *   application-default login (`gcloud auth application-default login`)
+ *   mints a short-lived token for the publisher service account
+ *   (AGLYN_PLAY_PUBLISHER, default play-publisher@aglyn-main), which holds
+ *   "Release apps to testing tracks" on both apps in Play Console and
+ *   nothing else. The operator needs Service Account Token Creator on it.
+ *   The package comes from the bundle's name (Aglyn-…, AglynPOS-…).
+ *
  * The Xcode and Gradle builds take the shared build locks
  * (/private/tmp/aglyn-xcodebuild.lock, /private/tmp/aglyn-gradle.lock), so
  * two sessions on this Mac never build at once.
@@ -44,6 +55,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmdirSync,
   statSync,
   writeFileSync,
@@ -285,6 +297,105 @@ function androidBundle(module) {
   console.log(`bundle ${target} (${sizeOf(target)})`)
 }
 
+const PLAY_PACKAGES = { Aglyn: 'com.aglyn.app', AglynPOS: 'com.aglyn.pos' }
+const PLAY_TRACKS = new Set(['internal', 'alpha', 'beta'])
+const PLAY_API = 'https://androidpublisher.googleapis.com'
+
+async function playToken() {
+  const publisher =
+    process.env.AGLYN_PLAY_PUBLISHER ||
+    'play-publisher@aglyn-main.iam.gserviceaccount.com'
+  const login = spawnSync(
+    'gcloud',
+    ['auth', 'application-default', 'print-access-token'],
+    { encoding: 'utf8' },
+  )
+  if (login.status !== 0)
+    fail(
+      'no application-default login: run `gcloud auth application-default login`',
+    )
+  const project = publisher.split('@')[1]?.split('.')[0]
+  const response = await fetch(
+    `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${publisher}:generateAccessToken`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${login.stdout.trim()}`,
+        'Content-Type': 'application/json',
+        ...(project ? { 'x-goog-user-project': project } : {}),
+      },
+      body: JSON.stringify({
+        scope: ['https://www.googleapis.com/auth/androidpublisher'],
+        lifetime: '900s',
+      }),
+    },
+  )
+  const body = await response.json()
+  if (!body.accessToken)
+    fail(
+      `could not act as ${publisher}: ${body.error?.message ?? response.status}`,
+    )
+  return body.accessToken
+}
+
+async function play(token, path, init = {}) {
+  const response = await fetch(`${PLAY_API}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...init.headers },
+  })
+  const text = await response.text()
+  const body = text ? JSON.parse(text) : {}
+  if (!response.ok)
+    fail(
+      `Play ${init.method ?? 'GET'} ${path}: ${body.error?.message ?? response.status}`,
+    )
+  return body
+}
+
+async function androidUpload(bundle, track = 'internal') {
+  if (!bundle || !existsSync(bundle)) fail(`no bundle at ${bundle}`)
+  if (!PLAY_TRACKS.has(track))
+    fail(
+      `track must be one of ${[...PLAY_TRACKS].join(', ')} (production is released by a person)`,
+    )
+  const name = basename(bundle).split('-android-')[0]
+  const packageName = PLAY_PACKAGES[name]
+  if (!packageName)
+    fail(
+      `cannot tell the app from ${basename(bundle)} (expected ${Object.keys(PLAY_PACKAGES).join('- or ')}-…)`,
+    )
+  const token = await playToken()
+  const app = `/androidpublisher/v3/applications/${packageName}/edits`
+  const edit = await play(token, app, { method: 'POST' })
+  const uploaded = await play(
+    token,
+    `/upload${app}/${edit.id}/bundles?uploadType=media`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: readFileSync(bundle),
+    },
+  )
+  await play(token, `${app}/${edit.id}/tracks/${track}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      track,
+      releases: [
+        {
+          name: `${uploaded.versionCode} (${headCommit()})`,
+          versionCodes: [String(uploaded.versionCode)],
+          status: 'completed',
+        },
+      ],
+    }),
+  })
+  await play(token, `${app}/${edit.id}:commit`, { method: 'POST' })
+  console.log(
+    `\n${packageName}: versionCode ${uploaded.versionCode} released to ${track} (${sizeOf(bundle)})`,
+  )
+}
+
 const [command, ...args] = process.argv.slice(2)
 try {
   switch (command) {
@@ -297,9 +408,12 @@ try {
     case 'android-bundle':
       androidBundle(args[0])
       break
+    case 'android-upload':
+      await androidUpload(args[0], args[1])
+      break
     default:
       fail(
-        'usage: ios-archive <Aglyn|AglynPOS> <ios|macos> | ios-upload <archive> | android-bundle <app|pos>',
+        'usage: ios-archive <Aglyn|AglynPOS> <ios|macos> | ios-upload <archive> | android-bundle <app|pos> | android-upload <aab> [track]',
       )
   }
 } catch (error) {
