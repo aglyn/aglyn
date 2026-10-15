@@ -55,7 +55,11 @@ describe('setting a PIN', () => {
   it('stores a salted scrypt hash, never the digits', () => {
     const stored = h.memory.read('hosts/shop/posStaffPins/cashier')!
     expect(stored['pinScrypt']).toMatch(/^[0-9a-f]{32}:[0-9a-f]{128}$/)
-    expect(JSON.stringify(stored)).not.toContain('2580')
+    // Everything but the hash, since a random hex salt or digest can hold
+    // "2580" by chance (one run in about 400 did).
+    const rest = Object.fromEntries(Object.entries(stored).filter(([key]) => key !== 'pinScrypt'))
+    expect(JSON.stringify(rest)).not.toContain('2580')
+    expect(Object.values(stored)).not.toContain('2580')
   })
 
   it('refuses a weak or malformed PIN', async () => {
