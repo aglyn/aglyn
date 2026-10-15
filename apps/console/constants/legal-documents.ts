@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v15'
+export const LEGAL_DOCUMENT_VERSION = 'v16'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -817,6 +817,42 @@ export interface LegalDocumentManifestEntry {
  * `v14` pin (45676 bytes / `c2e6ef…`) byte for byte before and after
  * publication, and keeps that pin.
  *
+ * v16 (2026-10-14): ad conversion reporting on sites built with Aglyn
+ * (AGL-3799, disclosing AGL-3694).
+ *
+ *   - Privacy gains a paragraph after §1.4: when a site owner connects their
+ *     own Meta, TikTok or Pinterest ad account, Aglyn reports that site's
+ *     purchases and form submissions to it with the owner's own access token
+ *     (`libs/plugins/ad-conversions`). Only for visitors whose cookie choices
+ *     on that site allow advertising (where the law requires asking first,
+ *     only after they accept; elsewhere, unless they turned it off: an
+ *     `implied` record grants advertising, see `advertisingGrantedByStatus`)
+ *     and whose browser sends no Global Privacy Control signal. A purchase
+ *     carries the order id, value excluding tax, currency and items; a form
+ *     only that it was submitted. Email, phone, name, city, state, postal code
+ *     and country go as SHA-256 hashes; IP address, user agent, the page
+ *     address without its query string and the platform's own browser ids go
+ *     unhashed. No payment details; the consent and event records expire
+ *     after 14 days (Firestore TTL on `expiresAt`).
+ *   - Subprocessors (not acceptance-pinned): the merchant-connected sentence
+ *     adds live chat, website translation, review and local courier services.
+ *     The Terms, AUP, DMCA, DPA and Cookie Policy are unchanged.
+ *
+ * "Last updated" stays October 14, 2026, which v15 already set the same
+ * Central day, so no `/legal` index card moved. Published from the console's
+ * Publish now at 19:17 Central. The wording and the re-acceptance
+ * were approved on 2026-10-14; the record is
+ * `Platform Docs/Legal/Proposed/2026-10-14-ad-conversions-merchant-sites/`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through the
+ * Docs API, the page was published, the live page confirmed serving the new
+ * text, and only then was privacy captured: 28594 bytes (`d3d51f…`),
+ * identical across two requests and a cache-busting query, and archived in
+ * `Acceptance-Snapshots/v16` beside an unchanged copy of the terms. The Terms
+ * did not change, so they were the control: the live terms page reproduced its
+ * `v14` pin (45676 bytes / `c2e6ef…`) byte for byte before and after
+ * publication, and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -883,7 +919,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '0eb10f4fd436de87d53ab5d0bf80778497cabeb8050175e5b9ed1d382ebc4a9d',
-    bytes: 27475,
+      'd3d51f7304e8c45fe8696824ccd592bc3f824414ed7390f3e95ab4d1a976c587',
+    bytes: 28594,
   },
 ]
