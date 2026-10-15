@@ -43,6 +43,7 @@ class AglynPosApplication : Application() {
         authEmulatorHost = BuildConfig.AUTH_EMULATOR_HOST,
         firestoreEmulatorHost = BuildConfig.FIRESTORE_EMULATOR_HOST,
         appCheck = BuildConfig.APP_CHECK,
+        googleWebClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID,
       ),
       manifest = NativePluginManifest.entries,
       appVersion = BuildConfig.VERSION_NAME,

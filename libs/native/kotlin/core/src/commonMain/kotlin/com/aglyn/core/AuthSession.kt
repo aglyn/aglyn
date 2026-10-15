@@ -10,6 +10,11 @@ data class AuthUser(
   val uid: String,
   val email: String?,
   val displayName: String?,
+  /**
+   * Whether the account's email address is confirmed. Every console route refuses an account that has not confirmed it, so the
+   * shell shows the verification step first, as the console's `/verify-email` does. Each [AuthSession] states it.
+   */
+  val emailVerified: Boolean = true,
 )
 
 sealed interface AuthState {
@@ -49,6 +54,36 @@ interface AuthSession {
   /** Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner). */
   suspend fun signInWithCustomToken(token: String): Unit = throw AuthError("Signing in with a passkey is not available here.")
 
+  /**
+   * Creates an email and password account in the project pool and signs in as it, as the console's sign-up does
+   * (`createUserWithEmailAndPassword`); the blocking functions and abuse checks run on it as on the console's. Throws [AuthError]
+   * with the sign-up form's words and the Identity Toolkit code.
+   */
+  suspend fun signUpWithEmail(email: String, password: String): AuthUser =
+    throw AuthError("Creating an account is not available here.")
+
+  /**
+   * Signs in with Google's ID token (a [GoogleCredentialSource]'s), which signs up a person the project has not seen; returns
+   * whether it did, the console's `isNewAccount(credential)`. Throws [AuthError] with the form's words.
+   */
+  suspend fun signInWithGoogle(googleIdToken: String): Boolean = throw AuthError("Google sign-in is not available here.")
+
+  /** Re-reads the account (the console's `user.reload()`), so a confirmed address shows as confirmed in [state]. */
+  suspend fun reload() {}
+
+  /** Confirms an address with an emailed verification link's code (`applyActionCode`); no one need be signed in. */
+  suspend fun applyActionCode(code: String): Unit = throw AuthError("Verifying an email is not available here.")
+
+  /** The address an emailed reset link's code is for (`verifyPasswordResetCode`); throws when it is spent or expired. */
+  suspend fun verifyPasswordResetCode(code: String): String = throw AuthError("Resetting a password is not available here.")
+
+  /** Sets a new password with an emailed reset link's code (`confirmPasswordReset`). */
+  suspend fun confirmPasswordReset(code: String, newPassword: String): Unit =
+    throw AuthError("Resetting a password is not available here.")
+
+  /** The sign-in providers the account holds (`password`, `google.com`, …), as the console reads `user.providerData`. */
+  suspend fun providerIds(): List<String> = emptyList()
+
   suspend fun signOut()
 
   /** Proves [current], then sets [new]. Throws [AuthError] with words for the form. */
@@ -67,7 +102,8 @@ interface AuthSession {
   suspend fun updateDisplayName(name: String) {}
 }
 
-class AuthError(override val message: String, cause: Throwable? = null) : Exception(message, cause)
+/** A failed auth call, in words for the form; [code] is the Identity Toolkit code it carried, when one did. */
+class AuthError(override val message: String, cause: Throwable? = null, val code: String? = null) : Exception(message, cause)
 
 /** The sign-in form's words for an Identity Toolkit / Firebase Auth error code. */
 fun authErrorMessage(code: String?): String = if (code == APP_CHECK_REFUSED || isAppCheckRefusalText(code)) {

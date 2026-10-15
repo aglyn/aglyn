@@ -92,13 +92,13 @@ public enum GoogleLink {
     ]
   }
 
-  /// The whole link: sheet, code, token, Identity Toolkit. `authenticate` opens the URL in the platform's
-  /// auth sheet and returns the URL it came back to; `firebaseIDToken` is the account's current token.
-  public static func link(
-    iosClientID: String, apiKey: String, emulatorHost: String?, loginHint: String?, transport: HTTPTransport,
-    firebaseIDToken: @Sendable () async throws -> String?,
+  /// Google's ID token for the person who signs in on the platform's auth sheet: the sheet (with Google's account chooser
+  /// always shown, so a sign-in never silently reuses the device's account, AGL-1415), the code, then the token.
+  /// `authenticate` opens the URL in the sheet and returns the URL it came back to.
+  public static func idToken(
+    iosClientID: String, loginHint: String?, transport: HTTPTransport,
     authenticate: @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
-  ) async throws {
+  ) async throws -> String {
     let (verifier, challenge) = pkce()
     let state = base64URL(Data((0..<16).map { _ in UInt8.random(in: 0...255) }))
     let url = authorizationURL(iosClientID: iosClientID, challenge: challenge, state: state, loginHint: loginHint)
@@ -113,6 +113,18 @@ public enum GoogleLink {
     guard (200..<300).contains(tokenResponse.statusCode), case .object(let granted)? = JSONValue.decode(tokenData),
       let googleIDToken = granted["id_token"]?.stringValue
     else { throw GoogleLinkError(message: "Google did not hand back a sign-in. Try again.") }
+    return googleIDToken
+  }
+
+  /// The whole link: sheet, code, token, Identity Toolkit. `authenticate` opens the URL in the platform's
+  /// auth sheet and returns the URL it came back to; `firebaseIDToken` is the account's current token.
+  public static func link(
+    iosClientID: String, apiKey: String, emulatorHost: String?, loginHint: String?, transport: HTTPTransport,
+    firebaseIDToken: @Sendable () async throws -> String?,
+    authenticate: @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
+  ) async throws {
+    let googleIDToken = try await idToken(
+      iosClientID: iosClientID, loginHint: loginHint, transport: transport, authenticate: authenticate)
 
     guard let firebaseToken = try await firebaseIDToken() else { throw GoogleLinkError(message: "Sign in again, then connect Google.") }
     let base = emulatorHost.map { "http://\($0)/identitytoolkit.googleapis.com" } ?? "https://identitytoolkit.googleapis.com"

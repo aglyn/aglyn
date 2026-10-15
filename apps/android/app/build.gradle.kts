@@ -28,6 +28,9 @@ android {
     versionCode = setting("versionCode", "1").toInt()
     versionName = "0.1.0"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // The console host whose sign-up, verification and reset links open the app (App Links, verified by the console's
+    // assetlinks.json).
+    manifestPlaceholders["consoleHost"] = setting("consoleUrl", "https://app.aglyn.com").substringAfter("://").substringBefore("/").substringBefore(":")
   }
 
   // The upload key (Play App Signing re-signs for the store). Applied only when the
@@ -87,9 +90,10 @@ android {
       // The domain passkeys are made for (aglyn.com). Set -Paglyn.passkeyRpId only once aglyn.com serves an
       // assetlinks.json that names this app's signing certificate (apps/android/README.md, "What Zach owes").
       buildConfigField("String", "PASSKEY_RP_ID", quoted(setting("passkeyRpId", "")))
-      // The Firebase project's Web OAuth client id, for "Connect Google" (-Paglyn.googleWebClientId). The project also needs an
-      // Android OAuth client for com.aglyn.app and the release signing certificate (apps/android/README.md, "What Zach owes").
-      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("googleWebClientId", "")))
+      // The Firebase project's Web OAuth client id, the audience of Google's ID token for "Continue with Google" and "Connect
+      // Google" (-Paglyn.googleWebClientId overrides it). Google also needs an Android OAuth client for com.aglyn.app and its
+      // signing certificates (apps/android/README.md, "What Zach owes").
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("googleWebClientId", "543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com")))
       buildConfigField("String", "DEBUG_EMAIL", quoted(""))
       buildConfigField("String", "DEBUG_PASSWORD", quoted(""))
     }

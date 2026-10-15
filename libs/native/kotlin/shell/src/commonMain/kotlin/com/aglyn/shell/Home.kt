@@ -126,11 +126,7 @@ internal fun HomeScreen(
     ) {
       workspace.error?.let { error -> SectionCard(null) { Text(error, color = MaterialTheme.colorScheme.error) } }
       if (workspace.ready && workspace.orgs.isEmpty()) {
-        EmptyState(
-          "No workspaces yet",
-          body = "Create a workspace in the ${services.config.brandName} console, then come back here.",
-          icon = AglynIcons.named("workspaces"),
-        )
+        FirstRunContent(services)
         return@Column
       }
       SiteHeader(workspace, host, now, onSwitch = { navigator.push(Route.Switcher) }) { url -> runCatching { uriHandler.openUri(url) } }

@@ -86,7 +86,7 @@ class DesktopSessionTest {
     val session = IdentityToolkitAuthSession(http(), "key", "127.0.0.1:9299", credentials = InMemoryCredentialStore(), credentialKey = "k")
     session.signInWithEmail("dana@example.test", "pw")
     session.updateDisplayName("Dana Scully")
-    assertEquals(AuthState.SignedIn(AuthUser("u1", "dana@example.test", "Dana Scully")), session.state.value)
+    assertEquals(AuthState.SignedIn(AuthUser("u1", "dana@example.test", "Dana Scully", emailVerified = false)), session.state.value)
   }
 
   @Test
@@ -130,7 +130,7 @@ class DesktopSessionTest {
     val session = IdentityToolkitAuthSession(http(calls), "key", "127.0.0.1:9299", credentials = store, credentialKey = "k")
     assertEquals(AuthState.Restoring, session.state.value)
     session.restore()
-    assertEquals(AuthState.SignedIn(AuthUser("u1", "dana@example.test", "Dana")), session.state.value)
+    assertEquals(AuthState.SignedIn(AuthUser("u1", "dana@example.test", "Dana", emailVerified = false)), session.state.value)
     assertEquals("id-2", session.idToken())
     assertEquals("good-rotated", store.read("k"))
     assertEquals(listOf("token", "accounts:lookup"), calls)
