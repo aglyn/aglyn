@@ -3,6 +3,12 @@
 
 name: Deploy to Firebase Hosting on PR
 'on': pull_request
+# One run per PR: a re-push supersedes the running one (AGL-3783). The
+# workflow is disabled in the repository's settings today; this keeps it from
+# piling up a build per push if it is ever turned back on.
+concurrency:
+  group: firebase-hosting-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 # The Nx Cloud org is disabled (free-plan quota); with an access token
 # present, nx hard-fails CI at authorization before running any task.
 env:

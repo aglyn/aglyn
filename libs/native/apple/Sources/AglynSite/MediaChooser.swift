@@ -36,17 +36,22 @@ public let privateFileRefusal =
 
 /// The media library as a chooser, the native side of the console's media
 /// picker (`pickMedia`): this site's files and the workspace's, filtered to
-/// one kind, one tap to choose. Shown in a sheet by whoever needs a file.
+/// one kind (nil: every kind), one tap to choose. A private file is refused unless `allowPrivate` (the console's
+/// `pickMedia` option for paid media, which only a private file can be). Shown in a sheet by whoever needs a file.
 public struct MediaChooserSheet: View {
   let context: NativePluginContext
-  let kind: String
+  let kind: String?
+  let allowPrivate: Bool
   let onChoose: (ChosenMedia) -> Void
   @State private var tab = 0
   @Environment(\.dismiss) private var dismiss
 
-  public init(context: NativePluginContext, kind: String = "image", onChoose: @escaping (ChosenMedia) -> Void) {
+  public init(
+    context: NativePluginContext, kind: String? = "image", allowPrivate: Bool = false, onChoose: @escaping (ChosenMedia) -> Void
+  ) {
     self.context = context
     self.kind = kind
+    self.allowPrivate = allowPrivate
     self.onChoose = onChoose
   }
 
@@ -70,7 +75,7 @@ public struct MediaChooserSheet: View {
         }
         if let scope {
           MediaScopeGate(context: context, scope: scope) { scopeTokens in
-            MediaChooserGrid(context: context, scope: scope, scopeTokens: scopeTokens, kind: kind) { chosen in
+            MediaChooserGrid(context: context, scope: scope, scopeTokens: scopeTokens, kind: kind, allowPrivate: allowPrivate) { chosen in
               onChoose(chosen)
               dismiss()
             }
@@ -98,7 +103,8 @@ private struct MediaChooserGrid: View {
   let context: NativePluginContext
   let scope: MediaScope
   let scopeTokens: [String]?
-  let kind: String
+  let kind: String?
+  let allowPrivate: Bool
   let onChoose: (ChosenMedia) -> Void
   @State private var model = MediaListModel()
   @State private var searchText = ""
@@ -122,7 +128,7 @@ private struct MediaChooserGrid: View {
           LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: AglynSpace.one)], spacing: AglynSpace.one) {
             ForEach(items) { item in
               Button {
-                if item.isPrivate { refusal = privateFileRefusal } else { onChoose(ChosenMedia(item: item, scope: scope)) }
+                if item.isPrivate && !allowPrivate { refusal = privateFileRefusal } else { onChoose(ChosenMedia(item: item, scope: scope)) }
               } label: {
                 AglynMediaTile(
                   item.fileName, imageURL: item.thumbnail(origin: context.api.origin).flatMap(URL.init(string:)),
