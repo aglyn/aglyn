@@ -331,6 +331,32 @@ export function aiLayoutListingContext(
   return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...tokens])] }
 }
 
+/** The most of the text of the page a planned page starts from that its prompt shows: about 1,000 tokens (AGL-3832). */
+export const AI_LAYOUT_START_PAGE_MAX_CHARS = 4_000
+
+/** The site's page a planned page starts from (its plan's `duplicateOf`), by its name and its words. */
+export interface AiLayoutStartPage {
+  label: string
+  text: string
+}
+
+/**
+ * The page a planned page starts from, as its prompt shows it (AGL-3832): its
+ * words, never its tree. A page in the layout language is written whole, so
+ * a copy of the page would be replaced by the answer, and what the copy was
+ * for — what the site already says there — reaches the page only through
+ * the model. Empty when the page has no words to show.
+ */
+export function aiLayoutStartPageLines(start: AiLayoutStartPage | null | undefined): string[] {
+  const text = start?.text.trim() ?? ''
+  if (!start || !text) return []
+  const shown = text.length > AI_LAYOUT_START_PAGE_MAX_CHARS ? `${text.slice(0, AI_LAYOUT_START_PAGE_MAX_CHARS).trimEnd()} …` : text
+  return [
+    `This page starts from the site's page "${start.label}": keep its facts, names and details wherever a section below covers them, and design every section anew. Its text:`,
+    shown,
+  ]
+}
+
 /** The page's user turn: the page, the brief, the plan, its sections and where its links may go. */
 export function aiLayoutPagePrompt(input: {
   job: Pick<AiJob, 'brief' | 'inputs' | '$id'>
@@ -338,6 +364,8 @@ export function aiLayoutPagePrompt(input: {
   screen: AiBuildPlanScreen
   targets: AiLayoutTargets
   reusableComponents: boolean
+  /** The site's page the plan starts this page from, read off the site (AGL-3832). */
+  startsFrom?: AiLayoutStartPage | null
   /** The sections a re-ask still needs, by plan index; absent on the first ask. */
   missing?: readonly number[]
 }): string {
@@ -389,6 +417,7 @@ export function aiLayoutPagePrompt(input: {
     // The kind of site the person picked sets how its pages are arranged (AGL-3660).
     ...aiSiteKindDesignLines(job.inputs),
     ...aiPlanReferenceLines(plan),
+    ...aiLayoutStartPageLines(input.startsFrom),
     `Sections to design, in order:`,
     ...sections,
     pages.length
@@ -735,6 +764,8 @@ export interface AiLayoutPageRunInput {
   reusableComponents: boolean
   inventory: AiSiteInventory | null
   model: string
+  /** The site's page the plan starts this page from (AGL-3832). */
+  startsFrom?: AiLayoutStartPage | null
   signal?: AbortSignal
   /** Wraps the check, for an eval that records each answer it reads. */
   observe?: (check: AiGenerationCheck<AiLayoutPageBuilt>) => AiGenerationCheck<AiLayoutPageBuilt>
@@ -773,6 +804,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
     screen: input.screen,
     targets: input.targets,
     reusableComponents: input.reusableComponents,
+    startsFrom: input.startsFrom ?? null,
   })
   const ask = (content: string, maxTokens: number, only?: readonly number[]) =>
     runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_PAGE_KIND, {

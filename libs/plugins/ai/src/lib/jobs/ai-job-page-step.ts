@@ -113,6 +113,7 @@ import {
   aiLayoutPageTargets,
   aiLayoutLeftOutNote,
   aiRunLayoutPage,
+  type AiLayoutStartPage,
 } from './ai-job-page-language'
 import {
   aiCreationUnit,
@@ -455,6 +456,27 @@ export const aiPageJobAdmission: AiJobAdmission = async (context) => {
 }
 
 /**
+ * The site's page a page of a build or a site starts from (AGL-3832): the
+ * plan's `duplicateOf`, by its name and its words, for the page's prompt.
+ * Only a page the site has, and never its starter home page, which is a
+ * placeholder rather than words of the owner's (AGL-3596) — nor an entry
+ * template, whose words are its records'. `null` when there is no such page
+ * or its words cannot be read: the page is then built from its plan alone.
+ */
+export async function aiPageStartPage(
+  firestore: Parameters<typeof readAiDraftNodes>[0],
+  input: { hostId: string; screen: Pick<AiBuildPlanScreen, 'duplicateOf'>; inventory: Pick<AiSiteInventory, 'screens'> },
+  readNodes: typeof readAiDraftNodes = readAiDraftNodes,
+): Promise<AiLayoutStartPage | null> {
+  const id = input.screen.duplicateOf
+  const row = id ? input.inventory.screens.find((one) => one.id === id && !one.template && !one.replaceable) : undefined
+  if (!row) return null
+  const stored = await readNodes(firestore, { kind: 'screen', hostId: input.hostId, id: row.id }).catch(() => null)
+  const text = stored ? buildPageMarkdown({ nodes: stored.nodes as never, rootId: CANVAS_ROOT_ELEMENT_ID }).trim() : ''
+  return text ? { label: row.name, text } : null
+}
+
+/**
  * The library photos the job's other pages already show (AGL-3660): read
  * from the screen drafts a site job names for its page unit
  * (`AI_STOCK_PHOTO_PAGES_INPUT`), never this page's own, so a pass repeated
@@ -583,8 +605,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const record = aiPageRecordTemplate(screen.record, inventory, plan)
     const recordNote = record ? aiPageRecordNote(record) : null
 
-    // The plan starts from a copy of a screen the site has (rule 15): the copy
-    // is the draft — unrouted, as every copy is — and nothing is generated.
+    // A page job's plan starts from a copy of a screen the site has (rule
+    // 15): the copy is the draft — unrouted, as every copy is — and nothing
+    // is generated.
     // Only a page is a page's start: a collection entry template's copy stays
     // a template, so a plan naming one builds the page instead.
     // A copy shows what its SOURCE shows, and this branch generates nothing.
@@ -603,8 +626,16 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       screen.duplicateOf &&
         inventory.screens.some((row) => row.id === screen.duplicateOf && row.replaceable),
     )
+    // A page a build or a site makes (every one designed in the layout
+    // language) counts as built only once its plan's sections are in it,
+    // under the ids this step writes them by (AGL-3596). A copy holds its
+    // source's sections under the source's ids, so it never counts: a build
+    // that copied "Our Story" for its About page failed the page and left the
+    // copy behind (AGL-3832). Such a page is generated from its plan, its
+    // prompt shown the words of the page it starts from (`aiPageStartPage`).
+    const generatedWhole = aiJobUsesLayoutLanguage(job)
     const sourceReview =
-      !written && screen.duplicateOf && !copiesStarter
+      !written && screen.duplicateOf && !copiesStarter && !generatedWhole
         ? await aiCopiedPageReview(firestore, { hostId, id: screen.duplicateOf, name, screen })
         : null
     const sourceShort = Boolean(sourceReview?.findings.length)
@@ -612,6 +643,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       !written &&
       !sourceShort &&
       !copiesStarter &&
+      !generatedWhole &&
       screen.duplicateOf &&
       inventory.screens.some((row) => row.id === screen.duplicateOf && !row.template)
     ) {
@@ -835,6 +867,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (language) {
       // ── The whole page in one answer, in the layout language ──
       const targets = aiLayoutPageTargets({ job, inventory, own: [screen.id, draftId] })
+      const startsFrom = await aiPageStartPage(firestore, { hostId, screen, inventory })
       const result = await aiRunLayoutPage({
         job,
         plan,
@@ -845,6 +878,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         reusableComponents,
         inventory,
         model,
+        startsFrom,
         ...(signal ? { signal } : {}),
       })
       const spent = aiGenerationSpent(result)
