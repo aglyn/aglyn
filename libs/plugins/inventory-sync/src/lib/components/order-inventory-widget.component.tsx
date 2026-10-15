@@ -45,7 +45,7 @@ const STATUS: Readonly<Record<InventoryOrderStatus, { label: string; tone: Statu
 
 /**
  * THE INVENTORY SYSTEM ON ONE ORDER (AGL-3642): whether the order reached the
- * store's connected Cin7 Core, inFlow or Brightpearl account, under which
+ * store's connected Cin7 Core, inFlow, Brightpearl or Ordoro account, under which
  * number and reference, and why not when it did not — with Send again for
  * one that failed. Draws nothing when the order was never queued for one.
  */

@@ -141,6 +141,7 @@ export const DOCS_HELP_EXCERPTS = {
   insights: 'Ask Aglyn AI a question about your site\'s figures in plain words, and get answers where every number is traced to the figure it comes from — plus weekly insights by email.',
   installYourFirstPlugin: 'A click-by-click walkthrough of the Marketplace — find something, choose which sites get it, install it, and turn it off again.',
   interactions: 'Build element interactions in one dialog and drop sanitized custom markup anywhere.',
+  inventoryAndErpSync: 'Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account. Rolling out.',
   inviteTeammates: 'Add people to your site and understand how team members act within your organization.',
   languageSwitcher: 'Let visitors move between your site\'s locales.',
   layouts: 'A layout is the shared frame your pages render inside — header, nav and footer in one place, nested up to five deep.',

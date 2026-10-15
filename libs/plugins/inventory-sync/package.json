@@ -40,5 +40,5 @@
     "react": "^19.2.8"
   },
   "sideEffects": false,
-  "description": "Inventory and ERP sync for Aglyn stores: stock levels, products and paid orders kept in step with the merchant's own Cin7 Core, inFlow or Brightpearl account."
+  "description": "Inventory and ERP sync for Aglyn stores: stock levels, products and paid orders kept in step with the merchant's own Cin7 Core, inFlow, Brightpearl or Ordoro account."
 }

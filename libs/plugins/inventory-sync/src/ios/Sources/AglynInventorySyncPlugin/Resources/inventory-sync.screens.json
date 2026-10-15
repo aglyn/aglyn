@@ -57,6 +57,14 @@
             "locationLabel": "Warehouse",
             "customerLabel": "Customer contact ID",
             "customerHelper": "The ID of the Brightpearl contact that store orders are recorded under."
+          },
+          {
+            "id": "ordoro",
+            "label": "Ordoro",
+            "summary": "Stock and products from Ordoro, with paid orders sent to it for fulfillment.",
+            "locationLabel": "Warehouse",
+            "customerLabel": "Sales channel for web orders",
+            "customerHelper": "The name of an Ordoro sales channel that store orders are recorded under."
           }
         ]
       },

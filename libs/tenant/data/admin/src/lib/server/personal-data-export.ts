@@ -309,7 +309,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'EXISTENCE ONLY for the keys — each site’s connection to the merchant’s own Cin7 Core, inFlow or Brightpearl account (AGL-3642): system, status, account name, the stock, product and order settings (location, the customer orders are recorded under, the tax rule), the last count by SKU, the last syncs’ counts, cursors and totals. The sealed API keys or grant and the id of the key that sealed them carry `credential` in their names and are redacted (see redactSecrets); Brightpearl’s account code and datacenter are disclosed as stored. The document id is the site id. Its `log` subcollection is not read by this export.',
+    note: 'EXISTENCE ONLY for the keys — each site’s connection to the merchant’s own Cin7 Core, inFlow, Brightpearl or Ordoro account (AGL-3642): system, status, account name, the stock, product and order settings (location, the customer or Ordoro sales channel orders are recorded under, the tax rule), the last count by SKU, the last syncs’ counts, cursors and totals. The sealed API keys or grant and the id of the key that sealed them carry `credential` in their names and are redacted (see redactSecrets); Brightpearl’s account code and datacenter are disclosed as stored. The document id is the site id. Its `log` subcollection is not read by this export.',
   },
   {
     collection: 'inventorySyncOrders',
