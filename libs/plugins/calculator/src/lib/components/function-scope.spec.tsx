@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { formatFunctionDate } from './function-controls'
 import { PRINT_HIDE_ATTRIBUTE, PRINT_TARGET_ATTRIBUTE } from './function-document-save'
 import FunctionScope, {
   FunctionDocument,
@@ -320,5 +321,104 @@ describe('the schemas', () => {
     const control = (functionInputSchema.attributes ?? []).find((a) => a.name === 'control')
     const values = (control as unknown as { options: { value: string }[] }).options.map((o) => o.value)
     expect(values).toEqual(['auto', 'number', 'text', 'select', 'chips', 'switch'])
+  })
+})
+
+/**
+ * THE SITE'S OWN FORM FIELDS ANSWER A CALCULATOR (AGL-3825). A job receipt's
+ * Date is a Date Picker from the form builder, not a calculator-only box:
+ * any field placed inside a Calculator and named after a parameter sets it,
+ * read the way a form would send it.
+ */
+describe('A Calculator answered by the form builder’s own fields', () => {
+  const job: Aglyn.HostFunction = {
+    name: 'job',
+    parameters: [
+      { name: 'customer', type: 'text', label: 'Customer' },
+      { name: 'town', type: 'text', label: 'Town', defaultValue: 'Jarrell' },
+      { name: 'discount', type: 'boolean', label: 'Discount', defaultValue: 'false' },
+      { name: 'extras', type: 'text', label: 'Extras' },
+      { name: 'size', type: 'text', label: 'Size' },
+      { name: 'job_date', type: 'text', label: 'Date' },
+    ],
+    variables: [{ name: 'line', type: 'text' }],
+    operations: [
+      {
+        if: { left: '1', comparator: '==', right: '1' },
+        then: [{ set: 'line', expression: "customer + ' · ' + town + ' · ' + discount + ' · ' + extras + ' · ' + size" }],
+        otherwise: [],
+      },
+    ],
+    returnValue: 'line',
+  }
+
+  const page = (
+    <FunctionScope functionName="job" definition={job}>
+      <input name="customer" aria-label="Customer" defaultValue="" />
+      <select name="town" aria-label="Town" defaultValue="Salado">
+        <option value="Jarrell">Jarrell</option>
+        <option value="Salado">Salado</option>
+      </select>
+      <input type="checkbox" name="discount" value="Yes" aria-label="Discount" />
+      <input type="checkbox" name="extras" value="Haul" aria-label="Haul" />
+      <input type="checkbox" name="extras" value="Store run" aria-label="Store run" />
+      <input type="radio" name="size" value="Small" aria-label="Small" />
+      <input type="radio" name="size" value="Large" aria-label="Large" />
+      <FunctionOutput announce />
+      <FunctionOutput name="job_date" format="date" />
+    </FunctionScope>
+  )
+
+  it('reads every field once at the start, so a field that starts filled counts', () => {
+    const { container } = render(page)
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(' · Salado · false ·  · ')
+  })
+
+  it('takes what a visitor types, picks and ticks, as a form would send it', () => {
+    const { container } = render(page)
+    fireEvent.input(screen.getByLabelText('Customer'), { target: { value: 'Pat' } })
+    fireEvent.change(screen.getByLabelText('Town'), { target: { value: 'Jarrell' } })
+    fireEvent.click(screen.getByLabelText('Discount'))
+    fireEvent.click(screen.getByLabelText('Haul'))
+    fireEvent.click(screen.getByLabelText('Store run'))
+    fireEvent.click(screen.getByLabelText('Large'))
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
+      'Pat · Jarrell · true · Haul, Store run · Large',
+    )
+  })
+
+  it('hears a date picked in a Date Picker, which announces it from an input of its own', () => {
+    const { container } = render(
+      <FunctionScope functionName="job" definition={job}>
+        <input type="text" name="job_date" aria-hidden="true" tabIndex={-1} readOnly={false} defaultValue="" />
+        <FunctionOutput name="job_date" format="date" />
+      </FunctionScope>,
+    )
+    const answer = container.querySelector('input[name="job_date"]') as HTMLInputElement
+    act(() => {
+      answer.value = '2026-10-15'
+      answer.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(screen.getByText(formatFunctionDate('2026-10-15', 'en-US'))).toBeTruthy()
+  })
+
+  it('ignores a field no parameter is named after', () => {
+    const { container } = render(
+      <FunctionScope functionName="job" definition={job}>
+        <input name="unrelated" aria-label="Unrelated" />
+        <FunctionOutput announce />
+      </FunctionScope>,
+    )
+    fireEvent.input(screen.getByLabelText('Unrelated'), { target: { value: 'x' } })
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(' · Jarrell · false ·  · ')
+  })
+
+  it('prints a picked day as a person writes it, and leaves a non-date alone', () => {
+    expect(formatFunctionDate('2026-01-01', 'en-US')).toBe('Jan 1, 2026')
+    expect(formatFunctionDate('2026-10-15', 'en-GB')).toBe('15 Oct 2026')
+    expect(formatFunctionDate('next Tuesday', 'en-US')).toBe('next Tuesday')
+    expect(formatFunctionDate('2026-02-30', 'en-US')).toBe('2026-02-30')
+    const format = (functionOutputSchema.attributes ?? []).find((a) => a.name === 'format')
+    expect((format as unknown as { options: { value: string }[] }).options.map((o) => o.value)).toEqual(['text', 'date'])
   })
 })

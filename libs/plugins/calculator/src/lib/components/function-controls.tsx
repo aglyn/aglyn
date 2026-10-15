@@ -88,6 +88,42 @@ export function isFunctionValueTruthy(
   return text !== '' && text !== 'false' && text !== '0' && text !== 'no'
 }
 
+/** A calendar day as a date picker posts it: `2026-10-15`. */
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * A picked day as a person reads it — `2026-10-15` becomes "Oct 15, 2026"
+ * in the page's language. Anything that is not a calendar date is returned
+ * as it is, so a result set to show a date never hides what the function
+ * actually put there.
+ *
+ * The date is read and written in UTC: it is a day on a calendar, not an
+ * instant, and a visitor west of Greenwich must not see the day before.
+ */
+export function formatFunctionDate(value: string, locale?: string): string {
+  const match = ISO_DATE.exec(value.trim())
+  if (!match) return value
+  const [, year, month, day] = match
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+  if (date.getUTCDate() !== Number(day)) return value
+  return new Intl.DateTimeFormat(locale ?? pageLocale(), {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date)
+}
+
+/** The page's own language, or US English where there is no page. */
+function pageLocale(): string {
+  const lang = typeof document === 'undefined' ? '' : document.documentElement.lang
+  try {
+    return lang && Intl.DateTimeFormat.supportedLocalesOf(lang).length ? lang : 'en-US'
+  } catch {
+    return 'en-US'
+  }
+}
+
 /** `control: auto` resolved against what the parameter is. */
 export function resolveFunctionControl(
   control: FunctionControlKind | undefined,
