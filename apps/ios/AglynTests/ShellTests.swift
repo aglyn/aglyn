@@ -44,4 +44,17 @@ final class ShellTests: XCTestCase {
     navigation.select(.notifications)
     XCTAssertEqual(navigation.paths[.notifications], [])
   }
+
+  /// Firebase Auth's app-delegate proxy hands the APNs device token only to a delegate class that implements the
+  /// callback itself, and SwiftUI's forwards it to `PushAppDelegate`: with the proxy on, the token never reaches `PushCenter`.
+  func testBothAppsKeepFirebasesAppDelegateProxyOff() throws {
+    XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "FirebaseAppDelegateProxyEnabled") as? Bool, false)
+    let config = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("Config")
+    for name in ["Aglyn-Info.plist", "AglynPOS-Info.plist"] {
+      let data = try Data(contentsOf: config.appendingPathComponent(name))
+      let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+      XCTAssertEqual(plist["FirebaseAppDelegateProxyEnabled"] as? Bool, false, name)
+    }
+  }
 }
