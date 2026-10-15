@@ -1,0 +1,30 @@
+{
+  "name": "plugins-help-desks",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/help-desks/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/help-desks",
+        "main": "libs/plugins/help-desks/src/index.ts",
+        "tsConfig": "libs/plugins/help-desks/tsconfig.lib.json",
+        "assets": ["libs/plugins/help-desks/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/help-desks"],
+      "options": {
+        "jestConfig": "libs/plugins/help-desks/jest.config.ts"
+      }
+    }
+  }
+}

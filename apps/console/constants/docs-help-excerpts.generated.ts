@@ -133,6 +133,7 @@ export const DOCS_HELP_EXCERPTS = {
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
   glossary: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',
   googleAnalytics: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',
+  helpDesks: 'Show your support team each buyer\'s recent orders beside their tickets in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form messages there as new tickets. Rolling out.',
   howAglynAiBuilds: 'Every AI build reuses what your site already has, takes its colors and spacing from your theme, and arrives as a draft. Every plan is checked against those rules before you see it, asked again, then stopped.',
   import: 'Bring people or companies into the CRM from a file — other CRMs\' exports map themselves — see every match and conflict in a dry run, choose how each is handled, and undo for seven days.',
   importAndExport: 'Render the field-picking export dialog and the eight-step import wizard for your plugin\'s records, with your own steps and locked rules.',

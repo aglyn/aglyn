@@ -2538,6 +2538,29 @@ allow read, write: if false;
 
 
 
+match /helpDeskConnections/{connectionId} {
+allow read, write: if false;
+match /log/{entryId} {
+allow read, write: if false;
+}
+}
+match /helpDeskOutbox/{itemId} {
+allow read, write: if false;
+}
+match /helpDeskCustomers/{customerId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
 match /adConversionConnections/{connectionId} {
 allow read, write: if false;
 }

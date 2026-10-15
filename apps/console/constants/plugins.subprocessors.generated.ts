@@ -436,6 +436,42 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'help-desks',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "gorgias.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Gorgias account a site's owner or admin connects on the site's Setup → Integrations page, at the account's own subdomain (`{domain}.gorgias.com`), reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/gorgias.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "reamaze.io",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Re:amaze account a site's owner or admin connects on the site's Setup → Integrations page, at the brand's own subdomain (`{brand}.reamaze.io`), reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/reamaze.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "api.kustomerapp.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Kustomer account a site's owner or admin connects on the site's Setup → Integrations page, reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/kustomer.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "gladly.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Gladly account a site's owner or admin connects on the site's Setup → Integrations page, at the organization's own subdomain (`{organization}.gladly.com`), reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/gladly.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "api.richpanel.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Richpanel account a site's owner or admin connects on the site's Setup → Integrations page, reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/richpanel.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+    ],
+  },
+  {
     pluginId: 'ad-conversions',
     subprocessors: [],
     hosts: [

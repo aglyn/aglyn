@@ -284,6 +284,10 @@ const PLUGIN_TOPICS = {
   // The Trustpilot and Yotpo Reviews cards under the store's Settings and
   // the order dialog's Review invitations section (AGL-3699).
   reviewPlatforms: '/commerce-and-bookings/commerce/review-platforms',
+  // The Help desks card on a site's Setup → Integrations (AGL-3824). Listed
+  // with a Rolling out note: the card draws nothing until the console holds
+  // HELP_DESKS_TOKEN_KEY.
+  helpDesks: '/commerce-and-bookings/commerce/help-desks',
   // The Tax service card under the store's Settings (AGL-3631).
   taxServices: '/commerce-and-bookings/commerce/tax-services',
   // The Print on demand card under the store's Settings, and its product and

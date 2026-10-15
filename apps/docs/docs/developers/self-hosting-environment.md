@@ -939,6 +939,20 @@ merchant's credential.
 Register `https://<console>/api/marketing-platforms/oauth/callback` as the
 redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
 
+### Help desks: Gorgias, Re:amaze, Kustomer, Gladly and Richpanel {#help-desks}
+
+A site can keep its buyers and their recent orders in the merchant's **own**
+Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form
+messages there as tickets. Each merchant connects with their own API
+credentials, so the deployment needs no vendor account: only the key those
+credentials are sealed under. Leave it unset and no Help desks card appears and
+nothing is sent to any of them. Set it on the **console only**: the sync runs
+there, and the tenant runtime never opens a merchant's credential.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `HELP_DESKS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored help desk credential with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one on its next sync. **Losing the key loses every connection**: each merchant connects again. |
+
 ### Zapier {#zapier}
 
 The REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`) are

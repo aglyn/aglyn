@@ -242,6 +242,27 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Commerce events still owed to a connected marketing platform (AGL-3639): checkout started, order paid, fulfilled, refunded or cancelled, with the shopper’s email, the order, its items and value, and the tracking number. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives; a row is deleted once delivered.',
   },
   {
+    collection: 'helpDeskConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the credential — each site’s connection to the merchant’s own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account (AGL-3824): provider, status, the account’s subdomain and name, the Richpanel support address, the chosen channel, inbox or custom object, the sync switches, cursors and run timing. The sealed API key, login and app client id, sealed together, and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the provider.',
+  },
+  {
+    collection: 'helpDeskOutbox',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Orders and contact form messages still owed to a connected help desk (AGL-3824): a buyer’s email and name with the order’s number, items and totals, or a message’s sender, subject and text. A SHOPPER’s or a visitor’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives; a row is deleted once delivered.',
+  },
+  {
+    collection: 'helpDeskCustomers',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'What each help desk connection knows of a buyer (AGL-3824): their email and name, the help desk’s id for them and their ten latest orders, so each order sent carries the recent ones. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives. The document id carries a truncated SHA-256 of the email — a lookup key, not a credential.',
+  },
+  {
     collection: 'adConversionConnections',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1164,8 +1185,8 @@ export async function exportOrgData(
   // Where each short tracking link the org's sequences sent points (AGL-3297).
   data['outreachLinks'] = await readByField(db, 'outreachLinks', 'orgId', orgId)
 
-  // Shipping (AGL-3612), tax services (AGL-3631) and marketing platforms
-  // (AGL-3639): top-level and keyed by `orgId`, the bound their
+  // Shipping (AGL-3612), tax services (AGL-3631), marketing platforms
+  // (AGL-3639) and help desks (AGL-3824): top-level and keyed by `orgId`, the bound their
   // `orgKeyedCollections` erasure sweeps by. The sealed credentials are
   // withheld by `redactSecrets` on their names.
   for (const collection of [
@@ -1177,6 +1198,9 @@ export async function exportOrgData(
     'taxEngineTransactions',
     'marketingPlatformConnections',
     'marketingPlatformEvents',
+    'helpDeskConnections',
+    'helpDeskOutbox',
+    'helpDeskCustomers',
     'adConversionConnections',
     'adConversionConsents',
     'adConversionEvents',

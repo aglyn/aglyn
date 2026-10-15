@@ -356,6 +356,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "help-desks",
+    "label": "Help desks",
+    "alwaysOnForWorkspace": true,
+    "description": "Your buyers and their recent orders in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and contact form messages as tickets.",
+    "siteOff": {
+      "stops": "Switching Help desks off for this site stops its buyers, orders and contact form messages reaching the help desks it connected.",
+      "keeps": "The connections are kept, and everything already sent stays in the help desk."
+    }
+  },
+  {
     "id": "ad-conversions",
     "label": "Ad conversions",
     "alwaysOnForWorkspace": true,
@@ -406,6 +416,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "review-platforms": "console-only",
   "weglot": "elements",
   "music": "elements",
+  "help-desks": "console-only",
   "ad-conversions": "console-only",
 }
 
@@ -1978,6 +1989,15 @@ export const PLUGIN_VISITOR_DOORS_DECLARED: readonly ResolvedVisitorDoor[] = [
  */
 export const PLUGIN_RECORD_PAGES_DECLARED: readonly ResolvedPluginRecordPage[] = [
   {
+    "pluginId": "commerce",
+    "kind": "order",
+    "path": "/products/orders",
+    "record": {
+      "path": "/products/orders",
+      "param": "order"
+    }
+  },
+  {
     "pluginId": "inbox",
     "kind": "formSubmission",
     "path": "/inbox",
@@ -2376,6 +2396,21 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "marketing-platforms",
     "name": "marketingPlatformEvents",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "help-desks",
+    "name": "helpDeskConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "help-desks",
+    "name": "helpDeskOutbox",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "help-desks",
+    "name": "helpDeskCustomers",
     "orgField": "orgId"
   },
   {
