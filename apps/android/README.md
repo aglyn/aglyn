@@ -172,6 +172,24 @@ node tools/scripts/native-release.mjs android-bundle app
 node tools/scripts/native-release.mjs android-bundle pos
 ```
 
+`android-upload` then sends a bundle to Play internal testing (or `alpha` /
+`beta`; production stays a person's release) through the Play Developer API,
+so nobody drags bundles into Play Console:
+
+```bash
+node tools/scripts/native-release.mjs android-upload /private/tmp/aglyn-release/Aglyn-android-<versionCode>.aab
+node tools/scripts/native-release.mjs android-upload /private/tmp/aglyn-release/AglynPOS-android-<versionCode>.aab
+```
+
+- **No key file.** The script asks for a short-lived token for the publisher
+  service account `play-publisher@aglyn-main.iam.gserviceaccount.com`
+  (override with `AGLYN_PLAY_PUBLISHER`), using the operator's own
+  `gcloud auth application-default login`. The operator's account needs
+  Service Account Token Creator on that service account (IAM).
+- **The publisher's Play access** is "Release apps to testing tracks" (plus
+  read-only app information) on both apps, in Play Console → Users and
+  permissions, and nothing else.
+
 - **versionCode** is the minutes since 1970 (UTC), passed as
   `-Paglyn.versionCode`, so every bundle outnumbers the last and stays under
   Play's 2,100,000,000. A build without it is versionCode 1.
