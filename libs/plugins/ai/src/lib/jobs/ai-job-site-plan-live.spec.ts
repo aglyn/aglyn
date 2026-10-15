@@ -145,6 +145,9 @@ const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audien
   { businessName: 'Ledgerly Books', businessType: 'a freelance bookkeeper', audience: 'small business owners behind on their books', starter: 'business' },
   { businessName: 'Gleam Mobile Detailing', businessType: 'a mobile car detailing service', audience: 'busy commuters', starter: 'landing' },
   { businessName: 'Fretwork Lessons', businessType: 'a guitar teacher', audience: 'adults who always wanted to learn', starter: 'business' },
+  // A Free blog writes its first post since AGL-3798: its plan is told the
+  // blog is written and linked, so no page may stand in for it.
+  { businessName: 'Slow Roads', businessType: 'a personal travel blog about long train journeys through Europe, written by one person', audience: 'readers planning a slow trip by rail', starter: 'business', siteKind: 'blog' },
 ]
 
 /**
@@ -370,6 +373,10 @@ describeLive("a guided start's plan from the real model", () => {
                   (screen) => `${screen.slug}: ${screen.sections.map((section) => section.name).join(' | ')}`,
                 ),
               }
+            : {}),
+          // Reported, not held: a blog's pages, where none may stand in for the written blog (AGL-3798).
+          ...(brief.siteKind === 'blog'
+            ? { pages: ((outcome['plan'] as AiJobPlan | undefined)?.screens ?? []).map((screen) => `${screen.slug}: ${screen.title}`) }
             : {}),
           // Every answer the step read: its home's sections and what the step's checks found.
           answers: [...mockAnswers.entries()].find(([turn]) => turn.includes(brief.businessType))?.[1] ?? [],
