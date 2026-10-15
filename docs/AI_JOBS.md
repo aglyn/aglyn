@@ -2551,8 +2551,12 @@ section (`aglynAnimation*`, `libs/aglyn/src/lib/app-utils/element-animation.ts`)
 written by code.
 
 - **The pass.** `applyElementMotion` (`libs/aglyn/src/lib/app-utils/element-motion.ts`)
-  plays the first section's content on `load` as a short ladder (each block a
-  step after the one before, at most six steps), slides every later section's
+  plays the first section's secondary content — eyebrow, lede, buttons, a
+  small picture — on `load` as a short ladder (each block a step after the one
+  before, at most six steps). That section's main heading (the h1, else its
+  first heading) and its largest picture never move, nor does anything holding
+  them: they are the page's Largest Contentful Paint candidates (AGL-3581), so
+  they paint where they stand from the first frame. It slides every later section's
   content in on `scroll`, and staggers a group of like items — a grid of cards,
   a list, an FAQ, a dataset repeat — rather than moving it as one block. A
   section's band, and a cover photo's backdrop, never move; nothing nests

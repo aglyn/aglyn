@@ -103,8 +103,10 @@ Some pages start out with their animations set up for you:
   [Start your site with AI](../../ai/start-with-ai.md) or from a request to
   Assist.
 
-On these pages the first section's words and picture arrive one after another
-as the page opens, every later section slides in as it scrolls into view, and
+On these pages the first section's heading and main picture are there from the
+moment the page opens, so it never looks slow to load, while the lines and
+buttons around them arrive one after another. Every later section slides in as
+it scrolls into view, and
 a grid of cards, a list or a set of questions arrives one item at a time.
 Forms, the header and footer, and anything pinned to the screen stay still.
 

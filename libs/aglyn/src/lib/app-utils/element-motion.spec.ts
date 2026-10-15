@@ -154,20 +154,44 @@ const moving = (nodes: Record<string, any>): string[] =>
   Object.keys(nodes).filter((id) => nodePropsAnimate(nodes[id]?.props)).sort()
 
 describe('applyElementMotion (AGL-3838)', () => {
-  it('plays the first section on load as a ladder, opening the column of words beside its picture', () => {
+  it('plays the first section’s secondary blocks on load as a ladder, around its heading and picture', () => {
     const nodes = applyElementMotion(page())
-    const rungs = ['heroEyebrow', 'heroTitle', 'heroLede', 'heroButtons', 'heroPhotoCell']
+    // The row of buttons is opened up too, one rung a button: a call to action, not a group of cards.
+    const rungs = ['heroEyebrow', 'heroLede', 'heroCta', 'heroMore']
     rungs.forEach((id, index) => {
-      expect(motionOf(nodes, id)).toMatchObject({ aglynAnimationTrigger: 'load' })
+      expect(motionOf(nodes, id)).toMatchObject({ aglynAnimation: ELEMENT_MOTION_DEFAULT.preset, aglynAnimationTrigger: 'load' })
       expect(nodes[id].props.aglynAnimationDelay ?? 0).toBe(index * ELEMENT_MOTION_DEFAULT.heroStepMs)
     })
-    expect(nodes['heroTitle'].props.aglynAnimation).toBe(ELEMENT_MOTION_DEFAULT.preset)
-    // The picture takes the media preset.
-    expect(nodes['heroPhotoCell'].props.aglynAnimation).toBe(ELEMENT_MOTION_DEFAULT.mediaPreset)
-    // Its band never moves: only what it holds.
-    for (const id of ['hero', 'heroWrap', 'heroGrid', 'heroWordsCell', 'heroWords']) expect(motionOf(nodes, id)).toEqual({})
-    // A row of two buttons is a call to action, not a group of cards.
-    expect(nodes['heroButtons'].props.aglynAnimationStagger).toBeUndefined()
+    // Its band never moves, and nothing around its heading and picture moves as one block.
+    for (const id of ['hero', 'heroWrap', 'heroGrid', 'heroWordsCell', 'heroWords', 'heroButtons', 'heroPhotoCell']) {
+      expect(motionOf(nodes, id)).toEqual({})
+    }
+  })
+
+  it('PINS LCP: the first section’s main heading and largest picture never move, nor anything holding them (AGL-3581)', () => {
+    const nodes = applyElementMotion(page())
+    for (const id of ['heroTitle', 'heroPhoto']) {
+      expect(motionOf(nodes, id)).toEqual({})
+      for (let at: string | null = id; at; at = nodes[at]?.parentId ?? null) expect([at, nodePropsAnimate(nodes[at]?.props)]).toEqual([at, false])
+    }
+    // The largest picture, not the first: a small one beside it still climbs.
+    const base = buildStarterNodes([
+      {
+        id: 'top',
+        componentId: 'section',
+        children: [
+          { id: 'badge', componentId: 'image', props: { height: '48px' } },
+          text('h', 'h2', 'A heading'),
+          text('sub', 'h5', 'A subheading'),
+          { id: 'big', componentId: 'image', props: { height: '480px' } },
+        ],
+      },
+    ])
+    const moved = applyElementMotion(base)
+    expect(moving(moved)).toEqual(['badge', 'sub'])
+    // With no h1 or display heading, the first heading is the one kept still.
+    expect(motionOf(moved, 'h')).toEqual({})
+    expect(motionOf(moved, 'big')).toEqual({})
   })
 
   it('slides later sections in on scroll, and staggers a grid of cards instead of moving it as one block', () => {
@@ -234,13 +258,17 @@ describe('applyElementMotion (AGL-3838)', () => {
           componentId: 'section',
           children: [
             { id: 'backdrop', componentId: 'muiBox', sx: { position: 'absolute', top: 0 }, children: [{ id: 'photo', componentId: 'image' }] },
-            { id: 'words', componentId: 'muiContainer', children: [text('title', 'h1', 'Title'), text('lede', 'body1', 'Lede.')] },
+            {
+              id: 'words',
+              componentId: 'muiContainer',
+              children: [text('eyebrow', 'overline', 'Hello'), text('title', 'h1', 'Title'), text('lede', 'body1', 'Lede.')],
+            },
           ],
         },
       ]),
     )
-    expect(moving(nodes)).toEqual(['lede', 'title'])
-    expect(nodes['title'].props.aglynAnimationDelay).toBeUndefined()
+    expect(moving(nodes)).toEqual(['eyebrow', 'lede'])
+    expect(nodes['eyebrow'].props.aglynAnimationDelay).toBeUndefined()
     expect(nodes['lede'].props.aglynAnimationDelay).toBe(ELEMENT_MOTION_DEFAULT.heroStepMs)
   })
 
@@ -297,10 +325,13 @@ describe('applyElementMotion (AGL-3838)', () => {
     }
   })
 
-  it('moves the new site’s home: its hero climbs on load, its feature cards stagger, its form stays still', () => {
+  it('moves the new site’s home: its hero’s secondary blocks climb on load, its feature cards stagger, its form stays still', () => {
     const nodes = buildDefaultHomeScreen('Paperlink').nodes
-    expect(nodes['dh_heroTitle'].props.aglynAnimationTrigger).toBe('load')
-    expect(nodes['dh_heroImageCell'].props.aglynAnimationTrigger).toBe('load')
+    expect(nodes['dh_heroOverline'].props.aglynAnimationTrigger).toBe('load')
+    expect(nodes['dh_heroSub'].props.aglynAnimationTrigger).toBe('load')
+    expect(nodes['dh_heroCta'].props.aglynAnimationTrigger).toBe('load')
+    // Its Largest Contentful Paint candidates paint where they stand.
+    for (const id of ['dh_heroTitle', 'dh_heroImage', 'dh_heroImageCell']) expect(motionOf(nodes, id)).toEqual({})
     expect(nodes['dh_featuresGrid'].props.aglynAnimationStagger).toBe(true)
     expectStillWhereItMustBe(nodes)
   })
@@ -308,12 +339,16 @@ describe('applyElementMotion (AGL-3838)', () => {
   it('moves every starter page as it is seeded, and leaves the starters a model is shown without motion', () => {
     for (const doc of buildAllStarterTemplateDocs()) {
       const nodes = doc.data['nodes'] as Record<string, any>
-      // A page that is only a form — a shop's account page — has nothing to move.
+      // A page that is only a form or a cart under its heading — a shop's
+      // account and cart pages — has nothing to move: the heading is its
+      // Largest Contentful Paint, and the rest never moves.
+      const words = (id: string) => nodes[id]?.componentId === 'muiTypography'
       const underStill = (id: string | undefined): boolean =>
         !!id && (ELEMENT_MOTION_NEVER.has(nodes[id]?.componentId) || underStill(nodes[id]?.parentId))
-      const onlyStill = Object.entries(nodes)
-        .filter(([, node]) => node.parentId && !node.nodes?.length)
-        .every(([id]) => underStill(id))
+      const leaves = Object.entries(nodes).filter(([, node]) => node.parentId && !node.nodes?.length)
+      const onlyStill =
+        leaves.every(([id]) => underStill(id)) ||
+        (leaves.filter(([id]) => !underStill(id)).every(([id]) => words(id)) && leaves.filter(([id]) => words(id)).length === 1)
       if (!onlyStill) expect([doc.id, moving(nodes).length > 0]).toEqual([doc.id, true])
       expectStillWhereItMustBe(nodes)
     }

@@ -47,10 +47,13 @@ import {
  *
  * ## The rules
  *
- *  - The FIRST section's content plays on `load`, as a short ladder: each of
- *    its blocks starts {@link ElementMotionCharacter.heroStepMs} after the
- *    one before. Its band — a background color or a cover photo — never
- *    moves; only what sits in it does.
+ *  - The FIRST section's secondary content — its eyebrow, its lede, its
+ *    buttons, a small picture — plays on `load`, as a short ladder: each
+ *    block starts {@link ElementMotionCharacter.heroStepMs} after the one
+ *    before. Its main heading and its largest picture, the candidates for the
+ *    page's Largest Contentful Paint, never move: they are painted where
+ *    they stand from the first frame. Its band — a background color or a
+ *    cover photo — never moves either.
  *  - Every later section's content slides in on `scroll`.
  *  - A group of like items — a grid of cards, a list, the questions of an
  *    FAQ, a dataset repeated over one card — STAGGERS its items, one after
@@ -220,11 +223,13 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
   const children = (id: string): string[] => (node(id)?.nodes ?? []).filter((child) => typeof child === 'string' && !!node(child))
   const patches = new Map<string, Record<string, unknown>>()
 
+  /** The first section's Largest Contentful Paint candidates, painted where they stand. */
+  const still = new Set<string>()
   /** Left alone, and so is everything inside it. */
   const closed = (id: string): boolean => {
     const at = node(id)
     if (!at) return true
-    if (at.hidden) return true
+    if (at.hidden || still.has(id)) return true
     if (ELEMENT_MOTION_NEVER.has(String(at.componentId ?? ''))) return true
     if (at.props && NODE_ANIMATION_PROPS.some((prop) => at.props?.[prop] !== undefined)) return true
     return pins(at.sx?.['position'])
@@ -335,15 +340,21 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     return at
   }
 
-  /** The first section's content: on load, one rung per block. */
+  /**
+   * The first section's content: on load, one rung per block, around the
+   * blocks that stay still. A rung that holds one is opened up, down to the
+   * parts beside it, so the eyebrow, the lede and the buttons still climb.
+   */
   const ladder = (id: string): void => {
     if (closed(id)) return
     // A repeat's one child is the card every record is drawn with: the
     // repeat staggers its records rather than each record playing at once.
     if (isGroup(id) && children(id).length < 2) return animate(id, 'load', 0)
-    const base = children(id).length ? children(id) : [id]
-    // A column of words beside a picture is opened up, so the heading, the
-    // lede and the buttons climb one after another before the picture lands.
+    const around = (at: string): string[] =>
+      children(at).flatMap((child) => (closed(child) ? [] : holds(child) ? around(child) : [child]))
+    const base = children(id).length ? around(id) : [id]
+    // A column of words beside a picture is opened up, so its lines climb one
+    // after another before the picture lands.
     const rungs: string[] = []
     base.forEach((rung, index) => {
       const inner = descend(rung)
@@ -351,24 +362,50 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
       const opens =
         kids.length >= 2 &&
         !isGroup(inner) &&
-        !holds(inner) &&
         !leadsWithMedia(inner) &&
         rungs.length + kids.length + (base.length - index - 1) <= ELEMENT_MOTION_HERO_RUNGS
       rungs.push(...(opens ? kids : [rung]))
     })
     // A rung left alone takes no step of the ladder: the first block that moves starts at once.
-    rungs.filter((rung) => !closed(rung)).forEach((rung, index) => {
-      const delayMs = Math.min(index, ELEMENT_MOTION_HERO_RUNGS - 1) * character.heroStepMs
-      // A rung that holds a form: what is beside the form still climbs.
-      if (holds(rung)) {
-        for (const child of children(rung)) if (!holds(child)) animate(child, 'load', delayMs)
-        return
-      }
-      animate(rung, 'load', delayMs)
-    })
+    rungs
+      .filter((rung) => !closed(rung))
+      .forEach((rung, index) => animate(rung, 'load', Math.min(index, ELEMENT_MOTION_HERO_RUNGS - 1) * character.heroStepMs))
+  }
+
+  /**
+   * What the first section paints first, and so what Lighthouse times as its
+   * Largest Contentful Paint (AGL-3581): its main heading — the h1, else its
+   * first heading — and its largest picture. Neither ever starts at opacity 0,
+   * which would hold the paint back by the length of the entrance.
+   */
+  const markStill = (sectionId: string): void => {
+    const order: string[] = []
+    const walk = (id: string): void => {
+      order.push(id)
+      for (const child of children(id)) walk(child)
+    }
+    walk(sectionId)
+    const typeOf = (id: string) => {
+      const at = node(id)
+      return at?.componentId === 'muiTypography' ? String(at.props?.['variant'] ?? '') : null
+    }
+    const main = (id: string) => /^(h1|display)/i.test(typeOf(id) ?? '') || (typeOf(id) !== null && node(id)?.props?.['component'] === 'h1')
+    const heading = order.find(main) ?? order.find((id) => /^(h[1-6]|display)/i.test(typeOf(id) ?? ''))
+    if (heading) still.add(heading)
+    const size = (id: string): number => {
+      const at = node(id)
+      const read = (value: unknown) => (typeof value === 'number' ? value : parseFloat(String(value ?? '')) || 0)
+      return Math.max(read(at?.props?.['height']), read(at?.props?.['width']), read(at?.sx?.['height']), read(at?.sx?.['width']))
+    }
+    let picture: string | undefined
+    for (const id of order) {
+      if (MEDIA.has(String(node(id)?.componentId ?? '')) && (picture === undefined || size(id) > size(picture))) picture = id
+    }
+    if (picture) still.add(picture)
   }
 
   const sections = (options.sectionIds ?? children(rootId)).filter((id) => !!node(id))
+  if (sections[0]) markStill(sections[0])
   sections.forEach((id, index) => {
     if (closed(id)) return
     const content = contentOf(id)

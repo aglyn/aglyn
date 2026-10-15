@@ -154,7 +154,7 @@ describe('a page the AI designs in the layout language moves (AGL-3838)', () => 
       return false
     }
     const first = moving.filter(([id]) => inSection('sec-0', id))
-    expect(first.length).toBeGreaterThan(1)
+    expect(first.length).toBeGreaterThan(0)
     expect(first.every(([, node]) => node.props.aglynAnimationTrigger === 'load')).toBe(true)
     const later = moving.filter(([id]) => !inSection('sec-0', id))
     expect(later.length).toBeGreaterThan(0)
@@ -173,6 +173,29 @@ describe('a page the AI designs in the layout language moves (AGL-3838)', () => 
     // Its motion is the site's own.
     const motion = aiSiteMotion({ kind: 'trades', seed: 7 })
     expect(staggered[0][1].props).toMatchObject({ aglynAnimationStaggerStep: motion.staggerStepMs, aglynAnimationEase: motion.ease })
+  })
+
+  it('PINS LCP: on every kind, the first section’s heading and pictures never start hidden (AGL-3581)', () => {
+    for (const kind of AI_SITE_KINDS) {
+      for (const seed of [1, 7, 42]) {
+        const nodes = built({ kind: kind.id, seed, home: true })?.value?.nodes as Record<string, any>
+        const inFirst = (id: string): boolean => {
+          for (let at: string | null = id; at; at = nodes[at]?.parentId ?? null) if (at === 'sec-0') return true
+          return false
+        }
+        const heading = Object.keys(nodes).find((id) => inFirst(id) && /^(h1|display)/i.test(String(nodes[id].props?.variant ?? '')))
+        const pictures = Object.keys(nodes).filter((id) => inFirst(id) && nodes[id].componentId === 'image')
+        expect(heading).toBeDefined()
+        for (const id of [heading as string, ...pictures]) {
+          for (let at: string | null = id; at; at = nodes[at]?.parentId ?? null) {
+            expect([kind.id, at, nodePropsAnimate(nodes[at]?.props)]).toEqual([kind.id, at, false])
+          }
+        }
+        // The lede beside the heading still climbs in.
+        const moving = Object.keys(nodes).filter((id) => inFirst(id) && nodePropsAnimate(nodes[id].props))
+        expect([kind.id, moving.length > 0]).toEqual([kind.id, true])
+      }
+    }
   })
 
   it('moves a page whose job names no kind of site, in the standard mood', () => {
