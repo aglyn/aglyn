@@ -62,6 +62,8 @@ export const AI_LAYOUT_LABELS_EN = {
   storeEmptyTextAlone: 'Our first pieces are being finished now. Check back soon.',
   /** The way to get in touch under that empty grid, where the site has a page for it. */
   getInTouch: 'Get in touch',
+  /** A stock photo's alt text where the library's own words cannot describe it in the site's language. */
+  illustrativePhoto: 'Illustrative photo',
 } as const
 
 export type AiLayoutLabel = keyof typeof AI_LAYOUT_LABELS_EN
@@ -89,6 +91,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyText: 'Estamos terminando nuestras primeras piezas. Escríbenos y te avisaremos en cuanto lleguen.',
     storeEmptyTextAlone: 'Estamos terminando nuestras primeras piezas. Vuelve pronto.',
     getInTouch: 'Escríbenos',
+    illustrativePhoto: 'Foto ilustrativa',
   },
   fr: {
     seeAll: 'Tout voir',
@@ -109,6 +112,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyText: 'Nous terminons nos premières pièces. Écrivez-nous et nous vous préviendrons dès leur arrivée.',
     storeEmptyTextAlone: 'Nous terminons nos premières pièces. Revenez bientôt.',
     getInTouch: 'Écrivez-nous',
+    illustrativePhoto: 'Photo d’illustration',
   },
   pt: {
     seeAll: 'Ver tudo',
@@ -129,6 +133,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyText: 'Estamos finalizando nossas primeiras peças. Fale conosco e avisaremos assim que chegarem.',
     storeEmptyTextAlone: 'Estamos finalizando nossas primeiras peças. Volte em breve.',
     getInTouch: 'Fale conosco',
+    illustrativePhoto: 'Imagem ilustrativa',
   },
   de: {
     seeAll: 'Alle ansehen',
@@ -149,6 +154,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyText: 'Unsere ersten Stücke werden gerade fertig. Schreiben Sie uns, und wir melden uns, sobald sie da sind.',
     storeEmptyTextAlone: 'Unsere ersten Stücke werden gerade fertig. Schauen Sie bald wieder vorbei.',
     getInTouch: 'Kontakt aufnehmen',
+    illustrativePhoto: 'Symbolbild',
   },
   it: {
     seeAll: 'Vedi tutto',
@@ -169,6 +175,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyText: 'Stiamo finendo i nostri primi pezzi. Scrivici e ti avviseremo appena arrivano.',
     storeEmptyTextAlone: 'Stiamo finendo i nostri primi pezzi. Torna presto.',
     getInTouch: 'Scrivici',
+    illustrativePhoto: 'Immagine illustrativa',
   },
 }
 

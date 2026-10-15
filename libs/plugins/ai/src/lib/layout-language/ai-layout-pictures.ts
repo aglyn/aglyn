@@ -38,7 +38,10 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
  *    CREDITS file beside them). They are the platform's own files, so a
  *    visitor's browser asks no other host for them.
  *
- * The slot keeps the alt text the model wrote whichever source fills it.
+ * A slot keeps the alt text the model wrote unless the photo filling it
+ * brings its own words: the model wrote it before any photo was found, so a
+ * stock photo that is not what it says is described by what it is
+ * (`aiStockPhotoAlt`).
  */
 
 /** What a picture slot is for, read from where it sits and what it says. */
@@ -72,6 +75,12 @@ export interface AiLayoutPicturePhoto {
   src: string
   width: number
   height: number
+  /**
+   * What the photo shows, where the slot's own alt text does not say it: the
+   * slot takes it in place of the words the model wrote before the photo was
+   * found. Absent, the slot's words describe it.
+   */
+  alt?: string
 }
 
 /** Words that say a picture shows people, or a section is about them. */
@@ -269,8 +278,8 @@ export function aiLayoutStarterPhotos(
  * The page with each slot filled by its photo: the `image` given its source,
  * its intrinsic size and how it loads (the hero eagerly, as the starter home
  * page loads its own), and the placeholder icon taken out of the frame. The
- * alt text is kept as the model wrote it. A slot given no photo is left as
- * the compiler wrote it.
+ * alt text is kept as the model wrote it unless the photo brings its own
+ * words. A slot given no photo is left as the compiler wrote it.
  */
 export function aiLayoutPlacePictures(
   nodes: NodesMap,
@@ -296,6 +305,7 @@ export function aiLayoutPlacePictures(
         src: photo.src,
         intrinsicWidth: photo.width,
         intrinsicHeight: photo.height,
+        ...(photo.alt?.trim() ? { alt: photo.alt.trim() } : {}),
         ...(index === lead && slot.role === 'hero' ? { loading: 'eager' } : {}),
       },
     }
