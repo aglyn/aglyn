@@ -50,6 +50,7 @@ import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_SITE_CREATE_KINDS,
   AI_SITE_FREE_PAGES,
+  AI_SITE_FREE_POSTS,
   AI_SITE_PLAN_MAX_TOKENS,
   AI_SITE_HOME_BANDS,
   aiFreeSiteSectionsWithin,
@@ -306,8 +307,9 @@ export function aiPlanSiteLines(
   // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
   // read "at most 8" as leave to plan a home of two.
   lines.push(aiSiteFullPlanSentence({ pages: cap ?? 1, across: home.across, min: plansHome ? home.min : 0 }))
-  // A paid blog's first posts are written at /blog and linked from the
-  // header (AGL-3660, AGL-3676), so the plan plans no page standing in for it.
+  // A blog's first posts — a Free blog's one (AGL-3798) — are written at /blog
+  // and linked from the header (AGL-3660, AGL-3676), so the plan plans no
+  // page standing in for it.
   if (aiSiteContentPart(job.inputs ?? null, capabilities?.freeTaste === true) === 'posts') {
     lines.push(
       "This site's blog is written for it with its first posts at /blog, and the header links it. Plan no page that stands in for it (no Blog, Articles, Journal, Posts or Stories page); feature the posts in a section of the home page instead.",
@@ -387,7 +389,7 @@ export function aiSitePlanHomeRule(
   if (cap === undefined) return { min: aiSiteHomeMinSections({ pages: 1, across: null }), across: null }
   // Dear: a guided start that places a form makes one (AGL-3596).
   const across = aiFreeSiteSectionsWithin(
-    { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap, forms: 1 },
+    { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap, forms: 1, posts: capabilities?.freeSitePosts ?? 0 },
     FREE_AI_TASTE_CREDITS_PER_MONTH,
   )
   return { min: aiSiteHomeMinSections({ pages: cap, across }), across }
@@ -1277,7 +1279,9 @@ export function aiSitePlanCapabilities(
     Number.isInteger(asked) && asked >= AI_SITE_FREE_PAGES.min
       ? Math.min(asked, AI_SITE_FREE_PAGES.max)
       : AI_SITE_FREE_PAGES.max
-  return { ...site, freeSitePages: pages }
+  // A Free blog writes one first post (AGL-3798), which the wall counts.
+  const posts = aiSiteContentPart(job.inputs ?? null, true) === 'posts' ? { freeSitePosts: AI_SITE_FREE_POSTS } : {}
+  return { ...site, freeSitePages: pages, ...posts }
 }
 
 /**
