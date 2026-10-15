@@ -370,6 +370,15 @@ export interface AiRequestBase {
    * It changes no answer, so a replay key does not read it.
    */
   cacheConversation?: boolean
+  /**
+   * Cache the tool list as a prefix of its own (AGL-3830): one more
+   * breakpoint, on the last tool, counted against the same limit as the
+   * system's. For a request whose tools are shared with other requests that
+   * go on to differ in their system blocks, so they read the tools one of
+   * them wrote. A provider without a cache ignores it, and it changes no
+   * answer, so a replay key does not read it.
+   */
+  cacheTools?: boolean
 }
 
 /** The request an adapter receives: the runtime has already validated it. */

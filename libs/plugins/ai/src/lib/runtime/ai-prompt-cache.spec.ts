@@ -42,6 +42,9 @@ import {
   aiDoctrineSystemBlock,
   aiDoctrineSystemBlocks,
   aiDoctrineTreeTool,
+  AI_ANSWER_WRONG_TOOL_CODE,
+  aiInstructionsNamingTool,
+  aiRequestToolName,
   runValidatedGeneration,
 } from './ai-doctrine'
 import { detectPublishIntent } from './ai-doctrine-validators'
@@ -64,7 +67,11 @@ import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
 import { AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_FRAME_KIND } from '../jobs/ai-job-layout-language'
-import { AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_PAGE_KIND } from '../jobs/ai-job-page-language'
+import {
+  AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+  AI_LAYOUT_LANGUAGE_THINKING,
+  AI_LAYOUT_PAGE_KIND,
+} from '../jobs/ai-job-page-language'
 import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
 import { buildAnthropicRequestBody } from '../providers/anthropic'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
@@ -91,7 +98,10 @@ import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-e
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { AI_INVENTORY_LOOKUP_TOOL_NAME, aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
-import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
+import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions, generateSeoFields } from './seo-fields'
+import { AI_SITE_JOB_LISTING_FIELDS, aiSiteJobTools } from '../jobs/ai-site-job-tools'
+import { AI_SITE_LOOK_INSTRUCTIONS, AI_SITE_LOOK_KIND } from '../jobs/ai-job-site-look'
+import { AI_SITE_LOOK_TOOL } from '../model/ai-site-look'
 import {
   AI_CATALOG_INSTRUCTIONS,
   AI_CATEGORIES_INSTRUCTIONS,
@@ -119,6 +129,7 @@ import {
   AI_CACHE_PREFIX_TOKEN_CHARS,
   aiCachedPrefixCaches,
   aiCachedPrefixChars,
+  runAiRequest,
   validateAiSystemBlocks,
 } from './ai-runtime'
 
@@ -415,12 +426,18 @@ const REQUESTS: Record<string, Composed> = {
       }),
     tools: () => [aiComponentTool(), aiInventoryLookupTool()],
   },
+  // An email job's, and so a site's welcome email (AGL-3830): offered the site
+  // job's one tool list and told which tool is its own. A campaign sends the
+  // email tool and the lookup alone.
   email: {
     door: 'jobs/ai-job-email-step.ts',
     step: 'job.email',
     blocks: (site) =>
-      aiDoctrineSystemBlocks(site, { instructions: AI_JOB_EMAIL_INSTRUCTIONS, surface: 'email' }),
-    tools: () => [AI_JOB_EMAIL_TOOL, aiInventoryLookupTool()],
+      aiDoctrineSystemBlocks(site, {
+        instructions: aiInstructionsNamingTool(AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL.name, aiInventoryLookupTool()),
+        surface: 'email',
+      }),
+    tools: () => [...aiSiteJobTools()],
   },
   form: {
     door: 'jobs/ai-job-form-step.ts',
@@ -440,25 +457,26 @@ const REQUESTS: Record<string, Composed> = {
   // The layout language (AGL-3660): a guided start's pages, one answer a
   // page, and its header and footer. Both carry the fields-scope doctrine and
   // the language; the site's inventory rides after the last breakpoint.
+  // Both offered the site job's one tool list (AGL-3830).
   'layout-page': {
     door: 'jobs/ai-job-page-language.ts',
     step: 'job.page',
     blocks: (site) =>
       aiDoctrineSystemBlocks(site, {
-        instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+        instructions: aiInstructionsNamingTool(AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_PAGE_TOOL.name, aiInventoryLookupTool()),
         scope: aiDoctrineScopeFor(AI_LAYOUT_PAGE_KIND),
       }),
-    tools: () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()],
+    tools: () => [...aiSiteJobTools()],
   },
   'layout-frame': {
     door: 'jobs/ai-job-layout-step.ts',
     step: 'job.layout',
     blocks: (site) =>
       aiDoctrineSystemBlocks(site, {
-        instructions: AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+        instructions: aiInstructionsNamingTool(AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_FRAME_TOOL.name, aiInventoryLookupTool()),
         scope: aiDoctrineScopeFor(AI_LAYOUT_FRAME_KIND),
       }),
-    tools: () => [AI_LAYOUT_FRAME_TOOL, aiInventoryLookupTool()],
+    tools: () => [...aiSiteJobTools()],
   },
   theme: {
     door: 'jobs/ai-job-theme-step.ts',
@@ -881,7 +899,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
       // says plainly that a subject line and a preheader carry no merge token.
-      email: { prefixTokens: 2_970, minimum: 512, caches: true, toolsStable: true },
+      // Up 1,728 at AGL-3830: the site job's one tool list, and the line that
+      // names its own tool. The list is a cache entry of its own, which the
+      // look writes first in a guided start and this reads.
+      email: { prefixTokens: 4_698, minimum: 512, caches: true, toolsStable: true },
       // 2,728 while a form was the Form and its all-in-one Form Fields. Up 594
       // when the form job moved to MUI's separate form elements: the form
       // catalog lists each piece of a field, and the instructions say how a
@@ -897,8 +918,12 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
       // and their system prompt included. Both up 10 at AGL-3717, which says
       // an image block whose `to` is lightbox opens its picture large.
-      'layout-page': { prefixTokens: 1_841, minimum: 512, caches: true, toolsStable: true },
-      'layout-frame': { prefixTokens: 2_212, minimum: 512, caches: true, toolsStable: true },
+      // Page up 1,612 and frame up 1,370 at AGL-3830: the site job's one tool
+      // list and the line naming each one's tool. The list and the doctrine
+      // ahead of the instructions are the same bytes on the look, the frame,
+      // the page and the listing, so a job writes them once.
+      'layout-page': { prefixTokens: 3_453, minimum: 512, caches: true, toolsStable: true },
+      'layout-frame': { prefixTokens: 3_582, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
       theme: { prefixTokens: 3_518, minimum: 512, caches: true, toolsStable: true },
@@ -1105,6 +1130,319 @@ describe('the ledger: what each request caches, against its model’s minimum', 
  * site's, read by every request of a job on that site. Each row below is a
  * ledger row's request with the context added the way its door adds it.
  */
+describe('one tool prefix shared by every route of a site job (AGL-3830)', () => {
+  /** A provider that answers every call through the tool its instructions name, with an empty input. */
+  function routeRecording(): { fake: AiProvider; requests: AiProviderRequest[] } {
+    const requests: AiProviderRequest[] = []
+    const fake: AiProvider = {
+      id: 'fake',
+      label: 'Fake',
+      apiKeyEnv: 'FAKE_AI_KEY',
+      endpointHost: 'ai.test',
+      readApiKey: () => 'key',
+      models: () => [],
+      complete: async (request) => {
+        requests.push(request)
+        const name = aiRequestToolName(request) ?? 'none'
+        return {
+          kind: 'completion',
+          text: '',
+          toolUse: [{ name, input: {} }],
+          usage: { inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          estCostUsd: 0,
+          stopReason: 'tool_use',
+        }
+      },
+      stream: async () => {
+        throw new Error('the doctrine loop never streams')
+      },
+    }
+    return { fake, requests }
+  }
+
+  /** A provider that answers from a queue of tool calls, keeping every request. */
+  function queued(calls: Array<{ name: string; input: Record<string, unknown> }>): {
+    fake: AiProvider
+    requests: AiProviderRequest[]
+  } {
+    const { fake, requests } = routeRecording()
+    return {
+      requests,
+      fake: {
+        ...fake,
+        complete: async (request) => {
+          requests.push(request)
+          const call = calls.shift()
+          if (!call) throw new Error('no answer armed')
+          return {
+            kind: 'completion',
+            text: '',
+            toolUse: [call],
+            usage: { inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 },
+            estCostUsd: 0,
+            stopReason: 'tool_use',
+          }
+        },
+      },
+    }
+  }
+
+  const textOf = (system: readonly AiSystemBlock[]) => system.map((block) => block.text).join('\n')
+
+  const SITES = [
+    { inventory: SITE_A, brief: 'a roofer in Springfield, storm repairs and new roofs', name: 'Acme Roofing' },
+    { inventory: SITE_B, brief: 'a bakery on Main Street with sourdough and a cafe', name: 'Rise Bakery' },
+  ] as const
+
+  /**
+   * The first request each route sends, as the route's own call site composes
+   * it: its kind, instructions, tool, thinking and whether it reads the site.
+   */
+  async function routeRequests(site: (typeof SITES)[number]): Promise<Record<string, AiProviderRequest>> {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const first: Record<string, AiProviderRequest> = {}
+    const brief = [{ role: 'user' as const, content: `Brief: ${site.brief}` }]
+    const generic = async (
+      route: string,
+      kind: string,
+      input: { instructions: readonly AiSystemBlock[]; tool: AiTool; reads: boolean; thinking?: object },
+    ) => {
+      const { fake, requests } = routeRecording()
+      await runValidatedGeneration(kind, {
+        model: 'claude-sonnet-5-5',
+        provider: fake,
+        instructions: input.instructions as AiSystemBlock[],
+        ...(input.reads ? { inventory: site.inventory } : {}),
+        messages: brief,
+        tool: input.tool,
+        toolset: aiSiteJobTools(),
+        ...(input.thinking ?? {}),
+        check: () => ({ value: {}, violations: [] }),
+      })
+      first[route] = requests[0]
+    }
+    await generic('look', AI_SITE_LOOK_KIND, {
+      instructions: AI_SITE_LOOK_INSTRUCTIONS,
+      tool: AI_SITE_LOOK_TOOL,
+      reads: false,
+      thinking: { thinking: 'off' },
+    })
+    await generic('frame', AI_LAYOUT_FRAME_KIND, {
+      instructions: AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+      tool: AI_LAYOUT_FRAME_TOOL,
+      reads: true,
+      thinking: AI_LAYOUT_LANGUAGE_THINKING,
+    })
+    await generic('page', AI_LAYOUT_PAGE_KIND, {
+      instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+      tool: AI_LAYOUT_PAGE_TOOL,
+      reads: true,
+      thinking: AI_LAYOUT_LANGUAGE_THINKING,
+    })
+    await generic('email', 'email', {
+      instructions: AI_JOB_EMAIL_INSTRUCTIONS,
+      tool: AI_JOB_EMAIL_TOOL,
+      reads: true,
+      thinking: { thinking: 'off' },
+    })
+    // The listing through its own entry point, as the page step calls it.
+    const { fake, requests } = routeRecording()
+    await generateSeoFields({
+      subject: { kind: 'screen', name: 'Home', path: '/' },
+      brand: site.name,
+      site: null,
+      text: `# ${site.name}\n\n${site.brief}`,
+      fields: [...AI_SITE_JOB_LISTING_FIELDS],
+      otherTitles: site.inventory.screens.map((row) => row.name),
+      model: 'claude-haiku-5-5',
+      provider: fake,
+      toolset: aiSiteJobTools(),
+    })
+    first['listing'] = requests[0]
+    warn.mockRestore()
+    return first
+  }
+
+  const wire = (request: AiProviderRequest) =>
+    buildAnthropicRequestBody({ ...request, stream: false }) as {
+      tools: Array<Record<string, unknown>>
+      tool_choice: unknown
+      system: Array<Record<string, unknown>>
+    }
+
+  it('is passed by the five routes’ call sites and by no other door', () => {
+    const passing = sourceFiles(LIB_ROOT)
+      .filter((path) => /\btoolset:\s*aiSiteJobTools\(\)/.test(readFileSync(path, 'utf8')))
+      .map((path) => path.slice(LIB_ROOT.length + 1))
+      .sort()
+    expect(passing).toEqual([
+      'jobs/ai-job-email-step.ts',
+      'jobs/ai-job-layout-step.ts',
+      'jobs/ai-job-page-language.ts',
+      'jobs/ai-job-page-step.ts',
+      'jobs/ai-job-site-look.ts',
+    ])
+  })
+
+  it('holds each route’s tool and the lookup, sorted by name, and leaves the plan out', () => {
+    const names = aiSiteJobTools().map((tool) => tool.name)
+    expect(names).toEqual([
+      AI_INVENTORY_LOOKUP_TOOL_NAME,
+      'propose_search_listing',
+      'submit_email',
+      'submit_frame',
+      'submit_page',
+      'submit_site_look',
+    ])
+    expect(names).toEqual([...names].sort())
+    expect(names).not.toContain(AI_BUILD_PLAN_TOOL.name)
+    expect(aiSiteJobTools()).toBe(aiSiteJobTools())
+  })
+
+  it('sends the same tool bytes on every route, for every brief and site, with the last tool a breakpoint', async () => {
+    const all = [...Object.values(await routeRequests(SITES[0])), ...Object.values(await routeRequests(SITES[1]))]
+    expect(all).toHaveLength(10)
+    const tools = all.map((request) => JSON.stringify(wire(request).tools))
+    expect(new Set(tools).size).toBe(1)
+    const sent = wire(all[0]).tools
+    expect(sent.at(-1)?.['cache_control']).toEqual({ type: 'ephemeral' })
+    expect(sent.slice(0, -1).every((tool) => tool['cache_control'] === undefined)).toBe(true)
+    for (const request of all) {
+      // Never a forced choice: Sonnet 5.5 refuses one, and the page and frame think.
+      expect(wire(request).tool_choice).toEqual({ type: 'auto' })
+      expect(request.cacheTools).toBe(true)
+      expect((JSON.stringify(wire(request)).match(/"cache_control"/g) ?? []).length).toBeLessThanOrEqual(4)
+    }
+  })
+
+  it('sends the same doctrine block after the tools on the look, frame, page and listing, so tools and doctrine are one entry', async () => {
+    for (const site of SITES) {
+      const routes = await routeRequests(site)
+      const doctrine = ['look', 'frame', 'page', 'listing'].map((route) => JSON.stringify(wire(routes[route]).system[0]))
+      expect(new Set(doctrine).size).toBe(1)
+      expect(wire(routes['look']).system[0]['cache_control']).toEqual({ type: 'ephemeral' })
+    }
+  })
+
+  it('tells each route which tool is its own, in its own block, and the doctrine nothing', async () => {
+    const routes = await routeRequests(SITES[0])
+    const own: Record<string, string> = {
+      look: 'submit_site_look',
+      frame: 'submit_frame',
+      page: 'submit_page',
+      listing: 'propose_search_listing',
+      email: 'submit_email',
+    }
+    for (const [route, tool] of Object.entries(own)) {
+      expect([route, aiRequestToolName(routes[route])]).toEqual([route, tool])
+      expect(routes[route].system[0].text).not.toContain(`Answer with ${tool}`)
+    }
+    // A route that reads the site may look it up; one that reads none is told never to.
+    expect(textOf(routes['page'].system)).toContain(`except ${AI_INVENTORY_LOOKUP_TOOL_NAME}`)
+    expect(textOf(routes['look'].system)).not.toContain(`except ${AI_INVENTORY_LOOKUP_TOOL_NAME}`)
+  })
+
+  it('re-asks an answer that came through another route’s tool, naming the route’s own', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { fake, requests } = queued([
+      { name: 'submit_frame', input: {} },
+      { name: 'submit_page', input: {} },
+    ])
+    const result = await runValidatedGeneration(AI_LAYOUT_PAGE_KIND, {
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+      inventory: SITE_A,
+      messages: [{ role: 'user', content: 'Brief: a roofer' }],
+      tool: AI_LAYOUT_PAGE_TOOL,
+      toolset: aiSiteJobTools(),
+      check: () => ({ value: {}, violations: [] }),
+    })
+    expect(result).toMatchObject({ status: 'ok', attempts: 2 })
+    const reask = String(requests[1].messages.at(-1)?.content)
+    expect(reask).toContain('came through submit_frame, which belongs to another step')
+    expect(reask).toContain('Answer again with submit_page')
+    expect(warn.mock.calls).toEqual([
+      [
+        'ai answer through another route’s tool',
+        { kind: AI_LAYOUT_PAGE_KIND, model: 'claude-sonnet-5-5', called: 'submit_frame', tool: 'submit_page' },
+      ],
+    ])
+    warn.mockRestore()
+  })
+
+  it('re-asks a lookup from a route that reads no site, and stops with the wrong tool named', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { fake } = queued([
+      { name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'screens', query: 'home' } },
+      { name: 'submit_page', input: {} },
+    ])
+    const result = await runValidatedGeneration(AI_SITE_LOOK_KIND, {
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      instructions: AI_SITE_LOOK_INSTRUCTIONS as AiSystemBlock[],
+      messages: [{ role: 'user', content: 'Brief: a roofer' }],
+      tool: AI_SITE_LOOK_TOOL,
+      toolset: aiSiteJobTools(),
+      check: () => ({ value: {}, violations: [] }),
+    })
+    expect(result.status).toBe('needs_input')
+    expect(result.status === 'needs_input' && result.violations.map((violation) => violation.code)).toEqual([
+      AI_ANSWER_WRONG_TOOL_CODE,
+    ])
+    expect(warn).toHaveBeenCalledTimes(2)
+    warn.mockRestore()
+  })
+
+  it('counts the tool list’s marker against the four: the conversation’s goes first, and a fifth is refused', async () => {
+    const { fake, requests } = queued([{ name: 'submit', input: {} }])
+    const own: AiTool = { name: 'submit', description: 'Submit.', strict: true, inputSchema: { type: 'object', properties: {} } }
+    await runValidatedGeneration('three-and-tools', {
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      // The doctrine's own breakpoint, these two and the tool list's: four.
+      instructions: [1, 2].map((n) => ({ text: `rules ${n}`, cacheBreakpoint: true })),
+      messages: [{ role: 'user', content: 'brief' }],
+      tool: own,
+      toolset: [own],
+      cacheConversation: true,
+      check: () => ({ value: {}, violations: [] }),
+    })
+    expect(requests[0].cacheConversation).toBeUndefined()
+    expect((JSON.stringify(wire(requests[0])).match(/"cache_control"/g) ?? []).length).toBe(4)
+    await expect(
+      runAiRequest({
+        model: 'claude-sonnet-5-5',
+        provider: fake,
+        system: [1, 2, 3, 4].map((n) => ({ text: `rules ${n}`, cacheBreakpoint: true })),
+        messages: [{ role: 'user', content: 'brief' }],
+        tools: [own],
+        cacheTools: true,
+        maxTokens: 10,
+        stream: false,
+      }),
+    ).rejects.toThrow("the tool list's breakpoint would be the 5th")
+  })
+
+  it('refuses a list that does not hold the route’s tool as the route asks for it, before anything is spent', async () => {
+    const { fake, requests } = routeRecording()
+    await expect(
+      generateSeoFields({
+        subject: { kind: 'screen', name: 'Home', path: '/' },
+        brand: 'Acme Roofing',
+        text: 'Roofs.',
+        // A picture's description too: a listing tool of another shape than the list's.
+        fields: ['title', 'description', 'imageAlt'],
+        image: { alt: 'A roof' },
+        model: 'claude-haiku-5-5',
+        provider: fake,
+        toolset: aiSiteJobTools(),
+      }),
+    ).rejects.toThrow('does not hold propose_search_listing')
+    expect(requests).toHaveLength(0)
+  })
+})
+
 describe('a site’s context block extends the shared prefix, never enters it (AGL-3661)', () => {
   const context = (name: string, email: string): AiSiteContextInput => ({
     profile: resolveBusinessProfile({

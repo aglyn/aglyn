@@ -63,6 +63,7 @@ import { aiOriginJobId } from './ai-job-draft-ids'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
+import { aiSiteJobTools } from './ai-site-job-tools'
 import { aiLayoutIsHomeSlug, aiLayoutSiteAliases, aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutInventedContactViolations } from './ai-layout-site-facts'
 
@@ -782,6 +783,8 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
       inventory: input.inventory,
       messages: [{ role: 'user', content }],
       tool: AI_LAYOUT_PAGE_TOOL,
+      // The site job's one tool list (AGL-3830).
+      toolset: aiSiteJobTools(),
       maxTokens,
       cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer items in each group.' },
       ...AI_LAYOUT_LANGUAGE_THINKING,

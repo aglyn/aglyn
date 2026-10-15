@@ -18,7 +18,7 @@
 import type { SeoListingFieldKey } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import type { AiSeoFieldValues } from '../model/ai-seo'
 import type { AiStepKind } from '../providers/catalog'
-import type { AiProvider } from '../providers/contract'
+import type { AiProvider, AiTool } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiRouteSettings, type AiPluginSettings } from '../providers/routing'
 import {
   AI_SEO_FIELDS_TOOL_NAME,
@@ -251,6 +251,11 @@ export interface GenerateSeoFieldsInput extends Omit<AiSeoFieldsPromptInput, 'fi
   fields?: readonly SeoListingFieldKey[]
   /** The step kind the call is routed as; `job.seo` when omitted. */
   step?: AiStepKind
+  /**
+   * The job's shared tool list (AGL-3830), holding this listing's tool for
+   * the same fields; a site job's page passes it.
+   */
+  toolset?: readonly AiTool[]
   settings?: AiPluginSettings
   model?: string
   /**
@@ -300,6 +305,7 @@ export async function generateSeoFields(
     }),
     messages: [{ role: 'user', content: aiSeoFieldsPrompt({ ...input, fields, keywords }) }],
     tool: aiSeoFieldsTool(fields),
+    ...(input.toolset ? { toolset: input.toolset } : {}),
     maxTokens: input.maxTokens ?? AI_SEO_FIELDS_MAX_TOKENS,
     ...(input.signal ? { signal: input.signal } : {}),
     ...(input.provider ? { provider: input.provider } : {}),

@@ -47,6 +47,7 @@ import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiJobPlanCreationsRefusal } from './ai-job-plan-creations'
 import { aiJobStepBudget, type AiJobStepBudget } from './ai-job-budget'
 import { aiJobDraftId } from './ai-job-draft-ids'
+import { aiSiteJobTools } from './ai-site-job-tools'
 import { aiSiteSubdomain } from './ai-job-drafts'
 import {
   aiConfirmedPlan,
@@ -600,6 +601,8 @@ export interface AiEmailGenerationInput {
   products: AiEmailProductBinding
   /** The email plugin's design writer, whose check the design must pass. */
   design: PluginResourceDraftWriter
+  /** The site job's shared tool list (AGL-3830); a campaign passes none. */
+  toolset?: readonly AiTool[]
   signal?: AbortSignal
 }
 
@@ -627,6 +630,7 @@ export async function generateAiEmail(input: AiEmailGenerationInput): Promise<Ai
       },
     ],
     tool: AI_JOB_EMAIL_TOOL,
+    ...(input.toolset ? { toolset: input.toolset } : {}),
     maxTokens: AI_JOB_EMAIL_STEP_BUDGETS[input.step].maxTokens(input.model),
     thinking: 'off',
     // What has one reading is settled, not re-asked (AGL-3676): the tree's
@@ -738,6 +742,8 @@ export function createAiJobEmailStep(deps: AiJobEmailStepDeps = {}): AiJobStepRu
       hostId,
       products,
       design,
+      // The site job's one tool list (AGL-3830): a site's welcome email runs here.
+      toolset: aiSiteJobTools(),
       ...(signal ? { signal } : {}),
     })
     const { result } = generated

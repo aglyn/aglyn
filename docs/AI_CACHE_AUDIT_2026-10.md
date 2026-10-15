@@ -218,7 +218,7 @@ generate writes on single-use routes.
 | # | lever | $/week now | per 1,000 paid starts | quality risk | status |
 | -- | -- | --: | --: | -- | -- |
 | 1 | **The plan caches its conversation** (finding 1) | ~$0.01 | ~$8 (3.2%) | none: no prompt byte changes | **implemented** |
-| 2 | **Share one prefix across a job's routes**: every generate route offered the same sorted tool list, with the route's own tool forced by `tool_choice` (which does not invalidate the tools or system cache). About five writes per job become one write and four reads. | ~$0.05 | ~$30 (12%) | the model sees tools it must not call; a forced `tool_choice` is refused with thinking on some models | proposal; needs a live golden sweep, about $2–4 batched |
+| 2 | **Share one prefix across a job's routes**: every generate route offered the same sorted tool list, with the route's own tool forced by `tool_choice` (which does not invalidate the tools or system cache). About five writes per job become one write and four reads. | ~$0.05 | ~$30 (12%) | the model sees tools it must not call; a forced `tool_choice` is refused with thinking on some models | **built as a draft 2026-10-15** (AGL-3830), with `auto` rather than a forced choice; the re-measured saving is far smaller (below); waits on the live sweep |
 | 3 | **Drop system markers on single-use routes in a deployed runtime** (look, frame, theme, email, products, dataset, posts): no 0.25× write on a prefix nothing reads. Development keeps them. | ~$0.11 | ~$6 (2.3%) | none to answers; it costs more once jobs run within five minutes of each other, and a re-ask then pays full input | proposal: a traffic call for the owner |
 | 4 | **Development batches warm a cold prefix first**: one `max_tokens: 0` request per cold prefix with three or more entries, then the batch | ~$0.3–0.5 of development | — | none; adds a few seconds per batch | proposal |
 | 5 | **Development sweeps re-run within the hour, or `AGLYN_AI_CACHE_TTL=5m` for a one-off sweep** (finding 7) | ~$0.1–0.3 of development | — | none | operational note |
@@ -230,6 +230,50 @@ The cache is not where the money is. A paid start's output is 57% of its
 cost, and development is most of the provider bill (AI_JOBS, *Verifying a
 prompt change*). The next lever after this round is output, the effort A/B
 already in flight, more than any further cache work.
+
+### Lever 2, as built (AGL-3830, a draft until its live sweep)
+
+The look, the header and footer, each layout-language page, each page's
+listing and the welcome email are offered one list, `aiSiteJobTools()`: their
+five tools and the lookup, sorted by name. Three things changed from the
+proposal once it was built.
+
+- **No forced `tool_choice`.** Claude Sonnet 5.5, which serves every one of
+  these routes on a paid plan, refuses `{type: "tool"}` with a 400, and so
+  does Claude Opus 5.5. The page and the frame also think adaptively, which a
+  forced choice cannot be combined with on any model. Every request keeps
+  `auto`, the same bytes on every route, and the route's own instructions name
+  its tool. An answer through another route's tool is re-asked.
+- **What is shared is the tools and the `fields` doctrine, not the whole
+  prefix.** Each route's instructions differ and sit after both. Measured at
+  four characters a token: the list is 2,086 tokens and the `fields` doctrine
+  349. The look, the frame, the page and the listing share both (2,435). The
+  email shares the list alone, through a breakpoint on the last tool, since
+  its doctrine is the `documents` one. Each route's own prefix grows by the
+  other routes' tools: the page from 1,841 to 3,453, the frame from 2,212 to
+  3,582, the email from 2,970 to 4,698.
+- **A cache entry is per model, and maybe per thinking setting.** The listing
+  runs on the fast tier, so it shares the bytes but not the entry. On Claude
+  Sonnet 5.5, the look and the email run with thinking off (`between_tools`),
+  while the frame and the page run adaptive at low effort. Whether that
+  difference splits the tools and system cache is model-specific and not
+  documented. Finding 5 only shows that an effort change did not.
+
+Re-measured on one paid job (Sonnet 5.5, five-minute cache, routes minutes
+apart, five pages):
+
+- **If thinking does not split the cache.** Today the Sonnet routes write
+  8,306 prefix tokens a job. With the list they write 7,520 and read 6,956 at
+  0.05×, and the four later pages each read 1,599 more. Net, about 300
+  token-equivalents saved, **about $0.0006 a job**.
+- **If it does.** The frame writes the list again for the adaptive group. The
+  job then writes 9,955, which is **about $0.005 a job dearer** than today.
+
+Either way it is well under the $30 per 1,000 starts the table estimated,
+which assumed the whole prefix would be shared. With lever 7 on, a busy hour
+reads every route's prefix across jobs anyway, so the list adds bytes read at
+0.05× and saves little. Keep it only if the live sweep shows the frame and
+page reading the look's 2,435 tokens and no rise in re-asks.
 
 ## What needs a live eval
 

@@ -152,6 +152,7 @@ import {
 import type { AiJobOutput } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { aiEvalMemoryInventory } from '../runtime/ai-eval-memory-firestore'
+import { aiRequestToolName } from '../runtime/ai-doctrine'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const NOW = new Date('2026-09-15T22:00:00.000Z')
@@ -782,7 +783,7 @@ describe('a golden page whose plan creates what its site lacks (AGL-3031)', () =
     mockReadInventory.mockReset().mockImplementation(async () => inventoryNow())
     const sections = [...FIXTURE.answers]
     mockRunAiRequest.mockReset().mockImplementation(async (request: SentRequest) => {
-      const tool = (request.tools[0] as { name: string }).name
+      const tool = aiRequestToolName(request as never) as string
       if (tool === 'submit_layout') return answer(tool, { tree: JSON.stringify(FIXTURE.layout) })
       // A created layout is designed in the layout language and compiled (AGL-3660).
       if (tool === 'submit_frame') {

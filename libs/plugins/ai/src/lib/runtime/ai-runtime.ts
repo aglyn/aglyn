@@ -173,10 +173,11 @@ export function validateAiSystemBlocks(system: readonly AiSystemBlock[]): void {
 /**
  * Whether a request may also cache its conversation (AGL-3809): the
  * conversation's breakpoint is one more marker, so it fits only where the
- * system blocks leave one of the provider's four free.
+ * system blocks, and the tool list's marker when it has one (AGL-3830),
+ * leave one of the provider's four free.
  */
-export function aiConversationCacheFits(system: readonly AiSystemBlock[]): boolean {
-  return system.filter((block) => block.cacheBreakpoint).length < AI_MAX_CACHE_BREAKPOINTS
+export function aiConversationCacheFits(system: readonly AiSystemBlock[], cacheTools = false): boolean {
+  return system.filter((block) => block.cacheBreakpoint).length + (cacheTools ? 1 : 0) < AI_MAX_CACHE_BREAKPOINTS
 }
 
 /**
@@ -365,7 +366,13 @@ export async function runAiRequest(
   input: AiRequest | AiStreamRequest,
 ): Promise<AsyncIterable<AiStreamEvent> | AiResult> {
   validateAiSystemBlocks(input.system)
-  if (input.cacheConversation && !aiConversationCacheFits(input.system)) {
+  const toolsMarked = Boolean(input.cacheTools) && Boolean(input.tools?.length)
+  if (toolsMarked && !aiConversationCacheFits(input.system)) {
+    throw new AiRequestShapeError(
+      `the tool list's breakpoint would be the ${AI_MAX_CACHE_BREAKPOINTS + 1}th; at most ${AI_MAX_CACHE_BREAKPOINTS} are cached`,
+    )
+  }
+  if (input.cacheConversation && !aiConversationCacheFits(input.system, toolsMarked)) {
     throw new AiRequestShapeError(
       `the conversation's breakpoint would be the ${AI_MAX_CACHE_BREAKPOINTS + 1}th; at most ${AI_MAX_CACHE_BREAKPOINTS} are cached`,
     )

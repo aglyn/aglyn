@@ -367,6 +367,33 @@ vendor, and it does not move as a conversation grows.
   door measured to continue may turn it on. Today that is the plan alone; the
   cache spec lists the doors. The audit behind it, and the levers left as
   proposals, are in `docs/AI_CACHE_AUDIT_2026-10.md`.
+- **One tool list for a site job's routes (AGL-3830).** A provider renders
+  the tools ahead of the system blocks, so routes that each offered only
+  their own tool shared no cached byte. The look, the header and footer, each
+  page in the layout language, each page's listing and the welcome email are
+  now all offered `aiSiteJobTools()` (`jobs/ai-site-job-tools.ts`): their five
+  tools and the lookup, sorted by name, built from module constants so no
+  brief or site moves a byte. `runValidatedGeneration` takes it as `toolset`.
+  It marks the last tool a breakpoint (`cacheTools`, one of the four), so the
+  list is a cache entry the email can read too, and on the look, the frame,
+  the page and the listing the `fields` doctrine block after it is the same
+  bytes, behind its own breakpoint. Each route's own instructions end with
+  the line naming its tool (`aiInstructionsNamingTool`). The tool choice
+  stays `auto` on every request and is never forced: Claude Sonnet 5.5 and
+  Claude Opus 5.5 refuse a forced choice, and the page and the frame think
+  adaptively, which a forced choice cannot be combined with. An answer
+  through another tool in the list, or a lookup from a route that reads no
+  site, is re-asked like a broken rule (`answer-wrong-tool`) and logged as
+  `ai answer through another route's tool`. The plan stays out: its tool
+  changes with the brief (the video players it may name), and it runs as
+  its own step. A cache entry is per model, so the listing, on the fast tier,
+  shares the bytes but not the entry, and a route whose thinking setting
+  differs may not share it either. The cache spec's *one tool prefix shared
+  by every route of a site job* section holds the bytes equal across the
+  routes and across briefs and sites. A replay key hashes the tools, so every
+  recorded answer of these five routes stops replaying: the next live run
+  asks them again and records under the new keys, and the old recordings sit
+  unread. A recording made for one tool list is never replayed for another.
 
 Two consequences worth knowing before writing a prompt. A door on the fast
 tier has the HIGHEST minimum on the platform, so a step moved there to save

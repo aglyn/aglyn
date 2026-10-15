@@ -45,6 +45,7 @@ import {
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { aiHasPlaceholderToken } from '../runtime/ai-placeholder-tokens'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
+import { AI_SITE_JOB_LISTING_FIELDS, aiSiteJobTools } from './ai-site-job-tools'
 import { readSiteInventory } from '../runtime/site-inventory'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
@@ -802,10 +803,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             // and a page job started from the Screens page carries neither.
             site: aiSiteWords(job.inputs),
             text: buildPageMarkdown({ nodes: page as never, rootId: CANVAS_ROOT_ELEMENT_ID }),
-            fields: ['title', 'description'],
+            fields: [...AI_SITE_JOB_LISTING_FIELDS],
             // Other screens by name only: their own listings are their content.
             otherTitles: inventory.screens.map((row) => row.name),
             model: seoModel,
+            // The site job's one tool list (AGL-3830).
+            toolset: aiSiteJobTools(),
             ...(signal ? { signal } : {}),
           })
           spent = { ...spent, ...aiGenerationSpent(result) }

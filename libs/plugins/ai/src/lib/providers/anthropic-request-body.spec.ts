@@ -130,6 +130,29 @@ describe('the cache lifetime a request asks for', () => {
   })
 })
 
+describe('a request that caches its tool list (AGL-3830)', () => {
+  const OTHER: AiTool = { ...TOOL, name: 'other' }
+
+  it('marks the last tool alone, at the system breakpoints’ lifetime, and no tool unless asked', () => {
+    const plain = body('claude-sonnet-5-5', { tools: [OTHER, TOOL] })['tools'] as Array<Record<string, unknown>>
+    expect(plain.map((tool) => tool['cache_control'] ?? null)).toEqual([null, null])
+    const marked = body('claude-sonnet-5-5', { tools: [OTHER, TOOL], cacheTools: true, cacheTtl: '1h' })['tools'] as Array<
+      Record<string, unknown>
+    >
+    expect(marked.map((tool) => tool['cache_control'] ?? null)).toEqual([null, { type: 'ephemeral', ttl: '1h' }])
+  })
+
+  it('counts the tool list’s marker against the four the API allows', () => {
+    const system = [1, 2, 3, 4].map((n) => ({ text: `rules ${n}`, cacheBreakpoint: true }))
+    expect(() => body('claude-sonnet-5-5', { system, cacheTools: true })).toThrow('5 cache breakpoints')
+    expect(() => body('claude-sonnet-5-5', { system: system.slice(1), cacheTools: true })).not.toThrow()
+  })
+
+  it('keeps the tool choice `auto` whatever the list, which no current model refuses', () => {
+    expect(body('claude-sonnet-5-5', { tools: [OTHER, TOOL], cacheTools: true })['tool_choice']).toEqual({ type: 'auto' })
+  })
+})
+
 describe('a request that caches its conversation (AGL-3809)', () => {
   const turns = [
     { role: 'user', content: 'brief' },

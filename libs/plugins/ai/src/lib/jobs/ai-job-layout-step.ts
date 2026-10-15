@@ -87,6 +87,7 @@ import {
   aiLayoutSiteName,
   type AiLayoutFrameBuilt,
 } from './ai-job-layout-language'
+import { aiSiteJobTools } from './ai-site-job-tools'
 import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage, aiLayoutDesignOf } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -410,6 +411,8 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
         inventory,
         messages: [{ role: 'user', content: aiLayoutFramePrompt({ job, siteName, pages, targets }) }],
         tool: AI_LAYOUT_FRAME_TOOL,
+        // The site job's one tool list (AGL-3830).
+        toolset: aiSiteJobTools(),
         maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
         ...AI_LAYOUT_LANGUAGE_THINKING,
         check: aiLayoutFrameCheck({

@@ -111,6 +111,7 @@ import {
 import { aiEvalMemoryFirestore } from './ai-eval-memory-firestore'
 import { AI_PALETTE } from './ai-palette.generated'
 import { validateAiMessages } from './ai-runtime'
+import { aiRequestToolName } from './ai-doctrine'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const fixture = (path: string): AiEvalCase =>
@@ -167,7 +168,7 @@ function armReferenceAnswers(
 ) {
   const sections = [...AI_FREE_PAGE_FIXTURE.answers]
   mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }>; messages?: unknown }) => {
-    const tool = request.tools?.[0]?.name
+    const tool = aiRequestToolName(request)
     if (tool === AI_BUILD_PLAN_TOOL.name) return toolCall(tool, planned.candidates[0].plan)
     if (tool === AI_AUTOMATION_TOOL_NAME) return toolCall(tool, draft.candidates[0].answer)
     if (tool === AI_WORKFLOW_EXPLANATION_TOOL_NAME) return toolCall(tool, explain.candidates[0].answer)
@@ -263,7 +264,7 @@ describe('the live run', () => {
     const sent = mockRunAiRequest.mock.calls.map((call) => call[0])
     // The plan was told what the Free workspace may create, and every section to build inline.
     expect(String(sent[0].messages[0].content)).toContain("- component: no, because this workspace's plan does not include reusable components")
-    const passes = sent.filter((request) => request.tools?.[0]?.name === AI_PAGE_SECTION_TOOL.name)
+    const passes = sent.filter((request) => aiRequestToolName(request) === AI_PAGE_SECTION_TOOL.name)
     expect(passes).toHaveLength(AI_FREE_PAGE_FIXTURE.answers.length)
     for (const request of passes) expect(String(request.messages[0].content)).toContain(AI_PAGE_SECTION_INLINE_LINE)
 
@@ -302,7 +303,7 @@ describe('the live run', () => {
       },
     })
     // …and the grader reads all of it before the page.
-    const graded = String(sent.find((request) => request.tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name).messages[0].content)
+    const graded = String(sent.find((request) => aiRequestToolName(request) === AI_EVAL_RUBRIC_TOOL.name).messages[0].content)
     for (const line of [
       '- address: /about',
       `- search title: "${AI_FREE_PAGE_FIXTURE.seo.title}"`,
@@ -324,7 +325,7 @@ describe('the live run', () => {
       await recordAiEvalLive([evalCase], { env: LIVE.env, graderModel: LIVE.graderModel })
       const listing = mockRunAiRequest.mock.calls
         .map((call) => call[0])
-        .find((request) => request.tools?.[0]?.name === AI_SEO_FIELDS_TOOL_NAME)
+        .find((request) => aiRequestToolName(request) === AI_SEO_FIELDS_TOOL_NAME)
       return String(listing.messages[0].content)
     }
     const untitled = await listingOf(freePage)
@@ -343,7 +344,7 @@ describe('the live run', () => {
     mockRunAiRequest.mockImplementationOnce(async () => toolCall(AI_BUILD_PLAN_TOOL.name, AI_FREE_PAGE_RECORDED_PLAN))
     const [{ candidate }] = (await recordAiEvalLive([freePage], LIVE)).recorded
     const sent = mockRunAiRequest.mock.calls.map((call) => call[0])
-    const plans = sent.filter((request) => request.tools?.[0]?.name === AI_BUILD_PLAN_TOOL.name)
+    const plans = sent.filter((request) => aiRequestToolName(request) === AI_BUILD_PLAN_TOOL.name)
     expect(plans).toHaveLength(2)
     // The one re-ask tells this Free workspace to draw its form. The hero that
     // placed the page's own layout is settled in code, so it is not asked
@@ -359,7 +360,7 @@ describe('the live run', () => {
     expect(candidate.steps?.[0]).toMatchObject({ step: 'job.plan', usage: { inputTokens: 2 * USAGE.inputTokens } })
     expect(candidate.steps?.filter((step) => step.step === 'job.page')).toHaveLength(AI_FREE_PAGE_FIXTURE.answers.length)
     // And its grader is told the workspace it was built for.
-    const grade = sent.find((request) => request.tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name)
+    const grade = sent.find((request) => aiRequestToolName(request) === AI_EVAL_RUBRIC_TOOL.name)
     expect(String(grade.messages[0].content)).toContain(AI_EVAL_INLINE_GRADER_NOTE)
   })
 
@@ -394,7 +395,7 @@ describe('the live run', () => {
     // asked one brief after another would never get past the first.
     const held: Array<() => void> = []
     mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
-      if (request.tools?.[0]?.name !== AI_EVAL_RUBRIC_TOOL.name) {
+      if (aiRequestToolName(request) !== AI_EVAL_RUBRIC_TOOL.name) {
         await new Promise<void>((release) => {
           held.push(release)
           if (held.length === 2) for (const go of held) go()
@@ -432,7 +433,7 @@ describe('the live run', () => {
     armReferenceAnswers({ structure: 9, copy: 'fine', reuse: null, notes: '' })
     const [{ candidate }] = (await recordAiEvalLive([text], LIVE)).recorded
     // One answer and one re-ask to the grader, then a rubric that cannot pass.
-    expect(mockRunAiRequest.mock.calls.filter((call) => call[0].tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name)).toHaveLength(2)
+    expect(mockRunAiRequest.mock.calls.filter((call) => aiRequestToolName(call[0]) === AI_EVAL_RUBRIC_TOOL.name)).toHaveLength(2)
     expect(candidate.rubric).toMatchObject({ structure: 1, copy: 1, grader: 'grader-model' })
     expect(scoreAiEvalCandidate(text, candidate).pass).toBe(false)
   })
@@ -461,7 +462,7 @@ describe('the automation and products recorders (AGL-3074)', () => {
     get: async () => null,
   })
   const requestsFor = (toolName: string) =>
-    mockRunAiRequest.mock.calls.map((call) => call[0]).filter((request) => request.tools?.[0]?.name === toolName)
+    mockRunAiRequest.mock.calls.map((call) => call[0]).filter((request) => aiRequestToolName(request) === toolName)
 
   /** A job the step's runner is handed, on the harness's own site. */
   const job = (kind: AiJob['kind'], evalCase: AiEvalCase, inputs: Record<string, string>): AiJob =>
@@ -502,7 +503,7 @@ describe('the automation and products recorders (AGL-3074)', () => {
     }) => Promise<Record<string, unknown>>
     mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
       const answer = await answers(request)
-      return request.tools?.[0]?.name === AI_AUTOMATION_TOOL_NAME
+      return aiRequestToolName(request) === AI_AUTOMATION_TOOL_NAME
         ? { ...answer, toolUse: [{ name: AI_AUTOMATION_TOOL_NAME, input: {} }], stopReason: 'max_tokens', rawOutput: runaway }
         : answer
     })
@@ -777,7 +778,7 @@ describe('the automation and products recorders (AGL-3074)', () => {
     // automation's before the model ran. The first brief is recorded before
     // the throw and the third is recorded after it.
     mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
-      if (request.tools?.[0]?.name === AI_THEME_TOOL_NAME) {
+      if (aiRequestToolName(request) === AI_THEME_TOOL_NAME) {
         throw new AiUpstreamError(400, false, 'req_refused_theme')
       }
       return answers(request)
@@ -801,7 +802,7 @@ describe('the automation and products recorders (AGL-3074)', () => {
       tools?: Array<{ name: string }>
     }) => Promise<unknown>
     mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
-      if (request.tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name) throw new Error('the grader is out of quota')
+      if (aiRequestToolName(request) === AI_EVAL_RUBRIC_TOOL.name) throw new Error('the grader is out of quota')
       return answers(request)
     })
     const report = await recordAiEvalLive([text], LIVE)

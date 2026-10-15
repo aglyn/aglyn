@@ -41,6 +41,7 @@ import { runValidatedGeneration, type AiGenerationCheck } from '../runtime/ai-do
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
+import { aiSiteJobTools } from './ai-site-job-tools'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepContext, type AiJobStepOutcome } from './ai-job-text-step'
 
 /**
@@ -292,6 +293,8 @@ export async function aiRunSiteLook(
     instructions: AI_SITE_LOOK_INSTRUCTIONS as AiSystemBlock[],
     messages: [{ role: 'user', content: aiSiteLookPrompt({ job: { ...job, $id: origin }, kind, bases: aiSiteLookBases(kind) }) }],
     tool: AI_SITE_LOOK_TOOL,
+    // The site job's one tool list (AGL-3830), so the look writes the prefix the frame, pages and email read.
+    toolset: aiSiteJobTools(),
     maxTokens: AI_SITE_LOOK_BUDGET.maxTokens(model),
     thinking: 'off',
     check: aiSiteLookCheck,

@@ -184,7 +184,9 @@ export function buildAnthropicRequestBody(
   input: Omit<AiProviderRequest, 'apiKey' | 'signal'> & { stream: boolean },
 ): Record<string, unknown> {
   const conversation = Boolean(input.cacheConversation) && input.messages.length > 0
-  const breakpoints = input.system.filter((block) => block.cacheBreakpoint).length + (conversation ? 1 : 0)
+  const toolsMarked = Boolean(input.cacheTools) && Boolean(input.tools?.length)
+  const breakpoints =
+    input.system.filter((block) => block.cacheBreakpoint).length + (conversation ? 1 : 0) + (toolsMarked ? 1 : 0)
   if (breakpoints > ANTHROPIC_MAX_CACHE_BREAKPOINTS) {
     throw new Error(
       `${breakpoints} cache breakpoints; the Messages API allows ${ANTHROPIC_MAX_CACHE_BREAKPOINTS}`,
@@ -198,11 +200,14 @@ export function buildAnthropicRequestBody(
     text: block.text,
     ...(block.cacheBreakpoint ? { cache_control: cacheControl } : {}),
   }))
-  const tools = input.tools?.map((tool) => ({
+  // The last tool closes the tool list's own cache entry when asked (AGL-3830).
+  const lastTool = (input.tools?.length ?? 0) - 1
+  const tools = input.tools?.map((tool, index) => ({
     name: tool.name,
     description: tool.description,
     input_schema: { ...tool.inputSchema, additionalProperties: false },
     strict: true,
+    ...(toolsMarked && index === lastTool ? { cache_control: cacheControl } : {}),
   }))
   // A model that rejects an explicit thinking setting gets none, whatever
   // the door asked for, and no effort either: effort rides the same rule

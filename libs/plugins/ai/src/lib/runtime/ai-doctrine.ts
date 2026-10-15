@@ -810,6 +810,76 @@ function unreadableAnswer(toolName: string): AiDoctrineViolation {
   }
 }
 
+/** The code of an answer that came through another route's tool (AGL-3830). */
+export const AI_ANSWER_WRONG_TOOL_CODE = 'answer-wrong-tool'
+
+function wrongToolAnswer(called: string, toolName: string): AiDoctrineViolation {
+  return {
+    rule: null,
+    code: AI_ANSWER_WRONG_TOOL_CODE,
+    message: `The answer came through ${called}, which belongs to another step; this answer goes through ${toolName}.`,
+  }
+}
+
+/**
+ * A job's shared tool list, held to what the door asked for (AGL-3830): it
+ * must hold the door's own tool byte for byte, since a route answering
+ * through a different shape of it would be read by the wrong check, and the
+ * lookup wherever the door reads a site. A list that does not is a wiring
+ * fault, refused before anything is spent.
+ */
+function aiCheckedToolset(toolset: readonly AiTool[], tool: AiTool, lookup: AiTool | null): readonly AiTool[] {
+  const same = (a: AiTool | undefined, b: AiTool) => Boolean(a) && JSON.stringify(a) === JSON.stringify(b)
+  if (!same(toolset.find((entry) => entry.name === tool.name), tool)) {
+    throw new Error(`runValidatedGeneration: the shared tool list does not hold ${tool.name} as the door asks for it`)
+  }
+  if (lookup && !same(toolset.find((entry) => entry.name === lookup.name), lookup)) {
+    throw new Error(`runValidatedGeneration: the shared tool list does not hold ${lookup.name}`)
+  }
+  return toolset
+}
+
+const AI_TOOLSET_RULE_OPENING = 'Answer with '
+const AI_TOOLSET_RULE_REST = ". The other tools listed are for other steps of this site's build: never call them"
+
+/**
+ * The tool a request is to be answered through: the one its instructions
+ * name where it is offered a job's shared list (AGL-3830), else the first it
+ * is offered, which is the door's own. What a reader of sent requests keys a
+ * route on: a spec's fake provider, a ledger of a live run.
+ */
+export function aiRequestToolName(request: {
+  system?: ReadonlyArray<{ text: string }>
+  tools?: ReadonlyArray<{ name: string }>
+}): string | undefined {
+  for (const block of request.system ?? []) {
+    const at = block.text.lastIndexOf(AI_TOOLSET_RULE_OPENING)
+    if (at < 0) continue
+    const name = block.text.slice(at + AI_TOOLSET_RULE_OPENING.length).split(AI_TOOLSET_RULE_REST)
+    if (name.length > 1 && /^[a-z_]+$/.test(name[0])) return name[0]
+  }
+  return request.tools?.[0]?.name
+}
+
+/**
+ * The door's instructions told which tool of a shared list is its own
+ * (AGL-3830), at the end of its last block: a door's own block, never the
+ * doctrine, so the prefix every route shares is unchanged. A route that reads
+ * a site may still look it up first.
+ */
+export function aiInstructionsNamingTool(
+  instructions: readonly AiSystemBlock[],
+  toolName: string,
+  lookup: AiTool | null,
+): AiSystemBlock[] {
+  const rule =
+    `${AI_TOOLSET_RULE_OPENING}${toolName}${AI_TOOLSET_RULE_REST}` +
+    (lookup ? `, except ${lookup.name} to look something up before you answer.` : '.')
+  const last = instructions.length - 1
+  if (last < 0) return [{ text: rule }]
+  return instructions.map((block, index) => (index === last ? { ...block, text: `${block.text}\n\n${rule}` } : block))
+}
+
 /**
  * The re-ask: the rules broken, where, and the offending parts as the model
  * wrote them. An answer cut off at its ceiling is told that first, with what
@@ -920,6 +990,17 @@ interface AiGenerationInputBase {
    * hold every breakpoint.
    */
   cacheConversation?: boolean
+  /**
+   * The tools every route of a job is offered (AGL-3830), the door's own
+   * `tool` among them, in place of the door's tool and the lookup alone. The
+   * routes of a site job share one list (`jobs/ai-site-job-tools.ts`) so the
+   * tools, which a provider renders ahead of the system, are one cached
+   * prefix for all of them. The door's instructions are told which tool is
+   * its own, the list's last tool is marked a breakpoint, and an answer
+   * through any other tool in it is re-asked. It must hold a tool equal to
+   * `tool`, and the lookup where the door reads a site.
+   */
+  toolset?: readonly AiTool[]
 }
 
 export interface AiTreeGenerationInput extends AiGenerationInputBase {
@@ -1107,8 +1188,17 @@ export async function runValidatedGeneration(
   if (!model) {
     throw new Error(`runValidatedGeneration: a ${kind} names neither its step nor its model`)
   }
+  // "More on request" (AGL-2937). A door that reads a site is offered the
+  // lookup tool beside its own on EVERY request, whatever the site's size:
+  // the tool list renders ahead of the system blocks and is part of what a
+  // cache entry is keyed on, so offering it only to the sites large enough to
+  // need it would split the platform's one cached prefix in two. A kind that
+  // builds from no site structure — a theme, a listing — passes no inventory
+  // and is offered nothing.
+  const lookup = input.inventory === undefined ? null : aiInventoryLookupTool()
+  const toolset = input.toolset ? aiCheckedToolset(input.toolset, input.tool, lookup) : null
   const system = aiDoctrineSystemBlocks(input.inventory, {
-    instructions: input.instructions,
+    instructions: toolset ? aiInstructionsNamingTool(input.instructions, input.tool.name, lookup) : input.instructions,
     scope: aiDoctrineScopeFor(kind),
     ...(isAiOutputKind(kind) ? { surface: AI_OUTPUT_SURFACE[kind] } : {}),
   })
@@ -1127,16 +1217,9 @@ export async function runValidatedGeneration(
     stopReason: null,
     effort: effort ?? null,
   }
-  // "More on request" (AGL-2937). A door that reads a site is offered the
-  // lookup tool beside its own on EVERY request, whatever the site's size:
-  // the tool list renders ahead of the system blocks and is part of what a
-  // cache entry is keyed on, so offering it only to the sites large enough to
-  // need it would split the platform's one cached prefix in two. A kind that
-  // builds from no site structure — a theme, a listing — passes no inventory
-  // and is offered nothing.
-  const lookup = input.inventory === undefined ? null : aiInventoryLookupTool()
-  const cacheConversation = Boolean(input.cacheConversation) && aiConversationCacheFits(system)
-  const tools = lookup ? [input.tool, lookup] : [input.tool]
+  const cacheTools = Boolean(toolset)
+  const cacheConversation = Boolean(input.cacheConversation) && aiConversationCacheFits(system, cacheTools)
+  const tools = toolset ? [...toolset] : lookup ? [input.tool, lookup] : [input.tool]
   let messages: AiMessage[] = [...input.messages]
   let violations: AiDoctrineViolation[] = []
   // The answer `violations` were found in, for the review a person reads.
@@ -1175,6 +1258,7 @@ export async function runValidatedGeneration(
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(effort ? { effort } : {}),
       ...(cacheConversation ? { cacheConversation } : {}),
+      ...(cacheTools ? { cacheTools } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.settings ? { settings: input.settings } : {}),
       ...(input.provider ? { provider: input.provider } : {}),
@@ -1245,6 +1329,16 @@ export async function runValidatedGeneration(
       return { ...spend, status: 'ok', value: checked.value }
     }
     const found = checked?.violations ?? []
+    // An answer through a tool that belongs to another route of the job
+    // (AGL-3830) is named as that, so the re-ask can say which tool is this
+    // route's; a lookup from a route that reads no site is one too.
+    const stray = answer
+      ? undefined
+      : result.toolUse.find((use) => use.name !== input.tool.name && use.name !== lookup?.name)
+    // Said in the log, where a live run's sweep and production count how often
+    // a shared list draws a route to another's tool; the names are ours, never
+    // the site's words.
+    if (stray) console.warn('ai answer through another route’s tool', { kind, model, called: stray.name, tool: input.tool.name })
     refused = answer
     if (cutOff) {
       rawOutput = result.rawOutput ?? null
@@ -1270,7 +1364,9 @@ export async function runValidatedGeneration(
       ? [cutOffAnswer(kind, input.cutOff), ...found.filter((violation) => violation.rule !== null)]
       : found.length
         ? found
-        : [unreadableAnswer(input.tool.name)]
+        : stray
+          ? [wrongToolAnswer(stray.name, input.tool.name)]
+          : [unreadableAnswer(input.tool.name)]
     const offending = cutOff && violations.length === 1 ? undefined : checked?.offending
     // The re-ask continues the turn rather than replacing it, so whatever the
     // model looked up is still in front of it and is not asked for twice.
