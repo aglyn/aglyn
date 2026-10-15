@@ -35,6 +35,7 @@ import { aiCutOffFigures, aiStoppedAtCeiling, type AiProvider } from '../provide
 import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
+  aiConversationCacheFits,
   runAiRequest,
   type AiCompletion,
   type AiEffort,
@@ -902,6 +903,17 @@ interface AiGenerationInputBase {
   signal?: AbortSignal
   /** A provider chosen ahead of every setting; specs use it. */
   provider?: AiProvider
+  /**
+   * Cache the conversation on every request too (AGL-3809), for a door whose
+   * generations usually continue: a lookup round or a re-ask re-sends the
+   * whole first turn and the site's inventory, which the conversation's
+   * breakpoint lets it read back at a cache read's price instead of the full
+   * input rate. The first request pays the cache write on its own tail, so a
+   * door turns it on only where most of its generations continue — the plan
+   * (docs/AI_CACHE_AUDIT_2026-10.md). Dropped where the system blocks already
+   * hold every breakpoint.
+   */
+  cacheConversation?: boolean
 }
 
 export interface AiTreeGenerationInput extends AiGenerationInputBase {
@@ -1117,6 +1129,7 @@ export async function runValidatedGeneration(
   // builds from no site structure — a theme, a listing — passes no inventory
   // and is offered nothing.
   const lookup = input.inventory === undefined ? null : aiInventoryLookupTool()
+  const cacheConversation = Boolean(input.cacheConversation) && aiConversationCacheFits(system)
   const tools = lookup ? [input.tool, lookup] : [input.tool]
   let messages: AiMessage[] = [...input.messages]
   let violations: AiDoctrineViolation[] = []
@@ -1155,6 +1168,7 @@ export async function runValidatedGeneration(
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(effort ? { effort } : {}),
+      ...(cacheConversation ? { cacheConversation } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.settings ? { settings: input.settings } : {}),
       ...(input.provider ? { provider: input.provider } : {}),

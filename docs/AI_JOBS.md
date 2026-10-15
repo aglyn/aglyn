@@ -358,6 +358,16 @@ vendor, and it does not move as a conversation grows.
   block stranded after the last breakpoint, and refuses a step that quotes
   cache reads in `AI_STEP_NOMINAL_USAGE` for a prefix its model will not cache.
 
+- **A generation that continues (AGL-3809).** A lookup round and a re-ask
+  re-send the first turn and the inventory. A door whose generations usually
+  continue passes `cacheConversation: true` to `runValidatedGeneration`, and
+  the last turn of each request is marked as well. That marker is one of the
+  four allowed and is dropped first where the system blocks hold all four.
+  On a single-call generation it costs a 0.25× write on the tail, so only a
+  door measured to continue may turn it on. Today that is the plan alone; the
+  cache spec lists the doors. The audit behind it, and the levers left as
+  proposals, are in `docs/AI_CACHE_AUDIT_2026-10.md`.
+
 Two consequences worth knowing before writing a prompt. A door on the fast
 tier has the HIGHEST minimum on the platform, so a step moved there to save
 per-token money can cost more per request; and on a door that cannot cache,
