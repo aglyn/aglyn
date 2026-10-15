@@ -68,9 +68,23 @@ fun AglynShell(
       com.aglyn.ui.LocalVideoProbe provides (com.aglyn.ui.LocalVideoProbe.current ?: platformVideoProbe()),
     ) {
     val auth by services.auth.state.collectAsState()
+    val impersonation by services.auth.impersonation.collectAsState()
+    // A sign-up, sign-in, reset or verification link opens its own screen; any other link waits for the signed-in shell.
+    LaunchedEffect(pendingLink, auth is AuthState.SignedIn) {
+      val link = pendingLink ?: return@LaunchedEffect
+      val signedIn = auth is AuthState.SignedIn
+      val handled = services.authFlow.open(link, signedIn) { plan ->
+        services.workspace.state.value.org?.slug?.let { services.authFlow.landingLink = plan.destination(it) }
+      }
+      if (handled) onLinkOpened()
+    }
     when (val state = auth) {
       AuthState.Restoring -> Loading()
-      AuthState.SignedOut -> SignInScreen(services, autoSignIn)
+      AuthState.SignedOut -> SignedOutScreen(services, autoSignIn)
+      // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
+      is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn)
+      // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
+      is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
       is AuthState.SignedIn -> SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
     }
     }
@@ -141,9 +155,22 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   }
 
   LaunchedEffect(pendingLink, workspace.ready) {
-    if (pendingLink != null && workspace.ready) {
+    if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       context.openLink(pendingLink)
       onLinkOpened()
+    }
+  }
+  // The first verified session of an account with no workspace creates the one its sign-up asked for; a new workspace with a
+  // plan lands on billing with it.
+  LaunchedEffect(uid, workspace.ready) { services.settleFirstRun(workspace) }
+  val landingLink = services.authFlow.landingLink
+  LaunchedEffect(landingLink, workspace.ready, workspace.org?.slug) {
+    val link = landingLink ?: return@LaunchedEffect
+    val slug = link.removePrefix("/").substringBefore('/')
+    if (workspace.ready && workspace.orgs.any { it.slug == slug }) {
+      workspace.orgs.firstOrNull { it.slug == slug }?.let { services.workspace.selectOrg(it.id) }
+      services.authFlow.landingLink = null
+      context.openLink(link)
     }
   }
 

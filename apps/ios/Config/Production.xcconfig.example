@@ -26,3 +26,5 @@
 // Firebase App Check: on for any project that enforces it (register the apps for App Attest and
 // DeviceCheck in the Firebase console first); off only for a project that does not.
 // AGLYN_APP_CHECK = on
+// AGLYN_LEGAL_ORIGIN = https:/$()/<your legal site>
+// AGLYN_APPLE_SIGN_IN = YES

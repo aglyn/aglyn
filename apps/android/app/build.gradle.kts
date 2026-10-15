@@ -28,6 +28,9 @@ android {
     versionCode = setting("versionCode", "1").toInt()
     versionName = "0.1.0"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // The console host whose sign-up, verification and reset links open the app (App Links, verified by the console's
+    // assetlinks.json).
+    manifestPlaceholders["consoleHost"] = setting("consoleUrl", "https://app.aglyn.com").substringAfter("://").substringBefore("/").substringBefore(":")
   }
 
   // The upload key (Play App Signing re-signs for the store). Applied only when the

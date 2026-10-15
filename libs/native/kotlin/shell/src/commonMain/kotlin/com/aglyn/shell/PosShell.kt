@@ -83,12 +83,18 @@ fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean
       key(device.id) { device.content(DeviceContext(services, leave), emptyMap()) }
     } else {
       val auth by services.auth.state.collectAsState()
+      val impersonation by services.auth.impersonation.collectAsState()
+      val onDeviceMode = { chosen: com.aglyn.pluginhost.NativeScreen ->
+        services.prefs.set(POS_DEVICE_MODE_KEY, chosen.id)
+        deviceMode = chosen.id
+      }
       when (val state = auth) {
         AuthState.Restoring -> Loading()
-        AuthState.SignedOut -> SignInScreen(services, autoSignIn, deviceScreens) { chosen ->
-          services.prefs.set(POS_DEVICE_MODE_KEY, chosen.id)
-          deviceMode = chosen.id
-        }
+        AuthState.SignedOut -> SignedOutScreen(services, autoSignIn, deviceScreens, onDeviceMode)
+        // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
+        is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn, deviceScreens, onDeviceMode)
+        // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
+        is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
         is AuthState.SignedIn -> PosSignedIn(services, state.user.uid)
       }
     }
@@ -99,6 +105,8 @@ fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean
 private fun PosSignedIn(services: ShellServices, uid: String) {
   androidx.compose.runtime.LaunchedEffect(uid) { services.push.register(uid) }
   val workspace by services.workspace.state.collectAsState()
+  // The first verified session of an account with no workspace creates the one its sign-up asked for.
+  androidx.compose.runtime.LaunchedEffect(uid, workspace.ready) { services.settleFirstRun(workspace) }
   var confirmed by remember(uid) { mutableStateOf(services.prefs.get(posStoreKey(uid))) }
   val scope = rememberCoroutineScope()
   val site = workspace.site
@@ -168,6 +176,8 @@ internal fun StorePicker(
         }
         if (!workspace.ready) {
           SkeletonList(rows = 3)
+        } else if (workspace.orgs.isEmpty()) {
+          FirstRunContent(services)
         } else if (sellable.isEmpty()) {
           EmptyState(
             "No store you can sell on",

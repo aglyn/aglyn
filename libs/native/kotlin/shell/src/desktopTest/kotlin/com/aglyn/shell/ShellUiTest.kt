@@ -64,6 +64,11 @@ private class FakeAuth : AuthSession {
     if (password != "right") throw AuthError("That email and password do not match.")
     mutable.value = AuthState.SignedIn(AuthUser("u1", email, "Dana"))
   }
+  override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
+    val created = AuthUser("u2", email, null, emailVerified = false)
+    mutable.value = AuthState.SignedIn(created)
+    return created
+  }
   override suspend fun signOut() {
     mutable.value = AuthState.SignedOut
   }
@@ -82,6 +87,7 @@ class ShellUiTest {
   private fun services(
     userDoc: Map<String, Any?>? = null,
     writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+    apiCalls: MutableList<String> = mutableListOf(),
   ): ShellServices {
     val auth = FakeAuth()
     val firestore = FakeFirestore(
@@ -107,7 +113,7 @@ class ShellUiTest {
       config = config,
       auth = auth,
       firestore = firestore,
-      api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { respondOk() }), auth::idToken),
+      api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { request -> apiCalls += request.url.encodedPath; respondOk() }), auth::idToken),
       workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
       prefs = prefs,
       registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
@@ -140,6 +146,38 @@ class ShellUiTest {
     onNodeWithTag("quick-action-site.pages-open").assertIsDisplayed()
     onNodeWithText("New order #1042").assertIsDisplayed()
     onNodeWithText("5 min ago").assertIsDisplayed()
+  }
+
+  /** Sign-up is the console's: the form, the agreement it is gated on, the console's routes, then the verification step. */
+  @Test
+  fun signsUpThroughTheConsolesRoutesAndThenAsksForTheAddressToBeConfirmed() = runComposeUiTest {
+    val calls = mutableListOf<String>()
+    val merges = mutableListOf<String>()
+    val writer = object : com.aglyn.core.FirestoreWriter {
+      override suspend fun merge(path: String, data: Map<String, Any?>) { merges += "$path ${data.keys.sorted()}" }
+    }
+    val services = services(writer = writer, apiCalls = calls)
+    setContent { AglynShell(services) }
+    onNodeWithTag("sign-in-create-account").performClick()
+    onNodeWithTag("sign-up-first-name").performTextInput("Ada")
+    onNodeWithTag("sign-up-last-name").performTextInput("Lovelace")
+    onNodeWithTag("sign-up-organization").performTextInput("Analytical Engines")
+    onNodeWithTag("sign-up-email").performTextInput("ada@example.test")
+    onNodeWithTag("sign-up-password").performTextInput("Passw0rd!")
+    onNodeWithTag("sign-up-confirm").performTextInput("Passw0rd!")
+    // Without the agreement nothing is created.
+    onNodeWithTag("sign-up-submit").performScrollTo().performClick()
+    onNodeWithText("Please accept the Terms of Service and Privacy Policy to continue.").assertExists()
+    onNodeWithTag("sign-up-consent").performScrollTo().performClick()
+    onNodeWithTag("sign-up-submit").performScrollTo().performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("verify-continue") > 0 }
+    onNodeWithText("Verify your email").assertIsDisplayed()
+    assertEquals(
+      listOf("/api/lockdown-status", "/api/auth/legal-acceptance", "/api/auth/acquisition"),
+      calls.take(3),
+    )
+    waitUntil(timeoutMillis = 3_000) { "/api/auth/send-verification" in calls }
+    assertEquals(true, merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it })
   }
 
   @Test

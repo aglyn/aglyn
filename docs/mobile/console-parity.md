@@ -42,6 +42,31 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [x] | [x] |
 | Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [x] | [x] |
 
+## Sign in, sign up and first run (AGL-3819, AGL-3816)
+
+The apps are a direct alternative to the web app before sign-in too: every
+door of the console's `(auth)` pages, through the console's own routes in the
+console's order, with the same server checks (`beforeSignupCreate`, the abuse
+and fraud checks, the signups lockdown). The Kotlin column covers Android and
+the Windows desktop build; a row the desktop answers through the console
+hand-off says so.
+
+| door | console routes | Apple | Kotlin |
+| -- | -- | -- | -- |
+| Sign in with email and password, retrying with the primary address when the typed one is a confirmed secondary | `/signin`, `/api/auth/resolve-identifier` | [x] | [x] |
+| Sign up: name, workspace name (`signupOrgNameField`), email, password; the Terms of Service and Privacy Policy agreement and its acceptance record; the product-updates opt-in | `/signup`, `/api/auth/legal-acceptance`, `/api/auth/acquisition`, `/api/auth/marketing-consent` | [x] | [x] |
+| The plan and campaign a sign-up link carries (`aglyn://signup?plan=…`, the console's `/signup?plan=…`), kept on the account and landing the new workspace on billing | `/signup`, `users/{uid}.onboardingPlanIntent`, `users/{uid}.signupCampaign` | [x] | [x] |
+| The signups-paused notice | `/api/lockdown-status?feature=signups` | [x] | [x] |
+| Email verification: sent on arrival, resend, re-checked every few seconds and on return, "I’ve verified — continue", and the emailed link confirming in the app | `/verify-email`, `/api/auth/send-verification` | [x] | [x] |
+| First verified session: the workspace the sign-up named created once, the AGL-1523 notice with "Create it now", and "Create an organization" | the `(home)` chooser, `/api/orgs/create` | [x] | [x] |
+| Account recovery and choosing a new password from the emailed link | `/account-recovery`, `/reset-password`, `/api/auth/send-password-reset` | [x] | [x] |
+| Passkey sign-in (shown once the build has a relying party) | `/api/auth/passkeys/signin/*` | [x] | [x] |
+| Continue with Google, sign in and sign up; a new person goes through the agreement and the workspace step (AGL-1415, AGL-1497) | `/signin`, `/signup` | [ ] | [ ] |
+| Sign in with Apple, sign in and sign up (App Store guideline 4.8) | `apple.com` through `accounts:signInWithIdp` | [ ] | n/a |
+| Single sign-on, through the console in the system auth session and a one-time hand-off back to the app | `/sso`, `/api/auth/sso-lookup`, `/api/auth/sso-jit` | [ ] | [ ] |
+| Desktop (Windows) sign in and sign up through the console and the same hand-off | `/signin`, `/signup` | n/a | [ ] |
+| Workspace invites: the invite email opens the app, and pending invites are answered from the empty workspace list | `/api/orgs/invites?mine=1`, `/api/orgs/invites` | [ ] | [ ] |
+
 ## Staff gaps (AGL-3667)
 
 The audit of every page under the console `admin/*` route and the plugin staff

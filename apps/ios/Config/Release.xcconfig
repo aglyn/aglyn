@@ -38,6 +38,11 @@ AGLYN_GOOGLE_WEB_CLIENT_ID = 543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.
 // already on the Aglyn target.
 AGLYN_PASSKEY_RP_ID =
 
+// The published Terms of Service and Privacy Policy the sign-up links to (<origin>/legal/terms, /legal/privacy).
+AGLYN_LEGAL_ORIGIN = https:/$()/aglyn.com
+// Sign in with Apple (AGL-3816): needs the App ID's Sign in with Apple capability and Firebase's Apple provider.
+AGLYN_APPLE_SIGN_IN = NO
+
 AGLYN_DEBUG_EMAIL =
 AGLYN_DEBUG_PASSWORD =
 

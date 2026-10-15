@@ -82,7 +82,7 @@ class IdentityToolkitAuthSession(
       return
     }
     val user = runCatching { lookup(restored.idToken) }.getOrNull()
-    mutable.value = AuthState.SignedIn(user ?: AuthUser(restored.uid, null, null))
+    mutable.value = AuthState.SignedIn(user ?: AuthUser(restored.uid, null, null, TokenClaims.fromIdToken(restored.idToken).emailVerified))
   }
 
   /** The account behind [idToken]: `accounts:lookup`. */
@@ -98,6 +98,7 @@ class IdentityToolkitAuthSession(
       uid = user.getValue("localId").jsonPrimitive.content,
       email = user["email"]?.jsonPrimitive?.content,
       displayName = user["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
+      emailVerified = user["emailVerified"]?.jsonPrimitive?.content == "true",
     )
   }
 
@@ -157,19 +158,71 @@ class IdentityToolkitAuthSession(
   }
 
   override suspend fun signInWithEmail(email: String, password: String) {
+    val body = call("accounts:signInWithPassword", ::authErrorMessage) {
+      put("email", email.trim()); put("password", password); put("returnSecureToken", true)
+    }
+    accept(body)
+  }
+
+  override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
+    val body = call("accounts:signUp", { signUpErrorMessage(it) }) {
+      put("email", email.trim()); put("password", password); put("returnSecureToken", true)
+    }
+    return accept(body)
+  }
+
+  override suspend fun reload() {
+    val signedIn = (mutable.value as? AuthState.SignedIn)?.user ?: return
+    if (support.active) return
+    val idToken = runCatching { staffIdToken(forceRefresh = true) }.getOrNull() ?: return
+    val fresh = runCatching { lookup(idToken) }.getOrNull()
+    mutable.value = AuthState.SignedIn(fresh ?: signedIn.copy(emailVerified = TokenClaims.fromIdToken(idToken).emailVerified))
+  }
+
+  override suspend fun applyActionCode(code: String) {
+    call("accounts:update", { signUpErrorMessage(it) }) { put("oobCode", code) }
+    reload()
+  }
+
+  override suspend fun verifyPasswordResetCode(code: String): String =
+    call("accounts:resetPassword", { signUpErrorMessage(it) }) { put("oobCode", code) }["email"]?.jsonPrimitive?.content.orEmpty()
+
+  override suspend fun confirmPasswordReset(code: String, newPassword: String) {
+    call("accounts:resetPassword", { signUpErrorMessage(it) }) { put("oobCode", code); put("newPassword", newPassword) }
+  }
+
+  override suspend fun providerIds(): List<String> {
+    val idToken = lock.withLock { tokens?.idToken } ?: return emptyList()
+    val body = runCatching { call("accounts:lookup", ::authErrorMessage) { put("idToken", idToken) } }.getOrNull() ?: return emptyList()
+    val user = (body["users"] as? JsonArray)?.firstOrNull() as? JsonObject ?: return emptyList()
+    return (user["providerUserInfo"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.get("providerId")?.jsonPrimitive?.content }
+  }
+
+  /** One Identity Toolkit call; a refusal throws [AuthError] in [message]'s words, carrying its code. */
+  private suspend fun call(
+    method: String,
+    message: (String?) -> String,
+    body: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit,
+  ): JsonObject {
     val response = try {
-      http.post("$identityBase/v1/accounts:signInWithPassword?key=$apiKey") {
+      http.post("$identityBase/v1/$method?key=$apiKey") {
         contentType(ContentType.Application.Json)
-        setBody(buildJsonObject { put("email", email.trim()); put("password", password); put("returnSecureToken", true) }.toString())
+        setBody(buildJsonObject(body).toString())
       }
     } catch (error: Exception) {
-      throw AuthError(authErrorMessage(null), error)
+      throw AuthError(message("NETWORK"), error, "NETWORK")
     }
-    val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
-    if (response.status.value !in 200..299 || body == null) {
-      val code = (body?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content
-      throw AuthError(authErrorMessage(code))
+    val parsed = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+    if (response.status.value !in 200..299 || parsed == null) {
+      val text = (parsed?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content
+      val code = if (isAppCheckRefusalText(text)) APP_CHECK_REFUSED else text?.substringBefore(' ')
+      throw AuthError(message(code), code = code)
     }
+    return parsed
+  }
+
+  /** Keeps a sign-in's tokens and signs the person in; whether the address is confirmed is read off the ID token. */
+  private suspend fun accept(body: JsonObject): AuthUser {
     lock.withLock {
       tokens = Tokens(
         idToken = body.getValue("idToken").jsonPrimitive.content,
@@ -179,13 +232,14 @@ class IdentityToolkitAuthSession(
       )
       keep(tokens!!.refreshToken)
     }
-    mutable.value = AuthState.SignedIn(
-      AuthUser(
-        uid = body.getValue("localId").jsonPrimitive.content,
-        email = body["email"]?.jsonPrimitive?.content,
-        displayName = body["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
-      ),
+    val user = AuthUser(
+      uid = body.getValue("localId").jsonPrimitive.content,
+      email = body["email"]?.jsonPrimitive?.content,
+      displayName = body["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
+      emailVerified = TokenClaims.fromIdToken(body["idToken"]?.jsonPrimitive?.content).emailVerified,
     )
+    mutable.value = AuthState.SignedIn(user)
+    return user
   }
 
   /** `accounts:update` with the current ID token; the new tokens replace the old, which a password change revokes. */
