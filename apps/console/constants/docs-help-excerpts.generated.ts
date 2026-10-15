@@ -77,6 +77,7 @@ export const DOCS_HELP_EXCERPTS = {
   companies: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.',
   components: 'Promote a subtree into a reusable component, give it properties, and insert instances across pages.',
   connectADomain: 'Point your own domain at your Aglyn site — a CNAME for a subdomain, an ALIAS for a bare apex — and verify with one click.',
+  connectAttentive: 'Send a site\'s contacts, their email marketing consent and its orders to your own Attentive account, for Attentive\'s journeys. Rolling out.',
   connectConversionsApi: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   consoleSearch: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
@@ -215,6 +216,8 @@ export const DOCS_HELP_EXCERPTS = {
   settings: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to, the address that files replies on a record, and each site\'s recipes.',
   sharing: 'Let another of your sites see a lead, a contact, a company or a deal — one record by hand, a selection from a list, or every record a sharing rule matches, now and later — without sharing the person\'s consent.',
   shipping: 'Shipping zones and rates, local pickup, and the postal address each inventory location ships from.',
+  shippingLabelsAndLiveRates: 'Buy carrier labels from your orders, one at a time or in a batch, quote live carrier rates at checkout, connect your own carrier accounts, and let carrier tracking move orders along and email customers. Rolling out.',
+  shipWithYourOwnEasyshipSendcloudOrShipperhq: 'Connect your own Easyship or Sendcloud account to get rates and buy labels there, billed to you by that service, or ShipperHQ to price checkout shipping with your own rules. Rolling out.',
   siteBackupAndPackages: 'Download a site or the items you pick as one package, import one into any of your sites, compare each item with the site\'s copy and choose how to handle it before anything is written, and undo an import.',
   siteLooks: 'How a site started with AI gets its look: the style you choose sets the range of themes, colors, fonts and buttons, and every site gets its own readable variation, saved as a theme you can edit.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',
@@ -917,7 +920,6 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#sequences': 'A sequence is the emails, and the tasks between them, one person gets from one rep.',
   },
   shipping: {
-    '#where-parcels-ship-from': 'Each inventory location (the Inventory locations card in the store\'s settings) can carry a postal address: choose Add address on its row, or Edit address once it has one.',
     '#zones-and-rates': 'The Shipping card, on Products → Shipping & delivery, prices every parcel: group the countries you ship to into zones, then give each zone one or more rates.',
   },
   siteBackupAndPackages: {
