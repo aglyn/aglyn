@@ -31,6 +31,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import {
+  AI_LAYOUT_NO_PHOTO,
   aiLayoutSeedNumber,
   type AiLayoutPicturePhoto,
   type AiLayoutPictureSlot,
@@ -141,11 +142,16 @@ import { aiStockBusinessNoun } from './ai-stock-business-nouns'
  *    its kin shuns (a pump for a bar) unless it names it; "bath" in a bath
  *    gift set is what the set is for; a size is never the product.
  *
- * A slot nothing acceptable answered — the library down, refusing, or out
- * of time — is left `null` for the starter photos. A named object is never
- * given one while the library answers anything of the site's world: the
- * broad searches come first. Nothing here throws, and none of it is an AI
- * model call: photos cost no AI credits.
+ * A slot the library could not fill because it never answered — down, or
+ * out of time before its first answer — or because the site's library
+ * refused to store, is left `null` for the starter photos. A slot the
+ * library answered and nothing acceptable came back for is answered
+ * {@link AI_LAYOUT_NO_PHOTO} and keeps its no-photo treatment: the beta.257
+ * Copper Kettle Catering hero, held to "caterer" while catering photos are
+ * tagged "catering", took the starters' pottery workbench (AGL-3831). A
+ * named object is never given one while the library answers anything of the
+ * site's world: the broad searches come first. Nothing here throws, and none
+ * of it is an AI model call: photos cost no AI credits.
  */
 
 /** Wall clock the whole page's photos may take, inside the step's own signal. */
@@ -864,6 +870,48 @@ const CRAFT_KIN: ReadonlyArray<{
     ],
     broad: ['coffee shop', 'coffee'],
     making: ['barista making coffee'],
+  },
+  {
+    // A caterer is named "caterer" and its photos "catering", "buffet",
+    // "food": the beta.257 Copper Kettle Catering hero, held to "caterer"
+    // alone, accepted none of forty hits (AGL-3831).
+    match: ['caterer', 'catering', 'cater'],
+    kin: [
+      'catering',
+      'caterer',
+      'cater',
+      'buffet',
+      'banquet',
+      'platter',
+      'food',
+      'meal',
+      'cuisine',
+    ],
+    broad: ['caterer', 'catering buffet'],
+    making: ['chef cooking', 'catering chef'],
+    // An airline's meal cart is catering too, never a caterer's: the same
+    // start's search answered a plane at Düsseldorf tagged "catering" first.
+    rivals: {
+      words: ['airport', 'airplane', 'plane', 'aircraft', 'aviation', 'airline', 'airfield'],
+      core: [],
+    },
+  },
+  {
+    match: ['barbecue', 'barbeque', 'bbq', 'smokehouse', 'pitmaster'],
+    kin: [
+      'barbecue',
+      'barbeque',
+      'bbq',
+      'grill',
+      'grilled',
+      'brisket',
+      'smoked',
+      'smoker',
+      'ribs',
+      'meat',
+    ],
+    broad: ['barbecue', 'bbq meat'],
+    making: ['pitmaster', 'grilling meat'],
   },
   {
     match: ['florist', 'flower', 'floral'],
@@ -2090,6 +2138,8 @@ export function aiLayoutStockPhotoSource(
     const answers = new Map<string, Promise<StockPhoto[] | null>>()
     let searches = 0
     let storing = true
+    /** Whether the library answered any search of this page: a slot left empty then found nothing fitting. */
+    let answered = false
     const remember = (sourceKey: string, src: string) => {
       placedSrcs.add(src)
       job?.set(sourceKey, scope)
@@ -2119,7 +2169,10 @@ export function aiLayoutStockPhotoSource(
       searches += 1
       const asked = provider
         .search(request, { signal })
-        .then((found) => found?.photos ?? [])
+        .then((found) => {
+          if (found) answered = true
+          return found?.photos ?? []
+        })
         .catch(() => [] as StockPhoto[])
       answers.set(key, asked)
       return asked
@@ -2423,6 +2476,11 @@ export function aiLayoutStockPhotoSource(
     )
     for (const [index, choice] of choices.entries())
       if (choice?.repeat) await fill(index)
-    return photos
+    // The library answered and nothing in it fits: no photo rather than a
+    // starter that shows another business (AGL-3831). A library that never
+    // answered, or a site that refused to store, leaves the starters.
+    return answered && storing
+      ? photos.map((photo) => photo ?? AI_LAYOUT_NO_PHOTO)
+      : photos
   }
 }

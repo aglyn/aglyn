@@ -28,6 +28,7 @@ import type {
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiLayoutPageCheck } from './ai-job-page-language'
 import {
+  AI_LAYOUT_NO_PHOTO,
   AI_LAYOUT_STARTER_PHOTOS,
   aiLayoutPictureSlots,
   aiResolveLayoutPictures,
@@ -1010,10 +1011,11 @@ describe('a picture of a thing shows the thing (AGL-3660, the Juniper Clay start
       slot(2, 'A bowl'),
     ])
     const srcs = (photos ?? []).map((found) => found?.src).filter(Boolean)
-    // Two photos for three bowls: the third is left to its fallback rather than repeat one.
+    // Two photos for three bowls: the third has no photo rather than repeat
+    // one, and, the library having answered, no starter either (AGL-3831).
     expect(srcs).toHaveLength(2)
     expect(new Set(srcs).size).toBe(2)
-    expect(photos?.[2]).toBeNull()
+    expect(photos?.[2]).toBe(AI_LAYOUT_NO_PHOTO)
   })
 
   it('never places the About portrait on another page of the same job, in this process or read from its drafts', async () => {
@@ -1157,7 +1159,7 @@ describe('a picture of a thing shows the thing (AGL-3660, the Juniper Clay start
     ])
     // The plants and the crackers never fill it; the studio does, once.
     expect(photos?.[0]?.src).toBe('media:host-1/pexels-3')
-    expect(photos?.[1]).toBeNull()
+    expect(photos?.[1]).toBe(AI_LAYOUT_NO_PHOTO)
     expect(asked).toEqual([
       'ceramic espresso cup',
       'ceramic cup',

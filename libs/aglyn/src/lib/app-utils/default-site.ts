@@ -53,13 +53,42 @@ import {
 /** Where the starter photos are served from, on every tenant and in the console. */
 export const DEFAULT_SITE_IMAGE_BASE = '/_static/starter'
 
-/** The starter photos, with the sizes the files actually are. */
+/**
+ * The starter photos, with the sizes the files actually are and the words
+ * that describe what each one shows: wherever a starter photo is placed, its
+ * alt text is its own, never words written for another picture (AGL-3831).
+ */
 export const DEFAULT_SITE_IMAGES = {
-  hero: { src: `${DEFAULT_SITE_IMAGE_BASE}/hero-team.jpg`, width: 1600, height: 1067 },
-  about: { src: `${DEFAULT_SITE_IMAGE_BASE}/about-owner.jpg`, width: 1600, height: 900 },
-  desk: { src: `${DEFAULT_SITE_IMAGE_BASE}/gallery-desk.jpg`, width: 1600, height: 1068 },
-  plants: { src: `${DEFAULT_SITE_IMAGE_BASE}/gallery-plants.jpg`, width: 1200, height: 900 },
-  craft: { src: `${DEFAULT_SITE_IMAGE_BASE}/gallery-craft.jpg`, width: 1600, height: 1065 },
+  hero: {
+    src: `${DEFAULT_SITE_IMAGE_BASE}/hero-team.jpg`,
+    width: 1600,
+    height: 1067,
+    alt: 'A small team working together around a table in a bright office',
+  },
+  about: {
+    src: `${DEFAULT_SITE_IMAGE_BASE}/about-owner.jpg`,
+    width: 1600,
+    height: 900,
+    alt: 'A smiling business owner standing behind the counter of her coffee shop',
+  },
+  desk: {
+    src: `${DEFAULT_SITE_IMAGE_BASE}/gallery-desk.jpg`,
+    width: 1600,
+    height: 1068,
+    alt: 'A tidy desk with a laptop, a lamp and fresh flowers',
+  },
+  plants: {
+    src: `${DEFAULT_SITE_IMAGE_BASE}/gallery-plants.jpg`,
+    width: 1200,
+    height: 900,
+    alt: 'Houseplants on a sunny windowsill',
+  },
+  craft: {
+    src: `${DEFAULT_SITE_IMAGE_BASE}/gallery-craft.jpg`,
+    width: 1600,
+    height: 1065,
+    alt: 'Hands working on a craft project at a workbench',
+  },
 } as const
 
 /** The node a call to action scrolls to, and the one the features link names. */
@@ -198,8 +227,7 @@ const cell = (id: string, size: string, children: NodeSpec[], sx?: Record<string
 
 const photo = (
   id: string,
-  image: { src: string; width: number; height: number },
-  alt: string,
+  image: { src: string; width: number; height: number; alt: string },
   height: string,
   loading: 'eager' | 'lazy' = 'lazy',
 ): NodeSpec => ({
@@ -207,7 +235,7 @@ const photo = (
   componentId: 'image',
   props: {
     src: image.src,
-    alt,
+    alt: image.alt,
     height,
     objectFit: 'cover',
     radius: 16,
@@ -403,7 +431,6 @@ export function buildDefaultHomeScreen(siteName: string): StarterTemplateScreen 
               photo(
                 'dh_heroImage',
                 DEFAULT_SITE_IMAGES.hero,
-                'A small team working together around a table in a bright office',
                 '420px',
                 'eager',
               ),
@@ -479,7 +506,6 @@ export function buildDefaultHomeScreen(siteName: string): StarterTemplateScreen 
               photo(
                 'dh_aboutImage',
                 DEFAULT_SITE_IMAGES.about,
-                'A smiling business owner standing behind the counter of her coffee shop',
                 '440px',
               ),
             ]),
@@ -541,13 +567,13 @@ export function buildDefaultHomeScreen(siteName: string): StarterTemplateScreen 
         ),
         grid('dh_galleryGrid', 3, [
           cell('dh_g1Cell', 'xs:12 sm:4', [
-            photo('dh_g1', DEFAULT_SITE_IMAGES.desk, 'A tidy desk with a laptop, a lamp and fresh flowers', '320px'),
+            photo('dh_g1', DEFAULT_SITE_IMAGES.desk, '320px'),
           ]),
           cell('dh_g2Cell', 'xs:12 sm:4', [
-            photo('dh_g2', DEFAULT_SITE_IMAGES.plants, 'Houseplants on a sunny windowsill', '320px'),
+            photo('dh_g2', DEFAULT_SITE_IMAGES.plants, '320px'),
           ]),
           cell('dh_g3Cell', 'xs:12 sm:4', [
-            photo('dh_g3', DEFAULT_SITE_IMAGES.craft, 'Hands working on a craft project at a workbench', '320px'),
+            photo('dh_g3', DEFAULT_SITE_IMAGES.craft, '320px'),
           ]),
         ]),
       ]),
