@@ -103,7 +103,7 @@ builds, in this order:
 2. **A header and footer**, as the layout every page sits in, with a link to each page.
 3. **A contact form**, saved on the Forms page, routed the way you chose, and placed on the
    page that needs it.
-4. **Your first posts or products**, on paid plans, when the site is a blog or a store.
+4. **Your first posts or products**, when the site is a blog or, on paid plans, a store.
    See [A store from the start](#a-store-from-the-start) and
    [A blog from the start](#a-blog-from-the-start).
    **Your first events**, when your business holds them and your workspace has the Event
@@ -127,7 +127,8 @@ step as it happens:
 - **Designing your look**
 - **Building the header and footer**
 - **Building your contact form**
-- **Writing your first posts** or **Adding your first products** (a paid blog or store)
+- **Writing your first posts** (**Writing your first post** on the Free plan) or **Adding
+  your first products** (a blog, or a paid store)
 - **Writing your pages**, then **Writing page 2 of 5: About** as each page is written
 - **Adding your account, cart and policy pages** (a paid store)
 - **Writing your welcome email**
@@ -228,9 +229,10 @@ policies, each with a button to the page where you do it.
 
 ## A blog from the start {#a-blog-from-the-start}
 
-On a paid plan, a site with the **Blog & writing** style also gets a **Blog** collection
-with three posts, signed with the business name and published with the site. Each post
-has a cover photo, and the blog's index page shows the covers on its cards. See
+A site with the **Blog & writing** style also gets a **Blog** collection with three posts
+on a paid plan, or one post on the Free plan, signed with the business name and published
+with the site. Each post has a cover photo, and the blog's index page shows the covers on
+its cards. See
 [Build a blog](../building-sites/site-templates/build-a-blog.md).
 
 ## Events from the start {#events-from-the-start}
@@ -253,7 +255,8 @@ event.
 
 A Free start builds one or two pages: the home page and the one page your business most
 needs. It keeps the site within about eight sections in all, uses the same look, header,
-footer and contact form as a paid start, and drafts no welcome email, posts or products.
+footer and contact form as a paid start, and drafts no welcome email or products. A blog
+gets one first post.
 It spends from the [300 AI credits](./ai-credits.md#free-plan) a Free workspace has each
 month.
 

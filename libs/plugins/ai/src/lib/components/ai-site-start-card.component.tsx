@@ -498,7 +498,9 @@ export function AiSiteStartCard({
   const [serverPrompt, setServerPrompt] = useState<AiCreditsPrompt | null>(null)
   // The door's prompt was for the pages it was asked with.
   useEffect(() => setServerPrompt(null), [answers.pages])
-  const prompt = freeTaste ? (aiFreeSitePrompt(freeCredits, answers.pages) ?? serverPrompt) : null
+  // A store's first products and a blog's first posts are part of the start (AGL-3676, AGL-3798).
+  const siteKind = aiSiteKindOfInputs(aiSiteStartInputs(answers))?.id ?? null
+  const prompt = freeTaste ? (aiFreeSitePrompt(freeCredits, answers.pages, { siteKind }) ?? serverPrompt) : null
   const noneLeft = freeTaste && freeCredits !== null && freeCredits.left <= 0
   const refusal = aiSiteStartRefusal(answers, { freeTaste })
   const band = aiSitePagesBand(freeTaste)
@@ -518,7 +520,7 @@ export function AiSiteStartCard({
     const asked = options.pages ? { ...answers, pages: options.pages } : answers
     if (!orgId || aiSiteStartRefusal(asked, { freeTaste }) || noneLeft) return
     // Past what is left, only an explicit go-ahead starts it.
-    if (freeTaste && !options.creditsConfirmed && aiFreeSitePrompt(freeCredits, asked.pages)) return
+    if (freeTaste && !options.creditsConfirmed && aiFreeSitePrompt(freeCredits, asked.pages, { siteKind })) return
     if (options.pages) answer({ pages: options.pages })
     setBusy(true)
     setNotice(null)
@@ -589,7 +591,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind])
 
   // The zone's `startBlank`. Before the site exists it creates it with the
   // starter, and answers `false` when it could not — most often a name or
@@ -665,14 +667,8 @@ export function AiSiteStartCard({
     ceiling: Math.round(range.ceiling * modelMultiplier),
   })
   const estimate = freeTaste
-    ? aiFreeSiteCreditRange(answers.pages)
-    : scaled(
-        aiSiteCreditRange(answers.pages, {
-          welcomeEmail: answers.welcomeEmail,
-          // A store's first products and a blog's first posts are part of the start (AGL-3676).
-          siteKind: aiSiteKindOfInputs(aiSiteStartInputs(answers))?.id ?? null,
-        }),
-      )
+    ? aiFreeSiteCreditRange(answers.pages, { siteKind })
+    : scaled(aiSiteCreditRange(answers.pages, { welcomeEmail: answers.welcomeEmail, siteKind }))
   // A Free start quotes what is LEFT (AGL-3660), shared across the owner's
   // Free workspaces — never the month's whole allowance as if none were spent.
   const estimateText = freeTaste

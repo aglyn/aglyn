@@ -99,6 +99,7 @@ import {
   AI_SITE_PLAN_MAX_TOKENS,
   AI_SITE_THIN_HOME_CODE,
   aiFreeSiteCreditEstimate,
+  aiFreeSiteCreditRange,
   aiFreeSiteSectionsWithin,
   aiSiteFullPlanSentence,
   AI_SITE_EMPTY_GALLERY_CODE,
@@ -133,7 +134,7 @@ import { aiRunSiteLook } from './ai-job-site-look'
 import { AI_SITE_LOOK_TOOL_NAME } from '../model/ai-site-look'
 import { generateAiBlogPost } from '../runtime/ai-blog-post-generation'
 import { AI_BLOG_POST_TOOL_NAME } from '../tools/ai-blog-post-tool'
-import { aiSiteContentPart } from './ai-job-site-content'
+import { AI_SITE_FREE_POSTS, AI_SITE_POST_BUDGET, aiSiteContentPart, aiSitePostModel } from './ai-job-site-content'
 import { AI_YOGA_SITE_PLAN_FIRST_ANSWER, AI_YOGA_SITE_PLAN_REDO_ANSWER } from './fixtures/ai-yoga-site-plan-recording'
 import { AI_SLOW_ROADS_SITE_PLAN_FIRST_ANSWER } from './fixtures/ai-slow-roads-site-plan-recording'
 import { AI_SITE_BLOG_PAGE_CODE, aiSiteBlogSlug, aiSiteBlogStandInViolations } from '../model/ai-site-job'
@@ -771,7 +772,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
   })
 })
 
-describe('a paid blog start plans no page that stands in for its blog (AGL-3660)', () => {
+describe('a blog start plans no page that stands in for its blog (AGL-3660)', () => {
   const empty = emptyAiSiteInventory('host-1')
   const paidEmpty = aiPlanCapabilitiesFrom(PAID_ORG, { layout: [], template: [] })
   const blogJob = (org: 'paid' | 'free' = 'paid') =>
@@ -830,11 +831,16 @@ describe('a paid blog start plans no page that stands in for its blog (AGL-3660)
     expect(aiSiteBlogSlug([...withoutArticles.screens, { ...journal, slug: '/blog' }])).toBe('posts')
   })
 
-  it('tells a paid blog start’s plan the blog is written and linked, and tells a Free one — which writes no posts — nothing', () => {
+  it('tells a blog start’s plan — paid, or Free with its one post (AGL-3798) — the blog is written and linked, and another kind nothing', () => {
     const paidLines = aiPlanSiteLines(blogJob(), empty, aiSitePlanCapabilities(blogJob(), paidEmpty)).join('\n')
     expect(paidLines).toContain("This site's blog is written for it with its first posts at /blog, and the header links it.")
     const free = aiSitePlanCapabilities(blogJob('free'), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] }))
-    expect(aiPlanSiteLines(blogJob('free'), empty, free).join('\n')).not.toContain('first posts at /blog')
+    expect(aiPlanSiteLines(blogJob('free'), empty, free).join('\n')).toContain('first posts at /blog')
+    // The Free wall counts the one post, and still fits the full eight sections beside it.
+    expect(free?.freeSitePosts).toBe(AI_SITE_FREE_POSTS)
+    expect(aiSitePlanHomeRule(empty, free).across).toBe(AI_FREE_SITE_MAX_SECTIONS)
+    const freeSite = aiSitePlanCapabilities(siteJob(), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] }))
+    expect(freeSite?.freeSitePosts).toBeUndefined()
     expect(aiPlanSiteLines(siteJob({ pages: 4 }), empty, aiSitePlanCapabilities(siteJob({ pages: 4 }), paidEmpty)).join('\n')).not.toContain('first posts at /blog')
   })
 
@@ -1071,6 +1077,46 @@ function languageBuildCredits(): Pick<AiFreeSiteWorstCase, 'layout' | 'form' | '
   return { layout, form: MEASURED_LANGUAGE.formCredits, page: page_, section, retry }
 }
 
+/**
+ * One first post at its worst on a tier's model (AGL-3798): its answer at the
+ * ceiling the posts runner asks (`AI_SITE_POST_BUDGET`), writing its cached
+ * prefix, and its one re-ask reading it — the two exchanges the wall counts
+ * for the plan, too.
+ */
+async function postCredits(tier: 'fast' | 'balanced'): Promise<number> {
+  mockRunAiRequest.mockReset()
+  mockRunAiRequest.mockResolvedValue({ ...toolAnswer({}), toolUse: [{ name: AI_BLOG_POST_TOOL_NAME, input: {} }] })
+  const model = AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+  await generateAiBlogPost({
+    brief: siteJob().brief,
+    merchantWords: siteJob().brief,
+    earlierTitles: [],
+    index: 1,
+    total: AI_SITE_FREE_POSTS,
+    model,
+    maxTokens: AI_SITE_POST_BUDGET.maxTokens(model),
+  })
+  const requests = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
+  expect(requests.map((request) => request.model)).toEqual([model, model])
+  return assistCreditsFromUsd(
+    requests.reduce((sum, request, index) => {
+      const { cached, uncached } = spans(request)
+      return (
+        sum +
+        usd(
+          {
+            inputTokens: realTokens(uncached),
+            outputTokens: request.maxTokens,
+            cacheReadTokens: index === 0 ? 0 : realTokens(cached),
+            cacheWriteTokens: index === 0 ? realTokens(cached) : 0,
+          },
+          request.model,
+        )
+      )
+    }, 0),
+  )
+}
+
 async function freeSiteRequests(): Promise<SentRequest[]> {
   mockRunAiRequest.mockReset()
   mockRunAiRequest.mockResolvedValueOnce(toolAnswer(THREE_PAGES)).mockResolvedValueOnce(toolAnswer(TWO_PAGES))
@@ -1092,6 +1138,7 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
       look: await lookCredits(),
       ...languageBuildCredits(),
       listing: creditsOf(AI_STEP_NOMINAL_USAGE['job.seo'], aiModelForStep('job.seo')),
+      post: await postCredits('fast'),
     }
     expect(derived).toEqual(AI_FREE_SITE_WORST_CASE_CREDITS)
   })
@@ -1181,50 +1228,45 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     expect([credits, notes.includes(`a site plan's one answer comes to at most ${credits} credits`)]).toEqual([credits, true])
   })
 
-  it('writes a Free blog no first posts and a Free store no products, though one post at its worst now fits what the wall leaves (AGL-3676, AGL-3781)', async () => {
-    // A post at its worst on the model a Free site runs on: its answer at the
-    // post's own ceiling, writing its cached prefix, and its one re-ask
-    // reading it — the two exchanges the wall counts for the plan, too.
-    mockRunAiRequest.mockReset()
-    mockRunAiRequest.mockResolvedValue({ ...toolAnswer({}), toolUse: [{ name: AI_BLOG_POST_TOOL_NAME, input: {} }] })
-    const fast = AI_MODEL_CATALOG.find((entry) => entry.tier === 'fast')?.id as string
-    await generateAiBlogPost({ brief: siteJob().brief, merchantWords: siteJob().brief, earlierTitles: [], index: 1, total: 3, model: fast })
-    const requests = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
-    expect(requests.map((request) => request.model)).toEqual([fast, fast])
-    const post = assistCreditsFromUsd(
-      requests.reduce((sum, request, index) => {
-        const { cached, uncached } = spans(request)
-        return (
-          sum +
-          usd(
-            {
-              inputTokens: realTokens(uncached),
-              outputTokens: request.maxTokens,
-              cacheReadTokens: index === 0 ? 0 : realTokens(cached),
-              cacheWriteTokens: index === 0 ? realTokens(cached) : 0,
-            },
-            request.model,
-          )
-        )
-      }, 0),
-    )
+  it('writes a Free blog ONE first post on the fast tier, inside the wall beside its eight sections, and a Free store no products (AGL-3798)', async () => {
+    const post = await postCredits('fast')
+    const balanced = await postCredits('balanced')
     // What a guided start's two-page Free site leaves — its site created
     // empty, so it builds its layout and its form first — once its sections
     // take all the cap allows, its retried page's room held back as the wall
     // holds it (AGL-3660).
     const pages = AI_SITE_FREE_PAGES.max
-    const sections = aiFreeSiteSectionsWithin({ layouts: 1, pages, forms: 1 }, FREE_AI_TASTE_CREDITS_PER_MONTH)
-    const left = FREE_AI_TASTE_CREDITS_PER_MONTH - aiFreeSiteWorstCaseCredits({ layouts: 1, pages, forms: 1 }, sections)
-    // The fast tier's markup on Claude Haiku 5.5 (AGL-3781) puts a post inside
-    // what the wall leaves; whether a Free site writes one is the guided
-    // start's content part, below, and not the wall.
-    expect({ post, left, fits: post <= left }).toEqual({ post, left, fits: true })
+    const site = { layouts: 1, pages, forms: 1 }
+    const sections = aiFreeSiteSectionsWithin(site, FREE_AI_TASTE_CREDITS_PER_MONTH)
+    const without = aiFreeSiteWorstCaseCredits(site, sections)
+    const left = FREE_AI_TASTE_CREDITS_PER_MONTH - without
+    // The fast tier's markup on Claude Haiku 5.5 (AGL-3781) puts the post
+    // inside what the wall leaves; the balanced tier `copy.blog` routes to
+    // would not, which is why a Free blog's post is written on the fast tier.
+    expect({ post, fits: post <= left }).toEqual({ post, fits: true })
+    expect({ balanced, fits: balanced <= left }).toEqual({ balanced, fits: false })
+    // The wall counts the post and still fits the full eight sections beside it.
+    const blog = { ...site, posts: AI_SITE_FREE_POSTS }
+    expect(aiFreeSiteSectionsWithin(blog, FREE_AI_TASTE_CREDITS_PER_MONTH)).toBe(AI_FREE_SITE_MAX_SECTIONS)
+    const withPost = aiFreeSiteWorstCaseCredits(blog, AI_FREE_SITE_MAX_SECTIONS)
+    expect(withPost).toBe(without + AI_FREE_SITE_WORST_CASE_CREDITS.post)
+    expect(withPost).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    // The quote and the door count it for a blog, and for no other kind.
+    expect(aiFreeSiteCreditEstimate(pages, { siteKind: 'blog' })).toBe(withPost)
+    expect(aiFreeSiteCreditEstimate(pages, { siteKind: 'store' })).toBe(without)
+    expect(aiFreeSiteCreditRange(pages, { siteKind: 'blog' }).p90).toBe(aiFreeSiteCreditRange(pages).p90 + AI_FREE_SITE_WORST_CASE_CREDITS.post)
     const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
-    expect([post, left, notes.includes(`its re-ask — is ${post}, within the ${left} the wall leaves since AGL-3781; a Free blog still writes no first posts`)]).toEqual([post, left, true])
-    // The guided start owes a Free blog and a Free store no part of their own.
-    expect(aiSiteContentPart({ siteKind: 'blog' }, true)).toBeNull()
+    expect([post, balanced, left, withPost, notes.includes(`one post at its worst on the fast tier — its answer at the \`copy.blog\` ceiling and its re-ask — is ${post}, within the ${left} the wall leaves (${balanced} on the balanced tier, which would not fit), so a Free blog writes one first post there: at most ${withPost} credits`)]).toEqual([post, balanced, left, withPost, true])
+    expect(AI_SITE_FREE_POSTS).toBe(1)
+    // The guided start owes a Free blog its posts part and a Free store none.
+    expect(aiSiteContentPart({ siteKind: 'blog' }, true)).toBe('posts')
     expect(aiSiteContentPart({ siteKind: 'store' }, true)).toBeNull()
     expect(aiSiteContentPart({ siteKind: 'blog' }, false)).toBe('posts')
+    // And the post is asked on the fast tier, the routed model staying a paid blog's.
+    const routed = AI_MODEL_CATALOG.find((entry) => entry.tier === AI_STEP_TIERS['copy.blog'])?.id as string
+    const fast = AI_MODEL_CATALOG.find((entry) => entry.tier === 'fast')?.id as string
+    expect(aiSitePostModel({}, routed, true)).toBe(fast)
+    expect(aiSitePostModel({}, routed, false)).toBe(routed)
   })
 })
 
