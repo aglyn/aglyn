@@ -17,6 +17,8 @@ AGLYN_FIRESTORE_EMULATOR_HOST = 127.0.0.1:8082
 AGLYN_GOOGLE_IOS_CLIENT_ID =
 AGLYN_GOOGLE_WEB_CLIENT_ID =
 AGLYN_BRAND_NAME = Aglyn
+// Firebase App Check: off, since the emulators do not enforce it (there is no App Check emulator).
+AGLYN_APP_CHECK = off
 AGLYN_PASSKEY_RP_ID =
 
 // Debug builds only: with `-AglynAutoSignIn YES` on the launch arguments,

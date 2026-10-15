@@ -59,6 +59,8 @@ android {
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "000000000000")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(setting("authEmulatorHost", "10.0.2.2:9099")))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(setting("firestoreEmulatorHost", "10.0.2.2:8082")))
+      // Firebase App Check: off, since the emulators do not enforce it (there is no App Check emulator).
+      buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "off")))
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
       buildConfigField("String", "PASSKEY_RP_ID", quoted(""))
       buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(""))
@@ -79,6 +81,9 @@ android {
       buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", quoted(setting("firebaseMessagingSenderId", "543499566626")))
       buildConfigField("String", "AUTH_EMULATOR_HOST", quoted(""))
       buildConfigField("String", "FIRESTORE_EMULATOR_HOST", quoted(""))
+      // Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a release build attests itself
+      // through Play Integrity.
+      buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "on")))
       // The domain passkeys are made for (aglyn.com). Set -Paglyn.passkeyRpId only once aglyn.com serves an
       // assetlinks.json that names this app's signing certificate (apps/android/README.md, "What Zach owes").
       buildConfigField("String", "PASSKEY_RP_ID", quoted(setting("passkeyRpId", "")))

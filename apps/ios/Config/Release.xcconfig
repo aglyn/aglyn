@@ -17,6 +17,9 @@ AGLYN_FIREBASE_STORAGE_BUCKET = aglyn-main.appspot.com
 AGLYN_AUTH_EMULATOR_HOST =
 AGLYN_FIRESTORE_EMULATOR_HOST =
 AGLYN_BRAND_NAME = Aglyn
+// Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a
+// Release build attests itself (App Attest on iPhone and iPad, DeviceCheck on a Mac).
+AGLYN_APP_CHECK = on
 
 // Per app: the Firebase Apple app and the iOS OAuth client registered for
 // each bundle (com.aglyn.app, com.aglyn.pos). Test targets get neither.

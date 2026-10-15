@@ -29,6 +29,7 @@ pinned in the catalog:
 | Stripe Android SDK (`com.stripe:paymentsheet`, approved 2026-10-14) | `:pos` only: the card form for a card typed in at the register | MIT |
 | CameraX (`camera-camera2`, `camera-lifecycle`, `camera-view`) | `:native-camera`, Android only | Apache-2.0 |
 | ML Kit barcode scanning (bundled model) | `:native-camera`, Android only | ML Kit Terms of Service |
+| Google Play Integrity (`com.google.android.play:integrity`, approved 2026-10-15) with Firebase App Check's `firebase-appcheck-playintegrity` | `:native-core` on Android: the App Check token production requires on Auth and Firestore (AGL-3818) | Android SDK License / Apache-2.0 |
 | JNA | desktop: Windows Credential Manager, WebView2 over COM | Apache-2.0 / LGPL-2.1 |
 | grpc-java (`grpc-okhttp`, `grpc-stub`) + `proto-google-cloud-firestore-v1` | desktop: Firestore `Listen` | Apache-2.0 |
 | Microsoft Edge WebView2 SDK (`Microsoft.Web.WebView2`, NuGet): `WebView2Loader.dll` only | desktop on Windows: the Besigner, on the Evergreen runtime Windows keeps updated | Microsoft BSD-style (packaged as `licenses/WebView2-LICENSE.txt`) |
@@ -208,7 +209,12 @@ and properties files from the plugin's `mobile.android` block; the apps load
 
 Done: the Firebase Android app registrations for `com.aglyn.app` and
 `com.aglyn.pos` in `aglyn-main` (their app ids are the release defaults), and
-the upload key with its fingerprints on both.
+the upload key with its fingerprints on both. App Check (AGL-3818, 2026-10-15):
+Play Integrity registered for both apps in Firebase App Check, the Play
+app-signing SHA-256 on each Firebase Android app, and both Play apps linked to
+Cloud project `aglyn-main` (543499566626) for the Integrity API. Release builds
+have `APP_CHECK` on (`-Paglyn.appCheck=off` turns it off for a project that
+does not enforce it); debug builds, on the emulators, have it off.
 
 - Google Play Console apps `com.aglyn.app` and `com.aglyn.pos`, enrolled in Play
   App Signing with the upload certificate above, and an internal testing track;

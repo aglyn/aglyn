@@ -39,11 +39,13 @@ public struct AglynGoogleClient: Equatable, Sendable {
 public enum AglynConfigError: Error, Equatable, LocalizedError {
   case notAnOrigin(String)
   case insecureOrigin
+  case appCheckSetting(String)
 
   public var errorDescription: String? {
     switch self {
     case .notAnOrigin(let raw): return "AGLYN_CONSOLE_URL is not an origin: \(raw)"
     case .insecureOrigin: return "AGLYN_CONSOLE_URL must be https outside a local stack."
+    case .appCheckSetting(let raw): return "AGLYN_APP_CHECK must be on or off, not \(raw)."
     }
   }
 }
@@ -75,13 +77,17 @@ public struct AglynConfig: Equatable, Sendable {
   /// belong to), set once the app is linked to it (the `webcredentials:` Associated Domains entry and the
   /// domain's `apple-app-site-association`); nil, and the "Set up a passkey" action hidden, until then.
   public var passkeyRelyingParty: String?
+  /// Whether Firebase App Check is on (`AGLYN_APP_CHECK`): App Attest on iPhone and iPad, DeviceCheck
+  /// on a Mac. Production enforces it, so a Release build has it on; the emulator stack does not, so
+  /// it is off there, and off by default whenever an emulator or a local console is configured.
+  public var appCheck: Bool = true
 
   public static let keys = [
     "AGLYN_CONSOLE_URL", "AGLYN_FIREBASE_API_KEY", "AGLYN_FIREBASE_AUTH_DOMAIN",
     "AGLYN_FIREBASE_PROJECT_ID", "AGLYN_FIREBASE_APP_ID", "AGLYN_FIREBASE_STORAGE_BUCKET",
     "AGLYN_FIREBASE_MESSAGING_SENDER_ID", "AGLYN_AUTH_EMULATOR_HOST",
     "AGLYN_FIRESTORE_EMULATOR_HOST", "AGLYN_GOOGLE_IOS_CLIENT_ID", "AGLYN_GOOGLE_WEB_CLIENT_ID",
-    "AGLYN_BRAND_NAME", "AGLYN_PASSKEY_RP_ID",
+    "AGLYN_BRAND_NAME", "AGLYN_PASSKEY_RP_ID", "AGLYN_APP_CHECK",
   ]
 
   /// True for the hosts a local development stack runs on.
@@ -100,6 +106,16 @@ public struct AglynConfig: Equatable, Sendable {
       !isLocalHost(raw)
     else { return nil }
     return raw
+  }
+
+  /// `AGLYN_APP_CHECK`: on or off, or unset for the default (`localStack` decides).
+  static func appCheckSetting(_ value: String?, localStack: Bool) throws -> Bool {
+    switch clean(value).lowercased() {
+    case "": return !localStack
+    case "on", "true", "yes", "1": return true
+    case "off", "false", "no", "0": return false
+    default: throw AglynConfigError.appCheckSetting(clean(value))
+    }
   }
 
   /// `host:port`, or nil for anything else.
@@ -131,9 +147,14 @@ public struct AglynConfig: Equatable, Sendable {
     let bucket = clean(env["AGLYN_FIREBASE_STORAGE_BUCKET"])
     let sender = clean(env["AGLYN_FIREBASE_MESSAGING_SENDER_ID"])
     let brand = clean(env["AGLYN_BRAND_NAME"])
+    let origin = try normalizeConsoleOrigin(env["AGLYN_CONSOLE_URL"])
+    let authEmulator = hostPort(env["AGLYN_AUTH_EMULATOR_HOST"])
+    let firestoreEmulator = hostPort(env["AGLYN_FIRESTORE_EMULATOR_HOST"])
+    let localStack =
+      authEmulator != nil || firestoreEmulator != nil || isLocalHost(URL(string: origin)?.host?.lowercased() ?? "")
     return AglynConfig(
       app: app,
-      consoleOrigin: try normalizeConsoleOrigin(env["AGLYN_CONSOLE_URL"]),
+      consoleOrigin: origin,
       firebase: AglynFirebaseOptions(
         apiKey: clean(env["AGLYN_FIREBASE_API_KEY"]),
         authDomain: clean(env["AGLYN_FIREBASE_AUTH_DOMAIN"]),
@@ -142,12 +163,13 @@ public struct AglynConfig: Equatable, Sendable {
         storageBucket: bucket.isEmpty ? nil : bucket,
         messagingSenderID: sender.isEmpty ? nil : sender
       ),
-      authEmulatorHost: hostPort(env["AGLYN_AUTH_EMULATOR_HOST"]),
-      firestoreEmulatorHost: hostPort(env["AGLYN_FIRESTORE_EMULATOR_HOST"]),
+      authEmulatorHost: authEmulator,
+      firestoreEmulatorHost: firestoreEmulator,
       google: !iosClient.isEmpty && !webClient.isEmpty
         ? AglynGoogleClient(iosClientID: iosClient, webClientID: webClient) : nil,
       brandName: brand.isEmpty ? defaultBrandName : brand,
-      passkeyRelyingParty: relyingParty(env["AGLYN_PASSKEY_RP_ID"])
+      passkeyRelyingParty: relyingParty(env["AGLYN_PASSKEY_RP_ID"]),
+      appCheck: try appCheckSetting(env["AGLYN_APP_CHECK"], localStack: localStack)
     )
   }
 

@@ -21,6 +21,8 @@ final class AppModel {
   let auth: AuthSession?
   let reader: FirestoreReader?
   let api: ConsoleAPIClient?
+  /// The transport the REST calls to Firebase go over: it adds the App Check token.
+  let firebaseHTTP: HTTPTransport
   let registry = NativePluginRegistry()
   let push: PushCenter
   private(set) var pluginFailures: [NativePluginLoadFailure] = []
@@ -54,11 +56,14 @@ final class AppModel {
     if let config, problems.isEmpty {
       self.config = config
       AglynFirebase.configure(config)
-      let auth = AuthSession.make(config)
+      // Every REST call to Firebase carries the App Check token production enforces (AGL-3818).
+      let firebaseHTTP = AppCheckTransport(appCheck: AglynFirebase.appCheck)
+      self.firebaseHTTP = firebaseHTTP
+      let auth = AuthSession.make(config, appCheck: AglynFirebase.appCheck)
       self.auth = auth
       // A REST sign-in has no SDK user for Firestore to read as, so Firestore goes over REST too.
       let rest = RestFirestoreReader(
-        projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost,
+        projectID: config.firebase.projectID, emulatorHost: config.firestoreEmulatorHost, transport: firebaseHTTP,
         idToken: { try await auth.idToken(forceRefresh: false) })
       // The SDK reads as the SDK's signed-in person, the staff member; a support session (signed in as a customer, over REST)
       // reads through the customer's own token instead, so the rules treat the staff member exactly as they treat the customer.
@@ -72,6 +77,7 @@ final class AppModel {
       auth.onBeforeSignOut { await push.signingOut() }
     } else {
       self.config = nil
+      self.firebaseHTTP = URLSession.shared
       self.auth = nil
       self.reader = nil
       self.api = nil
@@ -144,13 +150,13 @@ final class AppModel {
           await self?.refreshClaims(force: true)
         },
         linkGoogle: { [weak self] authenticate in
-          let parts = await MainActor.run { (self?.config, self?.auth, self?.auth?.user?.email) }
-          guard let config = parts.0, let client = config.google, let auth = parts.1 else {
+          let parts = await MainActor.run { (self?.config, self?.auth, self?.auth?.user?.email, self?.firebaseHTTP) }
+          guard let config = parts.0, let client = config.google, let auth = parts.1, let http = parts.3 else {
             throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
           }
           try await GoogleLink.link(
             iosClientID: client.iosClientID, apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost,
-            loginHint: parts.2, transport: URLSession.shared,
+            loginHint: parts.2, transport: http,
             firebaseIDToken: { try await auth.idToken(forceRefresh: true) }, authenticate: authenticate)
           await self?.refreshClaims(force: true)
         },

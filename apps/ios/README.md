@@ -150,6 +150,12 @@ Settings → Accounts.
 | Aglyn | `aps-environment`, `applinks:app.aglyn.com`, `webcredentials:aglyn.com` | App Sandbox, outgoing network, user-selected files read-write, `aps-environment`, the same associated domains, the app's own Keychain group (the Firebase SDK keeps its user there) |
 | Aglyn POS | `aps-environment`, `applinks:app.aglyn.com` | App Sandbox, outgoing network, user-selected files read-write, `aps-environment`, `applinks:app.aglyn.com`, the app's own Keychain group |
 
+The iOS and iPadOS entitlements also carry
+`com.apple.developer.devicecheck.appattest-environment = production` for
+Firebase App Check (AGL-3818). The Mac files do not: App Attest is not offered
+on a Mac, which uses DeviceCheck instead (`docs/mobile/native-architecture.md`,
+"App Check").
+
 `aps-environment` says `development` in the files; the App Store export signs
 it as `production`. Card readers (Stripe Terminal) and the barcode camera are
 iOS only, so the Mac apps ask for neither Bluetooth nor the camera.
@@ -190,6 +196,10 @@ and `com.aglyn.pos` (Push Notifications, Associated Domains), the Firebase
 Apple app registrations in `aglyn-main` (their values are in
 `Config/Release.xcconfig`), and the App Store Connect records.
 
+App Check (AGL-3818), done 2026-10-15: the App Attest capability on both App
+IDs (profiles regenerate on the next archive), and App Attest registered for
+both apps in Firebase App Check (team R3B7G75SWA, 1 h TTL).
+
 Still owed:
 
 1. **Xcode account** for team R3B7G75SWA (Xcode → Settings → Accounts), for
@@ -210,3 +220,6 @@ Still owed:
    Then `AGLYN_PASSKEY_RP_ID = aglyn.com` in `Config/Release.xcconfig`; until
    then "Set up a passkey" is hidden.
 7. **TestFlight**: listing, privacy labels and a tester group per app.
+8. **DeviceCheck in Firebase App Check** for both apps (a DeviceCheck `.p8`
+   key, its Key ID and the team), which the Mac builds use; until then a Mac
+   build against production is refused at sign-in.

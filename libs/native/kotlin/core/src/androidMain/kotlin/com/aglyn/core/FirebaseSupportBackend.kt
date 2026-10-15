@@ -35,7 +35,8 @@ class FirebaseSupportBackend(
   }
 
   private fun app(name: String): FirebaseApp =
-    FirebaseApp.getApps(context).firstOrNull { it.name == name } ?: FirebaseApp.initializeApp(context, base.app.options, name)
+    FirebaseApp.getApps(context).firstOrNull { it.name == name }
+      ?: FirebaseApp.initializeApp(context, base.app.options, name).also { AndroidFirebase.installAppCheck(it, base.config) }
 
   private fun session(tenantId: String?): Session {
     val pool = tenantId?.takeIf { it.isNotEmpty() }

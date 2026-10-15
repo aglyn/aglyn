@@ -37,6 +37,8 @@ let package = Package(
       name: "AglynCore",
       dependencies: [
         "AglynContracts",
+        // App Check (AGL-3818): Firebase's App Attest and DeviceCheck providers, which Auth and Firestore read.
+        .product(name: "FirebaseAppCheck", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "FirebaseFirestore", package: "firebase-ios-sdk"),
       ],

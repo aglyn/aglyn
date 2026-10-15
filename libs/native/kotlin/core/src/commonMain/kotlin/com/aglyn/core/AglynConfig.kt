@@ -43,6 +43,8 @@ data class AglynEnv(
   /** The desktop OAuth client Google's loopback sign-in uses (its secret is required by the token endpoint, not confidential). */
   val googleDesktopClientId: String? = null,
   val googleDesktopClientSecret: String? = null,
+  /** Firebase App Check: `on` or `off`; unset is on, except on a local stack (`AGLYN_APP_CHECK`). */
+  val appCheck: String? = null,
 )
 
 data class AglynConfig(
@@ -66,6 +68,11 @@ data class AglynConfig(
   val googleWebClientId: String? = null,
   val googleDesktopClientId: String? = null,
   val googleDesktopClientSecret: String? = null,
+  /**
+   * Whether Firebase App Check is on: Play Integrity on Android. Production enforces it, so a release build has it on; the
+   * emulator stack does not, so it is off there, and off by default whenever an emulator or a local console is configured.
+   */
+  val appCheck: Boolean = true,
 ) {
   /** What is missing for the app to sign anyone in, in words for a build log. */
   fun problems(): List<String> = buildList {
@@ -123,14 +130,26 @@ data class AglynConfig(
       return if (HOST_PORT.matches(raw)) raw else null
     }
 
+    /** `AGLYN_APP_CHECK`: on or off, or unset for the default ([localStack] decides). */
+    fun appCheckSetting(value: String?, localStack: Boolean): Boolean = when ((value ?: "").trim().lowercase()) {
+      "" -> !localStack
+      "on", "true", "yes", "1" -> true
+      "off", "false", "no", "0" -> false
+      else -> throw IllegalArgumentException("AGLYN_APP_CHECK must be on or off, not ${value?.trim()}.")
+    }
+
     internal fun hostOf(origin: String): String =
       ORIGIN.matchEntire(origin)?.groupValues?.get(2)?.lowercase() ?: ""
 
     fun read(env: AglynEnv, app: AglynAppId): AglynConfig {
       fun clean(value: String?) = (value ?: "").trim()
+      val origin = normalizeConsoleOrigin(env.consoleUrl)
+      val authEmulator = hostPort(env.authEmulatorHost)
+      val firestoreEmulator = hostPort(env.firestoreEmulatorHost)
+      val localStack = authEmulator != null || firestoreEmulator != null || isLocalHost(hostOf(origin))
       return AglynConfig(
         app = app,
-        consoleOrigin = normalizeConsoleOrigin(env.consoleUrl),
+        consoleOrigin = origin,
         firebase = FirebaseOptionsConfig(
           apiKey = clean(env.firebaseApiKey),
           authDomain = clean(env.firebaseAuthDomain),
@@ -139,13 +158,14 @@ data class AglynConfig(
           storageBucket = clean(env.firebaseStorageBucket).ifEmpty { null },
           messagingSenderId = clean(env.firebaseMessagingSenderId).ifEmpty { null },
         ),
-        authEmulatorHost = hostPort(env.authEmulatorHost),
-        firestoreEmulatorHost = hostPort(env.firestoreEmulatorHost),
+        authEmulatorHost = authEmulator,
+        firestoreEmulatorHost = firestoreEmulator,
         brandName = clean(env.brandName).ifEmpty { DEFAULT_BRAND_NAME },
         passkeyRelyingParty = relyingParty(env.passkeyRpId),
         googleWebClientId = clean(env.googleWebClientId).ifEmpty { null },
         googleDesktopClientId = clean(env.googleDesktopClientId).ifEmpty { null },
         googleDesktopClientSecret = clean(env.googleDesktopClientSecret).ifEmpty { null },
+        appCheck = appCheckSetting(env.appCheck, localStack),
       )
     }
   }
