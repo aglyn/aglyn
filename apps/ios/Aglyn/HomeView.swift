@@ -26,9 +26,7 @@ struct HomeView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: AglynSpace.three) {
         if let workspace = model.workspace, workspace.ready, workspace.orgs.isEmpty {
-          AglynEmptyState(
-            "No workspaces yet", systemImage: "building.2",
-            message: "Create a workspace in the \(model.brandName) console, then come back here.")
+          FirstRunView()
         } else {
           header
           WideLayoutReader { wide in

@@ -65,6 +65,7 @@ android {
       // Firebase App Check: off, since the emulators do not enforce it (there is no App Check emulator).
       buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "off")))
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(""))
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
       buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
       buildConfigField("boolean", "TERMINAL_LIVE_READERS", "false")
@@ -86,6 +87,9 @@ android {
       // Firebase App Check (AGL-3818): production enforces it on Auth and Firestore, so a release build attests itself
       // through Play Integrity.
       buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "on")))
+      // The Firebase project's Web OAuth client id, the audience of Google's ID token for "Continue with Google". Google also
+      // needs an Android OAuth client for com.aglyn.pos and its signing certificates (apps/android/README.md, "What Zach owes").
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("googleWebClientId", "543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com")))
       buildConfigField("String", "DEBUG_EMAIL", quoted(""))
       buildConfigField("String", "DEBUG_PASSWORD", quoted(""))
       buildConfigField("boolean", "TERMINAL_LIVE_READERS", liveReaders)

@@ -11,11 +11,26 @@ public struct AglynUser: Equatable, Sendable {
   public let uid: String
   public let email: String?
   public let displayName: String?
+  /// Whether the account's email address is confirmed. Every console route refuses an account that has not confirmed it,
+  /// so the app shows the verification step first, as the console's `/verify-email` does. False when unknown.
+  public let emailVerified: Bool
 
-  public init(uid: String, email: String?, displayName: String?) {
+  public init(uid: String, email: String?, displayName: String?, emailVerified: Bool = false) {
     self.uid = uid
     self.email = email
     self.displayName = displayName
+    self.emailVerified = emailVerified
+  }
+
+  /// The same person with what a fresh token says about the address.
+  func verified(_ verified: Bool) -> AglynUser {
+    AglynUser(uid: uid, email: email, displayName: displayName, emailVerified: verified)
+  }
+}
+
+extension AglynUser {
+  init(sdk user: User) {
+    self.init(uid: user.uid, email: user.email, displayName: user.displayName, emailVerified: user.isEmailVerified)
   }
 }
 
@@ -189,7 +204,7 @@ public final class AuthSession {
     }
     handle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
       MainActor.assumeIsolated {
-        let signedIn = user.map { AglynUser(uid: $0.uid, email: $0.email, displayName: $0.displayName) }
+        let signedIn = user.map { AglynUser(sdk: $0) }
         self?.ready = true
         // While a support session is on, the SDK's user is the staff member's, set aside.
         if self?.impersonation != nil {
@@ -234,18 +249,127 @@ public final class AuthSession {
       await refreshStanding()
       return
     }
+    // A self-serve account lives in the project pool; an SSO sign-in aims the SDK at a workspace's tenant, which
+    // is sticky until something says otherwise (the console's `aimAuthAtPool(auth, null)`, AGL-1993).
+    Auth.auth().tenantID = nil
     _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
   }
 
-  /// Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner).
-  public func signIn(customToken: String) async throws {
+  /// Signs in with a Firebase custom token: a passkey sign-in's, or the console hand-off's after single sign-on.
+  /// `tenantId` is the identity pool the token was minted in (an SSO account lives in its workspace's tenant).
+  public func signIn(customToken: String, tenantId: String? = nil) async throws {
+    let pool = tenantId.flatMap { $0.isEmpty ? nil : $0 }
     if let rest {
       signedInOrOutSinceLaunch = true
-      user = try await rest.signIn(customToken: customToken)
+      user = try await rest.signIn(customToken: customToken, tenantId: pool)
       await refreshStanding()
       return
     }
+    Auth.auth().tenantID = pool
     _ = try await Auth.auth().signIn(withCustomToken: customToken)
+  }
+
+  /// Creates an email and password account in the project pool and signs in as it, as the console's sign-up does
+  /// (`createUserWithEmailAndPassword`). Throws with the Firebase code for `signUpErrorMessage`.
+  public func signUp(email: String, password: String) async throws -> AglynUser {
+    let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let rest {
+      signedInOrOutSinceLaunch = true
+      let created = try await rest.signUp(email: trimmed, password: password)
+      user = created
+      await refreshStanding()
+      return created
+    }
+    Auth.auth().tenantID = nil
+    let result = try await Auth.auth().createUser(withEmail: trimmed, password: password)
+    let created = AglynUser(sdk: result.user)
+    user = created
+    return created
+  }
+
+  /// Signs in with a Google ID token (the platform sheet's), which signs up a person Firebase has not seen.
+  /// Returns whether it did, the console's `isNewAccount(credential)`.
+  public func signIn(googleIDToken: String, accessToken: String? = nil) async throws -> Bool {
+    if let rest {
+      signedInOrOutSinceLaunch = true
+      let (signedIn, isNew) = try await rest.signIn(
+        idpPostBody: "id_token=\(ConsoleAPIClient.encodeComponent(googleIDToken))&providerId=google.com")
+      user = signedIn
+      await refreshStanding()
+      return isNew
+    }
+    Auth.auth().tenantID = nil
+    let credential = GoogleAuthProvider.credential(withIDToken: googleIDToken, accessToken: accessToken ?? "")
+    let result = try await Auth.auth().signIn(with: credential)
+    user = AglynUser(sdk: result.user)
+    return result.additionalUserInfo?.isNewUser == true
+  }
+
+  /// Signs in with Sign in with Apple's identity token and the raw nonce its request was hashed from (provider
+  /// `apple.com`). Apple hands the name over on the first authorization only, so a new account keeps it then.
+  public func signIn(appleIDToken: String, rawNonce: String, fullName: PersonNameComponents?) async throws -> Bool {
+    let name = fullName.map { PersonNameComponentsFormatter().string(from: $0) }?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let isNew: Bool
+    if let rest {
+      signedInOrOutSinceLaunch = true
+      let (signedIn, created) = try await rest.signIn(
+        idpPostBody: "id_token=\(ConsoleAPIClient.encodeComponent(appleIDToken))&providerId=apple.com"
+          + "&nonce=\(ConsoleAPIClient.encodeComponent(rawNonce))")
+      user = signedIn
+      isNew = created
+    } else {
+      Auth.auth().tenantID = nil
+      let credential = OAuthProvider.appleCredential(withIDToken: appleIDToken, rawNonce: rawNonce, fullName: fullName)
+      let result = try await Auth.auth().signIn(with: credential)
+      user = AglynUser(sdk: result.user)
+      isNew = result.additionalUserInfo?.isNewUser == true
+    }
+    if isNew, !name.isEmpty, (user?.displayName ?? "").isEmpty { try? await updateDisplayName(name) }
+    await refreshStanding()
+    return isNew
+  }
+
+  /// Re-reads the account (the console's `user.reload()`), so a confirmed address shows as confirmed; the fresh
+  /// token then carries `email_verified`, which the routes read.
+  public func reload() async {
+    if let rest {
+      if let fresh = try? await rest.reload() { user = fresh }
+      return
+    }
+    guard let signedIn = Auth.auth().currentUser else { return }
+    try? await signedIn.reload()
+    guard let current = Auth.auth().currentUser else { return }
+    if current.isEmailVerified { _ = try? await current.getIDTokenResult(forcingRefresh: true) }
+    if impersonation == nil { user = AglynUser(sdk: current) }
+  }
+
+  /// The sign-in providers the account holds (`password`, `google.com`, …), as the console reads `user.providerData`.
+  public func providerIDs() async -> [String] {
+    if let rest { return (try? await rest.providerIDs()) ?? [] }
+    return Auth.auth().currentUser?.providerData.map(\.providerID) ?? []
+  }
+
+  /// Confirms an address with an emailed verification link's code; no one need be signed in.
+  public func applyEmailVerification(code: String) async throws {
+    if let rest {
+      try await rest.applyActionCode(code)
+    } else {
+      try await Auth.auth().applyActionCode(code)
+    }
+    await reload()
+  }
+
+  /// The address an emailed reset link's code is for; throws when the code is spent or has expired.
+  public func verifyPasswordResetCode(_ code: String) async throws -> String {
+    if let rest { return try await rest.verifyPasswordResetCode(code) }
+    return try await Auth.auth().verifyPasswordResetCode(code)
+  }
+
+  /// Sets a new password with an emailed reset link's code.
+  public func confirmPasswordReset(code: String, newPassword: String) async throws {
+    if let rest { return try await rest.confirmPasswordReset(code: code, newPassword: newPassword) }
+    try await Auth.auth().confirmPasswordReset(withCode: code, newPassword: newPassword)
   }
 
   /// Changes the password, after proving the current one.
@@ -271,7 +395,7 @@ public final class AuthSession {
     let change = signedIn.createProfileChangeRequest()
     change.displayName = trimmed
     try await change.commitChanges()
-    user = AglynUser(uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed)
+    user = AglynUser(uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed, emailVerified: signedIn.isEmailVerified)
   }
 
   /// Disconnects a sign-in provider (`google.com`), as the console's Account section does with `unlink`.
@@ -286,15 +410,6 @@ public final class AuthSession {
     // The token's identities are read for the provider list, so ask for a fresh one.
     _ = try await signedIn.getIDToken(forcingRefresh: true)
     await refreshStanding()
-  }
-
-  public func resetPassword(email: String) async throws {
-    let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
-    if let rest {
-      try await rest.sendPasswordReset(email: trimmed)
-      return
-    }
-    try await Auth.auth().sendPasswordReset(withEmail: trimmed)
   }
 
   /// Work that must finish while the person is still signed in (dropping the

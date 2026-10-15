@@ -60,6 +60,8 @@ public enum AglynConfigError: Error, Equatable, LocalizedError {
 public struct AglynConfig: Equatable, Sendable {
   public static let defaultConsoleOrigin = "https://app.aglyn.com"
   public static let defaultBrandName = "Aglyn"
+  /// Where the published Terms of Service and Privacy Policy live (the console's `OPERATOR_LEGAL_ORIGIN`).
+  public static let defaultLegalOrigin = "https://aglyn.com"
 
   public var app: AglynAppID
   /// The console origin every API call and WebView page is on.
@@ -81,13 +83,19 @@ public struct AglynConfig: Equatable, Sendable {
   /// on a Mac. Production enforces it, so a Release build has it on; the emulator stack does not, so
   /// it is off there, and off by default whenever an emulator or a local console is configured.
   public var appCheck: Bool = true
+  /// The origin the sign-up's Terms of Service and Privacy Policy links point at (`AGLYN_LEGAL_ORIGIN`), the console's
+  /// `LEGAL_URLS` (`<origin>/legal/terms`, `<origin>/legal/privacy`).
+  public var legalOrigin: String = AglynConfig.defaultLegalOrigin
+  /// Whether Sign in with Apple is offered (`AGLYN_APPLE_SIGN_IN`): it needs the app's Sign in with Apple capability and
+  /// the Firebase project's Apple provider, so a build turns it on once both exist.
+  public var appleSignIn: Bool = false
 
   public static let keys = [
     "AGLYN_CONSOLE_URL", "AGLYN_FIREBASE_API_KEY", "AGLYN_FIREBASE_AUTH_DOMAIN",
     "AGLYN_FIREBASE_PROJECT_ID", "AGLYN_FIREBASE_APP_ID", "AGLYN_FIREBASE_STORAGE_BUCKET",
     "AGLYN_FIREBASE_MESSAGING_SENDER_ID", "AGLYN_AUTH_EMULATOR_HOST",
     "AGLYN_FIRESTORE_EMULATOR_HOST", "AGLYN_GOOGLE_IOS_CLIENT_ID", "AGLYN_GOOGLE_WEB_CLIENT_ID",
-    "AGLYN_BRAND_NAME", "AGLYN_PASSKEY_RP_ID", "AGLYN_APP_CHECK",
+    "AGLYN_BRAND_NAME", "AGLYN_PASSKEY_RP_ID", "AGLYN_APP_CHECK", "AGLYN_LEGAL_ORIGIN", "AGLYN_APPLE_SIGN_IN",
   ]
 
   /// True for the hosts a local development stack runs on.
@@ -169,8 +177,18 @@ public struct AglynConfig: Equatable, Sendable {
         ? AglynGoogleClient(iosClientID: iosClient, webClientID: webClient) : nil,
       brandName: brand.isEmpty ? defaultBrandName : brand,
       passkeyRelyingParty: relyingParty(env["AGLYN_PASSKEY_RP_ID"]),
-      appCheck: try appCheckSetting(env["AGLYN_APP_CHECK"], localStack: localStack)
+      appCheck: try appCheckSetting(env["AGLYN_APP_CHECK"], localStack: localStack),
+      legalOrigin: legalOriginSetting(env["AGLYN_LEGAL_ORIGIN"]),
+      appleSignIn: ["yes", "on", "true", "1"].contains(clean(env["AGLYN_APPLE_SIGN_IN"]).lowercased())
     )
+  }
+
+  /// An `https:` origin for the legal documents, or the default.
+  static func legalOriginSetting(_ value: String?) -> String {
+    var raw = clean(value)
+    while raw.hasSuffix("/") { raw.removeLast() }
+    return raw.range(of: "^https://[A-Za-z0-9.-]+(:[0-9]{2,5})?$", options: .regularExpression) != nil
+      ? raw.lowercased() : defaultLegalOrigin
   }
 
   /// Reads the `AGLYN_*` keys from a bundle's Info.plist.
@@ -197,6 +215,14 @@ public struct AglynConfig: Equatable, Sendable {
       }
     }
     return problems
+  }
+
+  /// The domain workspace addresses sit under (`acme-inc.aglyn.com`): the console's host without its own label.
+  public var workspaceDomain: String {
+    let host = URL(string: consoleOrigin)?.host?.lowercased() ?? ""
+    let labels = host.split(separator: ".")
+    if labels.count >= 3 { return labels.dropFirst().joined(separator: ".") }
+    return host.isEmpty || isLocalConsole ? "aglyn.com" : host
   }
 
   public var isLocalConsole: Bool {

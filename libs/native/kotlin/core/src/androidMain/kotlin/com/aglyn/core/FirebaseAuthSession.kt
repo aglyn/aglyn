@@ -28,10 +28,12 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
       mutable.value = if (user == null) {
         AuthState.SignedOut
       } else {
-        AuthState.SignedIn(AuthUser(user.uid, user.email, user.displayName))
+        AuthState.SignedIn(user.toAuthUser())
       }
     }
   }
+
+  private fun com.google.firebase.auth.FirebaseUser.toAuthUser() = AuthUser(uid, email, displayName, isEmailVerified)
 
   override suspend fun beginImpersonation(customToken: String, tenantId: String?) {
     // A support session already on ends first, so the state it set aside is back before the next one starts.
@@ -58,11 +60,71 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     try {
       auth.signInWithEmailAndPassword(email.trim(), password).await()
     } catch (error: FirebaseAuthException) {
-      throw AuthError(authErrorMessage(error.errorCode), error)
+      throw AuthError(authErrorMessage(error.errorCode), error, error.errorCode)
     } catch (error: Exception) {
-      throw AuthError(authErrorMessage(appCheckRefusalCode(error)), error)
+      throw AuthError(authErrorMessage(appCheckRefusalCode(error)), error, appCheckRefusalCode(error))
     }
   }
+
+  override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
+    val created = try {
+      auth.createUserWithEmailAndPassword(email.trim(), password).await().user
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+    } catch (error: Exception) {
+      throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error, appCheckRefusalCode(error))
+    } ?: throw AuthError(signUpErrorMessage(null))
+    return created.toAuthUser().also { if (!supportSessions.active) mutable.value = AuthState.SignedIn(it) }
+  }
+
+  override suspend fun signInWithGoogle(googleIdToken: String): Boolean = try {
+    val result = auth.signInWithCredential(GoogleAuthProvider.getCredential(googleIdToken, null)).await()
+    result.additionalUserInfo?.isNewUser == true
+  } catch (error: FirebaseAuthException) {
+    throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+  } catch (error: Exception) {
+    throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error, appCheckRefusalCode(error))
+  }
+
+  override suspend fun reload() {
+    val user = auth.currentUser ?: return
+    runCatching { user.reload().await() }
+    val current = auth.currentUser ?: return
+    // The fresh token carries `email_verified`, which the routes read.
+    if (current.isEmailVerified) runCatching { current.getIdToken(true).await() }
+    if (!supportSessions.active) mutable.value = AuthState.SignedIn(current.toAuthUser())
+  }
+
+  override suspend fun applyActionCode(code: String) {
+    try {
+      auth.applyActionCode(code).await()
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+    } catch (error: Exception) {
+      throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error)
+    }
+    reload()
+  }
+
+  override suspend fun verifyPasswordResetCode(code: String): String = try {
+    auth.verifyPasswordResetCode(code).await().orEmpty()
+  } catch (error: FirebaseAuthException) {
+    throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+  } catch (error: Exception) {
+    throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error)
+  }
+
+  override suspend fun confirmPasswordReset(code: String, newPassword: String) {
+    try {
+      auth.confirmPasswordReset(code, newPassword).await()
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+    } catch (error: Exception) {
+      throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error)
+    }
+  }
+
+  override suspend fun providerIds(): List<String> = auth.currentUser?.providerData?.map { it.providerId }.orEmpty()
 
   override suspend fun signInWithCustomToken(token: String) {
     try {
@@ -114,7 +176,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
   override suspend fun updateDisplayName(name: String) {
     val user = auth.currentUser ?: return
     user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()).await()
-    mutable.value = AuthState.SignedIn(AuthUser(user.uid, user.email, name.ifEmpty { null }))
+    mutable.value = AuthState.SignedIn(AuthUser(user.uid, user.email, name.ifEmpty { null }, user.isEmailVerified))
   }
 
   override suspend fun signOut() {

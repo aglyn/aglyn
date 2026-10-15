@@ -34,6 +34,12 @@ final class AppModel {
   /// The screen this tablet was set up as instead of a register (a customer display or a self-service
   /// kiosk), remembered across launches so it comes back with nobody signed in. The POS app only.
   private(set) var deviceModeID: String?
+  /// The signed-out screens and what a sign-up carries across them.
+  let authFlow = AuthFlow()
+  /// The first verified session's workspace settling (the held sign-up name, AGL-2590).
+  var firstRun: FirstRunState = .idle
+  /// Whose first run has been settled, so it runs once per person per launch.
+  @ObservationIgnored var firstRunSettledFor: String?
 
   static let deviceModeKey = "aglyn.pos.deviceMode"
 
@@ -166,6 +172,8 @@ final class AppModel {
 
   func signOut() async {
     await auth?.signOut()
+    authFlow.reset()
+    authFlow.pendingVerificationCode = nil
   }
 
   /// The whole-screen modes a plugin offers this tablet at sign-in (the POS app only).

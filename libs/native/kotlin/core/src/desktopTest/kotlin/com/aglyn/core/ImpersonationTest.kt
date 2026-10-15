@@ -115,7 +115,7 @@ class ImpersonationTest {
     session.beginImpersonation("custom-token", null)
     session.endImpersonation()
 
-    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null)), session.state.value)
+    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null, emailVerified = false)), session.state.value)
     assertNull(session.impersonation.value)
     val claims = TokenClaims.fromIdToken(session.idToken())
     assertTrue(claims.isStaff)
@@ -138,7 +138,7 @@ class ImpersonationTest {
     val session = signedInStaff()
     val failure = assertFailsWith<AuthError> { session.beginImpersonation("bad", null) }
     assertEquals("The support session was refused. Try again.", failure.message)
-    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null)), session.state.value)
+    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null, emailVerified = false)), session.state.value)
     assertNull(session.impersonation.value)
   }
 
@@ -151,7 +151,7 @@ class ImpersonationTest {
     clock += 3_600_000L
     assertNull(session.idToken())
     assertNull(session.impersonation.value)
-    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null)), session.state.value)
+    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null, emailVerified = false)), session.state.value)
   }
 
   @Test
@@ -172,7 +172,7 @@ class ImpersonationTest {
     session.beginImpersonation("one", null)
     session.beginImpersonation("two", null)
     session.endImpersonation()
-    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null)), session.state.value)
+    assertEquals(AuthState.SignedIn(AuthUser("staff-1", "ops@example.test", null, emailVerified = false)), session.state.value)
     assertEquals(1, backend.requests.count { it.url.encodedPath.endsWith("accounts:signInWithPassword") })
   }
 
