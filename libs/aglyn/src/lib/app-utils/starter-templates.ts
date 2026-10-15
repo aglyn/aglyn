@@ -21,10 +21,12 @@
 // shows them to a model — and neither barrel works in both: the full
 // `@aglyn/aglyn` barrel breaks the RSC/server-route graph, while the server
 // entry drags `node:fs` into the client bundle. The starter kit imports only
-// the canvas constants, a leaf with no imports of their own; the compiled
+// the canvas constants, a leaf with no imports of their own, and the
+// entrance-motion pass, which adds only the animation vocabulary; the compiled
 // plugin starters are data behind a type-only import; and `screen-route`
 // imports only a TYPE from foundation — so all three are safe on either side.
 import { PLUGIN_STARTER_TEMPLATES } from './plugin-starter-templates.generated'
+import { applyElementMotion } from './element-motion'
 import { normalizeScreenSlug } from './screen-route'
 import {
   buildStarterNodes as buildNodes,
@@ -126,7 +128,11 @@ export function buildStarterTemplateDocs(
         category: starter.category,
         ...(slug ? { slug } : {}),
         ...(screen.seo ? { seo: screen.seo } : {}),
-        nodes: screen.nodes,
+        // A starter's page moves the way the attributes panel would set it
+        // up (AGL-3838). Written here, as it is seeded, and not into the
+        // starter itself: the starters are also the page examples a model is
+        // shown, and those carry no motion — the AI's is decided in code.
+        nodes: applyElementMotion(screen.nodes),
         source: {
           type: 'starter',
           starterId: starter.id,

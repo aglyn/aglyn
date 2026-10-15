@@ -18,6 +18,7 @@ import type { HostTheme } from '@aglyn/shared-data-types'
 import type { NodeInteraction } from './node-interactions'
 import { nodeInteractionSelector } from './node-interactions'
 import { SCREEN_ROOT_PATH } from './screen-route'
+import { applyElementMotion } from './element-motion'
 import {
   buildStarterNodes as buildNodes,
   starterSection as container,
@@ -387,7 +388,9 @@ export function buildDefaultHomeScreen(siteName: string): StarterTemplateScreen 
     displayName: 'Home',
     slug: SCREEN_ROOT_PATH,
     seo: { title: name, description: defaultHomeDescription(siteName) },
-    nodes: buildNodes([
+    // Its sections move as an author would set them up (AGL-3838): the hero
+    // climbs in on load, the rest slide in on scroll, the cards one by one.
+    nodes: applyElementMotion(buildNodes([
       // ── Hero ────────────────────────────────────────────────────────────
       band(
         'dh_heroSection',
@@ -718,7 +721,7 @@ export function buildDefaultHomeScreen(siteName: string): StarterTemplateScreen 
         ),
         contactForm(),
       ]),
-    ]),
+    ])),
   }
 }
 
