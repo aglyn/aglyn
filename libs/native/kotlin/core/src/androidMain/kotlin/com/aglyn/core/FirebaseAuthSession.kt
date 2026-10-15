@@ -57,6 +57,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
   }
 
   override suspend fun signInWithEmail(email: String, password: String) {
+    requireProjectPool()
     try {
       auth.signInWithEmailAndPassword(email.trim(), password).await()
     } catch (error: FirebaseAuthException) {
@@ -67,6 +68,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
   }
 
   override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
+    requireProjectPool()
     val created = try {
       auth.createUserWithEmailAndPassword(email.trim(), password).await().user
     } catch (error: FirebaseAuthException) {
@@ -78,6 +80,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
   }
 
   override suspend fun signInWithGoogle(googleIdToken: String): Boolean = try {
+    requireProjectPool()
     val result = auth.signInWithCredential(GoogleAuthProvider.getCredential(googleIdToken, null)).await()
     result.additionalUserInfo?.isNewUser == true
   } catch (error: FirebaseAuthException) {
@@ -136,6 +139,24 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     }
   }
 
+  /**
+   * The console hand-off's custom token, in the pool it was minted in. The Android SDK can aim its instance at a tenant but
+   * never back at the project pool (`setTenantId` takes no null), so after a single sign-on this process signs in to that
+   * tenant only; the other doors say so rather than creating or finding the account in the wrong pool (AGL-1993).
+   */
+  override suspend fun signInWithCustomToken(token: String, tenantId: String?) {
+    if (!tenantId.isNullOrEmpty()) {
+      auth.setTenantId(tenantId)
+    } else {
+      requireProjectPool()
+    }
+    signInWithCustomToken(token)
+  }
+
+  private fun requireProjectPool() {
+    if (auth.tenantId != null) throw AuthError(TENANT_STUCK_MESSAGE)
+  }
+
   override suspend fun changePassword(current: String, new: String) {
     val user = auth.currentUser
     val email = user?.email ?: throw AuthError(passwordChangeMessage(null))
@@ -185,3 +206,6 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     auth.signOut()
   }
 }
+
+/** Why a sign-in after a single sign-on in the same process is refused on Android. */
+internal const val TENANT_STUCK_MESSAGE = "To sign in with another account after single sign-on, close the app and open it again."

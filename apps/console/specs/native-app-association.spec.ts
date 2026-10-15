@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import {
   type AppLinksComponent,
   consoleAppLinksComponents,
+  NATIVE_AUTH_LINK_SEGMENTS,
   NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS,
 } from '@aglyn/aglyn/app-utils/native-app-association'
 import { CONSOLE_TOP_LEVEL_SEGMENTS } from '../constants/console-routes'
@@ -133,7 +134,9 @@ describe('the applinks paths follow the native deep-link grammar', () => {
   })
 
   it('splits the console top level exactly into native sections and web-only ones', () => {
-    const webOnly = new Set(NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS)
+    // Auth-link sections open their exact page in the app and leave the rest to the web.
+    const webOnly = new Set([...NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS, ...NATIVE_AUTH_LINK_SEGMENTS])
+    expect(NATIVE_AUTH_LINK_SEGMENTS.filter((s) => NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS.includes(s))).toEqual([])
     expect([...webOnly].filter((s) => nativeTopLevel.has(s))).toEqual([])
     expect([...CONSOLE_TOP_LEVEL_SEGMENTS].filter((s) => !webOnly.has(s) && !nativeTopLevel.has(s)).sort()).toEqual([])
     expect([...webOnly].filter((s) => !CONSOLE_TOP_LEVEL_SEGMENTS.has(s))).toEqual([])
@@ -157,6 +160,10 @@ describe('the applinks paths follow the native deep-link grammar', () => {
     '/acme/hosts/main-site/screens/s1/versions/v1/besigner',
     '/admin/emails/e1/versions/v1/besigner',
     '/manage/user/security',
+    '/signup',
+    '/verify-email',
+    '/reset-password',
+    '/account-recovery',
   ])('opens %s in the app', (path) => {
     expect(opensInApp(components, path)).toBe(true)
   })
@@ -164,12 +171,12 @@ describe('the applinks paths follow the native deep-link grammar', () => {
   it.each([
     '/signin',
     '/signup/plan',
-    '/verify-email',
-    '/reset-password',
+    '/verify-email/sent',
+    '/reset-password/done',
     '/auth/action',
     '/auth/handoff/continue',
     '/sso/acme',
-    '/account-recovery',
+    '/account-recovery/codes',
     '/signout',
     '/edit-access',
     '/kiosk/commerce/display',

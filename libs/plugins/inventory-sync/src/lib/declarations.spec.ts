@@ -64,6 +64,7 @@ describe('the plugin’s boot registrations (AGL-3642)', () => {
       'inventory.dearsystems.com',
       'cloudapi.inflowinventory.com',
       'oauth.brightpearlapp.com',
+      'api.ordoro.com',
     ])
     for (const entry of answer.hosts) {
       expect(entry.disposition).toBe('not-a-subprocessor')

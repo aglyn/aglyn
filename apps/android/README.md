@@ -172,6 +172,24 @@ node tools/scripts/native-release.mjs android-bundle app
 node tools/scripts/native-release.mjs android-bundle pos
 ```
 
+`android-upload` then sends a bundle to Play internal testing (or `alpha` /
+`beta`; production stays a person's release) through the Play Developer API,
+so nobody drags bundles into Play Console:
+
+```bash
+node tools/scripts/native-release.mjs android-upload /private/tmp/aglyn-release/Aglyn-android-<versionCode>.aab
+node tools/scripts/native-release.mjs android-upload /private/tmp/aglyn-release/AglynPOS-android-<versionCode>.aab
+```
+
+- **No key file.** The script asks for a short-lived token for the publisher
+  service account `play-publisher@aglyn-main.iam.gserviceaccount.com`
+  (override with `AGLYN_PLAY_PUBLISHER`), using the operator's own
+  `gcloud auth application-default login`. The operator's account needs
+  Service Account Token Creator on that service account (IAM).
+- **The publisher's Play access** is "Release apps to testing tracks" (plus
+  read-only app information) on both apps, in Play Console → Users and
+  permissions, and nothing else.
+
 - **versionCode** is the minutes since 1970 (UTC), passed as
   `-Paglyn.versionCode`, so every bundle outnumbers the last and stays under
   Play's 2,100,000,000. A build without it is versionCode 1.
@@ -225,14 +243,12 @@ does not enforce it); debug builds, on the emulators, have it off.
   (app links, both apps) and `https://aglyn.com/.well-known/assetlinks.json`
   (passkeys, `com.aglyn.app`), with the Play app signing certificates' SHA-256.
   Passkeys also need the `delegate_permission/common.get_login_creds` relation for `com.aglyn.app` in the apex
-  file (template: `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the
-  certificate's hash is listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden.
+  file (template: `docs/mobile/well-known/`); release builds default to `passkeyRpId = aglyn.com` (AGL-3817), and the console's `PASSKEY_ANDROID_APK_KEY_HASHES` lists the
+  Play app-signing and upload certificates' hashes (base64url SHA-256), set on aglyn-console production and preview.
 - Google sign-in ("Continue with Google" on both apps' sign-in and sign-up, and "Connect Google"): release builds carry
-  the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId` overrides it). Owed: an Android OAuth client in
-  Google Cloud project `aglyn-main` for each of `com.aglyn.app` and `com.aglyn.pos`, with the SHA-1 of the Play app
-  signing key (and one with the upload key's SHA-1, for sideloaded release builds); until then Google refuses the
-  Credential Manager request. On Windows a Desktop OAuth client (`AGLYN_GOOGLE_DESKTOP_CLIENT_ID` and
-  `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET`), used against the emulator stack only: production desktop sign-in goes through
-  the console (AGL-3816).
+  the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId` overrides it). Done 2026-10-15: the Android
+  OAuth clients for `com.aglyn.app` and `com.aglyn.pos`, for the Play app-signing and upload-key SHA-1s. On Windows a
+  Desktop OAuth client (`AGLYN_GOOGLE_DESKTOP_CLIENT_ID` and `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET`), used against the
+  emulator stack only: production desktop sign-in goes through the console (AGL-3816).
 - Desktop (Windows): code signing (Azure Trusted Signing or an EV certificate)
   and/or a Microsoft Store account.

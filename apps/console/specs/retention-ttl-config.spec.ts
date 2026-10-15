@@ -195,6 +195,13 @@ const POLICIES: Array<{
     writers: ['libs/tenant/data/admin/src/lib/server/auth-handoff.ts'],
     stamp: 'expiresAt: new Date(',
   },
+  // AGL-3816: a native app's console hand-off code. One writer, which stamps
+  // the policy's field beside the `expiresAtMs` redemption checks.
+  {
+    collectionGroup: 'nativeHandoffs',
+    writers: ['libs/tenant/data/admin/src/lib/server/native-handoff.ts'],
+    stamp: 'expiresAt: new Date(',
+  },
   // AGL-1978: REST/POS/marketplace replay keys, which store the original
   // response body — for the REST API, a copy of the created record. TWO
   // writers: the shared claim and commerce's local copy.

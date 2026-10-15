@@ -90,9 +90,15 @@ object DesktopShell {
   ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { System.err.println("Aglyn: $it") }
-    // Firebase App Check: Compose Desktop has no attestation provider yet, so its Firebase calls carry none; a desktop
-    // provider plugs in here, and every Firebase call below picks it up.
-    val appCheck: com.aglyn.core.AppCheckTokenProvider = com.aglyn.core.NoAppCheck
+    val prefs = JavaPreferencesStore(if (app == NativeApp.POS) "com/aglyn/pos" else "com/aglyn/app")
+    // Firebase App Check: Compose Desktop has no attestation, so the console mints this app's tokens for the session it
+    // signed in (AGL-3816), and every Firebase call below carries them. Off for the emulator stack.
+    val consoleAppCheck = if (config.appCheck) {
+      com.aglyn.core.ConsoleMintedAppCheck(defaultHttpClient(), config.consoleOrigin, installId(prefs))
+    } else {
+      null
+    }
+    val appCheck: com.aglyn.core.AppCheckTokenProvider = consoleAppCheck ?: com.aglyn.core.NoAppCheck
     val http = defaultHttpClient().let { if (config.appCheck) it.withAppCheck(appCheck) else it }
     // One kept session per app and Firebase project, so an emulator run never restores into production.
     val auth = IdentityToolkitAuthSession(
@@ -102,6 +108,7 @@ object DesktopShell {
       credentials = com.aglyn.core.CredentialStores.forOs(),
       credentialKey = "Aglyn/${config.app.wire}/${config.firebase.projectId}",
     )
+    consoleAppCheck?.idToken = { auth.currentIdToken() }
     val firestore = RestFirestoreReader(
       http,
       config.firebase.projectId,
@@ -112,7 +119,6 @@ object DesktopShell {
       ),
       freshIdToken = { auth.idToken(true) },
     )
-    val prefs = JavaPreferencesStore(if (app == NativeApp.POS) "com/aglyn/pos" else "com/aglyn/app")
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
     scope.launch { auth.restore() }
     val registry = NativePluginRegistry()
@@ -145,6 +151,21 @@ object DesktopShell {
       },
       mediaPicker = DesktopMediaPicker,
       fileExporter = DesktopFileExporter,
+      // Signing in through the console: the system browser, back to a loopback listener (AGL-3816). Against a project that
+      // enforces App Check it is the only way in, since this build has no attestation provider.
+      consoleHandoff = com.aglyn.core.ConsoleLoopback(openBrowser = { url ->
+        runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+          .onFailure { System.err.println("Aglyn: could not open the browser: ${it.message}") }
+      }),
+      // Before anyone is signed in there is no session to mint a token for, so every door is the console's.
+      signInThroughConsoleOnly = config.appCheck,
+      consoleAppCheck = consoleAppCheck,
     )
   }
+
+  /** A random id this install keeps (never a hardware identifier), for the App Check route's per-device rate limit. */
+  private fun installId(prefs: JavaPreferencesStore): String =
+    prefs.get(INSTALL_ID_KEY) ?: com.aglyn.core.secureRandomHex(16).also { prefs.set(INSTALL_ID_KEY, it) }
+
+  private const val INSTALL_ID_KEY = "aglyn.install.id"
 }

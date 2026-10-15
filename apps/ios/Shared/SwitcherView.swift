@@ -31,6 +31,11 @@ struct SwitcherView: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(org.id == workspace.org?.id ? .isSelected : [])
               }
+              // A full window is not the whole list (the console's switcher, AGL-2336).
+              if workspace.hasMoreOrgs {
+                Button("Load more workspaces") { workspace.loadMoreOrgs() }
+                  .accessibilityIdentifier("switcher-more-orgs")
+              }
             }
             if workspace.org != nil {
               Section(siteNoun == "Site" ? "Sites" : "Stores") {

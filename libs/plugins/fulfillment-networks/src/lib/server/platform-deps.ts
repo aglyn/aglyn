@@ -32,6 +32,7 @@ import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import { FULFILLMENT_NETWORKS_ENTITLEMENT, FULFILLMENT_NETWORKS_PLUGIN_ID, SELLER_PLUGIN_ID } from '../constants'
 import { NETWORK_PROVIDERS, type NetworkProviderId } from '../model/networks'
 import { createAmazonMcfProvider } from '../providers/amazon-mcf'
+import { createFlexportProvider } from '../providers/flexport'
 import { defaultProviderHttp, type ProviderHttp } from '../providers/http'
 import type { FulfillmentNetworkProvider } from '../providers/provider'
 import { createShipbobProvider } from '../providers/shipbob'
@@ -69,6 +70,7 @@ export const platformNetworkStore = (): NetworkStore => (store ??= createFiresto
 export function platformProvider(id: NetworkProviderId): FulfillmentNetworkProvider {
   const config = readFulfillmentNetworksConfig()
   if (id === 'shipmonk') return createShipmonkProvider({ http: http(), sandbox: config.shipmonk?.sandbox === true })
+  if (id === 'flexport') return createFlexportProvider({ http: http() })
   return id === 'shipbob'
     ? createShipbobProvider({ http: http(), sandbox: config.shipbob?.sandbox === true })
     : createAmazonMcfProvider({

@@ -107,6 +107,15 @@ internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, on
         modifier = Modifier.testTag("switcher-org-${org.id}"),
       )
     }
+    // A full window is not the whole list (the console's switcher, AGL-2336).
+    if (workspace.hasMoreOrgs) {
+      item {
+        androidx.compose.material3.TextButton(
+          onClick = { store.loadMoreOrgs() },
+          modifier = Modifier.padding(horizontal = space(1f)).testTag("switcher-more-orgs"),
+        ) { Text("Load more workspaces") }
+      }
+    }
     item { SectionHeader("Sites in ${workspace.org?.name ?: "this workspace"}") }
     if (!workspace.ready) {
       item { SkeletonList(rows = 2) }

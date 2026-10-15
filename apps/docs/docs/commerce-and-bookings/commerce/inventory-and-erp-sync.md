@@ -1,21 +1,20 @@
 ---
 sidebar_position: 4.65
-title: Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl)
-description: Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory or Brightpearl account. Rolling out.
-unlisted: true
+title: Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl, Ordoro)
+description: Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account. Rolling out.
 ---
 
-# Inventory and ERP sync: Cin7 Core, inFlow and Brightpearl
+# Inventory and ERP sync: Cin7 Core, inFlow, Brightpearl and Ordoro
 
-:::caution Rolling out
-Inventory sync is **not yet available** on aglyn.com-hosted workspaces. Until
-it is, no **Inventory and ERP** card appears on **Products → Integrations**, and
-your stock is counted the way it is today.
+:::note Rolling out
+Inventory sync appears in your console only once it is available on the
+platform you use. Until then, no **Inventory and ERP** card appears on
+**Products → Integrations**, and your stock is counted the way it is today.
 :::
 
 If you run your stock in **Cin7 Core** (formerly DEAR Inventory), **inFlow
-Inventory** or **Brightpearl**, connect that account to your store and Aglyn
-keeps the two in step:
+Inventory**, **Brightpearl** or **Ordoro**, connect that account to your store
+and Aglyn keeps the two in step:
 
 - **Stock counts** follow whichever side you say is right: the system's count
   of each SKU becomes your store's, or your store's count is written into the
@@ -44,6 +43,10 @@ system.
      your Brightpearl address) and select **Connect Brightpearl**. Sign in to
      Brightpearl and allow access; you come back to **Integrations** with it
      connected.
+   - **Ordoro:** in Ordoro, go to **Account Settings → API Keys**, add an API
+     key and select **Edit** beside it. Paste its **Client ID** and **Client
+     secret** and select **Connect Ordoro**. Ordoro's API is available on its
+     Premium plan and above.
 
 Keys are checked with the system before they are saved, and stored
 encrypted. They are never shown again. Aglyn never sees your Brightpearl
@@ -57,13 +60,13 @@ When you connect, nothing is synced until you choose what to sync below.
 
 | Choice | What happens |
 | --- | --- |
-| **The system** (Cin7 Core, inFlow or Brightpearl) | About every 30 minutes, the system's count of each SKU that can be sold now (on hand, less what the system has set aside for its own orders) becomes your store's count. Each change appears in your products' **Stock movements**, counted by the system. |
-| **The store** | About every 30 minutes, the system's count of each SKU is adjusted to match your store's. Each run is one stock adjustment in the system. |
+| **The system** (Cin7 Core, inFlow, Brightpearl or Ordoro) | About every 30 minutes, the system's count of each SKU that can be sold now (on hand, less what the system has set aside for its own orders) becomes your store's count. Each change appears in your products' **Stock movements**, counted by the system. |
+| **The store** | About every 30 minutes, the system's count of each SKU is adjusted to match your store's. Each run is one stock adjustment in the system; in Ordoro, each SKU's count is adjusted on its own. |
 | **Don't sync counts** | Counts are left alone on both sides. |
 
-Choose the **location** (in Brightpearl, the **warehouse**) whose counts are
-synced. To push your store's counts into the system you must choose one
-location; reading counts from the system can also add up all locations.
+Choose the **location** (in Brightpearl and Ordoro, the **warehouse**) whose
+counts are synced. To push your store's counts into the system you must choose
+one location; reading counts from the system can also add up all locations.
 
 - Counts are matched by **SKU**. A SKU only one side has is left alone, and
   the card says how many there were.
@@ -79,7 +82,7 @@ location; reading counts from the system can also add up all locations.
 | Choice | What happens |
 | --- | --- |
 | **Import from** the system | About every 6 hours, products added or changed in the system are added to your store as **drafts**, with their SKU and price in your store's currency, and kept in step after that. Review a draft and publish it when it is ready. A product you delete in the store is not added again. |
-| **Make store products in** the system (Cin7 Core and inFlow) | Store products with a SKU the system does not have are made there, with their name, description and barcode, and in Cin7 Core their price and weight. In inFlow, set the price in inFlow's pricing scheme. |
+| **Make store products in** the system (Cin7 Core, inFlow and Ordoro) | Store products with a SKU the system does not have are made there, with their name, description and barcode, and in Cin7 Core their price and weight. In inFlow, set the price in inFlow's pricing scheme. In Ordoro, products are made with their name, price and barcode (as the UPC); add the description and weight in Ordoro. |
 | **Match by SKU only** | Nothing is made on either side. |
 
 Brightpearl products are made in Brightpearl, since each needs a brand, a
@@ -97,6 +100,9 @@ Turn on **Send paid orders** and choose who orders are recorded under:
 - **Cin7 Core and inFlow:** the **name** of a customer that already exists in
   the system, such as "Web Sales".
 - **Brightpearl:** the **ID** of an existing Brightpearl contact.
+- **Ordoro:** the **name** of an Ordoro sales channel that already exists,
+  such as "Web Sales". Orders are recorded under that channel, and Ordoro
+  puts the channel's number in front of each order number.
 
 In Cin7 Core you can also name the **tax rule** order lines carry; leave it
 empty to use the customer's own.
@@ -120,9 +126,9 @@ Aglyn looks for its reference in the system.
 
 When you **cancel** an order, or **refund it in full**:
 
-- **Cin7 Core** voids the sale, and **inFlow** cancels the sales order. If
-  the system will not, for example because the order has shipped, the order
-  tells you to check it there.
+- **Cin7 Core** voids the sale, **inFlow** cancels the sales order, and
+  **Ordoro** cancels the order. If the system will not, for example because
+  the order has shipped, the order tells you to check it there.
 - **Brightpearl:** cancel the order in Brightpearl. The order reminds you,
   with its number there.
 

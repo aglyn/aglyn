@@ -412,6 +412,17 @@ public struct SignUpService: Sendable {
       body: .object(["email": .string(email.trimmingCharacters(in: .whitespacesAndNewlines))]), anonymous: true)
   }
 
+  /// Whether `email`'s domain signs in through a workspace's single sign-on (`/api/auth/sso-lookup`, the console's `/sso`
+  /// discovery): such an address lives in that workspace's identity pool, so a password sign-in in the project pool is not
+  /// its account. An unreadable answer is no.
+  public func usesSingleSignOn(_ email: String) async -> Bool {
+    let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard trimmed.contains("@"),
+      let answer = try? await api.request("/api/auth/sso-lookup", query: [("email", trimmed)], anonymous: true)
+    else { return false }
+    return answer["ssoEnabled"] == .bool(true) && (answer["tenantId"]?.stringValue ?? "").isEmpty == false
+  }
+
   /// The confirmed alternative address an account signs in with (`/api/auth/resolve-identifier`), or nil.
   public func resolveIdentifier(_ typed: String) async -> String? {
     guard
@@ -442,6 +453,54 @@ public struct SignUpService: Sendable {
       _ = await group.next()
       group.cancelAll()
     }
+  }
+}
+
+/// An invitation addressed to any confirmed address on the signed-in account (`GET /api/orgs/invites?mine=1`).
+public struct PendingInvite: Equatable, Identifiable, Sendable {
+  public let id: String
+  public let orgID: String
+  public let orgName: String?
+  public let role: String?
+  /// Whether the invitation hands the workspace over to its invitee (AGL-3466).
+  public let handoff: Bool
+
+  public init(id: String, orgID: String, orgName: String?, role: String?, handoff: Bool) {
+    self.id = id
+    self.orgID = orgID
+    self.orgName = orgName
+    self.role = role
+    self.handoff = handoff
+  }
+
+  /// "You've been invited to Acme as admin." (the console's `inviteSentence`).
+  public var sentence: String {
+    if handoff { return "You've been invited to take over \(orgName ?? "a workspace") as its owner." }
+    return "You've been invited to \(orgName ?? "an organization")" + (role.map { " as \($0)" } ?? "") + "."
+  }
+}
+
+extension SignUpService {
+  /// The account's pending invitations; none when they cannot be read.
+  public func pendingInvites() async -> [PendingInvite] {
+    guard let answer = try? await api.request("/api/orgs/invites", query: [("mine", "1")]),
+      case .array(let rows)? = answer["invites"]
+    else { return [] }
+    return rows.compactMap { row in
+      guard let id = row["$id"]?.stringValue, let org = row["orgId"]?.stringValue, !org.isEmpty else { return nil }
+      let handoff: Bool = { if case .object? = row["handoff"] { return true } else { return false } }()
+      return PendingInvite(
+        id: id, orgID: org, orgName: row["orgName"]?.stringValue, role: row["role"]?.stringValue, handoff: handoff)
+    }
+  }
+
+  /// Accepts or declines an invitation, as the console's dialog does (`POST /api/orgs/invites`).
+  public func answer(_ invite: PendingInvite, accept: Bool) async throws {
+    try await api.request(
+      "/api/orgs/invites", method: .post,
+      body: .object([
+        "orgId": .string(invite.orgID), "action": .string(accept ? "accept" : "decline"), "inviteId": .string(invite.id),
+      ]))
   }
 }
 

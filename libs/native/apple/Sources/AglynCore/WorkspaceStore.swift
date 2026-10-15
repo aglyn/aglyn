@@ -61,6 +61,11 @@ public final class WorkspaceStore {
   public static let siteWindow = 100
 
   public private(set) var orgs: [WorkspaceOrg] = []
+  /// Whether the workspace window is full, so the list is not known to be complete (the console's `hasMoreOrgs`);
+  /// `loadMoreOrgs` grows it.
+  public private(set) var hasMoreOrgs = false
+  /// How many memberships the listener holds: a page, not a ceiling (the console's `ORG_PAGE_SIZE`, AGL-2336).
+  public private(set) var orgWindowSize = WorkspaceStore.orgWindow
   public private(set) var sites: [WorkspaceSite] = []
   public private(set) var error: String?
   /// False until the org list (and, with an org, its sites) has arrived once.
@@ -101,13 +106,15 @@ public final class WorkspaceStore {
 
   public func start() {
     guard orgListener == nil else { return }
+    let window = orgWindowSize
     orgListener = reader.listen(
-      FirestoreQuery(["users", uid, "orgs"], limit: Self.orgWindow)
+      FirestoreQuery(["users", uid, "orgs"], limit: window)
     ) { [weak self] result in
       guard let self else { return }
       switch result {
       case .success(let docs):
         self.error = nil
+        self.hasMoreOrgs = docs.count >= window
         self.orgs = docs.map { Self.org(from: $0) }.sorted {
           $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
@@ -117,6 +124,14 @@ public final class WorkspaceStore {
         self.error = "Could not load your workspaces."
       }
     }
+  }
+
+  /// Grows the workspace window by a page (the console's `loadMoreOrgs`) and listens again with it.
+  public func loadMoreOrgs() {
+    orgWindowSize += Self.orgWindow
+    orgListener?.remove()
+    orgListener = nil
+    start()
   }
 
   public func stop() {

@@ -28,6 +28,7 @@ export type InventoryCredential =
   | { provider: 'cin7-core'; accountId: string; apiKey: string }
   | { provider: 'inflow'; companyId: string; apiKey: string }
   | { provider: 'brightpearl'; accountCode: string; apiDomain: string; accessToken: string }
+  | { provider: 'ordoro'; clientId: string; clientSecret: string }
 
 /** What a connect reads from the system about the account the keys or grant reach. */
 export interface SystemAccount {
@@ -118,7 +119,7 @@ export interface SystemOrderRequest {
   orderedAtMs: number
   /** ISO 4217, upper case. */
   currency: string
-  /** The connection's customer setting: a name, or Brightpearl's contact id. */
+  /** The connection's customer setting: a name, Brightpearl's contact id, or Ordoro's sales channel name. */
   customer: string
   locationId: string | null
   /** Cin7 Core only; empty for the customer's own. */

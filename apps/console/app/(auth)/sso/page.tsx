@@ -117,6 +117,11 @@ function SsoSignIn() {
   // here by mistake and takes the escape hatch must arrive back at `/signin`
   // still pointed at where they were going.
   const backToSignInHref = useContinueHref('/signin')
+  const [initialEmail] = useState(() =>
+    typeof window === 'undefined'
+      ? ''
+      : (new URLSearchParams(window.location.search).get('email') ?? '').trim().slice(0, 320),
+  )
 
   // Complete a returning SAML redirect (mobile path): restore the tenant,
   // consume the result, and JIT-map before the layout routes.
@@ -320,6 +325,8 @@ function SsoSignIn() {
         componentMapper={simpleComponentMapper}
         onSubmit={handleFormSubmit}
         schema={ssoSchema}
+        // The work email the native app already looked up (AGL-3816), so it is not typed twice.
+        initialValues={initialEmail ? { [FIELD_SCHEMA_EMAIL.name]: initialEmail } : undefined}
         clearOnUnmount
       />
       <AuthErrorAlertComponent error={error as never} sx={{ mt: 2 }} />

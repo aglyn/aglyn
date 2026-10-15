@@ -18,7 +18,6 @@ struct SignedOutView: View {
       case .accountRecovery: AccountRecoveryView()
       case .resetPassword(let code): ResetPasswordView(code: code)
       case .confirmEmail(let code): ConfirmEmailView(code: code)
-      case .singleSignOn: SignInView()
       }
     }
     .animation(.default, value: model.authFlow.screen)
@@ -28,6 +27,7 @@ struct SignedOutView: View {
 /// Email and password sign-in against Firebase Auth, the console's own accounts (`/signin`).
 struct SignInView: View {
   @Environment(AppModel.self) private var model
+  @Environment(\.webAuthenticationSession) private var webAuthentication
   @State private var password = ""
   @State private var busy = false
   @State private var error: String?
@@ -47,7 +47,7 @@ struct SignInView: View {
       if let error { AuthMessage(text: error) }
 
       VStack(spacing: 8) {
-        AuthPrimaryButton(title: "Sign in", busy: busy, enabled: !flow.email.isEmpty && !password.isEmpty, action: submit)
+        AuthPrimaryButton(title: "Sign in", busy: busy, enabled: !flow.email.isEmpty, action: submit)
           .accessibilityIdentifier("sign-in-submit")
         ProviderSignInButtons(mode: .signIn, busy: $busy, error: $error)
       }
@@ -96,14 +96,26 @@ struct SignInView: View {
 
   private func submit() {
     let email = model.authFlow.email
-    guard !email.isEmpty, !password.isEmpty, let auth = model.auth, !busy else { return }
+    guard !email.isEmpty, let auth = model.auth, !busy else { return }
     busy = true
     error = nil
     Task {
       do {
-        try await signInWithAnyConfirmedAddress(auth, email: email)
+        // Email first, as the console's `/sso` discovers it: an address on a workspace's single sign-on domain lives in
+        // that workspace's identity pool, so it signs in through its identity provider, never with a project-pool password.
+        if await model.signUpService?.usesSingleSignOn(email) == true {
+          try await model.signInThroughConsole(start: .singleSignOn, loginHint: email) { [webAuthentication] url, scheme in
+            try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
+          }
+        } else if password.isEmpty {
+          self.error = "Enter your password."
+        } else {
+          try await signInWithAnyConfirmedAddress(auth, email: email)
+        }
       } catch {
-        self.error = signInErrorMessage(error)
+        if !isCanceledSignIn(error) {
+          self.error = (error as? ConsoleAPIError)?.message ?? signInErrorMessage(error)
+        }
       }
       busy = false
     }

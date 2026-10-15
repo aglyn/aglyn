@@ -18,7 +18,6 @@ final class AuthFlow {
     case resetPassword(code: String)
     /// An emailed verification link's code (`/verify-email?oobCode=…`), opened by someone who may not be signed in.
     case confirmEmail(code: String)
-    case singleSignOn
   }
 
   var screen: Screen = .signIn
@@ -69,7 +68,8 @@ final class AuthFlow {
     case "/account-recovery", "/account-recovery/":
       screen = .accountRecovery
     case "/sso", "/sso/":
-      screen = .singleSignOn
+      // Single sign-on runs on the console, from the sign-in screen's button.
+      screen = .signIn
     case "/reset-password", "/reset-password/":
       guard let code = query["oobCode"], !code.isEmpty, (query["mode"] ?? "resetPassword") == "resetPassword" else {
         screen = .resetPassword(code: "")
@@ -182,6 +182,21 @@ extension AppModel {
     defer { if signingUp { authFlow.landing = false } }
     let isNew = try await auth.signIn(googleIDToken: googleIDToken)
     await afterProviderSignIn(door: .google, isNew: isNew, signingUp: signingUp, marketing: marketing)
+  }
+
+  /// Signing in through the console (AGL-3816): single sign-on, which runs the workspace's own identity provider on the
+  /// console's `/sso` page. The console page opens in the platform's auth session, and its one-time code comes back to
+  /// this app's URL scheme and is traded, with this sign-in's verifier, for a custom token in the account's own pool.
+  func signInThroughConsole(
+    start: ConsoleHandoff.Start, loginHint: String? = nil,
+    authenticate: @escaping @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
+  ) async throws {
+    guard let auth, let api, let config else { throw ConsoleAPIError(status: 0, message: "This build is not configured.") }
+    let pending = ConsoleHandoff.begin(origin: config.consoleOrigin, app: config.app, start: start, loginHint: loginHint)
+    let callback = try await authenticate(pending.url, pending.callbackScheme)
+    let code = try ConsoleHandoff.code(from: callback, pending: pending)
+    let grant = try await ConsoleHandoff.redeem(api: api, code: code, pending: pending)
+    try await auth.signIn(customToken: grant.token, tenantId: grant.tenantID)
   }
 
   /// Sign in with Apple's credential, from the sign-in or sign-up screen, with the same outcome rules as Google.

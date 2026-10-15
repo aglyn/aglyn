@@ -120,6 +120,12 @@ export function readPastedKeys(
     if (!KEY.test(companyId) || !KEY.test(apiKey)) return { ok: false, error: 'Paste the company ID and the API key from inFlow' }
     return { ok: true, payload: { provider, companyId, apiKey } }
   }
+  if (provider === 'ordoro') {
+    const clientId = field('clientId')
+    const clientSecret = field('clientSecret')
+    if (!KEY.test(clientId) || !KEY.test(clientSecret)) return { ok: false, error: 'Paste the Client ID and the Client secret from Ordoro' }
+    return { ok: true, payload: { provider, clientId, clientSecret } }
+  }
   return { ok: false, error: 'Brightpearl is connected by signing in' }
 }
 
@@ -202,13 +208,13 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
       return json(await answer(gate))
     },
 
-    /** POST { hostId, provider, accountId|companyId, apiKey } — connect with the merchant's own keys. */
+    /** POST { hostId, provider, accountId|companyId, apiKey } or { hostId, provider, clientId, clientSecret } — connect with the merchant's own keys. */
     async connectKeys(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
       const gate = await deps.gate(request, 'admin')
       if (gate instanceof Response) return gate
       const provider = gate.body['provider']
-      if (!isInventoryProviderId(provider) || INVENTORY_PROVIDERS[provider].auth !== 'keys') return fail(400, 'Choose Cin7 Core or inFlow')
+      if (!isInventoryProviderId(provider) || INVENTORY_PROVIDERS[provider].auth !== 'keys') return fail(400, 'Choose Cin7 Core, inFlow or Ordoro')
       if (!offered().includes(provider)) return fail(404, `${INVENTORY_PROVIDERS[provider].label} cannot be connected here`)
       const busy = await otherSystem(gate, provider)
       if (busy) return busy
@@ -366,13 +372,14 @@ export function createInventoryRoutes(deps: InventoryRouteDeps) {
           return fail(400, 'Enter the number of the Brightpearl contact orders are recorded under')
         }
         if (connection.status === 'reconnect') return fail(409, 'Connect again first')
+        const noun = connection.provider === 'ordoro' ? 'sales channel' : 'customer'
         try {
           const credential = await deps.credential(id, connection)
           if (!(await deps.provider(connection.provider).customerExists(credential, settings.orderCustomer))) {
-            return fail(400, `${info.label} has no customer “${settings.orderCustomer}”. Make it there first, or check the spelling.`)
+            return fail(400, `${info.label} has no ${noun} “${settings.orderCustomer}”. Make it there first, or check the spelling.`)
           }
         } catch (error) {
-          return fail(502, `${info.label} could not be asked about that customer: ${isProviderError(error) ? error.message : 'try again'}`)
+          return fail(502, `${info.label} could not be asked about that ${noun}: ${isProviderError(error) ? error.message : 'try again'}`)
         }
       }
       if (settings.stockSource !== undefined && settings.stockSource !== connection.stockSource) {

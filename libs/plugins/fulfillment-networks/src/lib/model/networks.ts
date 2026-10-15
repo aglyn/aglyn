@@ -22,9 +22,9 @@
  * holds or names a credential.
  */
 
-export type NetworkProviderId = 'shipbob' | 'amazon-mcf' | 'shipmonk'
+export type NetworkProviderId = 'shipbob' | 'amazon-mcf' | 'shipmonk' | 'flexport'
 
-export const NETWORK_PROVIDER_IDS: readonly NetworkProviderId[] = ['shipbob', 'amazon-mcf', 'shipmonk']
+export const NETWORK_PROVIDER_IDS: readonly NetworkProviderId[] = ['shipbob', 'amazon-mcf', 'shipmonk', 'flexport']
 
 /** Amazon's shipping speeds a Multi-Channel Fulfillment order may ask for. */
 export type AmazonShippingSpeed = 'Standard' | 'Expedited' | 'Priority'
@@ -46,6 +46,12 @@ export interface NetworkProviderInfo {
    * the deployment's app; `api-key` — pastes their own key (AGL-3697).
    */
   auth: 'oauth' | 'api-key'
+  /**
+   * An API-key network whose webhooks the merchant registers by hand, with
+   * the signing secret the card shows once (ShipMonk). Flexport's are
+   * registered through its API at connect, so it has none.
+   */
+  merchantWebhooks?: boolean
 }
 
 export const NETWORK_PROVIDERS: Readonly<Record<NetworkProviderId, NetworkProviderInfo>> = {
@@ -72,11 +78,20 @@ export const NETWORK_PROVIDERS: Readonly<Record<NetworkProviderId, NetworkProvid
     summary: 'Paid orders go to ShipMonk’s warehouses to pick, pack and ship; shipments and tracking come back to the order.',
     webhooks: true,
     auth: 'api-key',
+    merchantWebhooks: true,
+  },
+  flexport: {
+    id: 'flexport',
+    label: 'Flexport',
+    shortLabel: 'Flexport',
+    summary: 'Paid orders go to Flexport’s fulfillment network to pick, pack and ship; shipments and tracking come back to the order.',
+    webhooks: true,
+    auth: 'api-key',
   },
 }
 
 export function isNetworkProviderId(value: unknown): value is NetworkProviderId {
-  return value === 'shipbob' || value === 'amazon-mcf' || value === 'shipmonk'
+  return value === 'shipbob' || value === 'amazon-mcf' || value === 'shipmonk' || value === 'flexport'
 }
 
 /** One site's connection to one network, as the document id spells it. */
@@ -103,7 +118,8 @@ export interface NetworkConnectionSettings {
   /**
    * ShipBob: the ship option orders ask for, as named in the merchant's
    * ShipBob account. ShipMonk: the requested shipping service, which must
-   * match a shipping mapping in the merchant's ShipMonk account.
+   * match a shipping mapping in the merchant's ShipMonk account. Flexport:
+   * the ship method (`Standard`, `UPS Ground`, …) it maps to a delivery speed.
    */
   shippingMethod?: string
   /** Amazon: the shipping speed orders ask for. */
@@ -152,6 +168,8 @@ export interface NetworkConnectionView {
   storeId: string | null
   /** ShipMonk: whether a webhook signing secret is set, so ShipMonk's webhooks are taken. */
   webhookSecretSet: boolean
+  /** Whether webhooks were registered at the network for this connection (ShipBob, Flexport). */
+  webhooksRegistered: boolean
   syncInventory: boolean
   inventory: NetworkInventorySummary
   lastError: string | null
@@ -260,7 +278,8 @@ export const SHIPMONK_STORE_ID = /^[1-9][0-9]{0,11}$/
 
 /**
  * What a connect with the merchant's own API key reads from the request
- * (AGL-3697): the key, and for ShipMonk the API store it belongs to. The key
+ * (AGL-3697): the key, and for ShipMonk the API store it belongs to. Flexport
+ * (AGL-3822) takes the API token its Seller Portal issues, and nothing else. The key
  * is never echoed back; a refusal names the field, never its value.
  */
 export function readApiKeyConnect(
@@ -268,8 +287,13 @@ export function readApiKeyConnect(
   body: Record<string, unknown>,
 ): { ok: true; apiKey: string; storeId: string | null } | { ok: false; error: string } {
   const apiKey = typeof body['apiKey'] === 'string' ? body['apiKey'].trim() : ''
-  if (apiKey.length < 8 || apiKey.length > 512 || /\s/.test(apiKey)) {
-    return { ok: false, error: `Paste the ${NETWORK_PROVIDERS[provider].label} API key` }
+  // Flexport does not document its token's length, so its bound is looser.
+  const longest = provider === 'flexport' ? 4096 : 512
+  if (apiKey.length < 8 || apiKey.length > longest || /\s/.test(apiKey)) {
+    return {
+      ok: false,
+      error: provider === 'flexport' ? 'Paste the Flexport API token' : `Paste the ${NETWORK_PROVIDERS[provider].label} API key`,
+    }
   }
   if (provider !== 'shipmonk') return { ok: true, apiKey, storeId: null }
   const storeId = String(body['storeId'] ?? '').trim()

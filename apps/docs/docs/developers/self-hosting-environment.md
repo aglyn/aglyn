@@ -979,6 +979,7 @@ never opens a grant.
 | `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
 | `SHIPMONK_ENABLED` | Optional | Runtime, console | `true` offers ShipMonk. It needs no app: each merchant pastes their own ShipMonk API key and store id, sealed with the token key. |
 | `SHIPMONK_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipMonk's sandbox (`sandbox.shipmonk.dev`), which takes test orders only and needs sandbox keys. Unset is production. |
+| `FLEXPORT_ENABLED` | Optional | Runtime, console | `true` offers Flexport. It needs no app: each merchant pastes an API token from their own Flexport Seller Portal, sealed with the token key. Flexport's production and sandbox accounts share one address (`logistics-api.flexport.com`); the token decides which one a call reaches, so a connection is always treated as production. |
 
 Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
 redirect URI in both apps. ShipBob's webhooks are subscribed for each
@@ -987,7 +988,10 @@ with a token of their own; nothing needs registering for them. ShipMonk's
 webhooks are set up by each merchant in their ShipMonk account, at the
 address and with the signing secret the card shows once, and are answered at
 `https://<console>/api/fulfillment-networks/webhooks/shipmonk`; each is
-verified by its HMAC-SHA512 `X-Sm-Signature`.
+verified by its HMAC-SHA512 `X-Sm-Signature`. Flexport's webhooks are
+registered through its API for each connection, at
+`https://<console>/api/fulfillment-networks/webhooks/flexport`, with a token
+of their own sent in a header; nothing needs registering for them.
 
 ### Couriers: DoorDash Drive {#couriers}
 
@@ -1008,13 +1012,13 @@ Each merchant registers the webhook in their own DoorDash developer portal, at
 `https://<console>/api/couriers/webhooks/doordash?site=<siteId>` with the token
 their Couriers card shows; the card gives them both.
 
-### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
+### Inventory sync: Cin7 Core, inFlow, Brightpearl and Ordoro {#inventory-sync}
 
 A store can keep its stock counts, products and paid orders in step with the
-merchant's **own** Cin7 Core, inFlow Inventory or Brightpearl account. Cin7
-Core and inFlow need nothing registered by the deployment: the merchant pastes
-API keys from their own account, and both are offered once the token key that
-seals those keys is set. Brightpearl needs a developer app the deployment
+merchant's **own** Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account.
+Cin7 Core, inFlow and Ordoro need nothing registered by the deployment: the
+merchant pastes API keys from their own account, and all three are offered
+once the token key that seals those keys is set. Brightpearl needs a developer app the deployment
 registers with Brightpearl, and is offered only when its references **and** the
 token key are set. With no token key, no Inventory and ERP card appears and
 nothing is sent. Set these on the **console only**: the job runs there, and the

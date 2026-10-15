@@ -22,13 +22,14 @@ import type {
 import { BRIGHTPEARL_OAUTH_BASE } from './providers/brightpearl'
 import { CIN7_CORE_API_BASE } from './providers/cin7-core'
 import { INFLOW_API_BASE } from './providers/inflow'
+import { ORDORO_API_BASE } from './providers/ordoro'
 
 /**
- * Cin7 Core, inFlow and Brightpearl (AGL-3642): each the merchant's OWN
- * account, connected with the merchant's own API keys (Cin7 Core, inFlow) or
- * by the merchant's own consent to this deployment's app (Brightpearl), so
- * each is a destination the customer chose rather than a recipient of
- * Aglyn's. Brightpearl's app registration is the deployment's, as Intuit's
+ * Cin7 Core, inFlow and Brightpearl (AGL-3642) and Ordoro (AGL-3823): each
+ * the merchant's OWN account, connected with the merchant's own API keys
+ * (Cin7 Core, inFlow, Ordoro) or by the merchant's own consent to this
+ * deployment's app (Brightpearl), so each is a destination the customer
+ * chose rather than a recipient of Aglyn's. Brightpearl's app registration is the deployment's, as Intuit's
  * and Xero's are for accounting, but the data goes into the merchant's own
  * Brightpearl account and no account of Aglyn's holds any. Nothing reaches
  * any of them until a site connects one, and then only that site's orders,
@@ -71,7 +72,15 @@ export const BRIGHTPEARL_OAUTH_HOST: PluginEgressHostDeclaration = {
     SYNC_DATA,
 }
 
-export const INVENTORY_SYNC_HOSTS: PluginEgressHostDeclaration[] = [CIN7_CORE_HOST, INFLOW_HOST, BRIGHTPEARL_OAUTH_HOST]
+export const ORDORO_HOST: PluginEgressHostDeclaration = {
+  host: host(ORDORO_API_BASE),
+  disposition: 'not-a-subprocessor',
+  reason:
+    "Customer-chosen destination. The API of the merchant's own Ordoro account, reached with the Client ID and Client Secret of an API key the merchant made there and pasted into the store's settings (`libs/plugins/inventory-sync/src/lib/providers/ordoro.ts`), to read its warehouses, stock and products and to record the merchant's paid orders, count adjustments and products in it.",
+  dataReceived: SYNC_DATA,
+}
+
+export const INVENTORY_SYNC_HOSTS: PluginEgressHostDeclaration[] = [CIN7_CORE_HOST, INFLOW_HOST, BRIGHTPEARL_OAUTH_HOST, ORDORO_HOST]
 
 /** The plugin's `subprocessors` entry: no recipient of Aglyn's own, only the merchant's chosen destinations. */
 export function inventorySyncSubprocessors(): PluginSubprocessorsAnswer {

@@ -457,6 +457,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/besigner/interactions-and-custom-html',
     title: 'Interactions & custom HTML',
   },
+  inventoryAndErpSync: {
+    path: '/commerce-and-bookings/commerce/inventory-and-erp-sync',
+    title: 'Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl, Ordoro)',
+  },
   inviteTeammates: {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',
     title: 'Invite teammates',
@@ -1002,7 +1006,7 @@ export const DOCS_HELP_ANCHORS = {
   firstPartySurfaces: ['#register', '#include', '#what-the-capture-does-so-you-can-check-it', '#on-a-self-hosted-install'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#place-a-saved-form', '#saved-forms-per-site', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#style-a-field', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#consent-group-disclosure', '#where-submissions-go', '#the-inbox', '#filter-the-inbox', '#who-a-submission-is-from', '#what-it-links-to', '#where-this-one-went', '#replying-to-a-submission', '#inbox-card', '#every-sites-inbox-at-once', '#one-forms-own-page', '#form-details', '#form-crm-routing', '#form-versions', '#form-collected', '#form-submissions', '#form-saves-to-contact-fields', '#export-submissions', '#find-a-form', '#duplicate-a-form', '#switch-forms-off-for-one-site', '#related'],
-  fulfillmentNetworks: ['#connect-a-network', '#shipmonk-connect-with-your-api-key', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
+  fulfillmentNetworks: ['#connect-a-network', '#shipmonk-connect-with-your-api-key', '#flexport-connect-with-your-api-token', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
   funnels: ['#step-types', '#how-it-counts', '#what-is-a-visit', '#identified-visitors', '#create', '#create-with-ai', '#drafts', '#act-on-drop-off', '#ask-ai'],
   generateAComponentWithAglynAi: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
   generateAForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
@@ -1021,6 +1025,7 @@ export const DOCS_HELP_ANCHORS = {
   insights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#manage-plugins', '#find-plugins', '#built-in-plugins', '#a-plugins-page', '#where-a-plugin-runs', '#permissions-and-data', '#site-plugins', '#plugin-on-one-site', '#what-to-do-next', '#related'],
   interactions: ['#fluent-interactions', '#interactions-belong-to-the-page-they-are-on', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#scroll-to-element-step', '#play-video-step', '#open-a-lightbox', '#analytics-event-step', '#analytics-event-name', '#analytics-event-parameters', '#analytics-event-delivery', '#custom-html-block', '#related'],
+  inventoryAndErpSync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#member-page', '#member-access', '#member-activity', '#member-changes', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#site-activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   layouts: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],

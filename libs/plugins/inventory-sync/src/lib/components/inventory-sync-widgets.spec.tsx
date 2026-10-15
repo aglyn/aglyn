@@ -107,6 +107,19 @@ describe('the Inventory and ERP card (AGL-3642)', () => {
     expect(screen.queryByRole('button', { name: 'Connect inFlow Inventory' })).toBeNull()
   })
 
+  it('connects Ordoro with an API key’s client id and secret, and says the plan its API needs (AGL-3823)', async () => {
+    const routes = api({
+      connection: jest.fn(async () => ({ offered: [{ id: 'ordoro' as const }], connection: null, capabilities: { importProducts: false } })),
+    })
+    render(<InventorySyncCard hostId="h" api={routes} />)
+    const button = await screen.findByRole('button', { name: 'Connect Ordoro' })
+    expect(screen.getByText(/Ordoro’s API needs its Premium plan or above/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-1' } })
+    fireEvent.change(screen.getByLabelText('Client secret'), { target: { value: ' secret-1 ' } })
+    fireEvent.click(button)
+    await waitFor(() => expect(routes.connectKeys).toHaveBeenCalledWith('ordoro', { clientId: 'client-1', clientSecret: 'secret-1' }))
+  })
+
   it('shows a connection’s settings, counts and the orders that need the merchant', async () => {
     const routes = api({
       connection: jest.fn(async () => ({ offered: [{ id: 'cin7-core' as const }], connection: connection(), capabilities: { importProducts: false } })),

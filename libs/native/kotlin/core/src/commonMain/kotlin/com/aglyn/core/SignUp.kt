@@ -234,7 +234,7 @@ sealed interface VerificationSend {
  * Apple kit's `SignUpService`.
  */
 class SignUpService(
-  private val api: ConsoleApiClient,
+  internal val api: ConsoleApiClient,
   private val writer: FirestoreWriter,
   private val reader: FirestoreReader,
   private val now: () -> Long = ::nowMillis,
@@ -356,6 +356,19 @@ class SignUpService(
     api.request("/api/auth/send-password-reset", ApiMethod.POST, buildJsonObject { put("email", email.trim()) }, anonymous = true)
   }
 
+  /**
+   * Whether [email]'s domain signs in through a workspace's single sign-on (`/api/auth/sso-lookup`, the console's `/sso`
+   * discovery): such an address lives in that workspace's identity pool, so a password sign-in in the project pool is not its
+   * account. An unreadable answer is no.
+   */
+  suspend fun usesSingleSignOn(email: String): Boolean {
+    val trimmed = email.trim().lowercase()
+    if ('@' !in trimmed) return false
+    val answer = quietly { api.request("/api/auth/sso-lookup", query = mapOf("email" to trimmed), anonymous = true) } as? JsonObject
+      ?: return false
+    return (answer["ssoEnabled"] as? JsonPrimitive)?.booleanOrNull == true && !answer.string("tenantId").isNullOrEmpty()
+  }
+
   /** The confirmed alternative address an account signs in with (`/api/auth/resolve-identifier`), or null. */
   suspend fun resolveIdentifier(typed: String): String? {
     val answer = quietly {
@@ -412,6 +425,42 @@ private suspend fun runCatchingRequest(block: suspend () -> JsonElement?): Boole
 
 /** Lowercase letters with their accents removed, as `normalize('NFKD').replace(/[̀-ͯ]/g, '')` leaves them. */
 internal expect fun stripMarks(value: String): String
+
+/** An invitation addressed to any confirmed address on the signed-in account (`GET /api/orgs/invites?mine=1`). */
+data class PendingInvite(val id: String, val orgId: String, val orgName: String?, val role: String?, val handoff: Boolean) {
+  /** "You've been invited to Acme as admin." (the console's `inviteSentence`). */
+  val sentence: String
+    get() = if (handoff) {
+      "You've been invited to take over ${orgName ?: "a workspace"} as its owner."
+    } else {
+      "You've been invited to ${orgName ?: "an organization"}" + (role?.let { " as $it" } ?: "") + "."
+    }
+}
+
+/** The account's pending invitations; none when they cannot be read. */
+suspend fun SignUpService.pendingInvites(): List<PendingInvite> {
+  val answer = quietly { api.request("/api/orgs/invites", query = mapOf("mine" to "1")) } as? JsonObject
+    ?: return emptyList()
+  val rows = answer["invites"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+  return rows.mapNotNull { element ->
+    val row = element as? JsonObject ?: return@mapNotNull null
+    val id = row.string("\$id") ?: return@mapNotNull null
+    val org = row.string("orgId")?.ifEmpty { null } ?: return@mapNotNull null
+    PendingInvite(id, org, row.string("orgName"), row.string("role"), row["handoff"] is JsonObject)
+  }
+}
+
+/** Accepts or declines an invitation, as the console's dialog does (`POST /api/orgs/invites`). */
+suspend fun SignUpService.answer(invite: PendingInvite, accept: Boolean) {
+  api.request(
+    "/api/orgs/invites", ApiMethod.POST,
+    buildJsonObject {
+      put("orgId", invite.orgId)
+      put("action", if (accept) "accept" else "decline")
+      put("inviteId", invite.id)
+    },
+  )
+}
 
 /** The name a door that collected none derives for its workspace (`derivePersonalOrgName`). */
 fun derivedWorkspaceName(displayName: String?, email: String?): String =

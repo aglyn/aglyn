@@ -33,13 +33,13 @@ describe('config (AGL-3642)', () => {
   it('offers nothing without the token key, and Brightpearl only with its app', () => {
     expect(offeredProviders(readInventorySyncConfig({}))).toEqual([])
     const keyOnly = readInventorySyncConfig({ INVENTORY_SYNC_TOKEN_KEY: key() })
-    expect(offeredProviders(keyOnly)).toEqual(['cin7-core', 'inflow'])
+    expect(offeredProviders(keyOnly)).toEqual(['cin7-core', 'inflow', 'ordoro'])
     const all = readInventorySyncConfig({
       INVENTORY_SYNC_TOKEN_KEY: key(),
       BRIGHTPEARL_APP_REF: 'app',
       BRIGHTPEARL_DEV_REF: 'dev',
     })
-    expect(offeredProviders(all)).toEqual(['cin7-core', 'inflow', 'brightpearl'])
+    expect(offeredProviders(all)).toEqual(['cin7-core', 'inflow', 'brightpearl', 'ordoro'])
     expect(all.brightpearl).toEqual({ appRef: 'app', devRef: 'dev', clientSecret: null })
     expect(offeredProviders(readInventorySyncConfig({ INVENTORY_SYNC_TOKEN_KEY: 'not-a-key' }))).toEqual([])
   })
@@ -77,6 +77,12 @@ describe('opening a credential (AGL-3642)', () => {
     const resealed = store.connections.get('host-1')!.sealedCredential!
     expect(resealed).not.toBe(sealed)
     expect(openCredential(resealed, 'host-1', parseSecretBoxKeyring(second)).payload).toMatchObject({ apiKey: 'k' })
+  })
+
+  it('opens an Ordoro client id and secret (AGL-3823)', async () => {
+    const sealed = sealCredential({ provider: 'ordoro', clientId: 'id-1', clientSecret: 's-1' }, 'host-1', parseSecretBoxKeyring(first))
+    const { open, stored } = setup({ provider: 'ordoro', sealedCredential: sealed })
+    await expect(open('host-1', stored)).resolves.toEqual({ provider: 'ordoro', clientId: 'id-1', clientSecret: 's-1' })
   })
 
   it('reads a credential it cannot open as connect-again', async () => {

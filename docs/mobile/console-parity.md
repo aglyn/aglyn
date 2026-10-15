@@ -63,9 +63,10 @@ hand-off says so.
 | Passkey sign-in (shown once the build has a relying party) | `/api/auth/passkeys/signin/*` | [x] | [x] |
 | Continue with Google, sign in and sign up; a new person goes through the agreement and the workspace step (AGL-1415, AGL-1497) | `/signin`, `/signup` | [x] | [x] |
 | Sign in with Apple, sign in and sign up (App Store guideline 4.8) | `apple.com` through `accounts:signInWithIdp` | [x] | n/a |
-| Single sign-on, through the console in the system auth session and a one-time hand-off back to the app | `/sso`, `/api/auth/sso-lookup`, `/api/auth/sso-jit` | [ ] | [ ] |
-| Desktop (Windows) sign in and sign up through the console and the same hand-off | `/signin`, `/signup` | n/a | [ ] |
-| Workspace invites: the invite email opens the app, and pending invites are answered from the empty workspace list | `/api/orgs/invites?mine=1`, `/api/orgs/invites` | [ ] | [ ] |
+| Single sign-on, through the console in the system auth session and a one-time hand-off back to the app; an address on an SSO domain is routed there from the email field and signs in as its tenant account | `/sso`, `/api/auth/sso-lookup`, `/api/auth/sso-jit`, `/auth/native`, `/api/auth/native-handoff/*` | [x] | [x] |
+| Desktop (Windows) sign in and sign up through the console and the same hand-off, with console-minted App Check tokens for the signed-in session | `/signin`, `/signup`, `/auth/native`, `/api/auth/native-app-check` | n/a | [x] |
+| The workspace switcher pages past 50 workspaces ("Load more workspaces") | `use-org-scope` `loadMoreOrgs` | [x] | [x] |
+| Workspace invites: the invite email opens the app, and pending invites are answered from the empty workspace list (an existing member's arrive as notifications) | `/api/orgs/invites?mine=1`, `/api/orgs/invites` | [x] | [x] |
 
 ## Staff gaps (AGL-3667)
 

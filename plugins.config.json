@@ -3492,7 +3492,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account, its grant (or ShipMonk API key and webhook secret, AGL-3697) sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN ShipBob, ShipMonk, Flexport or Amazon Multi-Channel Fulfillment account, its grant (or ShipMonk API key and webhook secret, AGL-3697, or Flexport API token, AGL-3822) sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "fulfillmentNetworkConnections",
           "orgField": "orgId"
         },
@@ -3727,7 +3727,7 @@
     {
       "id": "inventory-sync",
       "mobile": {
-        "$comment": "AGL-3652: inventory and ERP natively (Cin7 Core, inFlow Inventory with the merchant's keys; Brightpearl by signing in): stock counts, location, product sync, sending paid orders, the orders not sent and recent activity, from the spec in src/android/screens/inventory-sync.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "$comment": "AGL-3652: inventory and ERP natively (Cin7 Core, inFlow Inventory with the merchant's keys; Brightpearl by signing in; an Ordoro connection made on the web is shown, AGL-3823): stock counts, location, product sync, sending paid orders, the orders not sent and recent activity, from the spec in src/android/screens/inventory-sync.screens.json. It sits in Commerce settings' commerceSettings zone.",
         "ios": {
           "module": "AglynInventorySyncPlugin",
           "register": "registerInventorySyncNative"
@@ -3756,7 +3756,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN Cin7 Core, inFlow or Brightpearl account, its keys or grant sealed, with its sync settings, last stock count, cursors and log subcollection (AGL-3642). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN Cin7 Core, inFlow, Brightpearl or Ordoro account, its keys or grant sealed, with its sync settings, last stock count, cursors and log subcollection (AGL-3642). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "inventorySyncConnections",
           "orgField": "orgId"
         },
@@ -3773,12 +3773,12 @@
       ],
       "catalog": {
         "order": 29,
-        "$comment": "Inventory and ERP sync for the commerce plugin's stores (AGL-3642): stock counts kept in step in the direction each connection names (the system's counts set through core's stock-levels seam, or the store's catalog read through core's product-catalog seam and adjusted into the system), products imported through core's product-writer seam or made in the system, and paid orders sent through commerce's order events; it imports neither commerce nor any other plugin. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds INVENTORY_SYNC_TOKEN_KEY (Cin7 Core and inFlow, on the merchant's own keys), and Brightpearl also needs BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF.",
+        "$comment": "Inventory and ERP sync for the commerce plugin's stores (AGL-3642): stock counts kept in step in the direction each connection names (the system's counts set through core's stock-levels seam, or the store's catalog read through core's product-catalog seam and adjusted into the system), products imported through core's product-writer seam or made in the system, and paid orders sent through commerce's order events; it imports neither commerce nor any other plugin. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds INVENTORY_SYNC_TOKEN_KEY (Cin7 Core, inFlow and Ordoro, on the merchant's own keys), and Brightpearl also needs BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF.",
         "label": "Inventory sync",
         "alwaysOnForWorkspace": true,
-        "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+        "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow, Brightpearl or Ordoro account.",
         "siteOff": {
-          "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl.",
+          "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow, Brightpearl or Ordoro.",
           "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
         },
         "publishedSiteImpact": "console-only"

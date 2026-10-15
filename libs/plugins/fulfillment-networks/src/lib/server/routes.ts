@@ -30,6 +30,7 @@ import {
 import { routingHolds } from '../model/routing'
 import { isProviderError, type ProviderHttp } from '../providers/http'
 import type { FulfillmentNetworkProvider, NetworkCredential } from '../providers/provider'
+import { FLEXPORT_WEBHOOK_TOKEN_HEADER } from '../providers/flexport'
 import { SHIPMONK_SIGNATURE_HEADER, verifyShipmonkSignature } from '../providers/shipmonk'
 import { networkSandbox, offeredNetworks, openGrant, sealGrant, type FulfillmentNetworksConfig } from './config'
 import type { Engine } from './engine'
@@ -59,7 +60,8 @@ import {
  * redirect back is authenticated by the single-use state its connect stored;
  * ShipBob's webhook by the token its address carries; ShipMonk's (AGL-3697)
  * by the HMAC-SHA512 signature ShipMonk computes with the connection's own
- * signing secret.
+ * signing secret; Flexport's (AGL-3822) by the token header it was
+ * registered with.
  *
  * With no network configured, every gated route answers 404, and the list
  * answers nothing to show, so the console draws nothing.
@@ -123,9 +125,24 @@ const sameToken = (presented: string, hash: string | null): boolean => {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-/** ShipBob's webhook address for one connection, before its topic. */
-const webhookPrefix = (deps: NetworkRouteDeps, requestUrl: string, connectionId: string): string | null => {
-  const base = deps.consoleAddress(`/api/${FULFILLMENT_NETWORKS_API_ROUTES.webhookShipbob}`, requestUrl)
+/**
+ * The webhook address of one connection whose webhooks the network
+ * registers through its API: ShipBob's (before its topic and token) or
+ * Flexport's (whose token travels in a header). `null` for any other network.
+ */
+const webhookPrefix = (
+  deps: NetworkRouteDeps,
+  requestUrl: string,
+  connectionId: string,
+  provider: NetworkProviderId,
+): string | null => {
+  const route =
+    provider === 'shipbob'
+      ? FULFILLMENT_NETWORKS_API_ROUTES.webhookShipbob
+      : provider === 'flexport'
+        ? FULFILLMENT_NETWORKS_API_ROUTES.webhookFlexport
+        : null
+  const base = route ? deps.consoleAddress(`/api/${route}`, requestUrl) : null
   return base ? `${base}?${new URLSearchParams({ connection: connectionId }).toString()}` : null
 }
 
@@ -135,7 +152,7 @@ const shipmonkWebhookUrl = (deps: NetworkRouteDeps, requestUrl: string, connecti
   return base ? `${base}?${new URLSearchParams({ connection: connectionId }).toString()}` : null
 }
 
-/** The most bytes a ShipMonk webhook body may carry before it is refused unread. */
+/** The most bytes a ShipMonk or Flexport webhook body may carry before it is refused unread. */
 const WEBHOOK_MAX_BYTES = 1_000_000
 
 export function createNetworkRoutes(deps: NetworkRouteDeps) {
@@ -255,7 +272,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
           nowMs: deps.now(),
         })
         account = await provider.account({ accessToken: grant.accessToken })
-        const prefix = webhookPrefix(deps, request.url, id)
+        const prefix = webhookPrefix(deps, request.url, id, connection.provider)
         if (provider.syncWebhooks && prefix && account.channelId) {
           webhookToken = newSecret()
           await provider.syncWebhooks(
@@ -316,9 +333,9 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
       const { id, connection } = found
 
       if (request.method === 'DELETE') {
-        // Stop ShipBob calling an address that no longer answers, while the
-        // grant still opens. A failure here does not keep the connection.
-        const prefix = webhookPrefix(deps, request.url, id)
+        // Stop ShipBob or Flexport calling an address that no longer answers,
+        // while the grant still opens. A failure here does not keep the connection.
+        const prefix = webhookPrefix(deps, request.url, id, provider)
         const network = deps.provider(provider)
         if (network.syncWebhooks && prefix && connection.status !== 'reconnect') {
           try {
@@ -490,10 +507,12 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
 
     /**
      * POST { hostId, provider, apiKey, storeId } — connect a network that
-     * takes the merchant's own API key (ShipMonk, AGL-3697), or connect it
-     * again with a new key. The key is tried before it is kept, sealed with
-     * the token key, and never answered back. A first connect also mints the
-     * webhook signing secret, answered ONCE with the address to give ShipMonk.
+     * takes the merchant's own API key (ShipMonk, AGL-3697; Flexport's API
+     * token, AGL-3822), or connect it again with a new key. The key is tried
+     * before it is kept, sealed with the token key, and never answered back.
+     * A first ShipMonk connect also mints the webhook signing secret, answered
+     * ONCE with the address to give ShipMonk. Flexport's webhooks are
+     * registered through its API on every connect, with a new token.
      */
     async connectKey(request: Request): Promise<Response> {
       if (request.method !== 'POST') return fail(405, 'Method not allowed')
@@ -510,17 +529,37 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
       const id = networkConnectionId(gate.hostId, provider)
       const existing = await deps.store.getConnection(id)
       if (existing && existing.hostId !== gate.hostId) return fail(404, 'Not found')
+      const adapter = deps.provider(provider)
+      const refusedKey =
+        provider === 'flexport'
+          ? 'Flexport refused that API token. Check that it is active and has the permissions the guide lists.'
+          : `${network} refused that API key. Check it and the store id.`
       let account: Awaited<ReturnType<FulfillmentNetworkProvider['account']>>
       try {
-        account = await deps.provider(provider).account({ accessToken: read.apiKey, storeId: read.storeId })
+        account = await adapter.account({ accessToken: read.apiKey, storeId: read.storeId })
       } catch (error) {
-        if (isProviderError(error) && error.kind === 'auth') return fail(400, `${network} refused that API key. Check it and the store id.`)
+        if (isProviderError(error) && error.kind === 'auth') return fail(400, refusedKey)
         if (isProviderError(error) && error.kind === 'invalid') return fail(400, `${network} refused the connection: ${error.message}`)
         console.error('[fulfillment-networks] key connect failed', isProviderError(error) ? error.message : error)
         return fail(502, `${network} could not be reached. Try again in a minute.`)
       }
+      // A network that registers its webhooks through its API gets a new
+      // token on every connect; one it cannot register is read back on schedule.
+      let webhookToken: string | null = null
+      const prefix = webhookPrefix(deps, request.url, id, provider)
+      if (!NETWORK_PROVIDERS[provider].merchantWebhooks && adapter.syncWebhooks && prefix) {
+        const token = newSecret()
+        try {
+          await adapter.syncWebhooks({ accessToken: read.apiKey, storeId: read.storeId }, { prefix, url: prefix, token })
+          webhookToken = token
+        } catch (error) {
+          if (isProviderError(error) && error.kind === 'auth') return fail(400, refusedKey)
+          console.error('[fulfillment-networks] webhooks not registered', isProviderError(error) ? error.message : error)
+        }
+      }
       const nowMs = deps.now()
-      const webhookSecret = existing?.sealedWebhookSecret ? null : newSecret()
+      const webhookSecret =
+        NETWORK_PROVIDERS[provider].merchantWebhooks && !existing?.sealedWebhookSecret ? newSecret() : null
       const stored: Partial<StoredConnection> = {
         ...(existing ?? emptyConnection({ orgId: gate.orgId, hostId: gate.hostId, provider, sandbox: networkSandbox(config, provider), nowMs })),
         status: existing?.status === 'paused' ? 'paused' : 'active',
@@ -532,6 +571,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
         accessTokenExpiresAtMs: null,
         tokenKeyId: config.keyring.current.id,
         ...(webhookSecret ? { sealedWebhookSecret: sealGrant(webhookSecret, id, 'webhook', config.keyring) } : {}),
+        ...(NETWORK_PROVIDERS[provider].merchantWebhooks ? {} : { webhookTokenHash: webhookToken ? sha256(webhookToken) : null }),
         // A new store's count is not the old one's.
         ...(existing?.storeId && existing.storeId !== read.storeId ? { stock: {} } : {}),
         inventoryDueAtMs: nowMs,
@@ -563,7 +603,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
       const provider = readProvider(gate.body, request)
       if (!provider) return fail(400, 'Choose a network')
       const config = deps.config()
-      if (NETWORK_PROVIDERS[provider].auth !== 'api-key' || !config.keyring) return fail(400, 'This network sets up its own webhooks')
+      if (!NETWORK_PROVIDERS[provider].merchantWebhooks || !config.keyring) return fail(400, 'This network sets up its own webhooks')
       const found = await connectionFor(gate, provider)
       if (!found?.connection.connectedAtMs) return fail(404, `${NETWORK_PROVIDERS[provider].label} is not connected`)
       const secret = newSecret()
@@ -609,6 +649,37 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
       // A split part names its parent: the order we sent is the parent.
       const orderKey = body?.['parent_order_key'] ?? body?.['order_key'] ?? null
       const result = await deps.engine.applyOrderWebhook(connectionId, orderKey === null || orderKey === undefined ? null : String(orderKey))
+      return json({ ok: true, result })
+    },
+
+    /**
+     * POST ?connection — Flexport's webhook (AGL-3822). Its token header is
+     * checked against the connection's token hash before the body is read;
+     * then the order it names is read back from Flexport. Acknowledged once
+     * verified, whatever it names, so Flexport stops retrying an order that
+     * is not ours.
+     */
+    async webhookFlexport(request: Request): Promise<Response> {
+      if (request.method !== 'POST') return fail(405, 'Method not allowed')
+      const connectionId = String(new URL(request.url).searchParams.get('connection') ?? '')
+      const connection = /^[A-Za-z0-9_-]{1,200}$/.test(connectionId) ? await deps.store.getConnection(connectionId) : null
+      const token = String(request.headers.get(FLEXPORT_WEBHOOK_TOKEN_HEADER) ?? '')
+      if (!connection || connection.provider !== 'flexport' || !sameToken(token, connection.webhookTokenHash)) {
+        return fail(401, 'Not a webhook this deployment registered')
+      }
+      const declared = Number(request.headers.get('content-length') ?? 0)
+      if (declared > WEBHOOK_MAX_BYTES) return fail(413, 'Too large')
+      const raw = await request.text().catch(() => '')
+      if (raw.length > WEBHOOK_MAX_BYTES) return fail(413, 'Too large')
+      let body: Record<string, any> | null
+      try {
+        body = JSON.parse(raw)
+      } catch {
+        body = null
+      }
+      // Every order and shipment event names the order as `orderId`.
+      const orderId = body?.['orderId'] ?? null
+      const result = await deps.engine.applyOrderWebhook(connectionId, orderId === null || orderId === undefined ? null : String(orderId))
       return json({ ok: true, result })
     },
 

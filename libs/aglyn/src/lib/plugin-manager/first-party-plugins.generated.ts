@@ -271,9 +271,9 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "id": "inventory-sync",
     "label": "Inventory sync",
     "alwaysOnForWorkspace": true,
-    "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+    "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow, Brightpearl or Ordoro account.",
     "siteOff": {
-      "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl.",
+      "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow, Brightpearl or Ordoro.",
       "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
     }
   },

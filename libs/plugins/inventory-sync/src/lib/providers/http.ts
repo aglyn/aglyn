@@ -16,17 +16,17 @@
  */
 
 /**
- * The one door every Cin7 Core, inFlow and Brightpearl call goes through
- * (AGL-3642, after AGL-3634's):
+ * The one door every Cin7 Core, inFlow, Brightpearl and Ordoro call goes
+ * through (AGL-3642, after AGL-3634's; Ordoro AGL-3823):
  * `fetch`, a timeout, a short in-call retry for a blip, and every failure
  * turned into a {@link ProviderError} whose `kind` decides what happens next.
  *
  * - `auth` — the provider refused the credential (401/403). Retrying cannot
  *   help; the connection waits for the merchant to connect again.
  * - `rate-limit` — 429, or a 503 that says when to come back (Brightpearl's
- *   `brightpearl-next-throttle-period`, or `Retry-After`). All three systems
- *   meter calls per minute: 60 for Cin7 Core and inFlow, 200 for
- *   Brightpearl. Retried in the call when the wait is short; otherwise the
+ *   `brightpearl-next-throttle-period`, or `Retry-After`). Every system
+ *   meters calls per minute: 60 for Cin7 Core and inFlow, 200 for
+ *   Brightpearl, 500 for Ordoro. Retried in the call when the wait is short; otherwise the
  *   run stops and the work's next attempt is set to when the provider said to
  *   come back.
  * - `transient` — 5xx, a timeout, a dropped connection. Retried in the call,
@@ -125,13 +125,14 @@ function firstFieldError(errors: unknown): string | undefined {
 /**
  * The system's own words for a refusal, trimmed: Cin7 Core answers an array
  * of `{ Exception }`, inFlow `{ message }` or `{ errors }`, Brightpearl
- * `{ errors: [{ code, message }] }`.
+ * `{ errors: [{ code, message }] }`, Ordoro `{ error_message, param }`.
  */
 function providerMessage(payload: any, fallback: string): string {
   const candidates = [
     Array.isArray(payload) ? payload[0]?.Exception : undefined,
     Array.isArray(payload) ? payload[0]?.message : undefined,
     payload?.Exception,
+    payload?.error_message,
     payload?.errors?.[0]?.message,
     firstFieldError(payload?.errors),
     payload?.detail,
