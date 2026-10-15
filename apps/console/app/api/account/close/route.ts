@@ -127,6 +127,23 @@ async function handler(request: Request): Promise<Response> {
           { status: 409 },
         )
       }
+      if (result.skippedReason === 'shared-address') {
+        // Nothing was erased, so this must not read as success: the client
+        // signs the person out on any 2xx, which would leave them believing a
+        // closure that never happened. A second account holds one of their
+        // addresses, so erasing its mail history could destroy that account's
+        // too — a decision about two customers that staff make, not this route.
+        // No address and no other uid ride along: the other account's holder
+        // is the person this refusal protects.
+        return Response.json(
+          {
+            error:
+              'Your account shares an email address with another account, so it cannot be closed here yet. Email privacy@aglyn.com and we will finish it for you.',
+            skippedReason: 'shared-address',
+          },
+          { status: 409 },
+        )
+      }
       // Nothing to erase. Reported as success: the caller asked for the
       // account to be gone and it is, and an error here would send someone
       // to support over an outcome they already have.
