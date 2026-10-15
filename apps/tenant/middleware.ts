@@ -41,6 +41,7 @@ import {
 // Deep import for the same reason: the leaving notice's path, from a leaf
 // with no imports of its own (AGL-3452).
 import { LEAVING_NOTICE_PATH } from '@aglyn/aglyn/app-utils/leaving-notice'
+import { nativeAppAssociationRoute } from '@aglyn/aglyn/app-utils/native-app-association'
 // Deep import for the same reason: a leaf with no imports of its own.
 import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
@@ -185,6 +186,11 @@ export const config = {
     // two above and one of its own: the catch-all's exclusion refuses a first
     // segment shaped `name.ext`, and `.well-known` is exactly that shape.
     '/.well-known/api-catalog',
+    // The native apps' association documents (AGL-3817), listed for the same
+    // reason as the catalog above; the branch at the top of the middleware
+    // rewrites them before any host is resolved.
+    '/.well-known/apple-app-site-association',
+    '/.well-known/assetlinks.json',
     // The `.md` spelling of a page (llmstxt.org), e.g. `/pricing.md`. A NESTED
     // path such as `/blog/post.md` already reaches the catch-all — its
     // `name.ext` exclusion only looks at the first segment — but a top-level
@@ -541,6 +547,14 @@ async function hostVerdict(
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
+  // The native apps' association documents (AGL-3817), FIRST: they are not a
+  // page of any site, so no host is resolved, no lockdown verdict is spent and
+  // no cookie is set. The route answers only for the platform's own home host
+  // and 404s on every customer domain.
+  const associationRoute = nativeAppAssociationRoute(req.nextUrl.pathname)
+  if (associationRoute) {
+    return NextResponse.rewrite(new URL(associationRoute, req.url))
+  }
   const reqHost = req?.headers?.get('host') || 'app.aglyn.com'
   const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
   const AGLYN_TENANT_DEMO = process.env.AGLYN_TENANT_DEMO
