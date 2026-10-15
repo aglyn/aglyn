@@ -1,0 +1,41 @@
+// The Release configuration: the production project (aglyn-main) and the
+// console at https://app.aglyn.com. Every value is PUBLIC client config, the
+// same kind the console's NEXT_PUBLIC_FIREBASE_* carry; none is a secret.
+// Debug builds use Emulator.xcconfig instead.
+//
+// No emulator hosts and no debug sign-in: AglynConfig refuses an emulator on
+// a non-local console. A machine that must point a Release build elsewhere
+// (a self-hosted project) overrides any key in Config/Production.xcconfig,
+// which git ignores (copy Production.xcconfig.example).
+
+AGLYN_CONSOLE_URL = https:/$()/app.aglyn.com
+AGLYN_FIREBASE_API_KEY = AIzaSyB4vSGQeeYk6gl4dCLBl_cAqLN11HbnxMQ
+AGLYN_FIREBASE_AUTH_DOMAIN = aglyn-main.firebaseapp.com
+AGLYN_FIREBASE_PROJECT_ID = aglyn-main
+AGLYN_FIREBASE_MESSAGING_SENDER_ID = 543499566626
+AGLYN_FIREBASE_STORAGE_BUCKET = aglyn-main.appspot.com
+AGLYN_AUTH_EMULATOR_HOST =
+AGLYN_FIRESTORE_EMULATOR_HOST =
+AGLYN_BRAND_NAME = Aglyn
+
+// Per app: the Firebase Apple app and the iOS OAuth client registered for
+// each bundle (com.aglyn.app, com.aglyn.pos). Test targets get neither.
+AGLYN_FIREBASE_APP_ID = $(AGLYN_FIREBASE_APP_ID_$(TARGET_NAME))
+AGLYN_FIREBASE_APP_ID_Aglyn = 1:543499566626:ios:dec4bae8ed34828d0d147b
+AGLYN_FIREBASE_APP_ID_AglynPOS = 1:543499566626:ios:b9374011551b44b00d147b
+AGLYN_GOOGLE_IOS_CLIENT_ID = $(AGLYN_GOOGLE_IOS_CLIENT_ID_$(TARGET_NAME))
+AGLYN_GOOGLE_IOS_CLIENT_ID_Aglyn = 543499566626-p1fpk3msr5bvllja3rqsqmc7orr44a6t.apps.googleusercontent.com
+AGLYN_GOOGLE_IOS_CLIENT_ID_AglynPOS = 543499566626-9kbdi3d79f120600bvj5obmsacv3t9ct.apps.googleusercontent.com
+// The project's Web OAuth client, the audience of the Google ID token Firebase verifies.
+AGLYN_GOOGLE_WEB_CLIENT_ID = 543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com
+
+// The domain passkeys are made for (aglyn.com). Set it only once aglyn.com
+// serves an apple-app-site-association naming R3B7G75SWA.com.aglyn.app
+// (docs/mobile/well-known); the entitlement webcredentials:aglyn.com is
+// already on the Aglyn target.
+AGLYN_PASSKEY_RP_ID =
+
+AGLYN_DEBUG_EMAIL =
+AGLYN_DEBUG_PASSWORD =
+
+#include? "Production.xcconfig"
