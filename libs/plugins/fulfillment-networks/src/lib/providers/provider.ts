@@ -100,7 +100,8 @@ export interface NetworkShipment {
   shippedAtMs: number | null
   /**
    * The handle its tracking is read back by: Amazon's package number;
-   * ShipMonk's order key (its tracking is read from the order).
+   * ShipMonk's order key and Flexport's order id (their tracking is read
+   * from the order).
    */
   packageNumber?: string | null
 }
@@ -156,7 +157,9 @@ export interface FulfillmentNetworkProvider {
   /**
    * Points the network's webhooks for one connection at `url`, removing any
    * of that connection's (every address starting `prefix`) that point
-   * elsewhere; with `url: null`, removes them all (ShipBob).
+   * elsewhere; with `url: null`, removes them all (ShipBob). A network that
+   * sends a token in a header of its own (Flexport) is given it as `token`,
+   * and its hooks are registered afresh so an old token stops working.
    */
-  syncWebhooks?(credential: NetworkCredential, target: { prefix: string; url: string | null }): Promise<void>
+  syncWebhooks?(credential: NetworkCredential, target: { prefix: string; url: string | null; token?: string | null }): Promise<void>
 }

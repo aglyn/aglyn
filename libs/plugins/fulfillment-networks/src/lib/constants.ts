@@ -51,6 +51,8 @@ export const FULFILLMENT_NETWORKS_API_ROUTES = {
   webhookSecret: `${FULFILLMENT_NETWORKS_API_PREFIX}/webhook-secret`,
   /** `POST` — ShipMonk's webhook; verified by its `X-Sm-Signature` HMAC. */
   webhookShipmonk: `${FULFILLMENT_NETWORKS_API_PREFIX}/webhooks/shipmonk`,
+  /** `POST` — Flexport's webhook (AGL-3822); verified by the token header it was registered with. */
+  webhookFlexport: `${FULFILLMENT_NETWORKS_API_PREFIX}/webhooks/flexport`,
 } as const
 
 /**
@@ -66,6 +68,10 @@ export const FULFILLMENT_NETWORKS_API_ROUTES = {
  * - ShipMonk (AGL-3697) — no app: each merchant pastes their own store's API
  *   key. `SHIPMONK_ENABLED=true` offers it (with the token key), and
  *   `sandbox` points everything at ShipMonk's sandbox.
+ * - Flexport (AGL-3822) — no app either: each merchant pastes an API token
+ *   from their own Flexport Seller Portal. `FLEXPORT_ENABLED=true` offers it
+ *   (with the token key). Flexport has one address for production and
+ *   sandbox; the token decides which account a call reaches.
  */
 export const FULFILLMENT_NETWORKS_ENV = {
   tokenKey: 'FULFILLMENT_NETWORKS_TOKEN_KEY',
@@ -80,6 +86,7 @@ export const FULFILLMENT_NETWORKS_ENV = {
   amazonDraftApp: 'AMAZON_SP_API_DRAFT_APP',
   shipmonkEnabled: 'SHIPMONK_ENABLED',
   shipmonkEnvironment: 'SHIPMONK_ENVIRONMENT',
+  flexportEnabled: 'FLEXPORT_ENABLED',
 } as const
 
 /**

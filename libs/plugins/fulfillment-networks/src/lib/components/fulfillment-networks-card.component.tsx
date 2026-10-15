@@ -96,7 +96,8 @@ const help = (excerpt: string, anchor: HelpAnchor) => pluginDocsHelp('fulfillmen
 
 /**
  * FULFILLMENT NETWORKS (AGL-3634): a store's connections to ShipBob,
- * ShipMonk (AGL-3697) and Amazon Multi-Channel Fulfillment — one card per network the deployment
+ * ShipMonk (AGL-3697), Flexport (AGL-3822) and Amazon Multi-Channel
+ * Fulfillment — one card per network the deployment
  * offers, its state and actions in its header, its settings in its body, and
  * its activity under it. Draws nothing where the deployment offers no
  * network, or the member cannot read the store's settings.
@@ -280,7 +281,7 @@ function NetworkCard(props: {
           Sync now
         </Button>
       ) : null}
-      {apiKeyNetwork && connection.status !== 'reconnect' ? (
+      {info.merchantWebhooks && connection.status !== 'reconnect' ? (
         <Button size="small" disabled={busy} onClick={() => void rotateWebhookSecret()}>
           {connection.webhookSecretSet ? 'New webhook secret' : 'Set up webhooks'}
         </Button>
@@ -347,7 +348,9 @@ function NetworkCard(props: {
             <Typography variant="body2" color="text.secondary">
               {`${
                 apiKeyNetwork
-                  ? `Not connected. Connect with the API key of your own ${info.label} API store; ${PLATFORM_BRAND_NAME} keeps it encrypted and never shows it again.`
+                  ? provider === 'flexport'
+                    ? `Not connected. Connect with an API token from your own ${info.label} account; ${PLATFORM_BRAND_NAME} keeps it encrypted and never shows it again.`
+                    : `Not connected. Connect with the API key of your own ${info.label} API store; ${PLATFORM_BRAND_NAME} keeps it encrypted and never shows it again.`
                   : `Not connected. Sign in to your own ${info.label} account to connect it; ${PLATFORM_BRAND_NAME} never sees your password.`
               }${offer?.sandbox ? ` This deployment connects to the ${info.label} sandbox, which takes test orders only.` : ''}`}
             </Typography>
@@ -404,18 +407,22 @@ function ConnectionDetails(props: {
           <MenuItem value="automatic">Automatic</MenuItem>
           <MenuItem value="manual">Manual</MenuItem>
         </TextField>
-        {connection.provider === 'shipbob' || connection.provider === 'shipmonk' ? (
+        {connection.provider !== 'amazon-mcf' ? (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
             <TextField
               size="small"
-              label={connection.provider === 'shipmonk' ? 'Shipping service' : 'Ship option'}
+              label={
+                connection.provider === 'shipmonk' ? 'Shipping service' : connection.provider === 'flexport' ? 'Ship method' : 'Ship option'
+              }
               value={method}
               disabled={locked}
               onChange={(event) => setMethod(event.target.value)}
               helperText={
                 connection.provider === 'shipmonk'
                   ? 'Must match a shipping mapping in your ShipMonk account.'
-                  : 'As named in your ShipBob account.'
+                  : connection.provider === 'flexport'
+                    ? 'Such as Standard or UPS Ground. Flexport sets the delivery speed from it.'
+                    : 'As named in your ShipBob account.'
               }
               sx={{ minWidth: 220 }}
             />
@@ -472,6 +479,13 @@ function ConnectionDetails(props: {
             : 'Orders are read back from ShipMonk every 15 minutes. Set up webhooks to hear about shipments sooner.'}
         </Typography>
       ) : null}
+      {connection.provider === 'flexport' ? (
+        <Typography variant="body2" color="text.secondary">
+          {connection.webhooksRegistered
+            ? 'Flexport tells us when an order ships or arrives; orders are also read back every 15 minutes.'
+            : 'Orders are read back from Flexport every 15 minutes. Connect again with a token that can manage webhooks to hear about shipments sooner.'}
+        </Typography>
+      ) : null}
       <FormControlLabel
         control={
           <Switch
@@ -507,8 +521,9 @@ function ConnectionDetails(props: {
 
 /**
  * The key form of a network that takes the merchant's own API key (ShipMonk,
- * AGL-3697): the key and the API store it belongs to. The key is sent once and
- * never shown again; the field is a password field so it is not left on screen.
+ * AGL-3697): the key and the API store it belongs to; for Flexport (AGL-3822),
+ * the API token alone. The key is sent once and never shown again; the field
+ * is a password field so it is not left on screen.
  */
 function ApiKeyForm(props: {
   provider: NetworkProviderId
@@ -521,39 +536,44 @@ function ApiKeyForm(props: {
   const info = NETWORK_PROVIDERS[provider]
   const [apiKey, setApiKey] = useState('')
   const [storeId, setStoreId] = useState(props.storeId)
-  const ready = apiKey.trim().length >= 8 && /^[1-9][0-9]{0,11}$/.test(storeId.trim())
+  const needsStore = provider === 'shipmonk'
+  const ready = apiKey.trim().length >= 8 && (!needsStore || /^[1-9][0-9]{0,11}$/.test(storeId.trim()))
   return (
     <Stack
       component="form"
       spacing={1.5}
       onSubmit={(event) => {
         event.preventDefault()
-        if (ready) onSubmit({ apiKey: apiKey.trim(), storeId: storeId.trim() })
+        if (ready) onSubmit({ apiKey: apiKey.trim(), storeId: needsStore ? storeId.trim() : '' })
       }}
     >
       <Typography variant="body2" color="text.secondary">
-        {`In ${info.label}, open Account Settings, then Integration API Keys. Create a key for your API store and copy it with the store's id.`}
+        {needsStore
+          ? `In ${info.label}, open Account Settings, then Integration API Keys. Create a key for your API store and copy it with the store's id.`
+          : `In ${info.label}'s Seller Portal, open Settings, then API Tokens. Create a token with read and write access to orders and webhooks and read access to products, and copy it.`}
       </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
         <TextField
           size="small"
           type="password"
-          label="API key"
+          label={needsStore ? 'API key' : 'API token'}
           autoComplete="off"
           value={apiKey}
           disabled={busy}
           onChange={(event) => setApiKey(event.target.value)}
           sx={{ minWidth: 260 }}
         />
-        <TextField
-          size="small"
-          label="Store id"
-          value={storeId}
-          disabled={busy}
-          onChange={(event) => setStoreId(event.target.value)}
-          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-          sx={{ minWidth: 160 }}
-        />
+        {needsStore ? (
+          <TextField
+            size="small"
+            label="Store id"
+            value={storeId}
+            disabled={busy}
+            onChange={(event) => setStoreId(event.target.value)}
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+            sx={{ minWidth: 160 }}
+          />
+        ) : null}
       </Stack>
       <Stack direction="row" spacing={1}>
         <Button type="submit" size="small" variant="contained" disabled={busy || !ready}>

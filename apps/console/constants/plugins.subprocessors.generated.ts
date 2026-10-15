@@ -572,6 +572,12 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         reason: "Customer-chosen destination. The ShipMonk sandbox API of the store whose own API key a site's admin pastes, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts`. Used only by a deployment pointed at the sandbox (`SHIPMONK_ENVIRONMENT=sandbox`), where nothing real ships.",
         dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
       },
+      {
+        host: "logistics-api.flexport.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Flexport Logistics API of the account whose own API token a site's admin pastes in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/flexport.ts` with that token, to send the orders the merchant routes to it, read their shipments and stock back, and register the webhooks that tell the store when an order ships. Flexport's sandbox is a separate account at the same address, chosen by the token.",
+        dataReceived: "For each paid order the merchant's store sends to Flexport: an opaque order reference, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), the ship method, and the items Flexport ships (Flexport's own product id, quantity and unit value for customs). Read back: the merchant's Flexport product list (SKU and Flexport's product id), Flexport's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each product it holds. For each connection, the webhook address and a random token Flexport sends back with each event. Also the API token the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
     ],
   },
   {

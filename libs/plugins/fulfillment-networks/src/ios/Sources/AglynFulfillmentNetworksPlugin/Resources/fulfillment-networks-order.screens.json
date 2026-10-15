@@ -27,6 +27,11 @@
             "id": "shipmonk",
             "label": "ShipMonk",
             "short": "ShipMonk"
+          },
+          {
+            "id": "flexport",
+            "label": "Flexport",
+            "short": "Flexport"
           }
         ],
         "statuses": [

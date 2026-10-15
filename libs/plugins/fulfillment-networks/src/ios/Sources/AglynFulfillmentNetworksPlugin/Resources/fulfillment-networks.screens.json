@@ -1,5 +1,5 @@
 {
-  "$comment": "The Fulfillment networks plugin's native screens: the networks a site can connect (ShipBob and Amazon Multi-Channel Fulfillment by signing in, ShipMonk with its API key), each one's status, settings, stock counts and recent activity. Routes: GET /api/fulfillment-networks/connections and log, POST connect, connect-key, sync-now and webhook-secret, PATCH and DELETE connection. Signing in opens the network’s consent page in the secure browser; the server finishes the connection when the network sends the person back. Grammar: docs/mobile/native-architecture.md section 13.",
+  "$comment": "The Fulfillment networks plugin's native screens: the networks a site can connect (ShipBob and Amazon Multi-Channel Fulfillment by signing in, ShipMonk with its API key, Flexport with its API token), each one's status, settings, stock counts and recent activity. Routes: GET /api/fulfillment-networks/connections and log, POST connect, connect-key, sync-now and webhook-secret, PATCH and DELETE connection. Signing in opens the network’s consent page in the secure browser; the server finishes the connection when the network sends the person back. Grammar: docs/mobile/native-architecture.md section 13.",
   "screens": [
     {
       "id": "fulfillment-networks.service",
@@ -35,6 +35,12 @@
             "label": "ShipMonk",
             "auth": "api-key",
             "summary": "Paid orders go to ShipMonk’s warehouses to pick, pack and ship; shipments and tracking come back to the order."
+          },
+          {
+            "id": "flexport",
+            "label": "Flexport",
+            "auth": "api-token",
+            "summary": "Paid orders go to Flexport’s fulfillment network to pick, pack and ship; shipments and tracking come back to the order."
           }
         ]
       },
@@ -117,6 +123,12 @@
             "label": "ShipMonk",
             "auth": "api-key",
             "summary": "Paid orders go to ShipMonk’s warehouses to pick, pack and ship; shipments and tracking come back to the order."
+          },
+          {
+            "id": "flexport",
+            "label": "Flexport",
+            "auth": "api-token",
+            "summary": "Paid orders go to Flexport’s fulfillment network to pick, pack and ship; shipments and tracking come back to the order."
           }
         ]
       },
@@ -246,6 +258,28 @@
               "success": "Connected. Paid orders go to it from now on."
             },
             {
+              "id": "connectToken",
+              "label": "Connect {const.providers[id=params.provider].label}",
+              "icon": "key|key",
+              "when": "!data.nets.connections[provider=params.provider] && const.providers[id=params.provider].auth == api-token",
+              "url": "/api/fulfillment-networks/connect-key",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API token",
+                  "kind": "password",
+                  "required": true,
+                  "help": "From Settings, then API Tokens, in your Seller Portal. Stored encrypted. It is never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "apiKey": "{form.apiKey}"
+              },
+              "success": "Connected. Paid orders go to it from now on."
+            },
+            {
               "id": "reconnect",
               "label": "Connect again",
               "icon": "link|link",
@@ -285,6 +319,27 @@
                 "provider": "{params.provider}",
                 "apiKey": "{form.apiKey}",
                 "storeId": "{form.storeId}"
+              },
+              "success": "Connected again."
+            },
+            {
+              "id": "reconnectToken",
+              "label": "Connect again with a token",
+              "icon": "key|key",
+              "when": "data.nets.connections[provider=params.provider].status == reconnect && const.providers[id=params.provider].auth == api-token",
+              "url": "/api/fulfillment-networks/connect-key",
+              "prompt": [
+                {
+                  "key": "apiKey",
+                  "label": "API token",
+                  "kind": "password",
+                  "required": true
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "apiKey": "{form.apiKey}"
               },
               "success": "Connected again."
             },
