@@ -37,11 +37,13 @@ import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/
 import {
   aiDanglingWord,
   aiSettleMechanicalRules,
+  aiSettlePlaceholderItems,
   aiSettleUnrelatedScreenLinks,
   validateAiDoctrineTree,
   type AiDoctrineTree,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
+import { aiHasPlaceholderToken } from '../runtime/ai-placeholder-tokens'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
@@ -694,12 +696,17 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // and stored (AGL-3660): this pass asks no model, so a page refused
       // here for one would be refused the same way on every Try again. A
       // Portfolio page whose opening photos all loaded eagerly was (2026-10-10).
-      // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729).
+      // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729),
+      // and an item of a list that shows only placeholders is taken out where the list keeps a real one (AGL-3827).
       const settle = <T extends AiDoctrineTree>(tree: T): T =>
-        aiSettleUnrelatedScreenLinks(aiSettleMechanicalRules(tree, 'page'), 'page', {
-          ...context,
-          ownScreenIds: [screen.id, draftId],
-        })
+        aiSettleUnrelatedScreenLinks(
+          aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page'), 'page', context),
+          'page',
+          {
+            ...context,
+            ownScreenIds: [screen.id, draftId],
+          },
+        )
       const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
       if (settled.nodes !== (page as unknown as AiDoctrineTree['nodes'])) {
         // Never written once the job is canceled (AGL-3616).
@@ -803,9 +810,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           })
           spent = { ...spent, ...aiGenerationSpent(result) }
           if (result.status === 'ok') {
+            // A written field that shows a placeholder keeps the plan's, which
+            // the plan's own check already held to rule 14 (AGL-3827).
+            const usable = (text: string | null | undefined): string =>
+              text?.trim() && !aiHasPlaceholderToken(text) ? text.trim() : ''
             values = {
-              title: result.value.title?.trim() || values.title,
-              description: result.value.description?.trim() || values.description,
+              title: usable(result.value.title) || values.title,
+              description: usable(result.value.description) || values.description,
             }
           }
         }
