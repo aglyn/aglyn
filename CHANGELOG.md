@@ -27,6 +27,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **signup:** an unacknowledged Firestore write no longer holds a sign-up for a minute ([AGL-3806](https://linear.app/aglyn/issue/AGL-3806))
 - **auth:** follow a peer tab's sign-in into the user's pool ([AGL-3803](https://linear.app/aglyn/issue/AGL-3803))
 - **native:** the release script prints each output's size ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
 - **native:** release lint passes, fragment 1.3+ for the activity result api ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
@@ -39,8 +40,9 @@ content on the marketing site and is written separately.
 - **commerce:** paid media's words and rules in the model, for the apps to replay ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
 
 <details>
-<summary>Also in this release: 1 chore, 1 ci</summary>
+<summary>Also in this release: 1 chore, 1 ci, 1 legal</summary>
 
+- **legal:** declare www.apple.com as a plist DTD identifier, never fetched (AGL-3800)
 - **native:** both apps share one package build; self-host skips script-only PRs ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **linear:** raise the issue ceiling to AGL-3799, read off Linear ([AGL-3799](https://linear.app/aglyn/issue/AGL-3799), [AGL-3798](https://linear.app/aglyn/issue/AGL-3798))
 
