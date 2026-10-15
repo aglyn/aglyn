@@ -130,6 +130,48 @@ describe('the cache lifetime a request asks for', () => {
   })
 })
 
+describe('a request that caches its conversation (AGL-3809)', () => {
+  const turns = [
+    { role: 'user', content: 'brief' },
+    { role: 'assistant', content: 'Called look_up_site_inventory.' },
+    { role: 'user', content: 'the lookup answer' },
+  ]
+
+  it('sends turns as strings and marks none of them unless asked', () => {
+    const sent = body('claude-sonnet-5-5', { messages: turns })['messages'] as Array<Record<string, unknown>>
+    expect(sent.map((turn) => turn['content'])).toEqual(['brief', 'Called look_up_site_inventory.', 'the lookup answer'])
+  })
+
+  it('marks the last block of the last turn alone, at the system breakpoints’ lifetime', () => {
+    const sent = body('claude-sonnet-5-5', { messages: turns, cacheConversation: true, cacheTtl: '1h' })['messages'] as Array<{
+      content: Array<Record<string, unknown>>
+    }>
+    expect(sent.map((turn) => turn.content.map((block) => block['cache_control'] ?? null))).toEqual([
+      [null],
+      [null],
+      [{ type: 'ephemeral', ttl: '1h' }],
+    ])
+  })
+
+  it('renders a turn the same bytes on the call that marked it and on the next, where it is no longer last', () => {
+    const strip = (turn: { content: Array<Record<string, unknown>> }) =>
+      JSON.stringify(turn.content, (key, value) => (key === 'cache_control' ? undefined : value))
+    const first = body('claude-sonnet-5-5', { messages: turns.slice(0, 1), cacheConversation: true })
+    const next = body('claude-sonnet-5-5', { messages: turns, cacheConversation: true })
+    const firstTurns = first['messages'] as Array<{ content: Array<Record<string, unknown>> }>
+    const nextTurns = next['messages'] as Array<{ content: Array<Record<string, unknown>> }>
+    expect(strip(nextTurns[0])).toBe(strip(firstTurns[0]))
+    expect(JSON.stringify(next['system'])).toBe(JSON.stringify(first['system']))
+    expect(JSON.stringify(next['tools'])).toBe(JSON.stringify(first['tools']))
+  })
+
+  it('counts the conversation’s breakpoint against the four the API allows', () => {
+    const system = [1, 2, 3, 4].map((n) => ({ text: `rules ${n}`, cacheBreakpoint: true }))
+    expect(() => body('claude-sonnet-5-5', { system, cacheConversation: true })).toThrow(/5 cache breakpoints/)
+    expect(() => body('claude-sonnet-5-5', { system: system.slice(1), cacheConversation: true })).not.toThrow()
+  })
+})
+
 describe('an answer read off the wire or out of a batch', () => {
   const answer = {
     content: [{ type: 'tool_use', name: 'submit', input: { a: 'x' } }],

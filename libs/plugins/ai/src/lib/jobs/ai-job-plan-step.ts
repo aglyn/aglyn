@@ -1142,6 +1142,10 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
           ? { effort: route.effort }
           : {}),
       ...(signal ? { signal } : {}),
+      // Most plans continue — a lookup round, a re-ask — and each continuation
+      // re-sends the brief and the inventory, so the plan caches its
+      // conversation and the next request reads it back (AGL-3809).
+      cacheConversation: true,
       capabilities,
       // A build's events are listed on a page (AGL-3755): on the one it makes
       // about them, else on an Events page of its own where there is room.
