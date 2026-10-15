@@ -46,13 +46,14 @@ Attentive**.
 
 ## What is sent {#what-is-sent}
 
-- **Contacts and consent go out.** Everyone the site may send marketing to is
-  subscribed to **email** marketing in Attentive, with their email address and,
-  when it is in international format (like `+15551234567`), their phone number.
-  Someone the site must not market to (they unsubscribed, declined, bounced,
-  complained or were erased) is unsubscribed from email marketing in Attentive.
-  The first sync sends everyone; after that, only the people whose record
-  changed.
+- **Contacts and consent go out.** Someone the site may send marketing to is
+  subscribed to **email** marketing in Attentive, by their email address only,
+  when Attentive does not have them yet. Someone Attentive already has is left
+  exactly as Attentive has them. Aglyn never sends a phone number, so nobody is
+  signed up for text messages from here. Someone the site must not market to
+  (they unsubscribed, declined, bounced, complained or were erased) is
+  unsubscribed from email marketing in Attentive. The first sync goes through
+  everyone; after that, only the people whose record changed.
 - **Orders go out.** For each person the site may market to:
 
   | In Aglyn | In Attentive |
@@ -84,10 +85,11 @@ left there:
 - Someone who unsubscribes in Attentive is not unsubscribed from the site's own
   campaigns, and the row's count of **subscription changes read back** stays at
   zero.
-- When that person's record changes on the site later, for example with a new
-  order, Aglyn sends Attentive a subscription for them again.
+- Aglyn does not subscribe them again. Because it only subscribes people
+  Attentive does not have yet, a later change to their record on the site, such
+  as a new order, leaves their Attentive subscription as it is.
 
-To stop both, add them to the site's unsubscribe list as well.
+To stop the site's own campaigns too, add them to the site's unsubscribe list.
 
 ## Settings {#settings}
 
