@@ -132,7 +132,7 @@ Feeds state the cheapest shipping rate to each country your
 [shipping zones](./shipping.md) name. A rest-of-world (`*`) zone names no
 country, so set shipping for those countries in the channel itself.
 
-Where checkout prices shipping by [carrier rates](./shipping.md), the price
+Where checkout prices shipping by [carrier rates](./shipping-labels-and-live-rates.md#carrier-rates-at-checkout), the price
 depends on the address, so the feeds send none for those countries. In Google
 Merchant Center, set up **carrier-calculated shipping** for them: it prices
 each product from the weight and packed size the feed sends, so add both in
