@@ -64,10 +64,12 @@ import {
   FUNCTION_CONTROL_KINDS,
   FunctionParameterControl,
   displayFunctionValue,
+  formatFunctionDate,
   initialFunctionArguments,
   isFunctionValueTruthy,
   type FunctionControlKind,
 } from './function-controls'
+import { listenToFunctionFields } from './function-fields'
 
 /**
  * A CALCULATOR AN AUTHOR LAYS OUT (AGL-3202).
@@ -155,8 +157,25 @@ const FunctionScope = forwardRef<HTMLDivElement, FunctionScopeProps>(
       initialFunctionArguments(definition),
     )
     const setArgument = useCallback((name: string, value: string) => {
-      setArgs((previous) => ({ ...previous, [name]: value }))
+      setArgs((previous) =>
+        previous[name] === value ? previous : { ...previous, [name]: value },
+      )
     }, [])
+    // The site's own form fields placed inside, named after a parameter,
+    // answer it (AGL-3825): see function-fields.ts.
+    const box = useRef<HTMLDivElement | null>(null)
+    const setBox = useCallback(
+      (element: HTMLDivElement | null) => {
+        box.current = element
+        if (typeof ref === 'function') ref(element)
+        else if (ref) ref.current = element
+      },
+      [ref],
+    )
+    useEffect(() => {
+      if (!box.current || !definition) return undefined
+      return listenToFunctionFields(box.current, definition, setArgument)
+    }, [definition, setArgument])
     // Always live: a calculator laid out on a page has no single place a
     // "Calculate" button would obviously go, and every result can be on
     // screen at once. The Function Widget is the block with a button.
@@ -191,7 +210,7 @@ const FunctionScope = forwardRef<HTMLDivElement, FunctionScopeProps>(
     )
     return (
       <FunctionScopeContext.Provider value={value}>
-        <Box ref={ref} {...rest}>
+        <Box ref={setBox} {...rest}>
           {children}
         </Box>
       </FunctionScopeContext.Provider>
@@ -268,6 +287,8 @@ export interface FunctionOutputProps {
   /** Read a change aloud. One result per calculator, usually the sentence. */
   announce?: boolean
   element?: 'div' | 'p' | 'span'
+  /** `date` reads a picked day, `2026-10-15`, as "Oct 15, 2026". */
+  format?: 'text' | 'date'
 }
 
 const OUTPUT_ELEMENTS = ['div', 'p', 'span'] as const
@@ -291,7 +312,7 @@ export function renderFunctionEmphasis(text: string): ReactNode {
 
 const FunctionOutput = forwardRef<HTMLElement, FunctionOutputProps>(
   (props, ref) => {
-    const { name, placeholder, announce, element, ...rest } = props
+    const { name, placeholder, announce, element, format, ...rest } = props
     const scope = useContext(FunctionScopeContext)
     const { suppressNavigation } = useContext(ScreenLinkContext)
     const key = String(name ?? '').trim()
@@ -299,6 +320,7 @@ const FunctionOutput = forwardRef<HTMLElement, FunctionOutputProps>(
     let text = ''
     if (run?.ok) {
       text = displayFunctionValue(key ? run.scope[key] : run.value)
+      if (format === 'date') text = formatFunctionDate(text)
     } else if (suppressNavigation || !scope?.definition) {
       // Designing: show what will stand here. On a published page a missing
       // function shows nothing rather than a placeholder dressed as a price.
@@ -533,7 +555,9 @@ export const schema: Aglyn.ComponentSchema<FunctionScopeProps> = {
   displayName: 'Calculator',
   description:
     'A container bound to one of your functions. Put Calculator Inputs and ' +
-    'Calculator Results anywhere inside it and lay them out however you like.',
+    'Calculator Results anywhere inside it and lay them out however you like. ' +
+    'Any form field inside it, such as an Input, a Select or a Date Picker, ' +
+    'whose Field name is one of the function’s parameters answers that parameter.',
   category: ComponentCategory.INPUT,
   icon: { path: mdiCalculatorVariantOutline.path, sx: { color: ICON_COLOR } },
   attributes: [
@@ -541,7 +565,8 @@ export const schema: Aglyn.ComponentSchema<FunctionScopeProps> = {
       name: 'functionName',
       description:
         'Name of a function from the site’s Functions card. Every input and ' +
-        'result inside this container reads it.',
+        'result inside this container reads it, and every form field named ' +
+        'after one of its parameters sets it.',
       component: FieldComponentType.TEXT_FIELD,
       label: 'Function name',
     },
@@ -629,6 +654,18 @@ export const functionOutputSchema: Aglyn.ComponentSchema<FunctionOutputProps> = 
       description: 'What the besigner shows here, e.g. $625. Visitors never see it.',
       component: FieldComponentType.TEXT_FIELD,
       label: 'Placeholder',
+    },
+    {
+      name: 'format',
+      description:
+        'Date reads a picked day, 2026-10-15, as Oct 15, 2026 in the page’s ' +
+        'language. Anything that is not a date shows as it is.',
+      component: FieldComponentType.SELECT,
+      label: 'Show as',
+      options: [
+        { value: 'text', label: 'Text, as it is' },
+        { value: 'date', label: 'Date' },
+      ],
     },
     {
       name: 'element',

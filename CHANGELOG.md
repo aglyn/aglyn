@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **calculator:** a Calculator reads the site's own form fields placed inside it ([AGL-3825](https://linear.app/aglyn/issue/AGL-3825))
 - **native:** passkeys on for release builds now aglyn.com serves the association files ([AGL-3817](https://linear.app/aglyn/issue/AGL-3817))
 - **native,console:** console-minted App Check for the Windows app's session ([AGL-3816](https://linear.app/aglyn/issue/AGL-3816))
 - **native:** workspace invitations answered in the apps, and their link opens them ([AGL-3819](https://linear.app/aglyn/issue/AGL-3819), [AGL-851](https://linear.app/aglyn/issue/AGL-851))
