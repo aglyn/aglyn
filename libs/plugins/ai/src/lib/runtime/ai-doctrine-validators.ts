@@ -4107,6 +4107,55 @@ export function aiSettlePlanLayouts(
 }
 
 /**
+ * A section that places a layout — what rule 2's `plan-layout-in-section`
+ * reads as one: a site layout's id, or a `new:` layout the plan creates — has
+ * it taken out of its uses before the rules read the plan (AGL-3807), where
+ * the rule's own answer, "name it as the page's layout", has only one
+ * reading. A live Free start of 2026-10-15 ("a family dental practice") put
+ * both pages in the site's layout and named that layout again in every
+ * section that placed no form, and was refused on both attempts.
+ *
+ *  - The page names that same layout: it comes out of the sections, and the
+ *    page is otherwise as it was.
+ *  - The page names no layout, or a reference that resolves to nothing: the
+ *    one layout its sections named becomes the page's.
+ *  - The page names a different layout, a record of another kind, or its
+ *    sections name two layouts: there is more than one answer, so the page is
+ *    left for the rule to ask about.
+ *
+ * A section left with no uses is one that places nothing, as plenty do.
+ */
+export function aiSettlePlanLayoutsInSections(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+): AiBuildPlan {
+  const kinds = inventoryKinds(inventory)
+  const isLayout = (ref: string | null) => refKind(ref, plan, kinds) === 'layout'
+  // One layout, however a reference spells it.
+  const layoutKey = (ref: string) => (isAiPlanNewRef(ref) ? `new:${aiPlanCreateFor(plan, ref)?.name ?? ref}` : ref)
+  let changed = false
+  const screens = plan.screens.map((screen) => {
+    const placed = [
+      ...new Set(screen.sections.flatMap((section) => section.uses.filter(isLayout).map(layoutKey))),
+    ]
+    if (placed.length !== 1) return screen
+    const own = screen.layout?.trim() ? screen.layout : null
+    if (own !== null && refKind(own, plan, kinds) !== null && (!isLayout(own) || layoutKey(own) !== placed[0])) {
+      return screen
+    }
+    changed = true
+    return {
+      ...screen,
+      layout: isLayout(own) ? own : placed[0],
+      sections: screen.sections.map((section) =>
+        section.uses.some(isLayout) ? { ...section, uses: section.uses.filter((ref) => !isLayout(ref)) } : section,
+      ),
+    }
+  })
+  return changed ? { ...plan, screens } : plan
+}
+
+/**
  * A page section that is a layout region — a header, navigation or footer,
  * read by the name rule 2's `plan-layout-region-section` reads — is taken off
  * the page before the rules read the plan (AGL-3750). The region is already

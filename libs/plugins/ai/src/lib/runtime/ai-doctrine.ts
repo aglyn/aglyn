@@ -60,6 +60,7 @@ import {
   aiSettlePlanGalleries,
   aiSettlePlanLayoutRegionSections,
   aiSettlePlanLayouts,
+  aiSettlePlanLayoutsInSections,
   aiSettlePlanRefs,
   aiSettleWrittenGridItems,
   aiSettleWrittenMechanicalRules,
@@ -707,8 +708,10 @@ export function aiDoctrinePlanCheck(
     // A plan past the datasets this job may make keeps the most useful
     // (AGL-3616), once a form's dataset is one it can write to and no page
     // lists it.
+    // A section that places its page's one layout has it taken out, and a
+    // page that names none is put in it (AGL-3807), right after the refs.
     // A page section that is a layout region (header, navigation, footer) is
-    // taken off the page (AGL-3750), first after the refs, so the wall
+    // taken off the page (AGL-3750), first after those, so the wall
     // counts what the page keeps. A site start's section that shows the work
     // with fewer pieces than its fewest is given that many (AGL-3754).
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
@@ -721,7 +724,10 @@ export function aiDoctrinePlanCheck(
           aiSettlePlanDatasets(
             aiSettlePlanFormDatasets(
               aiSettlePlanGalleries(
-                aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
+                aiSettlePlanLayoutRegionSections(
+                  aiSettlePlanLayoutsInSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
+                  inventory,
+                ),
                 inventory,
                 capabilities,
               ),
