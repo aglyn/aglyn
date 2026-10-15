@@ -34,6 +34,7 @@ import {
   aiLiveBatchWaitMs,
   aiLiveBatchWanted,
   aiLiveTimeoutMs,
+  aiRequestCacheTtl,
 } from './ai-dev-env'
 import {
   aiCachedPrefixKey,
@@ -91,6 +92,24 @@ describe('which development layers a process runs', () => {
     }
     // `AGLYN_LIVE_AI` set to anything else is not a live run.
     expect(aiLiveBatchWanted({ AGLYN_LIVE_AI: '0' })).toBe(false)
+  })
+
+  it('sends the hour a route asked for in a deployed server, and nothing it did not (AGL-3830)', () => {
+    for (const deployed of [{ NODE_ENV: 'production' }, { VERCEL_ENV: 'preview' }, { K_SERVICE: 'console' }]) {
+      expect(aiRequestCacheTtl('1h', deployed)).toBe('1h')
+      expect(aiRequestCacheTtl(undefined, deployed)).toBeUndefined()
+      // The development variable never reaches a deployed request, either way.
+      expect(aiRequestCacheTtl('1h', { ...deployed, AGLYN_AI_CACHE_TTL: '5m' })).toBe('1h')
+      expect(aiRequestCacheTtl(undefined, { ...deployed, AGLYN_AI_CACHE_TTL: '1h' })).toBeUndefined()
+    }
+  })
+
+  it('keeps a route’s hour in development, unless AGLYN_AI_CACHE_TTL=5m turns every request back (AGL-3830)', () => {
+    expect(aiRequestCacheTtl('1h', { NODE_ENV: 'development' })).toBe('1h')
+    expect(aiRequestCacheTtl(undefined, { NODE_ENV: 'development' })).toBeUndefined()
+    expect(aiRequestCacheTtl(undefined, { NODE_ENV: 'test', ...LAUNCHER })).toBe('1h')
+    expect(aiRequestCacheTtl('1h', { NODE_ENV: 'test', ...LAUNCHER, AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
+    expect(aiRequestCacheTtl('1h', { NODE_ENV: 'development', AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
   })
 
   it('gives a batched live spec the time its batches can take, and leaves an unbatched one its own', () => {
@@ -306,6 +325,21 @@ describe('a request through the runtime in a development process', () => {
     process.env['AI_EVAL_LIVE_LAUNCHER'] = LAUNCHER.AI_EVAL_LIVE_LAUNCHER
     await ask('a bakery')
     expect(calls[0].cacheTtl).toBe('1h')
+  })
+
+  it('sends a request’s own hour to the provider in a deployed server (AGL-3830)', async () => {
+    ;(process.env as Record<string, string>)['NODE_ENV'] = 'production'
+    await runAiRequest({
+      provider,
+      model: 'claude-sonnet-5-5',
+      system: [{ text: 'rules', cacheBreakpoint: true }],
+      messages: [{ role: 'user', content: 'a bakery' }],
+      maxTokens: 50,
+      stream: false,
+      cacheTtl: '1h',
+    })
+    await ask('a florist')
+    expect(calls.map((call) => call.cacheTtl ?? null)).toEqual(['1h', null])
   })
 
   it('gathers the requests of a round into one batch, and a re-ask into the next', async () => {

@@ -367,6 +367,23 @@ vendor, and it does not move as a conversation grows.
   door measured to continue may turn it on. Today that is the plan alone; the
   cache spec lists the doors. The audit behind it, and the levers left as
   proposals, are in `docs/AI_CACHE_AUDIT_2026-10.md`.
+- **A site job's routes cache for the hour, in production too (AGL-3830).**
+  Each step a site job runs (the plan, the look, the header and footer, the
+  pages and their listings, the creations, the first posts and products, the
+  welcome email) carries `cacheTtl: '1h'` on its routing row
+  (`AiRoutingRow.cacheTtl` in `providers/routing.ts`), and
+  `runValidatedGeneration` puts it on the request, so every breakpoint goes
+  out as `ttl: "1h"`. A guided start writes each route's prefix once and the
+  next one, minutes or an hour later, reads it instead of writing it again.
+  Every other row keeps the provider's five minutes. An hour-long write
+  costs 2× the input price, where a five-minute one costs 1.25×: the
+  Anthropic adapter reads the hour's share of the writes
+  (`cache_creation.ephemeral_1h_input_tokens`) into `cacheWriteHourTokens`,
+  and the adapter's figure, the meter's two dollar figures and a live run's
+  ledger add the difference (`aiCacheWriteHourSurchargeUsd`), so neither
+  the credits drawn nor the provider cost reads low. The cache spec's
+  *a site job's routes keep their prefix for the hour* section holds which
+  rows ask for it and that a deployed request sends it on every marker.
 
 Two consequences worth knowing before writing a prompt. A door on the fast
 tier has the HIGHEST minimum on the platform, so a step moved there to save
@@ -494,10 +511,11 @@ request and 16 batched.
   alone and the others follow it. Production's beat runs one step at a
   time, so it never needed this and never gets it.
 - **The hour-long cache.** In a live run every breakpoint asks for
-  `ttl: "1h"` (`AGLYN_AI_CACHE_TTL=5m` turns it back), since an agent re-runs
-  an eval every ten to forty minutes, past the default five. Production
-  keeps five minutes: a job's steps run a beat apart, and a one-call step
-  with no re-ask would pay the hour's dearer write for nothing.
+  `ttl: "1h"`, since an agent re-runs an eval every ten to forty minutes,
+  past the default five. `AGLYN_AI_CACHE_TTL=5m` turns every request back to
+  five minutes, a site job's routes included, for a one-off sweep that will
+  not run again within the hour. Production asks for the hour only on a
+  site job's routes (above, AGL-3830); the variable never reaches it.
 - **A retired model is refused by name in a live run** (AGL-3781). Routing
   serves a retired catalog row's successor wherever a setting or an override
   names it, so a retired id that reaches the runtime in a live run was asked

@@ -1176,6 +1176,38 @@ const AI_CONVERSATION_CACHE_DOORS: Record<string, string> = {
     'plans continue more often than not: 27 lookup rounds to 42 answers on Claude Sonnet 5.5 in the golden replay store, and two or three calls in about half of production plan steps',
 }
 
+/** A provider that answers from a queue and keeps every request it was sent. */
+function recording(answers: AiResult[]): { fake: AiProvider; requests: AiProviderRequest[] } {
+  const requests: AiProviderRequest[] = []
+  const fake: AiProvider = {
+    id: 'fake',
+    label: 'Fake',
+    apiKeyEnv: 'FAKE_AI_KEY',
+    endpointHost: 'ai.test',
+    readApiKey: () => 'key',
+    models: () => [],
+    complete: async (request) => {
+      requests.push(request)
+      const next = answers.shift()
+      if (!next) throw new Error('no answer armed')
+      return next
+    },
+    stream: async () => {
+      throw new Error('the doctrine loop never streams')
+    },
+  }
+  return { fake, requests }
+}
+
+const answer = (toolUse: Array<{ name: string; input: Record<string, unknown> }>): AiResult => ({
+  kind: 'completion',
+  text: toolUse.length ? '' : 'A plan in prose.',
+  toolUse,
+  usage: { inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  estCostUsd: 0,
+  stopReason: toolUse.length ? 'tool_use' : 'end_turn',
+})
+
 describe('a generation that continues reads its own conversation (AGL-3809)', () => {
   it('is turned on only by the doors measured to continue', () => {
     const turnedOn = sourceFiles(LIB_ROOT)
@@ -1183,38 +1215,6 @@ describe('a generation that continues reads its own conversation (AGL-3809)', ()
       .map((path) => path.slice(LIB_ROOT.length + 1))
       .sort()
     expect(turnedOn).toEqual(Object.keys(AI_CONVERSATION_CACHE_DOORS).sort())
-  })
-
-  /** A provider that answers from a queue and keeps every request it was sent. */
-  function recording(answers: AiResult[]): { fake: AiProvider; requests: AiProviderRequest[] } {
-    const requests: AiProviderRequest[] = []
-    const fake: AiProvider = {
-      id: 'fake',
-      label: 'Fake',
-      apiKeyEnv: 'FAKE_AI_KEY',
-      endpointHost: 'ai.test',
-      readApiKey: () => 'key',
-      models: () => [],
-      complete: async (request) => {
-        requests.push(request)
-        const next = answers.shift()
-        if (!next) throw new Error('no answer armed')
-        return next
-      },
-      stream: async () => {
-        throw new Error('the doctrine loop never streams')
-      },
-    }
-    return { fake, requests }
-  }
-
-  const answer = (toolUse: Array<{ name: string; input: Record<string, unknown> }>): AiResult => ({
-    kind: 'completion',
-    text: toolUse.length ? '' : 'A plan in prose.',
-    toolUse,
-    usage: { inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 },
-    estCostUsd: 0,
-    stopReason: toolUse.length ? 'tool_use' : 'end_turn',
   })
 
   /** The wire body with every cache marker taken out: what the cache matches on. */
@@ -1292,5 +1292,64 @@ describe('a generation that continues reads its own conversation (AGL-3809)', ()
     })
     expect(requests[0].cacheConversation).toBeUndefined()
     expect(markers(requests[0])).toBe(4)
+  })
+})
+
+describe('a site job’s routes keep their prefix for the hour, in production too (AGL-3830)', () => {
+  /** Every step a guided start runs: the plan, the look, the frame, the pages, their listings, the creations, posts, products and the welcome email. */
+  const SITE_JOB_STEPS: readonly AiStepKind[] = [
+    'copy.blog',
+    'job.component',
+    'job.email',
+    'job.form',
+    'job.layout',
+    'job.page',
+    'job.plan',
+    'job.products',
+    'job.seo',
+    'job.template',
+    'job.theme',
+  ]
+
+  it('asks for the hour on exactly the routing rows a site job runs', () => {
+    const hourly = (Object.keys(AI_ROUTING_TABLE) as AiStepKind[])
+      .filter((step) => AI_ROUTING_TABLE[step].cacheTtl === '1h')
+      .sort()
+    expect(hourly).toEqual([...SITE_JOB_STEPS].sort())
+  })
+
+  async function generationOn(step: AiStepKind | undefined): Promise<AiProviderRequest> {
+    const { fake, requests } = recording([answer([{ name: 'submit', input: {} }])])
+    await runValidatedGeneration('route', {
+      ...(step ? { step } : {}),
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      instructions: [{ text: 'rules' }],
+      messages: [{ role: 'user', content: 'brief' }],
+      tool: { name: 'submit', description: 'Submit.', strict: true, inputSchema: { type: 'object', properties: {} } },
+      check: () => ({ value: {}, violations: [] }),
+    })
+    return requests[0]
+  }
+
+  it('sends the route’s hour on every breakpoint of a deployed server’s request, and five minutes elsewhere', async () => {
+    const saved = process.env['NODE_ENV']
+    ;(process.env as Record<string, string>)['NODE_ENV'] = 'production'
+    try {
+      for (const step of SITE_JOB_STEPS) {
+        const request = await generationOn(step)
+        expect([step, request.cacheTtl]).toEqual([step, '1h'])
+        const body = JSON.stringify(buildAnthropicRequestBody({ ...request, stream: false }))
+        const marks = body.match(/"cache_control":\{[^}]*\}/g) ?? []
+        expect(marks.length).toBeGreaterThan(0)
+        expect(new Set(marks)).toEqual(new Set(['"cache_control":{"type":"ephemeral","ttl":"1h"}']))
+      }
+      for (const step of ['job.crm', 'job.insight', 'job.edit', 'assist.chat'] as const) {
+        expect([step, (await generationOn(step)).cacheTtl]).toEqual([step, undefined])
+      }
+      expect((await generationOn(undefined)).cacheTtl).toBeUndefined()
+    } finally {
+      ;(process.env as Record<string, string | undefined>)['NODE_ENV'] = saved
+    }
   })
 })
