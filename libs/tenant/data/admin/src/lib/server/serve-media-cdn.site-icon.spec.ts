@@ -22,7 +22,7 @@
  * bytes rather than served as the full-size original.
  *
  * Firestore and Storage are stubbed exactly as `serve-media-cdn.stale-pin.spec.ts`
- * stubs them; the Storage download hands back a real PNG so the icon is drawn
+ * stubs them; the Storage read hands back a real PNG so the icon is drawn
  * by the real `sharp`.
  */
 
@@ -59,8 +59,7 @@ jest.mock('./firebase-admin', () => {
       if (!mockState.metadata) throw new Error('No such object')
       return [mockState.metadata]
     },
-    download: async () => [mockState.source],
-    createReadStream: () => Readable.from([Buffer.from('ORIGINAL')]),
+    createReadStream: () => Readable.from([mockState.source]),
   })
   return {
     firebaseAdmin: {
@@ -184,6 +183,7 @@ describe('a site icon on the media CDN (AGL-3484)', () => {
   it('leaves an unknown `icon` value to serve the asset as it is', async () => {
     const res = await serve(['org:ORG', 'MEDIA'], { icon: 'png-9999' })
     expect(res.statusCode).toBe(200)
-    expect(res.body.toString()).toBe('ORIGINAL')
+    // The stored bytes as they are, not a drawn icon.
+    expect(Buffer.compare(res.body, mockState.source)).toBe(0)
   })
 })
