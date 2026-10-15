@@ -2633,6 +2633,36 @@ function danglingWordIn(text: string, table: AiDanglingTable): string | null {
   return lower === '&' || table.words.has(lower) ? word : null
 }
 
+/** Punctuation that joins a phrase to the next one, left at a cut line's end. */
+const LISTING_TRAILING_JOINERS = /[\s,;:|/&—–-]+$/
+
+/**
+ * A search listing value held to `max` characters, cut at a word. A cut that
+ * leaves a joining word or mark at the end ("…Practice Areas and", "…across
+ * Springfield,") takes it off too, so a search result never shows a phrase
+ * that stops mid-thought (AGL-3813), in the plan's language (AGL-3828): a
+ * Spanish title cut to "Pan dulce y" reads "Pan dulce". A value with no space
+ * past half of `max` is cut at `max` itself, mid-word.
+ *
+ * The page step clips what it stores with it; `aiSettlePlanSeo` clips a plan
+ * with it only where the cut lands on a whole word (AGL-3837).
+ */
+export function aiClipAtWord(value: string, max: number, language?: string | null): string {
+  const text = value.trim()
+  if (text.length <= max) return text
+  const cut = text.slice(0, max + 1)
+  const space = cut.lastIndexOf(' ')
+  let clipped = (space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).replace(LISTING_TRAILING_JOINERS, '').trim()
+  for (let guard = 0; guard < 6; guard += 1) {
+    const word = aiDanglingWord(clipped, language)
+    if (!word) break
+    const shorter = clipped.slice(0, clipped.length - word.length).replace(LISTING_TRAILING_JOINERS, '').trim()
+    if (!shorter) break
+    clipped = shorter
+  }
+  return clipped
+}
+
 /** The last words of a line, as a re-ask quotes them. */
 function lineTail(line: string): string {
   const words = line.trim().split(/\s+/)
@@ -5134,6 +5164,59 @@ export function detectMissingNavAndSeo(
     })
   }
   return violations
+}
+
+/** A letter, digit or joiner inside a word: the next character after a cut that splits one. */
+const MID_WORD = /[\p{L}\p{M}\p{N}&'’-]/u
+
+/**
+ * A listing value past `max` cut at a word (`aiClipAtWord`), or `null` when
+ * the cut is not one a person would have written: it splits a word, or keeps
+ * less than half of `max`, which says more about the answer than its length.
+ */
+function settledListing(value: string, max: number, language: string | undefined): string | null {
+  const text = value.trim()
+  const clipped = aiClipAtWord(text, max, language)
+  if (clipped.length < Math.ceil(max / 2)) return null
+  return MID_WORD.test(text.charAt(clipped.length)) ? null : clipped
+}
+
+/**
+ * A page's search title or description a few words past its length is cut
+ * at a word in code, before the rules read the plan (AGL-3837), rather than
+ * re-asked: rule 10's `plan-seo` has one answer for it, "shorter", and a
+ * model asked again for a shorter line misses by as little as it did the
+ * first time. The live Free travel-blog start of 2026-10-15 wrote a home
+ * description of 173 characters against 170 on both answers and stopped.
+ *
+ * The cut is the one the page step stores a listing with (`aiClipAtWord`):
+ * at the last whole word inside `AI_SEO_TITLE_MAX` or
+ * `AI_SEO_DESCRIPTION_MAX`, without a joining mark (" |", ",", ":", "–") or a
+ * word that leaves the line unfinished (`aiDanglingWord`, in the plan's
+ * language) at its end. A missing or empty value, and one whose cut would
+ * split a word or keep under half the length, are left for the rule to
+ * re-ask.
+ */
+export function aiSettlePlanSeo(plan: AiBuildPlan): AiBuildPlan {
+  let changed = false
+  const screens = plan.screens.map((screen) => {
+    const title =
+      typeof screen.seoTitle === 'string' && screen.seoTitle.trim().length > AI_SEO_TITLE_MAX
+        ? settledListing(screen.seoTitle, AI_SEO_TITLE_MAX, plan.language)
+        : null
+    const description =
+      typeof screen.seoDescription === 'string' && screen.seoDescription.trim().length > AI_SEO_DESCRIPTION_MAX
+        ? settledListing(screen.seoDescription, AI_SEO_DESCRIPTION_MAX, plan.language)
+        : null
+    if (title === null && description === null) return screen
+    changed = true
+    return {
+      ...screen,
+      ...(title === null ? {} : { seoTitle: title }),
+      ...(description === null ? {} : { seoDescription: description }),
+    }
+  })
+  return changed ? { ...plan, screens } : plan
 }
 
 /** Every piece of copy a plan carries, with its path. */
