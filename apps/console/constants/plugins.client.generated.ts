@@ -209,6 +209,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms'),
   },
   {
+    id: 'help-desks',
+    apiPrefixes: ["help-desks"],
+    register: {"console":"registerHelpDesksConsole"},
+    contributes: {"console":{"slots":["hostSettings"]}},
+    load: () => import('@aglyn/plugins-help-desks'),
+  },
+  {
     id: 'ad-conversions',
     apiPrefixes: ["ad-conversions"],
     register: {"console":"registerAdConversionsConsole"},

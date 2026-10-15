@@ -367,6 +367,11 @@ export const PLUGIN_DOCS = {
     title: 'Funnels',
     excerpt: 'See how visitors move through the steps you care about, where they drop off and how long each step takes; build or explain a funnel with Aglyn AI, and follow up with people who dropped off.',
   },
+  helpDesks: {
+    path: '/commerce-and-bookings/commerce/help-desks',
+    title: 'Help desks (Gorgias, Re:amaze, Kustomer, Gladly and Richpanel)',
+    excerpt: 'Show your support team each buyer\'s recent orders beside their tickets in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form messages there as new tickets. Rolling out.',
+  },
   installYourFirstPlugin: {
     path: '/guides/install-your-first-plugin',
     title: 'Install your first marketplace item',
@@ -619,6 +624,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   forms: ['#reading-submissions-from-code', '#build-a-form', '#place-a-saved-form', '#saved-forms-per-site', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#style-a-field', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#consent-group-disclosure', '#where-submissions-go', '#the-inbox', '#filter-the-inbox', '#who-a-submission-is-from', '#what-it-links-to', '#where-this-one-went', '#replying-to-a-submission', '#inbox-card', '#every-sites-inbox-at-once', '#one-forms-own-page', '#form-details', '#form-crm-routing', '#form-versions', '#form-collected', '#form-submissions', '#form-saves-to-contact-fields', '#export-submissions', '#find-a-form', '#duplicate-a-form', '#switch-forms-off-for-one-site', '#related'],
   fulfillmentNetworks: ['#connect-a-network', '#shipmonk-connect-with-your-api-key', '#flexport-connect-with-your-api-token', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
   funnels: ['#step-types', '#how-it-counts', '#what-is-a-visit', '#identified-visitors', '#create', '#create-with-ai', '#drafts', '#act-on-drop-off', '#ask-ai'],
+  helpDesks: ['#before-you-start', '#connect', '#credentials', '#what-agents-see', '#contact-form-tickets', '#settings', '#sync-log', '#disconnect', '#related'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#manage-plugins', '#find-plugins', '#built-in-plugins', '#a-plugins-page', '#where-a-plugin-runs', '#permissions-and-data', '#site-plugins', '#plugin-on-one-site', '#what-to-do-next', '#related'],
   inventorySync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#member-page', '#member-access', '#member-activity', '#member-changes', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#site-activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],

@@ -14154,6 +14154,55 @@ describe('zapier hooks are the server’s alone (AGL-3643)', () => {
   })
 })
 
+describe('help desk connections are the server’s alone (AGL-3824)', () => {
+  // A connection holds the merchant's sealed Gorgias, Re:amaze, Kustomer,
+  // Gladly or Richpanel credential and the cursors the sync resumes from; an
+  // owed item is an order or a contact form message about to reach the
+  // merchant's help desk; a customer row holds a buyer's orders. All written
+  // and read by the help-desks plugin's routes and job through the Admin SDK.
+  const DOCS = [
+    ['helpDeskConnections', `${HOST}_gorgias`],
+    ['helpDeskConnections', `${HOST}_gorgias`, 'log', 'run-1'],
+    ['helpDeskOutbox', `${HOST}_gorgias_ticket_sub-1`],
+    ['helpDeskCustomers', `${HOST}_gorgias_abc123`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          email: 'pat@example.com',
+          sealedToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('email platform connections are the server’s alone (AGL-3639)', () => {
   // A connection holds the merchant's sealed Mailchimp, Klaviyo, Omnisend or
   // Attentive credential and the cursors the sync resumes from; an owed

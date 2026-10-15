@@ -87,6 +87,8 @@
       "@aglyn/plugins-commerce/*": ["./libs/plugins/commerce/src/lib/*"],
       "@aglyn/plugins-marketplace": ["./libs/plugins/marketplace/src/index.ts"],
       "@aglyn/plugins-marketplace/*": ["./libs/plugins/marketplace/src/lib/*"],
+      "@aglyn/plugins-help-desks": ["./libs/plugins/help-desks/src/index.ts"],
+      "@aglyn/plugins-help-desks/*": ["./libs/plugins/help-desks/src/lib/*"],
       "@aglyn/plugins-marketing-platforms": ["./libs/plugins/marketing-platforms/src/index.ts"],
       "@aglyn/plugins-marketing-platforms/*": ["./libs/plugins/marketing-platforms/src/lib/*"],
       "@aglyn/plugins-zapier": ["./libs/plugins/zapier/src/index.ts"],
