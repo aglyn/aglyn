@@ -873,6 +873,16 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   is one the rule reads as a region and it places nothing, or only a layout. One that
   places a form or a component, and a page whose every section is a region, are
   re-asked as before; a home left under its fewest sections is the thin-home check's.
+- **A section that places the page's layout has it taken out (AGL-3807).** Rule 2's
+  `plan-layout-in-section` answers "name it as the page's layout, and take it out of the
+  section's uses", so `aiSettlePlanLayoutsInSections` does that, right after the refs are
+  settled and before every other rule reads the plan: the live Free dental start of
+  2026-10-15 put both pages in the site's `laySite` and named it again in each section
+  that placed no form, on both attempts. A layout is what the rule reads as one (a site
+  layout's id, or a `new:` layout the plan creates). Where the page already names that
+  layout, it only comes out of the sections; where the page names none, or a reference
+  that resolves to nothing, the page is put in it. A page in a different layout (or a
+  record of another kind), or whose sections name two layouts, is re-asked as before.
 - **A section that shows the work gets its fewest pieces (AGL-3754).** A site start's
   `plan-empty-gallery` names one answer, "plan it with 3 to 6 items", so
   `aiSettlePlanGalleries` raises a gallery, portfolio or selected-works section (by the
