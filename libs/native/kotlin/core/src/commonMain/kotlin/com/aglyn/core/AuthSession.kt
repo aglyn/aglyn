@@ -1,6 +1,10 @@
 package com.aglyn.core
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+
+/** The support session of an [AuthSession] that has none. */
+private val NoImpersonation: StateFlow<Impersonation?> = MutableStateFlow(null)
 
 data class AuthUser(
   val uid: String,
@@ -23,17 +27,41 @@ sealed interface AuthState {
 interface AuthSession {
   val state: StateFlow<AuthState>
 
+  /**
+   * The support session a staff member is in as a customer, null for an ordinary session. While it is on, [state] is the customer
+   * and every token is theirs; the staff member's own sign-in is set aside untouched.
+   */
+  val impersonation: StateFlow<Impersonation?> get() = NoImpersonation
+
+  /** Signs in as the customer with the custom token `/api/admin/impersonate` minted, in the identity pool [tenantId] names. */
+  suspend fun beginImpersonation(customToken: String, tenantId: String?): Unit =
+    throw AuthError("Support sessions are not available here.")
+
+  /** Ends the support session and returns to the staff member's own sign-in, which was never signed out. */
+  suspend fun endImpersonation() {}
+
   /** The current Firebase ID token, refreshed when asked or when stale; null when signed out. */
   suspend fun idToken(forceRefresh: Boolean = false): String?
 
   /** Throws [AuthError] with words for the sign-in form. */
   suspend fun signInWithEmail(email: String, password: String)
 
+  /** Signs in with a Firebase custom token, as a passkey sign-in ends (the server mints it for the credential's owner). */
+  suspend fun signInWithCustomToken(token: String): Unit = throw AuthError("Signing in with a passkey is not available here.")
+
   suspend fun signOut()
 
   /** Proves [current], then sets [new]. Throws [AuthError] with words for the form. */
   suspend fun changePassword(current: String, new: String): Unit =
     throw AuthError("Changing the password is not available here.")
+
+  /** Disconnects a sign-in provider (`google.com`) from the account, as the console's Account section does with `unlink`. */
+  suspend fun unlinkProvider(providerId: String): Unit =
+    throw AuthError("Disconnecting a sign-in method is not available here.")
+
+  /** Attaches Google's credential (the ID token a [GoogleCredentialSource] returned) to the account, as the console's `linkWithPopup` does. */
+  suspend fun linkGoogle(googleIdToken: String): Unit =
+    throw AuthError("Connecting Google is not available here.")
 
   /** Keeps the account's display name in step with the profile (rosters and comments read it). */
   suspend fun updateDisplayName(name: String) {}

@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 class DeliveryAppsNativeTest {
   private val declared = mapOf(
     "screens" to listOf("delivery-apps.service", "delivery-apps.store", "delivery-apps.match"),
+    "widgets" to listOf("delivery-apps.pos-orders"),
     "deepLinks" to listOf(),
   )
 

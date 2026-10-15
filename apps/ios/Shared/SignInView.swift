@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynScreens
 import AglynUI
+import AuthenticationServices
 import SwiftUI
 
 /// Email and password sign-in against Firebase Auth, the console's own accounts.
 struct SignInView: View {
   @Environment(AppModel.self) private var model
+  @Environment(\.authorizationController) private var authorizationController
   @State private var email = ""
   @State private var password = ""
   @State private var busy = false
@@ -81,6 +84,17 @@ struct SignInView: View {
           .keyboardShortcut(.defaultAction)
           .accessibilityIdentifier("sign-in-submit")
 
+          // A passkey is offered where the build has a relying party (the console's sign-in page offers one too).
+          if model.config?.passkeyRelyingParty != nil, model.api != nil {
+            Button(action: passkey) {
+              Label("Sign in with a passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(busy)
+            .accessibilityIdentifier("sign-in-passkey")
+          }
+
           Button("Forgot password", action: forgot)
             .buttonStyle(.borderless)
             .disabled(busy)
@@ -119,6 +133,23 @@ struct SignInView: View {
         try await auth.signIn(email: email, password: password)
       } catch {
         self.error = signInErrorMessage(error)
+      }
+      busy = false
+    }
+  }
+
+  private func passkey() {
+    guard let auth = model.auth, let api = model.api, let relyingParty = model.config?.passkeyRelyingParty else { return }
+    busy = true
+    error = nil
+    notice = nil
+    Task {
+      do {
+        let token = try await PasskeySignIn.token(api: api, relyingParty: relyingParty, controller: authorizationController)
+        try await auth.signIn(customToken: token)
+      } catch {
+        // The ceremony's and the routes' failures have the console's words; the Firebase sign-in after them has its own.
+        self.error = PasskeySignIn.failed(error) ? PasskeySignIn.message(for: error) : signInErrorMessage(error)
       }
       busy = false
     }

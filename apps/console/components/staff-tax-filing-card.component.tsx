@@ -42,6 +42,7 @@ import {
 } from '../utils/country-options'
 import {
   isTaxJurisdictionKey,
+  TAX_FILING_SOURCE_LABEL,
   type MaskedTaxIdentifier,
   type TaxFilingConfigView,
   type TaxFilingSource,
@@ -51,13 +52,6 @@ interface TaxFilingBody {
   role: string
   config: TaxFilingConfigView
   limits: { noteMax: number }
-}
-
-/** What a source chip says, per layer. */
-const SOURCE_LABEL: Record<TaxFilingSource, string> = {
-  console: 'From this console',
-  environment: 'From the environment',
-  none: 'Not set',
 }
 
 /**
@@ -522,7 +516,7 @@ function SourceChip({ source }: { source: TaxFilingSource }) {
       size="small"
       variant="outlined"
       color={source === 'console' ? 'primary' : 'default'}
-      label={SOURCE_LABEL[source]}
+      label={TAX_FILING_SOURCE_LABEL[source]}
     />
   )
 }

@@ -19,6 +19,10 @@ firestore-protos = "3.21.0"
 androidx-activity = "1.13.0"
 androidx-core = "1.19.1"
 androidx-splashscreen = "1.2.0"
+# Passkeys: the Credential Manager, with Google Play services as its provider on devices before Android 14.
+androidx-credentials = "1.5.0"
+# Sign in with Google through the Credential Manager ("Connect Google").
+googleid = "1.1.1"
 # The versions Firebase BoM 34.19.0 pins; KMP androidMain takes no platform().
 firebase-auth = "24.2.0"
 firebase-firestore = "26.6.0"
@@ -26,6 +30,8 @@ firebase-messaging = "25.1.3"
 firebase-installations = "19.1.2"
 # Stripe Terminal Android (Tap to Pay + Bluetooth readers), Aglyn POS only.
 stripe-terminal = "5.8.2"
+# Stripe's card form (PaymentSheet) for a card typed in at the register, Aglyn POS only.
+stripe-android = "23.21.0"
 # Camera barcode scanning: CameraX preview + ML Kit's bundled barcode model.
 camerax = "1.6.2"
 mlkit-barcode = "17.3.0"
@@ -37,6 +43,9 @@ android-targetSdk = "36"
 [libraries]
 # Custom Tabs: Stripe's hosted Checkout and Customer Portal open in the secure in-app browser.
 androidx-browser = { module = "androidx.browser:browser", version = "1.9.0" }
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "androidx-credentials" }
+androidx-credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "androidx-credentials" }
+google-identity-googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }
@@ -77,6 +86,7 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging", versio
 firebase-installations = { module = "com.google.firebase:firebase-installations", version.ref = "firebase-installations" }
 stripe-terminal = { module = "com.stripe:stripeterminal", version.ref = "stripe-terminal" }
 stripe-terminal-taptopay = { module = "com.stripe:stripeterminal-taptopay", version.ref = "stripe-terminal" }
+stripe-paymentsheet = { module = "com.stripe:paymentsheet", version.ref = "stripe-android" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }

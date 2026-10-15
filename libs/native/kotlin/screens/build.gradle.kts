@@ -57,6 +57,8 @@ kotlin {
         api(project(":native-plugin-host"))
         api(project(":native-ui"))
         implementation(project(":native-contracts"))
+        // The media chooser a `media` field opens.
+        implementation(project(":native-site"))
       }
     }
     commonTest.dependencies {

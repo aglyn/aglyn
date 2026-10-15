@@ -75,6 +75,28 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(store.load()?.uid, "u1")
   }
 
+  /// A custom token (a passkey's, or a support session's) is exchanged once, and the person is read off the ID token it answers.
+  func testSignsInWithACustomTokenAndReadsWhoItIsOffTheToken() async throws {
+    func encode(_ object: [String: Any]) -> String {
+      let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
+      return data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+    }
+    let idToken = "\(encode(["alg": "none"])).\(encode(["user_id": "u9", "email": "p@example.test", "name": "Pat"])).sig"
+    let transport = RecordingTransport([
+      (200, #"{"idToken":"\#(idToken)","refreshToken":"r9","expiresIn":"3600","isNewUser":false}"#)
+    ])
+    let store = MemoryCredentialStore()
+    let user = try await auth(transport, store: store).signIn(customToken: "minted")
+    XCTAssertEqual(user, AglynUser(uid: "u9", email: "p@example.test", displayName: "Pat"))
+    XCTAssertEqual(transport.requests.map { $0.url?.lastPathComponent }, ["accounts:signInWithCustomToken"])
+    XCTAssertEqual(transport.json(0)["token"] as? String, "minted")
+    XCTAssertEqual(transport.json(0)["returnSecureToken"] as? Bool, true)
+    XCTAssertNil(transport.json(0)["tenantId"], "no pool named, none sent")
+    XCTAssertEqual(store.load()?.refreshToken, "r9")
+    XCTAssertEqual(store.load()?.uid, "u9")
+  }
+
   func testAPasswordChangeProvesTheCurrentOneThenReplacesTheTokens() async throws {
     let transport = RecordingTransport([
       (200, signedIn),
@@ -113,6 +135,18 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(user.displayName, "Ada Lovelace")
     XCTAssertEqual(transport.json(1)["displayName"] as? String, "Ada Lovelace")
     XCTAssertEqual(store.load()?.displayName, "Ada Lovelace")
+  }
+
+  func testDisconnectingAProviderAsksForItsDeletionAndKeepsTheFreshTokens() async throws {
+    let transport = RecordingTransport([(200, signedIn), (200, #"{"idToken":"id2","refreshToken":"r2","expiresIn":"3600"}"#)])
+    let store = MemoryCredentialStore()
+    let session = auth(transport, store: store)
+    try await session.signIn(email: "a@example.test", password: "pw")
+    try await session.deleteProvider("google.com")
+    XCTAssertTrue(transport.requests[1].url?.absoluteString.contains("accounts:update") == true)
+    XCTAssertEqual(transport.json(1)["deleteProvider"] as? [String], ["google.com"])
+    let token = try await session.idToken(forceRefresh: false)
+    XCTAssertEqual(token, "id2")
   }
 
   func testARefusedSignInCarriesTheCode() async {

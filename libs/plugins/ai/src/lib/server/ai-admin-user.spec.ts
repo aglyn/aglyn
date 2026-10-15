@@ -128,9 +128,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
 import { GET } from './ai-admin-user'
 import { aiUsageMonthKeys } from '../model/ai-usage-by-user'
 
-const get = (token: string | null = 'tok', uid = 'user-a') =>
+const get = (token: string | null = 'tok', uid = 'user-a', view = '') =>
   GET(
-    new Request(`https://app.aglyn.com/api/ai/admin/user?uid=${uid}`, {
+    new Request(`https://app.aglyn.com/api/ai/admin/user?uid=${uid}${view ? `&view=${view}` : ''}`, {
       headers: token ? { authorization: `Bearer ${token}` } : {},
     }),
   )
@@ -226,5 +226,25 @@ describe('/api/ai/admin/user (AGL-2928)', () => {
     staff()
     await get()
     expect(mockRecordAdminAudit).not.toHaveBeenCalled()
+  })
+
+  it('answers the card as it prints for ?view=prepared (AGL-3667)', async () => {
+    mockDocs[`users/user-a/aiUsage/${THIS_MONTH}`] = { estCostUsd: 0.227, returnedUsd: 0.2 }
+    staff()
+    const view = await (await get('tok', 'user-a', 'prepared')).json()
+    expect(view.allowance).toBe(
+      'Free AI allowance this month: 27 of 300 credits used across the free workspaces this account owns (200 given back).',
+    )
+    expect(view.giveBack).toEqual({
+      summary: 'Used this month, and so the most to give back: owner\u2019s Free allowance 27.',
+      returnable: 27,
+    })
+    expect(view.rows[0]).toMatchObject({
+      orgId: 'org-2',
+      workspace: 'Beta',
+      headline: '300 credits',
+      detail: '12 requests \u00b7 0 refusals',
+    })
+    expect(view.empty).toBe('')
   })
 })

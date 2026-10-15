@@ -447,7 +447,16 @@ fun ListDetail(context: NativePluginContext, actions: EmailActions, listId: Stri
     Row(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalAlignment = Alignment.CenterVertically) {
       Text(row?.name ?: "List", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
       OutlinedButton(onClick = { adding = true }, modifier = Modifier.testTag("list-add-people")) { Text("Add people") }
-      OverflowMenu(listOf(MenuAction("rename", "Rename") { renaming = true }, MenuAction("delete-list", "Delete list", destructive = true) { deleting = true }))
+      OverflowMenu(
+        listOf(
+          // The console's Import and Export on a list's page: the records wizard and export dialog, on this list.
+          MenuAction("list-transfer", "Import and export") {
+            context.navigate("email.list.transfer", mapOf("list" to listId, "name" to (row?.name ?: "this list"), "resource" to "email.list-members:$listId"))
+          },
+          MenuAction("rename", "Rename") { renaming = true },
+          MenuAction("delete-list", "Delete list", destructive = true) { deleting = true },
+        ),
+      )
     }
     notice?.let { NoticeBanner(it.first, it.second, Modifier.padding(horizontal = space(2f))) }
     if (row?.dynamic == true) {

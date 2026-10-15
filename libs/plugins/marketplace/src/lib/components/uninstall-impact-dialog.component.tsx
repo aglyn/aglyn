@@ -34,39 +34,11 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import type { UninstallTarget } from '../model/marketplace'
-
-/** Mirrors the `/api/hosts/plugin-impact` response. */
-interface ImpactSite {
-  hostId: string
-  label: string
-  stillCovered: boolean
-  placements: Array<{
-    type: 'screen' | 'layout' | 'component'
-    id: string
-    name: string
-    count: number
-  }>
-  affectedScreens: number
-  truncated: boolean
-}
-interface Impact {
-  sites: ImpactSite[]
-  losingSites: number
-  placements: number
-  affectedScreens: number
-  truncated: boolean
-  dataSurvives: boolean
-}
-
-/** The word people expect to type when a confirmation is worth slowing down. */
-const ACKNOWLEDGEMENT = 'UNINSTALL'
-
-const PLACEMENT_NOUNS: Record<ImpactSite['placements'][number]['type'], string> =
-  {
-    screen: 'page',
-    layout: 'layout',
-    component: 'component',
-  }
+import {
+  UNINSTALL_ACKNOWLEDGEMENT,
+  type UninstallImpact,
+  uninstallImpactView,
+} from '../model/marketplace-catalog'
 
 export interface UninstallImpactDialogProps {
   open: boolean
@@ -102,7 +74,7 @@ export interface UninstallImpactDialogProps {
 export function UninstallImpactDialog(props: UninstallImpactDialogProps) {
   const { open, listing, targets, scope, onCancel, onConfirm } = props
   const { data: user } = useUser()
-  const [impact, setImpact] = useState<Impact | null>(null)
+  const [impact, setImpact] = useState<UninstallImpact | null>(null)
   const [failed, setFailed] = useState(false)
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
@@ -145,7 +117,7 @@ export function UninstallImpactDialog(props: UninstallImpactDialogProps) {
         const payload = await response.json().catch(() => null)
         if (!active) return
         if (!response.ok || !payload) return void setFailed(true)
-        setImpact(payload as Impact)
+        setImpact(payload as UninstallImpact)
       } catch {
         if (active) setFailed(true)
       }
@@ -165,31 +137,32 @@ export function UninstallImpactDialog(props: UninstallImpactDialogProps) {
     }
   }, [onConfirm])
 
-  const name = listing?.displayName ?? 'this plugin'
-  const scanning = Boolean(pluginId) && losing.length > 0 && !impact && !failed
-  const affected = impact?.affectedScreens ?? 0
-  /**
-   * The scan could not speak, so it must not be read as "nothing breaks".
-   * A failed check is a reason for MORE friction, not less — the one thing it
-   * rules out is confidence.
+  /*
+   * The scan could not speak, so it must not be read as "nothing breaks": a
+   * failed check is a reason for MORE friction, not less — the one thing it
+   * rules out is confidence. What the dialog says, and how much friction it
+   * asks for, is `uninstallImpactView`, which the native apps replay.
    */
-  const unknown = failed || (!pluginId && losing.length > 0)
-  const needsAcknowledgement = affected > 0 || unknown
+  const view = uninstallImpactView({
+    name: listing?.displayName ?? 'this plugin',
+    scope,
+    pluginId,
+    targets,
+    impact,
+    failed,
+  })
   const canConfirm =
     !busy &&
-    !scanning &&
-    (!needsAcknowledgement || typed.trim().toUpperCase() === ACKNOWLEDGEMENT)
+    !view.scanning &&
+    (!view.needsAcknowledgement ||
+      typed.trim().toUpperCase() === UNINSTALL_ACKNOWLEDGEMENT)
 
   return (
     <Dialog open={open} onClose={() => !busy && onCancel()} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        {scope === 'org'
-          ? `Uninstall ${name} across the organization?`
-          : `Remove ${name} from this site?`}
-      </DialogTitle>
+      <DialogTitle>{view.title}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          {scanning ? (
+          {view.scanning ? (
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <CircularProgress size={16} />
               <Typography variant="body2" color="text.secondary">
@@ -198,100 +171,41 @@ export function UninstallImpactDialog(props: UninstallImpactDialogProps) {
             </Stack>
           ) : null}
 
-          {unknown && !scanning ? (
-            <Alert severity="warning">
-              {pluginId
-                ? 'The impact check could not run, so this cannot say what ' +
-                  'would stop working. Nothing here means "nothing breaks".'
-                : 'This listing records no plugin id, so its placements cannot ' +
-                  'be found. Pages using it may stop rendering it.'}
+          {view.alerts.map((alert) => (
+            <Alert key={alert.text} severity={alert.tone}>
+              {alert.text}
             </Alert>
-          ) : null}
+          ))}
 
-          {!scanning && !unknown && affected > 0 ? (
-            <Alert severity="error">
-              {`Removes ${name} from ${impact?.losingSites ?? losing.length} ` +
-                `site${(impact?.losingSites ?? losing.length) === 1 ? '' : 's'}; ` +
-                `${impact?.truncated ? 'at least ' : ''}${affected} published ` +
-                `page${affected === 1 ? '' : 's'} ` +
-                `place${affected === 1 ? 's' : ''} it and will stop ` +
-                'rendering it.'}
-            </Alert>
-          ) : null}
+          {view.sites.map((site) => (
+            <Box key={site.label}>
+              <Typography variant="subtitle2">{site.label}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {site.pages}
+              </Typography>
+              <Stack
+                useFlexGap
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap', gap: 1, marginTop: 1 }}
+              >
+                {site.chips.map((chip) => (
+                  <Chip key={chip} size="small" variant="outlined" label={chip} />
+                ))}
+              </Stack>
+            </Box>
+          ))}
 
-          {!scanning && !unknown && affected === 0 && losing.length ? (
-            <Alert severity="info">
-              {'No published page places this plugin, so nothing visitors can ' +
-                'see changes.'}
-            </Alert>
-          ) : null}
-
-          {covered.length ? (
-            // The case that would otherwise read as a lie.
-            <Alert severity="info">
-              {covered.length === targets.length
-                ? 'The plugin keeps running on ' +
-                  (covered.length === 1
-                    ? 'this site'
-                    : `all ${covered.length} of these sites`) +
-                  ', because another install still covers ' +
-                  (covered.length === 1 ? 'it' : 'them') +
-                  '. Only which version is in use changes.'
-                : `${covered.length} of these sites keep the plugin — ` +
-                  `${covered
-                    .map((target) => target.label)
-                    .join(', ')} — because another install still covers them.`}
-            </Alert>
-          ) : null}
-
-          {impact?.sites
-            .filter((site) => !site.stillCovered && site.placements.length)
-            .map((site) => (
-              <Box key={site.hostId}>
-                <Typography variant="subtitle2">{site.label}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {`${site.affectedScreens} published page` +
-                    `${site.affectedScreens === 1 ? '' : 's'} affected`}
-                </Typography>
-                <Stack
-                  useFlexGap
-                  direction="row"
-                  spacing={1}
-                  sx={{ flexWrap: 'wrap', gap: 1, marginTop: 1 }}
-                >
-                  {site.placements.slice(0, 12).map((placement) => (
-                    <Chip
-                      key={`${placement.type}:${placement.id}`}
-                      size="small"
-                      variant="outlined"
-                      label={
-                        `${PLACEMENT_NOUNS[placement.type]}: ${placement.name}` +
-                        (placement.count > 1 ? ` ×${placement.count}` : '')
-                      }
-                    />
-                  ))}
-                  {site.placements.length > 12 ? (
-                    <Chip
-                      size="small"
-                      label={`+${site.placements.length - 12} more`}
-                    />
-                  ) : null}
-                </Stack>
-              </Box>
-            ))}
-
-          {!scanning && losing.length ? (
+          {view.note ? (
             <Typography variant="body2" color="text.secondary">
-              {'Uninstalling removes the install only. The plugin’s settings ' +
-                'and any data it stored are kept, and installing it again ' +
-                'restores the pages that place it.'}
+              {view.note}
             </Typography>
           ) : null}
 
-          {needsAcknowledgement && !scanning ? (
+          {view.needsAcknowledgement ? (
             <TextField
               size="small"
-              label={`Type ${ACKNOWLEDGEMENT} to confirm`}
+              label={`Type ${UNINSTALL_ACKNOWLEDGEMENT} to confirm`}
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               autoComplete="off"
@@ -309,7 +223,7 @@ export function UninstallImpactDialog(props: UninstallImpactDialogProps) {
           disabled={!canConfirm}
           onClick={() => void confirm()}
         >
-          {scope === 'org' ? 'Uninstall org-wide' : 'Remove'}
+          {view.confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>

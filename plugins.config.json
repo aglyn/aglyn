@@ -472,7 +472,7 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
@@ -1068,12 +1068,13 @@
         "planEntitlements": "marketplacePlanEntitlements"
       },
       "mobile": {
-        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app: browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
+        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app (and, from AGL-3671, publishing the site as a template with the Publisher Agreement it needs, as spec screens in src/android/screens/marketplace.screens.json): browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop. From AGL-3671 it also fills two slots of the workspace's plugin pages, as the console's marketplace does: the plugins installed from it (every site's pins, with a chip where a newer version is on offer) and one plugin's installation (current or behind, which sites run it, update, add, split, promote and remove with the uninstall impact check, and its permissions).",
         "ios": { "module": "AglynMarketplacePlugin", "register": "registerMarketplaceNative" },
         "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
         "contributes": {
-          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"],
+          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.publishTemplate", "marketplace.publisherAgreement"],
           "quickActions": ["marketplace.open"],
+          "widgets": ["marketplace.org-installs", "marketplace.plugin-installation"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page"]
         }
       },
@@ -1827,7 +1828,7 @@
         "ios": { "module": "AglynEmailPlugin", "register": "registerEmailNative" },
         "android": { "package": "com.aglyn.plugins.email", "register": "registerEmailNative" },
         "contributes": {
-          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions"],
+          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions", "email.import.existing", "email.import.consent", "email.list.transfer"],
           "quickActions": ["email.open"],
           "deepLinks": ["email.page", "email.messages-page", "email.templates-page", "email.audiences-page", "email.topics-page", "email.sending-page", "email.suppressions-page", "email.message-page", "email.list-page"]
         }
@@ -2779,8 +2780,13 @@
             "ai.staffOrg",
             "ai.staffUser",
             "ai.signals",
+            "ai.staffRequests",
+            "ai.requests",
+            "ai.request",
+            "ai.orgsSpendColumn",
             "ai.hostMember",
-            "ai.allotment"
+            "ai.allotment",
+            "ai.import.productCopy"
           ],
           "widgets": [
             "ai.seo-audit",
@@ -3789,7 +3795,7 @@
     {
       "id": "delivery-apps",
       "mobile": {
-        "$comment": "AGL-3652: delivery apps natively (DoorDash, Uber Eats, Grubhub): linking a store, auto-accept and prep time, sending the menu and matching items to products, from the spec in src/android/screens/delivery-apps.screens.json. It sits in Commerce settings' commerceSettings zone. The register's delivery queue belongs to the POS register lane.",
+        "$comment": "AGL-3652: delivery apps natively (DoorDash, Uber Eats, Grubhub): linking a store, auto-accept and prep time, sending the menu and matching items to products, from the spec in src/android/screens/delivery-apps.screens.json. It sits in Commerce settings' commerceSettings zone. AGL-3651/AGL-3652: the register's delivery-order queue, a widget in the Aglyn POS register's posOrders zone (the commerce plugin hosts the zone and names no plugin): each open DoorDash, Uber Eats or Grubhub order with the one next step, through delivery-apps/queue and delivery-apps/order-action as the signed-in member.",
         "ios": {
           "module": "AglynDeliveryAppsPlugin",
           "register": "registerDeliveryAppsNative"
@@ -3803,6 +3809,9 @@
             "delivery-apps.service",
             "delivery-apps.store",
             "delivery-apps.match"
+          ],
+          "widgets": [
+            "delivery-apps.pos-orders"
           ]
         }
       },

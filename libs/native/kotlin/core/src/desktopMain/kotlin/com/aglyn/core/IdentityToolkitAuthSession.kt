@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -34,6 +36,8 @@ class IdentityToolkitAuthSession(
   private val now: () -> Long = ::nowMillis,
   private val credentials: CredentialStore = InMemoryCredentialStore(),
   private val credentialKey: String = "Aglyn",
+  /** How a support session signs in: over REST, keeping nothing. */
+  private val support: SupportSessions = SupportSessions(RestSupportBackend(http, apiKey, emulatorHost, now)),
 ) : AuthSession {
   private val identityBase = emulatorHost?.let { "http://$it/identitytoolkit.googleapis.com" } ?: "https://identitytoolkit.googleapis.com"
   private val tokenBase = emulatorHost?.let { "http://$it/securetoken.googleapis.com" } ?: "https://securetoken.googleapis.com"
@@ -118,7 +122,32 @@ class IdentityToolkitAuthSession(
     return refreshed
   }
 
-  override suspend fun idToken(forceRefresh: Boolean): String? = lock.withLock {
+  override val impersonation: StateFlow<Impersonation?> = support.impersonation
+
+  /** Signs in as a customer with the custom token a staff route minted; the staff member's own tokens stay as they are. */
+  override suspend fun beginImpersonation(customToken: String, tenantId: String?) {
+    // A support session already on ends first, so the state it set aside is back before the next one starts.
+    if (support.active) endImpersonation()
+    val customer = support.begin(customToken, tenantId, mutable.value)
+    mutable.value = AuthState.SignedIn(customer)
+  }
+
+  /** Ends the support session and returns to the staff member's own sign-in, which was never signed out. */
+  override suspend fun endImpersonation() {
+    mutable.value = support.end() ?: return
+  }
+
+  override suspend fun idToken(forceRefresh: Boolean): String? {
+    if (support.active) {
+      val token = support.idToken(forceRefresh)
+      // A refresh the server refuses (the support session was revoked) ends it, and the staff session returns.
+      if (token == null) endImpersonation()
+      return token
+    }
+    return staffIdToken(forceRefresh)
+  }
+
+  private suspend fun staffIdToken(forceRefresh: Boolean): String? = lock.withLock {
     val current = tokens ?: return@withLock null
     // Refresh a minute early, so a token never expires in flight.
     if (!forceRefresh && current.expiresAt - 60_000 > now()) return@withLock current.idToken
@@ -160,7 +189,7 @@ class IdentityToolkitAuthSession(
   }
 
   /** `accounts:update` with the current ID token; the new tokens replace the old, which a password change revokes. */
-  private suspend fun update(fields: Map<String, JsonPrimitive>): JsonObject {
+  private suspend fun update(fields: Map<String, JsonElement>): JsonObject {
     val idToken = lock.withLock { tokens?.idToken } ?: throw AuthError(authErrorMessage(null))
     val response = try {
       http.post("$identityBase/v1/accounts:update?key=$apiKey") {
@@ -200,13 +229,49 @@ class IdentityToolkitAuthSession(
     update(mapOf("password" to JsonPrimitive(new)))
   }
 
+  override suspend fun unlinkProvider(providerId: String) {
+    update(mapOf("deleteProvider" to JsonArray(listOf(JsonPrimitive(providerId)))))
+  }
+
+  override suspend fun linkGoogle(googleIdToken: String) {
+    val idToken = lock.withLock { tokens?.idToken } ?: throw AuthError(GoogleLink.linkRefusal(null))
+    val response = try {
+      http.post("$identityBase/v1/accounts:signInWithIdp?key=$apiKey") {
+        contentType(ContentType.Application.Json)
+        setBody(GoogleLink.linkBody(idToken, googleIdToken).toString())
+      }
+    } catch (error: Exception) {
+      throw AuthError(GoogleLink.linkRefusal(null), error)
+    }
+    val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+    if (response.status.value !in 200..299 || body == null) {
+      throw AuthError(GoogleLink.linkRefusal((body?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content))
+    }
+    // The new tokens carry the Google identity, which is what the provider list is read from.
+    lock.withLock {
+      val current = tokens ?: return@withLock
+      val fresh = Tokens(
+        idToken = body["idToken"]?.jsonPrimitive?.content ?: current.idToken,
+        refreshToken = body["refreshToken"]?.jsonPrimitive?.content ?: current.refreshToken,
+        expiresAt = now() + (body["expiresIn"]?.jsonPrimitive?.content?.toLongOrNull() ?: 3600) * 1000,
+        uid = current.uid,
+      )
+      tokens = fresh
+      keep(fresh.refreshToken)
+    }
+  }
+
   override suspend fun updateDisplayName(name: String) {
     val signedIn = (mutable.value as? AuthState.SignedIn)?.user ?: return
     update(mapOf("displayName" to JsonPrimitive(name)))
     mutable.value = AuthState.SignedIn(signedIn.copy(displayName = name.ifEmpty { null }))
   }
 
-  override suspend fun signOut() = lock.withLock { signOutLocked() }
+  override suspend fun signOut() {
+    // Leaving the app from a support session ends it, and then signs the staff member out as well.
+    endImpersonation()
+    lock.withLock { signOutLocked() }
+  }
 
   private fun signOutLocked() {
     tokens = null

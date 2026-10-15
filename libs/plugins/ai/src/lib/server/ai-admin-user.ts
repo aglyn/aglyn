@@ -25,6 +25,7 @@ import { readUserAiUsageMonths } from '../usage/ai-usage-by-user'
 import { freeAccountUsageRef } from '../usage/assist-free-taste'
 import { assistUsageMonth } from '../usage/assist-usage'
 import { composeStaffAiAccountAllowance } from '../usage/staff-org-ai'
+import { staffUserAiView } from '../usage/staff-org-ai-view'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
@@ -114,6 +115,10 @@ async function handler(request: Request): Promise<Response> {
       month,
       allowanceSnap.exists ? (allowanceSnap.data() ?? null) : null,
     )
+    // The card as it prints, for a client that draws none of it (the staff apps).
+    if (String(query.view ?? '') === 'prepared') {
+      return Response.json(staffUserAiView({ rows, allowance }), { status: 200 })
+    }
     return Response.json(
       { uid, rows, truncated: reverse.size >= MAX_ORGS, allowance },
       { status: 200 },

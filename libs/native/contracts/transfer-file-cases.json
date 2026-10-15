@@ -1,0 +1,3379 @@
+{
+  "$comment": "Replayed by apps/console/specs/native-transfer-file-matches-the-console.spec.ts against the console, and by the Swift and Kotlin ports (AglynCoreTests, native-core desktopTest).",
+  "texts": {
+    "comma": "name,email,phone\nAna,ana@x.co,555\nBo,bo@x.co,\n",
+    "semicolon": "name;email\nAna;ana@x.co\nBo;bo@x.co\n",
+    "tab": "name\temail\nAna\tana@x.co\n",
+    "pipe": "a|b|c\n1|2|3\n4|5|6\n",
+    "quoted": "name,notes\n\"Ana\",\"said \"\"hi\"\"\nthere\"\nBo,plain\n",
+    "noHeader": "Ana,ana@x.co,555\nBo,bo@x.co,666\n",
+    "crlf": "a,b\r\n1,2\r\n3,4\r\n",
+    "empty": "",
+    "oneColumn": "name\nAna\nBo\n",
+    "ragged": "a,b,c\n1,2\n1,2,3,4\n",
+    "blanks": "a,b\n\n1,2\n   ,  \n3,4",
+    "quotedDelimiter": "a;b\n\"x;y\";z\n",
+    "dupHeader": "a,a\n1,2\n",
+    "emptyHeader": "a,,c\n1,2,3\n",
+    "datesFirst": "2026-01-01,Ana\n2026-02-01,Bo\n",
+    "jsonArray": "[{\"b\":1,\"a\":\"x\"},{\"c\":true,\"a\":\"y\"}]",
+    "jsonObject": "{\"a\":1,\"b\":[1,2]}",
+    "ndjson": "{\"id\":\"1\",\"name\":\"Ana\"}\n{\"id\":\"2\",\"name\":\"Bo\",\"extra\":null}\n",
+    "badJson": "[{\"a\":1},",
+    "badNdjson": "{\"a\":1}\nnot json\n",
+    "nested": "[{\"a\":{\"x\":1},\"b\":[1,\"two\",null,true]}]",
+    "emptyJsonRecords": "[]",
+    "jsonScalars": "[1,\"two\",{\"a\":3}]"
+  },
+  "detectFormat": [
+    {
+      "fileName": "",
+      "text": "comma",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "comma",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "comma",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "comma",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "semicolon",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "semicolon",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "semicolon",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "semicolon",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "tab",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "tab",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "tab",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "tab",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "pipe",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "pipe",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "pipe",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "pipe",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "quoted",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "quoted",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "quoted",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "quoted",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "noHeader",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "noHeader",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "noHeader",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "noHeader",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "crlf",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "crlf",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "crlf",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "crlf",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "empty",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "empty",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "empty",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "empty",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "oneColumn",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "oneColumn",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "oneColumn",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "oneColumn",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "ragged",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "ragged",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "ragged",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "ragged",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "blanks",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "blanks",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "blanks",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "blanks",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "quotedDelimiter",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "quotedDelimiter",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "quotedDelimiter",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "quotedDelimiter",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "dupHeader",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "dupHeader",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "dupHeader",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "dupHeader",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "emptyHeader",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "emptyHeader",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "emptyHeader",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "emptyHeader",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "datesFirst",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "datesFirst",
+      "result": "csv"
+    },
+    {
+      "fileName": "a.json",
+      "text": "datesFirst",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "datesFirst",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "jsonArray",
+      "result": "json"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "jsonArray",
+      "result": "json"
+    },
+    {
+      "fileName": "a.json",
+      "text": "jsonArray",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "jsonArray",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "jsonObject",
+      "result": "json"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "jsonObject",
+      "result": "json"
+    },
+    {
+      "fileName": "a.json",
+      "text": "jsonObject",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "jsonObject",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "ndjson",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "ndjson",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "a.json",
+      "text": "ndjson",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "ndjson",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "badJson",
+      "result": "json"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "badJson",
+      "result": "json"
+    },
+    {
+      "fileName": "a.json",
+      "text": "badJson",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "badJson",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "badNdjson",
+      "result": "json"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "badNdjson",
+      "result": "json"
+    },
+    {
+      "fileName": "a.json",
+      "text": "badNdjson",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "badNdjson",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "nested",
+      "result": "json"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "nested",
+      "result": "json"
+    },
+    {
+      "fileName": "a.json",
+      "text": "nested",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "nested",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "emptyJsonRecords",
+      "result": "json"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "emptyJsonRecords",
+      "result": "json"
+    },
+    {
+      "fileName": "a.json",
+      "text": "emptyJsonRecords",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "emptyJsonRecords",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "jsonScalars",
+      "result": "json"
+    },
+    {
+      "fileName": "a.csv",
+      "text": "jsonScalars",
+      "result": "json"
+    },
+    {
+      "fileName": "a.json",
+      "text": "jsonScalars",
+      "result": "json"
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "jsonScalars",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "people.csv",
+      "text": "comma",
+      "result": "csv"
+    },
+    {
+      "fileName": "x.TSV",
+      "text": "comma",
+      "result": "csv"
+    },
+    {
+      "fileName": "data.json",
+      "text": "comma",
+      "result": "json"
+    },
+    {
+      "fileName": "rows.ndjson",
+      "text": "comma",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "x.jsonl",
+      "text": "comma",
+      "result": "ndjson"
+    },
+    {
+      "fileName": "",
+      "text": "comma",
+      "result": "csv"
+    },
+    {
+      "fileName": "notes.txt",
+      "text": "comma",
+      "result": "csv"
+    },
+    {
+      "fileName": "DATA.JSON",
+      "text": "comma",
+      "result": "json"
+    }
+  ],
+  "detectDelimiter": [
+    {
+      "text": "comma",
+      "result": ","
+    },
+    {
+      "text": "semicolon",
+      "result": ";"
+    },
+    {
+      "text": "tab",
+      "result": "\t"
+    },
+    {
+      "text": "pipe",
+      "result": "|"
+    },
+    {
+      "text": "quoted",
+      "result": ","
+    },
+    {
+      "text": "noHeader",
+      "result": ","
+    },
+    {
+      "text": "crlf",
+      "result": ","
+    },
+    {
+      "text": "empty",
+      "result": ","
+    },
+    {
+      "text": "oneColumn",
+      "result": ","
+    },
+    {
+      "text": "ragged",
+      "result": ","
+    },
+    {
+      "text": "blanks",
+      "result": ","
+    },
+    {
+      "text": "quotedDelimiter",
+      "result": ";"
+    },
+    {
+      "text": "dupHeader",
+      "result": ","
+    },
+    {
+      "text": "emptyHeader",
+      "result": ","
+    },
+    {
+      "text": "datesFirst",
+      "result": ","
+    },
+    {
+      "text": "jsonArray",
+      "result": ","
+    },
+    {
+      "text": "jsonObject",
+      "result": ","
+    },
+    {
+      "text": "ndjson",
+      "result": ","
+    },
+    {
+      "text": "badJson",
+      "result": ","
+    },
+    {
+      "text": "badNdjson",
+      "result": ","
+    },
+    {
+      "text": "nested",
+      "result": ","
+    },
+    {
+      "text": "emptyJsonRecords",
+      "result": ","
+    },
+    {
+      "text": "jsonScalars",
+      "result": ","
+    }
+  ],
+  "parseDelimited": [
+    {
+      "text": "comma",
+      "delimiter": ",",
+      "result": [
+        [
+          "name",
+          "email",
+          "phone"
+        ],
+        [
+          "Ana",
+          "ana@x.co",
+          "555"
+        ],
+        [
+          "Bo",
+          "bo@x.co",
+          ""
+        ]
+      ]
+    },
+    {
+      "text": "semicolon",
+      "delimiter": ",",
+      "result": [
+        [
+          "name;email"
+        ],
+        [
+          "Ana;ana@x.co"
+        ],
+        [
+          "Bo;bo@x.co"
+        ]
+      ]
+    },
+    {
+      "text": "semicolon",
+      "delimiter": ";",
+      "result": [
+        [
+          "name",
+          "email"
+        ],
+        [
+          "Ana",
+          "ana@x.co"
+        ],
+        [
+          "Bo",
+          "bo@x.co"
+        ]
+      ]
+    },
+    {
+      "text": "tab",
+      "delimiter": ",",
+      "result": [
+        [
+          "name\temail"
+        ],
+        [
+          "Ana\tana@x.co"
+        ]
+      ]
+    },
+    {
+      "text": "tab",
+      "delimiter": "\t",
+      "result": [
+        [
+          "name",
+          "email"
+        ],
+        [
+          "Ana",
+          "ana@x.co"
+        ]
+      ]
+    },
+    {
+      "text": "pipe",
+      "delimiter": ",",
+      "result": [
+        [
+          "a|b|c"
+        ],
+        [
+          "1|2|3"
+        ],
+        [
+          "4|5|6"
+        ]
+      ]
+    },
+    {
+      "text": "pipe",
+      "delimiter": "|",
+      "result": [
+        [
+          "a",
+          "b",
+          "c"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "4",
+          "5",
+          "6"
+        ]
+      ]
+    },
+    {
+      "text": "quoted",
+      "delimiter": ",",
+      "result": [
+        [
+          "name",
+          "notes"
+        ],
+        [
+          "Ana",
+          "said \"hi\"\nthere"
+        ],
+        [
+          "Bo",
+          "plain"
+        ]
+      ]
+    },
+    {
+      "text": "noHeader",
+      "delimiter": ",",
+      "result": [
+        [
+          "Ana",
+          "ana@x.co",
+          "555"
+        ],
+        [
+          "Bo",
+          "bo@x.co",
+          "666"
+        ]
+      ]
+    },
+    {
+      "text": "crlf",
+      "delimiter": ",",
+      "result": [
+        [
+          "a",
+          "b"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "3",
+          "4"
+        ]
+      ]
+    },
+    {
+      "text": "empty",
+      "delimiter": ",",
+      "result": []
+    },
+    {
+      "text": "oneColumn",
+      "delimiter": ",",
+      "result": [
+        [
+          "name"
+        ],
+        [
+          "Ana"
+        ],
+        [
+          "Bo"
+        ]
+      ]
+    },
+    {
+      "text": "ragged",
+      "delimiter": ",",
+      "result": [
+        [
+          "a",
+          "b",
+          "c"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "1",
+          "2",
+          "3",
+          "4"
+        ]
+      ]
+    },
+    {
+      "text": "blanks",
+      "delimiter": ",",
+      "result": [
+        [
+          "a",
+          "b"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "3",
+          "4"
+        ]
+      ]
+    },
+    {
+      "text": "quotedDelimiter",
+      "delimiter": ",",
+      "result": [
+        [
+          "a;b"
+        ],
+        [
+          "x;y;z"
+        ]
+      ]
+    },
+    {
+      "text": "quotedDelimiter",
+      "delimiter": ";",
+      "result": [
+        [
+          "a",
+          "b"
+        ],
+        [
+          "x;y",
+          "z"
+        ]
+      ]
+    },
+    {
+      "text": "dupHeader",
+      "delimiter": ",",
+      "result": [
+        [
+          "a",
+          "a"
+        ],
+        [
+          "1",
+          "2"
+        ]
+      ]
+    },
+    {
+      "text": "emptyHeader",
+      "delimiter": ",",
+      "result": [
+        [
+          "a",
+          "",
+          "c"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ]
+    },
+    {
+      "text": "datesFirst",
+      "delimiter": ",",
+      "result": [
+        [
+          "2026-01-01",
+          "Ana"
+        ],
+        [
+          "2026-02-01",
+          "Bo"
+        ]
+      ]
+    },
+    {
+      "text": "jsonArray",
+      "delimiter": ",",
+      "result": [
+        [
+          "[{\"b\":1",
+          "a:\"x\"}",
+          "{\"c\":true",
+          "a:\"y\"}]"
+        ]
+      ]
+    },
+    {
+      "text": "jsonObject",
+      "delimiter": ",",
+      "result": [
+        [
+          "{\"a\":1",
+          "b:[1",
+          "2]}"
+        ]
+      ]
+    },
+    {
+      "text": "ndjson",
+      "delimiter": ",",
+      "result": [
+        [
+          "{\"id\":\"1\"",
+          "name:\"Ana\"}"
+        ],
+        [
+          "{\"id\":\"2\"",
+          "name:\"Bo\"",
+          "extra:null}"
+        ]
+      ]
+    },
+    {
+      "text": "badJson",
+      "delimiter": ",",
+      "result": [
+        [
+          "[{\"a\":1}",
+          ""
+        ]
+      ]
+    },
+    {
+      "text": "badNdjson",
+      "delimiter": ",",
+      "result": [
+        [
+          "{\"a\":1}"
+        ],
+        [
+          "not json"
+        ]
+      ]
+    },
+    {
+      "text": "nested",
+      "delimiter": ",",
+      "result": [
+        [
+          "[{\"a\":{\"x\":1}",
+          "b:[1",
+          "two",
+          "null",
+          "true]}]"
+        ]
+      ]
+    },
+    {
+      "text": "emptyJsonRecords",
+      "delimiter": ",",
+      "result": [
+        [
+          "[]"
+        ]
+      ]
+    },
+    {
+      "text": "jsonScalars",
+      "delimiter": ",",
+      "result": [
+        [
+          "[1",
+          "two",
+          "{\"a\":3}]"
+        ]
+      ]
+    }
+  ],
+  "detectHeaderRow": [
+    {
+      "text": "comma",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "semicolon",
+      "delimiter": ";",
+      "result": true
+    },
+    {
+      "text": "tab",
+      "delimiter": "\t",
+      "result": true
+    },
+    {
+      "text": "pipe",
+      "delimiter": "|",
+      "result": true
+    },
+    {
+      "text": "quoted",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "noHeader",
+      "delimiter": ",",
+      "result": false
+    },
+    {
+      "text": "crlf",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "empty",
+      "delimiter": ",",
+      "result": false
+    },
+    {
+      "text": "oneColumn",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "ragged",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "blanks",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "quotedDelimiter",
+      "delimiter": ";",
+      "result": true
+    },
+    {
+      "text": "dupHeader",
+      "delimiter": ",",
+      "result": false
+    },
+    {
+      "text": "emptyHeader",
+      "delimiter": ",",
+      "result": false
+    },
+    {
+      "text": "datesFirst",
+      "delimiter": ",",
+      "result": false
+    },
+    {
+      "text": "jsonArray",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "jsonObject",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "ndjson",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "badJson",
+      "delimiter": ",",
+      "result": false
+    },
+    {
+      "text": "badNdjson",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "nested",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "emptyJsonRecords",
+      "delimiter": ",",
+      "result": true
+    },
+    {
+      "text": "jsonScalars",
+      "delimiter": ",",
+      "result": true
+    }
+  ],
+  "parse": [
+    {
+      "text": "comma",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "name",
+          "email",
+          "phone"
+        ],
+        "rows": [
+          [
+            "Ana",
+            "ana@x.co",
+            "555"
+          ],
+          [
+            "Bo",
+            "bo@x.co",
+            ""
+          ]
+        ]
+      }
+    },
+    {
+      "text": "comma",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2",
+          "Column 3"
+        ],
+        "rows": [
+          [
+            "name",
+            "email",
+            "phone"
+          ],
+          [
+            "Ana",
+            "ana@x.co",
+            "555"
+          ],
+          [
+            "Bo",
+            "bo@x.co",
+            ""
+          ]
+        ]
+      }
+    },
+    {
+      "text": "comma",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid JSON."
+      }
+    },
+    {
+      "text": "comma",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid NDJSON."
+      }
+    },
+    {
+      "text": "semicolon",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "name",
+          "email"
+        ],
+        "rows": [
+          [
+            "Ana",
+            "ana@x.co"
+          ],
+          [
+            "Bo",
+            "bo@x.co"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "semicolon",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "name",
+            "email"
+          ],
+          [
+            "Ana",
+            "ana@x.co"
+          ],
+          [
+            "Bo",
+            "bo@x.co"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "tab",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "\t",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "name",
+          "email"
+        ],
+        "rows": [
+          [
+            "Ana",
+            "ana@x.co"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "tab",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "\t",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "name",
+            "email"
+          ],
+          [
+            "Ana",
+            "ana@x.co"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "pipe",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "|",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b",
+          "c"
+        ],
+        "rows": [
+          [
+            "1",
+            "2",
+            "3"
+          ],
+          [
+            "4",
+            "5",
+            "6"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "pipe",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "|",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2",
+          "Column 3"
+        ],
+        "rows": [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          [
+            "1",
+            "2",
+            "3"
+          ],
+          [
+            "4",
+            "5",
+            "6"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "quoted",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "name",
+          "notes"
+        ],
+        "rows": [
+          [
+            "Ana",
+            "said \"hi\"\nthere"
+          ],
+          [
+            "Bo",
+            "plain"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "quoted",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "name",
+            "notes"
+          ],
+          [
+            "Ana",
+            "said \"hi\"\nthere"
+          ],
+          [
+            "Bo",
+            "plain"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "noHeader",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "Ana",
+          "ana@x.co",
+          "555"
+        ],
+        "rows": [
+          [
+            "Bo",
+            "bo@x.co",
+            "666"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "noHeader",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2",
+          "Column 3"
+        ],
+        "rows": [
+          [
+            "Ana",
+            "ana@x.co",
+            "555"
+          ],
+          [
+            "Bo",
+            "bo@x.co",
+            "666"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "crlf",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b"
+        ],
+        "rows": [
+          [
+            "1",
+            "2"
+          ],
+          [
+            "3",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "crlf",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "1",
+            "2"
+          ],
+          [
+            "3",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "empty",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    },
+    {
+      "text": "empty",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    },
+    {
+      "text": "empty",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid JSON."
+      }
+    },
+    {
+      "text": "empty",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    },
+    {
+      "text": "oneColumn",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "name"
+        ],
+        "rows": [
+          [
+            "Ana"
+          ],
+          [
+            "Bo"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "oneColumn",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1"
+        ],
+        "rows": [
+          [
+            "name"
+          ],
+          [
+            "Ana"
+          ],
+          [
+            "Bo"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "ragged",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b",
+          "c",
+          "Column 4"
+        ],
+        "rows": [
+          [
+            "1",
+            "2"
+          ],
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "ragged",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2",
+          "Column 3",
+          "Column 4"
+        ],
+        "rows": [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          [
+            "1",
+            "2"
+          ],
+          [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "blanks",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b"
+        ],
+        "rows": [
+          [
+            "1",
+            "2"
+          ],
+          [
+            "3",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "blanks",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "1",
+            "2"
+          ],
+          [
+            "3",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "quotedDelimiter",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b"
+        ],
+        "rows": [
+          [
+            "x;y",
+            "z"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "quotedDelimiter",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "x;y",
+            "z"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "dupHeader",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "a"
+        ],
+        "rows": [
+          [
+            "1",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "dupHeader",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "a",
+            "a"
+          ],
+          [
+            "1",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "emptyHeader",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "Column 2",
+          "c"
+        ],
+        "rows": [
+          [
+            "1",
+            "2",
+            "3"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "emptyHeader",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2",
+          "Column 3"
+        ],
+        "rows": [
+          [
+            "a",
+            "",
+            "c"
+          ],
+          [
+            "1",
+            "2",
+            "3"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "datesFirst",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "2026-01-01",
+          "Ana"
+        ],
+        "rows": [
+          [
+            "2026-02-01",
+            "Bo"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "datesFirst",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "2026-01-01",
+            "Ana"
+          ],
+          [
+            "2026-02-01",
+            "Bo"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "jsonArray",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "[{\"b\":1",
+          "a:\"x\"}",
+          "{\"c\":true",
+          "a:\"y\"}]"
+        ],
+        "rows": []
+      }
+    },
+    {
+      "text": "jsonArray",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2",
+          "Column 3",
+          "Column 4"
+        ],
+        "rows": [
+          [
+            "[{\"b\":1",
+            "a:\"x\"}",
+            "{\"c\":true",
+            "a:\"y\"}]"
+          ]
+        ]
+      }
+    },
+    {
+      "text": "jsonArray",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "b",
+          "a",
+          "c"
+        ],
+        "rows": [
+          [
+            1,
+            "x",
+            ""
+          ],
+          [
+            "",
+            "y",
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "text": "jsonArray",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    },
+    {
+      "text": "jsonObject",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b"
+        ],
+        "rows": [
+          [
+            1,
+            [
+              1,
+              2
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "text": "jsonObject",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b"
+        ],
+        "rows": [
+          [
+            1,
+            [
+              1,
+              2
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "text": "ndjson",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid JSON."
+      }
+    },
+    {
+      "text": "ndjson",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "id",
+          "name",
+          "extra"
+        ],
+        "rows": [
+          [
+            "1",
+            "Ana",
+            ""
+          ],
+          [
+            "2",
+            "Bo",
+            ""
+          ]
+        ]
+      }
+    },
+    {
+      "text": "badJson",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "[{\"a\":1}",
+          "Column 2"
+        ],
+        "rows": []
+      }
+    },
+    {
+      "text": "badJson",
+      "settings": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      },
+      "result": {
+        "headers": [
+          "Column 1",
+          "Column 2"
+        ],
+        "rows": [
+          [
+            "[{\"a\":1}",
+            ""
+          ]
+        ]
+      }
+    },
+    {
+      "text": "badJson",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid JSON."
+      }
+    },
+    {
+      "text": "badJson",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid NDJSON."
+      }
+    },
+    {
+      "text": "badNdjson",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid JSON."
+      }
+    },
+    {
+      "text": "badNdjson",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": [],
+        "error": "This is not valid NDJSON."
+      }
+    },
+    {
+      "text": "nested",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a",
+          "b"
+        ],
+        "rows": [
+          [
+            {
+              "x": 1
+            },
+            [
+              1,
+              "two",
+              null,
+              true
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "text": "nested",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    },
+    {
+      "text": "emptyJsonRecords",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    },
+    {
+      "text": "emptyJsonRecords",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    },
+    {
+      "text": "jsonScalars",
+      "settings": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [
+          "a"
+        ],
+        "rows": [
+          [
+            3
+          ]
+        ]
+      }
+    },
+    {
+      "text": "jsonScalars",
+      "settings": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      },
+      "result": {
+        "headers": [],
+        "rows": []
+      }
+    }
+  ],
+  "detectSettings": [
+    {
+      "fileName": "",
+      "text": "comma",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "comma",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "comma",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "comma",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "semicolon",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "semicolon",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "semicolon",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "semicolon",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "tab",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "\t",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "tab",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "\t",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "tab",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "tab",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "pipe",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "|",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "pipe",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": "|",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "pipe",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "pipe",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "quoted",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "quoted",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "quoted",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "quoted",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "noHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "noHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "noHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "noHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "crlf",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "crlf",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "crlf",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "crlf",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "empty",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "empty",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "empty",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "empty",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "oneColumn",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "oneColumn",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "oneColumn",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "oneColumn",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "ragged",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "ragged",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "ragged",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "ragged",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "blanks",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "blanks",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "blanks",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "blanks",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "quotedDelimiter",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "quotedDelimiter",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ";",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "quotedDelimiter",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "quotedDelimiter",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "dupHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "dupHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "dupHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "dupHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "emptyHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "emptyHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "emptyHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "emptyHeader",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "datesFirst",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "datesFirst",
+      "encoding": "utf-8",
+      "result": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": false
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "datesFirst",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "datesFirst",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "jsonArray",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "jsonArray",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "jsonArray",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "jsonArray",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "jsonObject",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "jsonObject",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "jsonObject",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "jsonObject",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "ndjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "ndjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "ndjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "ndjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "badJson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "badJson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "badJson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "badJson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "badNdjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "badNdjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "badNdjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "badNdjson",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "nested",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "nested",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "nested",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "nested",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "emptyJsonRecords",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "emptyJsonRecords",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "emptyJsonRecords",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "emptyJsonRecords",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "",
+      "text": "jsonScalars",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.csv",
+      "text": "jsonScalars",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.json",
+      "text": "jsonScalars",
+      "encoding": "utf-8",
+      "result": {
+        "format": "json",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "a.ndjson",
+      "text": "jsonScalars",
+      "encoding": "utf-8",
+      "result": {
+        "format": "ndjson",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    },
+    {
+      "fileName": "x.csv",
+      "text": "comma",
+      "encoding": "windows-1252",
+      "result": {
+        "format": "csv",
+        "encoding": "windows-1252",
+        "delimiter": ",",
+        "headerRow": true
+      }
+    }
+  ],
+  "formatBytes": [
+    {
+      "bytes": 0,
+      "result": "0 B"
+    },
+    {
+      "bytes": 1,
+      "result": "1 B"
+    },
+    {
+      "bytes": 1023,
+      "result": "1023 B"
+    },
+    {
+      "bytes": 1024,
+      "result": "1.0 KB"
+    },
+    {
+      "bytes": 1536,
+      "result": "1.5 KB"
+    },
+    {
+      "bytes": 1048575,
+      "result": "1024.0 KB"
+    },
+    {
+      "bytes": 1048576,
+      "result": "1.0 MB"
+    },
+    {
+      "bytes": 25165824,
+      "result": "24.0 MB"
+    },
+    {
+      "bytes": 3670016,
+      "result": "3.5 MB"
+    }
+  ]
+}

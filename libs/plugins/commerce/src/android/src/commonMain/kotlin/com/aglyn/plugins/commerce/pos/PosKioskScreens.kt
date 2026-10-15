@@ -67,6 +67,7 @@ import com.aglyn.contracts.PosKioskSaleStatus
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
+import com.aglyn.ui.KeepScreenOn
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.QuantityStepper
@@ -99,6 +100,8 @@ fun PosKioskScreen(context: NativePluginContext) {
     )
   }
   val scope = rememberCoroutineScope()
+  // A kiosk nobody is touching must not dim or lock: the next customer walks up to a lit screen.
+  KeepScreenOn()
   LaunchedEffect(Unit) { model.start() }
   // The idle clock, once a second.
   LaunchedEffect(model.token) {

@@ -2,10 +2,12 @@ package com.aglyn.pos
 
 import android.app.Application
 import com.aglyn.core.AglynEnv
+import com.aglyn.hardware.AndroidSystemPrinter
 import com.aglyn.hardware.StaticPeripherals
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AndroidShell
+import com.aglyn.pos.card.StripeKeyedCardEntry
 import com.aglyn.pos.terminal.PermissionGate
 import com.aglyn.pos.terminal.StripeTerminalCollector
 import com.aglyn.shell.ShellServices
@@ -23,6 +25,9 @@ class AglynPosApplication : Application() {
     if (TapToPay.isInTapToPayProcess()) return
     TerminalApplicationDelegate.onCreate(this)
   }
+
+  /** Stripe's card form for a card typed in at the register; the activity on screen attaches it. */
+  internal val keyedCards: StripeKeyedCardEntry by lazy { StripeKeyedCardEntry(this) }
 
   val services: ShellServices by lazy {
     AndroidShell.services(
@@ -50,6 +55,10 @@ class AglynPosApplication : Application() {
       // on for a build (TERMINAL_LIVE_READERS), which needs Stripe live mode.
       peripherals = StaticPeripherals(
         cardCollector = StripeTerminalCollector(this, simulated = !BuildConfig.TERMINAL_LIVE_READERS, permissions = { permissionGate }),
+        // A receipt with no printer of its own goes to Android's print sheet, as the console's goes to the browser's.
+        systemPrinter = AndroidSystemPrinter(this),
+        // A card typed in at the register goes into Stripe's own card form, not through our code.
+        keyedCardEntry = keyedCards,
       ),
     )
   }

@@ -34,9 +34,9 @@ public enum JSONValue: Equatable, Hashable, Sendable, Codable {
     }
   }
 
-  public func encoded() throws -> Data {
+  public func encoded(pretty: Bool = false) throws -> Data {
     let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
+    encoder.outputFormatting = pretty ? [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes] : [.sortedKeys]
     return try encoder.encode(self)
   }
 

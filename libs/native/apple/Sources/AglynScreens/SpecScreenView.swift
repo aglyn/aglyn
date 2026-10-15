@@ -6,6 +6,7 @@ import AglynPluginHost
 import AglynUI
 import AuthenticationServices
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if canImport(UIKit)
   import UIKit
@@ -25,6 +26,8 @@ public struct SpecScreenView: View {
   var embedded = false
 
   @Environment(\.aglynScreenSession) private var session
+  @Environment(\.webAuthenticationSession) private var webAuthentication
+  @Environment(\.authorizationController) private var authorizationController
   @State private var model: ScreenModel?
   @State private var selection: ListSelection?
 
@@ -71,11 +74,21 @@ public struct SpecScreenView: View {
         Form { SkeletonRows(count: 6) }.formStyle(.grouped)
       }
     }
+    .environment(\.aglynPluginContext, plugin)
+    .onChange(of: session.claims) { _, _ in model?.rebase(baseContext) }
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {
       let fresh = ScreenModel(
         spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer,
         account: session.account)
+      fresh.authenticate = { [webAuthentication] url, scheme in
+        try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
+      }
+      if session.passkeyRelyingParty != nil {
+        fresh.createPasskey = { [authorizationController] options in
+          try await SystemPasskeys.create(options, using: authorizationController)
+        }
+      }
       model = fresh
       selection = nil
       await fresh.load()
@@ -113,6 +126,14 @@ struct PendingAction: Identifiable {
   var reauthMessage: String?
 }
 
+/// An action whose route refused for something another screen settles: that screen, drawn over this one.
+struct GatedAction: Identifiable {
+  let id = UUID()
+  let action: ActionSpec
+  let scope: JSONValue
+  let spec: ScreenSpec
+}
+
 struct SpecScreenBody: View {
   @Bindable var model: ScreenModel
   let plugin: NativePluginContext
@@ -123,16 +144,27 @@ struct SpecScreenBody: View {
   @Environment(\.webAuthenticationSession) private var webAuthentication
   @Environment(\.openURL) private var openURL
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.aglynGateResolve) private var gateResolve
   @State private var confirming: PendingAction?
   @State private var prompting: PendingAction?
   @State private var reauthing: PendingAction?
+  @State private var gating: GatedAction?
+  @State private var gatedAgain: GatedAction?
+  @State private var gateResolved = false
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
-  @State private var exporting: TransferExportRequest?
+  @State private var exporting: ExportedDownload?
+  @State private var exportSheet: TransferExportRequest?
   @State private var running: String?
   @State private var searchText = ""
+  @State private var started = false
 
   private var context: JSONValue { model.context }
+
+  private var isReady: Bool {
+    if case .ready = model.phase { return true }
+    return false
+  }
 
   var body: some View {
     content
@@ -145,6 +177,16 @@ struct SpecScreenBody: View {
       }
       .animation(.default, value: notice?.text)
       .toolbar { toolbar }
+      // A screen that names a `start` action runs it once, as soon as its data is in: the action's own `when` decides
+      // whether there is anything to do (a link's `?notice=` that names a notice that cannot be reviewed does nothing).
+      .task(id: isReady) {
+        guard isReady, !started, let id = model.spec.startAction else { return }
+        started = true
+        guard let action = model.spec.raw["actions"].array.compactMap(ActionSpec.init).first(where: { $0.id == id }),
+          ScreenValues.condition(action.when, in: context)
+        else { return }
+        trigger(action, scope: context)
+      }
       .confirmationDialog(
         confirming.map { $0.action.confirmText(in: $0.scope) ?? ScreenValues.render($0.action.label, in: $0.scope) } ?? "",
         isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
@@ -159,9 +201,24 @@ struct SpecScreenBody: View {
         }
       }
       .sheet(item: $prompting) { pending in
-        ActionInputSheet(pending: pending, context: context) { filled in
+        ActionInputSheet(pending: pending, context: context, search: { group, words in try await model.lookup(group, words: words) }) { filled in
           prompting = nil
           Task { await execute(pending.action, scope: filled) }
+        }
+      }
+      .sheet(
+        item: $gating,
+        onDismiss: {
+          // The gate's screen closed: if it did what the gate asked, send the same action again, once.
+          guard gateResolved, let again = gatedAgain else { return }
+          gateResolved = false
+          gatedAgain = nil
+          Task { await execute(again.action, scope: again.scope, afterGate: true) }
+        }
+      ) { gated in
+        NavigationStack {
+          SpecScreenView(spec: gated.spec, context: plugin, params: [:], embedded: true)
+            .environment(\.aglynGateResolve, { gateResolved = true })
         }
       }
       .sheet(item: $reauthing) { pending in
@@ -172,9 +229,16 @@ struct SpecScreenBody: View {
           await execute(pending.action, scope: pending.scope)
         }
       }
-      .sheet(item: $exporting) { request in
+      .fileExporter(
+        isPresented: Binding(get: { exporting != nil }, set: { if !$0 { exporting = nil } }),
+        document: exporting.map { ExportedDocument(data: $0.data) },
+        contentType: exporting?.type ?? .data, defaultFilename: exporting?.name
+      ) { result in
+        if case .failure(let error) = result { show(error.localizedDescription, .error) }
+      }
+      .sheet(item: $exportSheet) { request in
         TransferExportSheet(context: plugin, request: request) { message in
-          exporting = nil
+          exportSheet = nil
           if let message { show(message, .success) }
         }
       }
@@ -325,9 +389,11 @@ struct SpecScreenBody: View {
           }
         }
       }
+      let slotParams = renderParams(block["params"], in: context)
       ForEach(widgets) { widget in
         Section {
           widget.make(plugin)
+            .environment(\.aglynSlotParams, slotParams)
             .accessibilityIdentifier("zone-widget-\(widget.id)")
         }
       }
@@ -337,6 +403,33 @@ struct SpecScreenBody: View {
           AglynNotice(ScreenValues.render(empty, in: context), tone: .info)
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
+        }
+      }
+    case "image":
+      // `{ "type": "image", "src": "{item.url}", "caption": "…" }`: a picture the route hands over (a staff media preview).
+      let source = ScreenValues.render(block["src"]?.stringValue ?? "", in: context)
+      if !source.isEmpty {
+        Section {
+          AglynRemoteImage(URL(string: source), contentMode: .fit, label: block["caption"]?.stringValue.map { ScreenValues.render($0, in: context) })
+            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 320)
+            .listRowInsets(EdgeInsets())
+        } header: {
+          if let title { Text(title) }
+        } footer: {
+          if let footer, !footer.isEmpty { Text(footer) }
+        }
+      }
+    case "html":
+      // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text.
+      // Scripts, styles, frames, forms and images never reach the importer, and a link opens in the system handler.
+      let source = ScreenValues.render(block["source"]?.stringValue ?? "", in: context)
+      section(title, footer) {
+        if source.isEmpty {
+          Text(block["empty"]?.stringValue.map { ScreenValues.render($0, in: context) } ?? "Nothing to show.").foregroundStyle(.secondary)
+        } else {
+          Text(EmailHTML.attributed(source))
+            .font(AglynFont.body)
+            .textSelection(.enabled)
         }
       }
     case "notice":
@@ -373,7 +466,7 @@ struct SpecScreenBody: View {
   }
 
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
-    if action.asksInputs {
+    if action.asksInputs(in: scope) {
       prompting = PendingAction(action: action, scope: scope)
     } else if action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
       confirming = PendingAction(action: action, scope: scope)
@@ -382,28 +475,25 @@ struct SpecScreenBody: View {
     }
   }
 
-  private func execute(_ action: ActionSpec, scope: JSONValue) async {
+  private func execute(_ action: ActionSpec, scope: JSONValue, afterGate: Bool = false) async {
+    if let request = action.exportRequest(in: scope) {
+      exportSheet = request
+      return
+    }
     if let copy = action.copy {
       copyToClipboard(ScreenValues.render(copy, in: scope))
       show("Copied", .success)
-      return
-    }
-    if let export = action.export {
-      let resource = export["resource"]?.stringValue ?? ""
-      let resolved = { (key: String) in export[key].map { ScreenValues.resolveBody($0, in: scope) } }
-      exporting = TransferExportRequest(
-        resource: resource,
-        title: ScreenValues.render(export["title"]?.stringValue ?? action.label, in: scope),
-        hostID: plugin.hostID,
-        scope: resolved("scope") ?? .object(["kind": .string("all")]),
-        fileStem: ScreenValues.render(export["fileStem"]?.stringValue ?? resource, in: scope),
-        filter: resolved("filter"))
       return
     }
     if let path = action.besigner {
       if !plugin.openBesigner(ScreenValues.render(path, in: scope), scope: .absolute) {
         show("That page does not open in the app.", .warning)
       }
+      return
+    }
+    if let route = action.route {
+      let path = ScreenValues.render(route, in: scope)
+      if path.isEmpty || !plugin.openLink(path) { show("That page does not open in the app.", .warning) }
       return
     }
     if let link = action.link {
@@ -426,8 +516,10 @@ struct SpecScreenBody: View {
         confirming = PendingAction(action: action, scope: ScreenContext.with(scope, "preview", response ?? .object([:])))
       case .needsReauth(let message):
         reauthing = PendingAction(action: action, scope: scope, reauthMessage: message)
-      case .failed(let message):
+      case .failed(let message), .gated(_, let message):
         show(message, .error)
+      case .file:
+        break  // a check asks a question; it never answers with a file
       }
       return
     }
@@ -437,11 +529,24 @@ struct SpecScreenBody: View {
     switch outcome {
     case .needsReauth(let message):
       reauthing = PendingAction(action: action, scope: scope, reauthMessage: message)
+    case .gated(let screen, let message):
+      // Asked about once: a second refusal after the gate's screen is answered as it stands.
+      if !afterGate, let spec = ScreenCatalog.shared.spec(screen) {
+        let gated = GatedAction(action: action, scope: scope, spec: spec)
+        gatedAgain = gated
+        gateResolved = false
+        gating = gated
+      } else {
+        show(message, .error)
+      }
     case .failed(let message):
       show(message, .error)
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.error)
       #endif
+    case .file(let file, let name, let message):
+      exporting = ExportedDownload(name: name, data: file.data, contentType: file.contentType)
+      if let message, !message.isEmpty { show(message, .success) }
     case .done(let message, let response):
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -465,14 +570,32 @@ struct SpecScreenBody: View {
       if let reveal = action.reveal, let value = ScreenValues.lookup(reveal, in: response ?? .null) ?? ScreenValues.lookup(reveal, in: after) {
         revealed = (action.label, ScreenValues.text(value))
       }
+      if let file = action.file, let made = file.contents(in: after) {
+        exporting = ExportedDownload(name: made.name, data: Data(made.text.utf8), contentType: file.type)
+      }
       if let openPath = action.openURL, let link = ScreenValues.lookup(openPath, in: response ?? .null)?.stringValue,
         let url = URL(string: link)
       {
         await webAuthentication.openHostedPage(url)
       }
+      if let impersonate = action.impersonate {
+        // The route minted a custom token for the customer; the app signs in with it. The token goes to the session
+        // and is shown, logged and kept nowhere else.
+        guard let (token, tenantId) = impersonate.resolve(in: response) else {
+          show("The support session could not be opened.", .error)
+          return
+        }
+        do {
+          try await session.impersonate(token, tenantId)
+        } catch {
+          show("The support session could not be opened. Try again.", .error)
+        }
+        return
+      }
       if let navigate = action.navigate {
         plugin.navigate(navigate.screen, navigate.params.mapValues { ScreenValues.render($0, in: after) })
       }
+      if action.resume { gateResolve?() }
       if action.back {
         dismiss()
         return
@@ -536,6 +659,28 @@ struct SearchModifier: ViewModifier {
       content
     }
   }
+}
+
+/// A file a route answered with, waiting for the person to choose where it goes.
+struct ExportedDownload {
+  let name: String
+  let data: Data
+  let contentType: String
+
+  var type: UTType {
+    UTType(mimeType: contentType.split(separator: ";").first.map(String.init) ?? contentType)
+      ?? UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
+  }
+}
+
+/// The bytes a save panel or the Files app writes.
+struct ExportedDocument: FileDocument {
+  static var readableContentTypes: [UTType] { [.data] }
+  let data: Data
+
+  init(data: Data) { self.data = data }
+  init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
 /// One screen's row in a zone. A screen with a `showWhen` reads its own loads first and is listed only while the condition holds,

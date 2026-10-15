@@ -21,3 +21,5 @@
 // AGLYN_GOOGLE_IOS_CLIENT_ID_AglynPOS = <the iOS OAuth client for com.aglyn.pos>
 // AGLYN_GOOGLE_WEB_CLIENT_ID = <the project's Web OAuth client>
 // AGLYN_BRAND_NAME = Aglyn
+// The domain passkeys are made for, once that domain serves an apple-app-site-association naming the app.
+// AGLYN_PASSKEY_RP_ID = <your passkey domain>

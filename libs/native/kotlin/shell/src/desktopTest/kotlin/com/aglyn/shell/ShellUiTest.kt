@@ -28,6 +28,7 @@ import com.aglyn.core.FirestorePage
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
+import com.aglyn.core.Impersonation
 import com.aglyn.core.InMemoryKeyValueStore
 import com.aglyn.core.Live
 import com.aglyn.core.WorkspaceStore
@@ -51,6 +52,13 @@ import kotlin.test.assertEquals
 private class FakeAuth : AuthSession {
   private val mutable = MutableStateFlow<AuthState>(AuthState.SignedOut)
   override val state: StateFlow<AuthState> = mutable
+  val support = MutableStateFlow<Impersonation?>(null)
+  var ended = 0
+  override val impersonation: StateFlow<Impersonation?> = support
+  override suspend fun endImpersonation() {
+    ended++
+    support.value = null
+  }
   override suspend fun idToken(forceRefresh: Boolean) = if (mutable.value is AuthState.SignedIn) "token" else null
   override suspend fun signInWithEmail(email: String, password: String) {
     if (password != "right") throw AuthError("That email and password do not match.")
@@ -261,6 +269,27 @@ class ShellUiTest {
     waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
     assertEquals("users/u1/notifications/n1", writer.writes.single().first)
     assertEquals(true, writer.writes.single().second["read"])
+  }
+
+  /** A support session wears the band on every screen, and its exit brings the staff member's own session back. */
+  @Test
+  fun aSupportSessionWearsABannerWithAWayBack() = runComposeUiTest {
+    val services = services()
+    val auth = services.auth as FakeAuth
+    setContent { AglynShell(services) }
+    onNodeWithTag("sign-in-email").performTextInput("dana@example.test")
+    onNodeWithTag("sign-in-password").performTextInput("right")
+    onNodeWithTag("sign-in-submit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-header") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("impersonation-banner"))
+
+    runOnIdle { auth.support.value = Impersonation(AuthUser("c1", "cass@example.test", "Cass"), "ops@example.test") }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("impersonation-banner") > 0 }
+    onNodeWithText("You are impersonating cass@example.test (staff: ops@example.test). Actions are audited.").assertIsDisplayed()
+
+    onNodeWithTag("impersonation-exit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("impersonation-banner") == 0 }
+    assertEquals(1, auth.ended)
   }
 
   @Test

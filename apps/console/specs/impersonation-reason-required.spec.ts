@@ -169,25 +169,26 @@ describe('staff impersonation records why (AGL-2125)', () => {
     })
   })
 
-  it('the dialog enforces the same minimum the route does', () => {
+  it('the dialog, the route and the staff apps share one minimum', async () => {
     const {
       IMPERSONATION_MIN_REASON_LENGTH,
     } = require('../components/staff-impersonation-dialog.component')
-    // Derived from the route's own refusal rather than from a second literal:
-    // a reason one character short must be refused and one character over
-    // must pass, so this fails if either side moves independently.
-    const source: string = require('node:fs').readFileSync(
-      require('node:path').join(
-        __dirname,
-        '../app/api/admin/impersonate/route.ts',
-      ),
-      'utf8',
+    expect(require('../utils/impersonation-reason').IMPERSONATION_MIN_REASON_LENGTH).toBe(
+      IMPERSONATION_MIN_REASON_LENGTH,
     )
-    const routeMinimum = Number(
-      /const MIN_REASON_LENGTH = (\d+)/.exec(source)?.[1],
-    )
-    expect(routeMinimum).toBeGreaterThan(1)
-    expect(IMPERSONATION_MIN_REASON_LENGTH).toBe(routeMinimum)
+    expect(IMPERSONATION_MIN_REASON_LENGTH).toBeGreaterThan(1)
+    // A reason one character short is refused and one at the minimum passes,
+    // so this fails if either side moves on its own.
+    const short = await post({
+      uid: 'uid-customer',
+      reason: 'x'.repeat(IMPERSONATION_MIN_REASON_LENGTH - 1),
+    })
+    expect(short.status).toBe(400)
+    const enough = await post({
+      uid: 'uid-customer',
+      reason: 'x'.repeat(IMPERSONATION_MIN_REASON_LENGTH),
+    })
+    expect(enough.status).toBe(200)
   })
 
   it('still refuses a non-staff caller, reason or not', async () => {

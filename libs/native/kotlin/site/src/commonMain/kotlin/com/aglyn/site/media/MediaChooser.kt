@@ -77,8 +77,16 @@ const val PRIVATE_FILE_REFUSAL = "That file is private, so it cannot be placed o
  * tap to choose. Shown over whatever screen needs a file.
  */
 @Composable
-fun MediaChooserDialog(context: NativePluginContext, onChoose: (ChosenMedia) -> Unit, onDismiss: () -> Unit, kind: String? = "image", allowPrivate: Boolean = false) {
-  val hostId = context.hostId
+fun MediaChooserDialog(
+  context: NativePluginContext,
+  onChoose: (ChosenMedia) -> Unit,
+  onDismiss: () -> Unit,
+  kind: String? = "image",
+  allowPrivate: Boolean = false,
+  /** The workspace's library alone, whichever site is picked: a workspace setting (its logo, its favicon) is chosen from the workspace's files, as the console's org media browser does. */
+  workspaceOnly: Boolean = false,
+) {
+  val hostId = context.hostId.takeIf { !workspaceOnly }
   val orgId = context.orgId
   var tab by remember { mutableStateOf(0) }
   val scope: MediaScope? = when {

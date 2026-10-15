@@ -80,16 +80,9 @@ import StaffUserProductEmail, {
   type StaffUserMarketing,
 } from '../../../../../components/staff-user-product-email.component'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
+import { IDENTITY_SOURCE_LABEL } from '../../../../../utils/staff-identity-source'
 import StaffUserSendEmailCard from '../../../../../components/staff-user-send-email-card.component'
 import StaffUserAdAudience from '../../../../../components/staff-user-ad-audience.component'
-
-/** Where a resolved name or photo came from, as the page says it. */
-const IDENTITY_SOURCE_LABEL = {
-  auth: 'auth record',
-  profile: 'profile',
-  provider: 'sign-in provider',
-  idp: 'SSO directory',
-} as const
 
 interface UserDetail {
   user: {

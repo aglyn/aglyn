@@ -496,3 +496,96 @@ export function evaluateNativeToWeb({ files, read, readLink = () => null }) {
   }
   return failures
 }
+
+/* ---------------------------------------------------------------------------
+ * SDK placement
+ *
+ * Stripe's card-entry SDK (the iOS StripePaymentSheet product and Android's
+ * com.stripe:paymentsheet) draws the card form for a card typed in at the
+ * register, so the card number stays inside Stripe's own field and our PCI
+ * scope does not change. It belongs to Aglyn POS alone: the Aglyn app, the
+ * shared kits and every plugin reach it only through the KeyedCardEntry
+ * seam in the hardware kit, never by name. This rule holds that at the file
+ * level, the way the walk above holds the web boundary.
+ * ------------------------------------------------------------------------- */
+
+/** Names that mean "the card-entry SDK", in Swift, Gradle, the version catalog and the Xcode project. */
+const CARD_SDK =
+  /\bStripe(?:PaymentSheet|PaymentsUI|Payments|Core|UICore)\b|stripe-ios-spm|com\.stripe:paymentsheet|com\.stripe\.android\.paymentsheet|stripe[-.]paymentsheet/
+
+/** The only native files that may name it. */
+const CARD_SDK_HOMES = [
+  /^apps\/ios\/AglynPOS\//,
+  /^apps\/android\/pos\//,
+  // Declares the version; only the POS module's build file uses the declaration.
+  /^apps\/android\/gradle\/libs\.versions\.toml$/,
+  // The resolved pin of every package the project uses.
+  /^apps\/ios\/Aglyn\.xcodeproj\/project\.xcworkspace\/xcshareddata\/swiftpm\/Package\.resolved$/,
+]
+
+const CARD_SDK_TARGET = 'AglynPOS'
+
+/**
+ * Which Xcode targets link which Stripe card products, from the project file.
+ * Returns `{ target, product }` pairs.
+ */
+export function xcodeStripeLinks(project) {
+  const products = new Map()
+  for (const match of project.matchAll(/^\s*(\w+) \/\* [^*]* \*\/ = \{isa = XCSwiftPackageProductDependency;[^}]*productName = ([\w-]+);/gm)) {
+    products.set(match[1], match[2])
+  }
+  const links = []
+  for (const line of project.split('\n')) {
+    if (!line.includes('isa = PBXNativeTarget')) continue
+    const name = /\bname = ([\w-]+);/.exec(line)?.[1]
+    const deps = /packageProductDependencies = \(([^)]*)\)/.exec(line)?.[1] ?? ''
+    for (const id of deps.match(/\b[0-9A-F]{24}\b/g) ?? []) {
+      const product = products.get(id)
+      if (name && product && /^Stripe/.test(product)) links.push({ target: name, product })
+    }
+  }
+  return links
+}
+
+/**
+ * Stripe's card-entry SDK, outside Aglyn POS. Returns the same failure shape
+ * as the walks above.
+ */
+export function evaluateCardSdkPlacement({ files, read }) {
+  const failures = []
+  for (const file of files) {
+    if (file.split('/').includes('node_modules')) continue
+    if (!isNativePath(file)) continue
+    if (!NATIVE_TEXT.test(file) && !/(^|\/)Package\.(swift|resolved)$/.test(file)) continue
+    let source
+    try {
+      source = read(file)
+    } catch {
+      continue
+    }
+    if (file.endsWith('.pbxproj')) {
+      for (const { target, product } of xcodeStripeLinks(source)) {
+        if (target !== CARD_SDK_TARGET) {
+          failures.push({
+            direction: 'sdk-placement',
+            file,
+            specifier: `${product} in ${target}`,
+            why: `links Stripe's card-entry SDK into ${target}; only ${CARD_SDK_TARGET} carries it`,
+          })
+        }
+      }
+      continue
+    }
+    if (CARD_SDK_HOMES.some((home) => home.test(file))) continue
+    const hit = CARD_SDK.exec(source)
+    if (hit) {
+      failures.push({
+        direction: 'sdk-placement',
+        file,
+        specifier: hit[0],
+        why: `names Stripe's card-entry SDK outside Aglyn POS; reach it through the KeyedCardEntry seam in the hardware kit`,
+      })
+    }
+  }
+  return failures
+}

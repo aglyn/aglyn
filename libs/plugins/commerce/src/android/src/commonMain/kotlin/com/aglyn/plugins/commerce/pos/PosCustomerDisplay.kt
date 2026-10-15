@@ -50,6 +50,7 @@ import com.aglyn.contracts.posDisplayEmail
 import com.aglyn.contracts.posDisplayPhone
 import com.aglyn.contracts.posTipProblem
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.ui.KeepScreenOn
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.StatusTone
@@ -74,6 +75,8 @@ const val COMMERCE_DISPLAY_SCREEN = "commerce.display"
 fun PosCustomerDisplayScreen(context: NativePluginContext) {
   val model = remember { PosCustomerDisplayModel(ConsolePosDeviceApi(context.api), PosDeviceTokenStore(context.deviceStore, PosDeviceMode.DISPLAY)) }
   val scope = rememberCoroutineScope()
+  // A display facing the customer must not dim or lock between sales.
+  KeepScreenOn()
   LaunchedEffect(Unit) { model.start() }
   LaunchedEffect(model.token) {
     if (model.token == null) return@LaunchedEffect

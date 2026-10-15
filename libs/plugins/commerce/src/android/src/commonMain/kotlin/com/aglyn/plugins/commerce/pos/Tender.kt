@@ -5,6 +5,9 @@ import com.aglyn.hardware.CardCollectOutcome
 import com.aglyn.hardware.CardCollectRequest
 import com.aglyn.hardware.CardCollector
 import com.aglyn.hardware.CardCollectorState
+import com.aglyn.hardware.KeyedCardEntry
+import com.aglyn.hardware.KeyedCardOutcome
+import com.aglyn.hardware.KeyedCardRequest
 import com.aglyn.hardware.collectRequestProblem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -94,7 +97,7 @@ suspend fun cancelCardPayment(deps: TenderDeps, paymentId: String): PosPaymentAn
   null
 }
 
-enum class CardReaderKind { SMART, DEVICE, SIMULATED }
+enum class CardReaderKind { SMART, DEVICE, SIMULATED, KEYED }
 
 /**
  * The register's card payment layer: one card tender, start to outcome, on
@@ -105,7 +108,10 @@ enum class CardReaderKind { SMART, DEVICE, SIMULATED }
  *   only kind a desktop register offers;
  * - [DeviceReaderService] over the device's [CardCollector]: Tap to Pay or a
  *   Bluetooth reader through the Stripe Terminal SDK (in the Aglyn POS Android
- *   app only), or the simulated reader for tests and training.
+ *   app only), or the simulated reader for tests and training;
+ * - [KeyedCardService] over the device's [KeyedCardEntry]: a typed card in
+ *   Stripe's own card form (the Stripe card SDK, in the Aglyn POS Android app
+ *   only).
  */
 interface CardReaderService {
   val id: String
@@ -241,6 +247,98 @@ class DeviceReaderService(private val collector: CardCollector) : CardReaderServ
 
   override suspend fun cancel(deps: TenderDeps, paymentId: String?) {
     collector.cancel()
+    if (paymentId != null) cancelCardPayment(deps, paymentId)
+  }
+}
+
+/**
+ * A card typed in at the register (card not present), the console's "Type
+ * card": the server makes the PaymentIntent (`card-keyed`) and hands back its
+ * secret, Stripe's own card form takes the card (the number never touches the
+ * register), the server records the payment from Stripe (`status`). Closing
+ * the form without paying releases the amount (`cancel`), as the console's
+ * dialog does. Before the form opens, the answer is checked: the secret must
+ * name an intent, and the amount must be the amount plus the tip the register
+ * asked for.
+ */
+class KeyedCardService(
+  private val entry: KeyedCardEntry,
+  val publishableKey: String,
+  private val merchantName: String,
+) : CardReaderService {
+  override val id = "keyed"
+  override val label = "Type card"
+  override val kind = CardReaderKind.KEYED
+
+  /** What the card step says while the form is open. */
+  val prompt = "Type the card into the card form."
+
+  override suspend fun charge(
+    deps: TenderDeps,
+    amountCents: Long,
+    tipCents: Long,
+    attemptKey: String,
+    onWaiting: (paymentId: String?) -> Unit,
+  ): TenderOutcome {
+    val started = try {
+      deps.api.payment(deps.orderId, SaleStep.CardKeyed(amountCents, tipCents), attemptKey)
+    } catch (error: Throwable) {
+      return failedOrUnknown(error, "The card payment could not be started.")
+    }
+    val already = outcomeOfPayment(started)
+    // A retried press whose first attempt already settled or failed.
+    if (already != null && already !is TenderOutcome.Canceled) return already
+    val payment = started.payment
+    val secret = started.clientSecret
+    if (payment == null || secret == null) {
+      return TenderOutcome.Failed(payment?.failureMessage ?: "The card payment could not be started.", started)
+    }
+    // The secret names its own intent (`pi_…_secret_…`).
+    val intent = started.paymentIntentId ?: secret.substringBefore("_secret_")
+    val request = KeyedCardRequest(intent, secret, publishableKey, payment.amountCents + payment.tipCents, merchantName)
+    val problem = request.problem
+      ?: if (payment.amountCents + payment.tipCents != amountCents + tipCents) {
+        "The amount to charge does not match the register. Start the payment again."
+      } else {
+        null
+      }
+    if (problem != null) {
+      return TenderOutcome.Failed(problem, cancelCardPayment(deps, payment.id) ?: started)
+    }
+    onWaiting(payment.id)
+    val form = try {
+      entry.collect(request)
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      // The form's answer was lost: the server's read of Stripe decides.
+      null
+    }
+    return when (form) {
+      is KeyedCardOutcome.Canceled -> released(deps, payment.id, started) { TenderOutcome.Canceled(it) }
+      // The intent stays open on the server; releasing it lets the cashier
+      // try another card or another tender.
+      is KeyedCardOutcome.Failed -> released(deps, payment.id, started) { TenderOutcome.Failed(form.message, it) }
+      is KeyedCardOutcome.Confirmed, null -> settleCardPayment(deps, payment.id)
+    }
+  }
+
+  /**
+   * Releases the amount. A card that completed in the gap (the form said
+   * "failed" after Stripe took it) is recorded as paid, never lost: the
+   * server reads Stripe before it cancels.
+   */
+  private suspend fun released(
+    deps: TenderDeps,
+    paymentId: String,
+    started: PosPaymentAnswer,
+    otherwise: (PosPaymentAnswer) -> TenderOutcome,
+  ): TenderOutcome {
+    val answer = cancelCardPayment(deps, paymentId)
+    val paid = answer?.let { outcomeOfPayment(it) }
+    return if (paid is TenderOutcome.Settled) paid else otherwise(answer ?: started)
+  }
+
+  override suspend fun cancel(deps: TenderDeps, paymentId: String?) {
     if (paymentId != null) cancelCardPayment(deps, paymentId)
   }
 }

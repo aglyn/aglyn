@@ -453,6 +453,12 @@ final class Checkout {
     }
   }
 
+  /// The receipt was printed on this device (its print sheet); the server only records the choice.
+  func markPrinted() async {
+    _ = try? await api.payment(orderID: opened.orderID, step: .receipt(channel: "print", to: nil))
+    printed = true
+  }
+
   /// Sends (or records) the receipt: `email` or `sms` to `to`, `print` when
   /// it printed here, `none` when the customer declined. "No receipt" never
   /// holds the next customer, so its note is best-effort. True when the sale is done.

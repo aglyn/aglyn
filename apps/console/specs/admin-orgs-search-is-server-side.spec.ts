@@ -366,3 +366,47 @@ describe('every clause reaches the query', () => {
     expect(payload.orgs).toHaveLength(1)
   })
 })
+
+describe('the staff organization list names the plan each row reads as (AGL-3667)', () => {
+  it('says what a lapsed payer and a comped workspace read as, beside what is stored', async () => {
+    orgs = [
+      { id: 'org-lapsed', data: { name: 'Lapsed Co', plan: 'starter', subscription: { status: 'canceled' } } },
+      { id: 'org-none', data: { name: 'Fresh Co' } },
+      { id: 'org-comp', data: { name: 'Comp Co', plan: 'free', entitlements: { planComp: { plan: 'pro' } } } },
+    ]
+    const payload = await (await get()).json()
+    const byId = Object.fromEntries(payload.orgs.map((org: any) => [org.$id, org]))
+    // A paid plan with a dead subscription reads as free, and the stored plan is named.
+    expect(byId['org-lapsed']).toMatchObject({ readsAs: 'free', storedNote: 'stored: starter' })
+    // An org with no stored plan reads as free too, and the row says there is none.
+    expect(byId['org-none']).toMatchObject({ readsAs: 'free', storedNote: 'stored: no plan', compNote: null })
+    // A staff comp lifts the plan the row reads as and is named beside it.
+    expect(byId['org-comp'].readsAs).toBe('pro')
+    expect(byId['org-comp'].compNote).toMatch(/^comp: /)
+  })
+})
+
+describe('the staff organization list carries the Site limit column (AGL-3667)', () => {
+  it('says the limit the row resolves to, the unlimited one as an infinity sign, and counts the overrides beside it', async () => {
+    orgs = [
+      { id: 'org-pro', data: { name: 'Pro Co', plan: 'pro', subscription: { status: 'active' }, entitlements: { hostLimit: 7, features: { abTesting: true } } } },
+      { id: 'org-bare', data: { name: 'Bare Co' } },
+      { id: 'org-unlimited', data: { name: 'Unlimited Co', plan: 'pro', entitlements: { hostLimit: -1 } } },
+    ]
+    const payload = await (await get()).json()
+    const byId = Object.fromEntries(payload.orgs.map((org: any) => [org.$id, org]))
+    expect(byId['org-pro']).toMatchObject({ siteLimit: 7, siteLimitText: '7', overridesNote: '2 overrides' })
+    expect(byId['org-bare']).toMatchObject({ overridesNote: null })
+    expect(typeof byId['org-bare'].siteLimitText).toBe('string')
+    // JSON cannot carry an infinite number, so an unlimited quota is null with the sign in the text.
+    for (const row of payload.orgs) {
+      if (row.siteLimit === null) {
+        expect(row.siteLimitText).toBe('∞')
+        expect(row.siteLimitRank).toBe(Number.MAX_SAFE_INTEGER)
+      } else {
+        expect(row.siteLimitText).toBe(String(row.siteLimit))
+        expect(row.siteLimitRank).toBe(row.siteLimit)
+      }
+    }
+  })
+})

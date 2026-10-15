@@ -94,6 +94,12 @@ xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -destination 'platform=m
 
 After you change a plugin's `mobile` block, run `npm run generate:plugin-manifests`.
 
+Aglyn POS (and only Aglyn POS) links Stripe's card form for a card typed in at the
+register: the `StripePaymentSheet` product of `stripe-ios-spm`, pinned exact in
+`Aglyn.xcodeproj`, filtered to iOS (the Mac build never sees it). The first build
+resolves it from GitHub. The Aglyn app target does not link it, and
+`check-mobile-isolation` keeps it that way.
+
 ## Test
 
 ```bash
@@ -177,5 +183,7 @@ Still owed:
    `https://app.aglyn.com/.well-known/apple-app-site-association` (`applinks`,
    both apps: `R3B7G75SWA.com.aglyn.app`, `R3B7G75SWA.com.aglyn.pos`) and at
    `https://aglyn.com/.well-known/apple-app-site-association` (`webcredentials`
-   for `R3B7G75SWA.com.aglyn.app`, for passkeys).
+   for `R3B7G75SWA.com.aglyn.app`, for passkeys; template: `docs/mobile/well-known/`).
+   Then `AGLYN_PASSKEY_RP_ID = aglyn.com` in `Config/Release.xcconfig`; until
+   then "Set up a passkey" is hidden.
 7. **TestFlight**: listing, privacy labels and a tester group per app.

@@ -18,6 +18,50 @@
 import { siteProfileUrls, type HostSeoEntity } from './content-authors'
 import { normalizeAreaServed } from './local-business'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
+import {
+  BUSINESS_PROFILE_FIELDS,
+  BUSINESS_PROFILE_MAX_CHARS,
+  BUSINESS_TONES,
+  businessProfileSourceOf,
+  fieldValue,
+  isEmpty,
+  text,
+  type BusinessProfileDoc,
+  type BusinessProfileField,
+  type BusinessProfileOrigin,
+  type BusinessProfileSource,
+  type BusinessProfileValues,
+  type BusinessTone,
+} from './business-profile-values'
+
+export {
+  BUSINESS_PROFILE_FIELDS,
+  BUSINESS_PROFILE_MAX_CHARS,
+  BUSINESS_PROFILE_MAX_SERVICES,
+  BUSINESS_PROFILE_SITE_DOC,
+  BUSINESS_PROFILE_SUBCOLLECTION,
+  BUSINESS_PROFILE_WORKSPACE_DOC,
+  BUSINESS_TONE_LABELS,
+  BUSINESS_TONES,
+  businessProfileOwnerWrite,
+  businessProfileSourceOf,
+  mergeBusinessProfilePrefill,
+  sanitizeBusinessProfileValues,
+} from './business-profile-values'
+export type {
+  BusinessProfileDoc,
+  BusinessProfileField,
+  BusinessProfileOrigin,
+  BusinessProfileSource,
+  BusinessProfileValues,
+  BusinessTone,
+} from './business-profile-values'
+
+/** The tones as a plain list, in the order the owner picks them, for the native apps' pickers. */
+export const BUSINESS_TONE_ORDER: readonly string[] = BUSINESS_TONES
+
+/** The stored fields as a plain list, for the native apps' writers. */
+export const BUSINESS_PROFILE_FIELD_ORDER: readonly string[] = BUSINESS_PROFILE_FIELDS
 
 /**
  * A site's BUSINESS PROFILE (AGL-3661): what the business is, as everything
@@ -56,88 +100,6 @@ import { PLATFORM_BRAND_NAME } from './platform-brand'
  * {@link mergeBusinessProfilePrefill} is the one place that rule is applied.
  */
 
-/** The collection a profile document lives in, under a host or an org. */
-export const BUSINESS_PROFILE_SUBCOLLECTION = 'businessProfile'
-/** The site's profile document id. */
-export const BUSINESS_PROFILE_SITE_DOC = 'profile'
-/** The workspace defaults document id. */
-export const BUSINESS_PROFILE_WORKSPACE_DOC = 'defaults'
-
-/** Who wrote a stored value: the owner, the guided start's answers, or a generator. */
-export type BusinessProfileSource = 'owner' | 'start' | 'ai'
-
-/**
- * Where a RESOLVED value came from: a stored source, the site's own settings
- * (`seo.entity`, `business`, the display name), or the workspace defaults.
- */
-export type BusinessProfileOrigin = BusinessProfileSource | 'site' | 'workspace'
-
-/** How much a source's words weigh: a higher rank is never replaced by a lower one. */
-const SOURCE_RANK: Readonly<Record<BusinessProfileSource, number>> = {
-  ai: 1,
-  start: 2,
-  owner: 3,
-}
-
-export const BUSINESS_TONES = ['friendly', 'professional', 'playful', 'premium', 'plain'] as const
-export type BusinessTone = (typeof BUSINESS_TONES)[number]
-
-/** The tones as a plain list, in the order the owner picks them, for the native apps' pickers. */
-export const BUSINESS_TONE_ORDER: readonly string[] = BUSINESS_TONES
-
-/** Each tone as the owner picks it and as a writer is told it. */
-export const BUSINESS_TONE_LABELS: Readonly<Record<BusinessTone, string>> = {
-  friendly: 'Friendly and warm',
-  professional: 'Professional and clear',
-  playful: 'Playful and upbeat',
-  premium: 'Premium and refined',
-  plain: 'Plain and direct',
-}
-
-/** The fields the profile document stores itself. */
-export const BUSINESS_PROFILE_FIELDS = [
-  'whatYouDo',
-  'services',
-  'serviceArea',
-  'audience',
-  'tone',
-  'toneNotes',
-] as const
-export type BusinessProfileField = (typeof BUSINESS_PROFILE_FIELDS)[number]
-
-/** The stored fields as a plain list, for the native apps' writers. */
-export const BUSINESS_PROFILE_FIELD_ORDER: readonly string[] = BUSINESS_PROFILE_FIELDS
-
-/** Each field's ceiling, in characters; `services` is per item. */
-export const BUSINESS_PROFILE_MAX_CHARS: Readonly<Record<Exclude<BusinessProfileField, 'tone'>, number>> = {
-  whatYouDo: 200,
-  services: 60,
-  serviceArea: 120,
-  audience: 160,
-  toneNotes: 200,
-}
-
-/** At most this many services are kept. */
-export const BUSINESS_PROFILE_MAX_SERVICES = 12
-
-/** The stored document, at either level. */
-export interface BusinessProfileDoc {
-  whatYouDo?: string
-  services?: string[]
-  serviceArea?: string
-  audience?: string
-  tone?: BusinessTone | null
-  toneNotes?: string
-  /** Who wrote each stored value; a value without one is the owner's. */
-  sources?: Partial<Record<BusinessProfileField, BusinessProfileSource>>
-  updatedAt?: unknown
-  updatedBy?: string | null
-}
-
-/** The values a write carries, before they are sanitized. */
-export type BusinessProfileValues = Partial<
-  Pick<BusinessProfileDoc, 'whatYouDo' | 'services' | 'serviceArea' | 'audience' | 'tone' | 'toneNotes'>
->
 
 /** The host fields the profile reads. A closed surface, as the host tokens' is. */
 export interface BusinessProfileHost {
@@ -179,121 +141,6 @@ export interface ResolvedBusinessProfile {
   logo: string | null
 }
 
-const text = (value: unknown, max: number): string =>
-  typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : ''
-
-const tone = (value: unknown): BusinessTone | null =>
-  (BUSINESS_TONES as readonly unknown[]).includes(value) ? (value as BusinessTone) : null
-
-const services = (value: unknown): string[] => {
-  const items = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,\n]/) : []
-  const seen = new Set<string>()
-  const kept: string[] = []
-  for (const item of items) {
-    const name = text(item, BUSINESS_PROFILE_MAX_CHARS.services)
-    const key = name.toLowerCase()
-    if (!name || seen.has(key)) continue
-    seen.add(key)
-    kept.push(name)
-    if (kept.length >= BUSINESS_PROFILE_MAX_SERVICES) break
-  }
-  return kept
-}
-
-/** One field's stored value, sanitized; empty is `''`, `[]` or `null`. */
-function fieldValue(doc: BusinessProfileValues | null | undefined, field: BusinessProfileField): unknown {
-  switch (field) {
-    case 'services':
-      return services(doc?.services)
-    case 'tone':
-      return tone(doc?.tone)
-    default:
-      return text(doc?.[field], BUSINESS_PROFILE_MAX_CHARS[field])
-  }
-}
-
-const isEmpty = (value: unknown): boolean =>
-  value === null || value === '' || (Array.isArray(value) && value.length === 0)
-
-/** The source a stored, non-empty value carries; the owner's when none is recorded. */
-export function businessProfileSourceOf(
-  doc: BusinessProfileDoc | null | undefined,
-  field: BusinessProfileField,
-): BusinessProfileSource | null {
-  if (isEmpty(fieldValue(doc, field))) return null
-  const source = doc?.sources?.[field]
-  return source && source in SOURCE_RANK ? source : 'owner'
-}
-
-/** Every value a write may carry, sanitized; an absent field stays absent. */
-export function sanitizeBusinessProfileValues(values: BusinessProfileValues): BusinessProfileValues {
-  const clean: BusinessProfileValues = {}
-  for (const field of BUSINESS_PROFILE_FIELDS) {
-    if (!(field in values)) continue
-    ;(clean as Record<string, unknown>)[field] = fieldValue(values, field)
-  }
-  return clean
-}
-
-/**
- * The document a generator's or the guided start's values make of the stored
- * one: each value fills a field that is empty or was written by a source that
- * weighs less, and nothing else. `null` when nothing would change, so a caller
- * writes only when there is something to write.
- */
-export function mergeBusinessProfilePrefill(
-  current: BusinessProfileDoc | null | undefined,
-  values: BusinessProfileValues,
-  source: Exclude<BusinessProfileSource, 'owner'>,
-): BusinessProfileDoc | null {
-  const clean = sanitizeBusinessProfileValues(values)
-  const next: BusinessProfileDoc = { ...(current ?? {}), sources: { ...(current?.sources ?? {}) } }
-  let changed = false
-  for (const field of BUSINESS_PROFILE_FIELDS) {
-    if (!(field in clean)) continue
-    const value = (clean as Record<string, unknown>)[field]
-    if (isEmpty(value)) continue
-    // An explicit source counts even on an empty value: a field the owner
-    // cleared stays cleared rather than being refilled behind them.
-    const recorded = current?.sources?.[field]
-    const held = recorded && recorded in SOURCE_RANK ? recorded : businessProfileSourceOf(current, field)
-    if (held && SOURCE_RANK[held] >= SOURCE_RANK[source]) continue
-    if (JSON.stringify(fieldValue(current, field)) === JSON.stringify(value)) continue
-    ;(next as Record<string, unknown>)[field] = value
-    next.sources![field] = source
-    changed = true
-  }
-  return changed ? next : null
-}
-
-/**
- * The document the owner's save makes: every field they changed becomes
- * theirs, and a field they left as it was keeps the source it had — so saving
- * the form after correcting one line does not claim every suggestion on it.
- */
-export function businessProfileOwnerWrite(
-  current: BusinessProfileDoc | null | undefined,
-  edited: BusinessProfileValues,
-): Pick<BusinessProfileDoc, BusinessProfileField | 'sources'> {
-  const clean = sanitizeBusinessProfileValues(edited)
-  const next: Record<string, unknown> = {}
-  const sources: Partial<Record<BusinessProfileField, BusinessProfileSource>> = {}
-  for (const field of BUSINESS_PROFILE_FIELDS) {
-    const before = fieldValue(current, field)
-    const after = field in clean ? (clean as Record<string, unknown>)[field] : before
-    next[field] = after
-    const same = JSON.stringify(before) === JSON.stringify(after)
-    if (isEmpty(after)) {
-      // A suggestion the owner deleted is their decision, and recorded as
-      // one, so the next prefill does not put it back.
-      if (!same) sources[field] = 'owner'
-      else if (current?.sources?.[field] === 'owner') sources[field] = 'owner'
-      continue
-    }
-    sources[field] = same ? (businessProfileSourceOf(current, field) ?? 'owner') : 'owner'
-  }
-  return { ...(next as Pick<BusinessProfileDoc, BusinessProfileField>), sources }
-}
 
 /** The postal address as one line: the SEO entity's parts, else the contact card's block. */
 function addressLine(host: BusinessProfileHost | null | undefined): string {

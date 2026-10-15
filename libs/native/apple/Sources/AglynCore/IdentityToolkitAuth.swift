@@ -201,6 +201,25 @@ public actor IdentityToolkitAuth {
     return user
   }
 
+  /// Signs in with a Firebase custom token: one the server mints for a passkey that signed its challenge, or one a support
+  /// session's `/api/admin/impersonate` minted for a customer. `tenantId` is the identity pool the token was minted in (an SSO
+  /// account lives in its workspace's tenant), because a custom token exchanged in another pool is a cross-pool exchange. The
+  /// person is read off the ID token the exchange answers with.
+  @discardableResult
+  public func signIn(customToken: String, tenantId: String? = nil) async throws -> AglynUser {
+    var json: [String: JSONValue] = ["token": .string(customToken), "returnSecureToken": .bool(true)]
+    if let tenantId, !tenantId.isEmpty { json["tenantId"] = .string(tenantId) }
+    let body = try await post("\(identityBase)/v1/accounts:signInWithCustomToken?key=\(apiKey)", json: json)
+    guard case .string(let idToken)? = body["idToken"], case .string(let refreshToken)? = body["refreshToken"] else {
+      throw IdentityToolkitError(code: nil, status: 200)
+    }
+    let claims = TokenClaims(idToken: idToken).values
+    guard let uid = claims["user_id"]?.stringValue ?? claims["sub"]?.stringValue else { throw IdentityToolkitError(code: nil, status: 200) }
+    let user = AglynUser(uid: uid, email: claims["email"]?.stringValue, displayName: claims["name"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
+    accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+    return user
+  }
+
   public func sendPasswordReset(email: String) async throws {
     _ = try await post(
       "\(identityBase)/v1/accounts:sendOobCode?key=\(apiKey)",
@@ -238,6 +257,20 @@ public actor IdentityToolkitAuth {
       user: user, idToken: body["idToken"]?.stringValue ?? current.idToken,
       refreshToken: body["refreshToken"]?.stringValue ?? current.refreshToken, expiresIn: body["expiresIn"])
     return user
+  }
+
+  /// Removes a sign-in provider from the account (`accounts:update` with `deleteProvider`), as the
+  /// console's `unlink` does, and keeps the fresh tokens the answer carries.
+  public func deleteProvider(_ providerID: String) async throws {
+    guard let current = session else { throw IdentityToolkitError(code: nil, status: 401) }
+    let body = try await post(
+      "\(identityBase)/v1/accounts:update?key=\(apiKey)",
+      json: [
+        "idToken": .string(current.idToken), "deleteProvider": .array([.string(providerID)]), "returnSecureToken": .bool(true),
+      ])
+    accept(
+      user: current.user, idToken: body["idToken"]?.stringValue ?? current.idToken,
+      refreshToken: body["refreshToken"]?.stringValue ?? current.refreshToken, expiresIn: body["expiresIn"])
   }
 
   /// The current ID token, refreshed a minute before it expires; nil when signed out.

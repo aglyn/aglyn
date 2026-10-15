@@ -13,7 +13,10 @@
     },
     "params": {
       "uid": "u2",
-      "empty": ""
+      "empty": "",
+      "col": "1",
+      "mrow": "r1",
+      "mcol": "c2"
     },
     "data": {
       "members": [
@@ -111,7 +114,131 @@
         2,
         1,
         3
-      ]
+      ],
+      "ids": [
+        "h2",
+        "h1",
+        "zz"
+      ],
+      "jur": "US-TX",
+      "plain": "US",
+      "check": {
+        "ok": false,
+        "ms": 12,
+        "code": "job-silent",
+        "schedule": "0 4 * * *",
+        "lastBeatAgeMinutes": 1500,
+        "newestReadyAgeDays": 3,
+        "degradedEpisodes": 2,
+        "held": true,
+        "note": "",
+        "nested": {
+          "a": 1
+        }
+      },
+      "msA": 30000,
+      "msB": 720000,
+      "msC": 11100000,
+      "msD": 360000000,
+      "rolesInfo": {
+        "h1": {
+          "label": "Editor"
+        },
+        "h2": {
+          "label": "Viewer"
+        }
+      },
+      "groups": [
+        {
+          "label": "Sequences",
+          "items": [
+            {
+              "key": "outreach/a",
+              "name": "Welcome"
+            },
+            {
+              "key": "outreach/b"
+            }
+          ]
+        },
+        {
+          "label": "Campaigns",
+          "items": [
+            {
+              "key": "campaign/c"
+            }
+          ]
+        },
+        {
+          "label": "Empty",
+          "items": []
+        }
+      ],
+      "pick": "y",
+      "samples": [
+        [
+          "a",
+          "b",
+          "c"
+        ],
+        [
+          "d",
+          "e",
+          "f"
+        ],
+        [
+          "g",
+          "h"
+        ]
+      ],
+      "matrix": {
+        "r1": {
+          "c1": "x",
+          "c2": "y"
+        }
+      },
+      "picklists": [
+        {
+          "fieldId": "status",
+          "proposals": {
+            "x": {
+              "action": "leaveBlank"
+            }
+          }
+        },
+        {
+          "fieldId": "tier",
+          "proposals": {
+            "gold": {
+              "action": "mapTo",
+              "valueId": "g"
+            }
+          }
+        }
+      ],
+      "from": "2026-09",
+      "monthKey": "2026-10",
+      "badFrom": "true",
+      "hundred": 100,
+      "depKey": "layout/main-layout",
+      "noSlash": "plain",
+      "listResource": "email.list-members:abc123",
+      "wholeResource": "commerce.gift-cards"
+    },
+    "now": {
+      "ms": 1790000000000
+    },
+    "form": {
+      "scope": "org",
+      "hours": "2",
+      "blank": "",
+      "quota.hostLimit": 5,
+      "quota.blank": null,
+      "quota.typed": "12",
+      "quota.empty": "",
+      "feature.a": "true",
+      "feature.b": "false",
+      "feature.c": ""
     }
   },
   "render": [
@@ -406,6 +533,182 @@
     {
       "template": "{data.members.0.count ?? 'not recorded':number}",
       "expect": "0"
+    },
+    {
+      "template": "{data.check:facts}",
+      "expect": "degraded episodes: 2 · held: yes · last beat age minutes: 1,500 · newest ready age days: 3 · schedule: 0 4 * * *"
+    },
+    {
+      "template": "{data.access:pairs}|{data.list:pairs}",
+      "expect": "h1: editor, h2: viewer|x, y"
+    },
+    {
+      "template": "{data.msA:shareOf/data.msB}|{data.msB:shareOf/data.msA}|{data.msA:shareOf/data.nothing}",
+      "expect": "4%|2400%|0%"
+    },
+    {
+      "template": "{data.jur:before/-}|{data.jur:after/-}|{data.plain:before/-}|{data.plain:after/-}",
+      "expect": "US|TX|US|"
+    },
+    {
+      "template": "{data.ids:labeled/data.access}|{data.hostKey:labeled/data.access}|{data.list:labeled/data.access}",
+      "expect": "viewer, editor, zz|viewer|x, y"
+    },
+    {
+      "template": "{data.msA:duration}|{data.msB:duration}|{data.msC:duration}|{data.msD:duration}|{data.nothing:duration}",
+      "expect": "under a minute|12 min|3h 5m|4 days|unknown"
+    },
+    {
+      "template": "{data.rolesInfo[@data.hostKey].label}",
+      "expect": "Viewer"
+    },
+    {
+      "template": "{data.missing + 1}",
+      "expect": ""
+    },
+    {
+      "template": "{data.money + data.bytes - 1:number}",
+      "expect": "1,696,319"
+    },
+    {
+      "template": "{data.big - 1000000:number}",
+      "expect": "234,567.89"
+    },
+    {
+      "template": "{data.members.*.count + 1}",
+      "expect": "1"
+    },
+    {
+      "template": "{data.big - 1000000 + data.nothing?:number}",
+      "expect": "234,567.89"
+    },
+    {
+      "template": "{data.big - 1000000 + data.nothing:number}",
+      "expect": ""
+    },
+    {
+      "template": "{data.flag:present}",
+      "expect": "true"
+    },
+    {
+      "template": "{data.nothing:present}",
+      "expect": ""
+    },
+    {
+      "template": "{data.bytes:megabytes}",
+      "expect": "1.5"
+    },
+    {
+      "template": "{data.nothing:megabytes}",
+      "expect": ""
+    },
+    {
+      "template": "{data.groups.*.items.*.key}",
+      "expect": "outreach/a, outreach/b, campaign/c"
+    },
+    {
+      "template": "{data.groups.*.label}",
+      "expect": "Sequences, Campaigns, Empty"
+    },
+    {
+      "template": "{data.groups[label='Campaigns'].items.0.key}",
+      "expect": "campaign/c"
+    },
+    {
+      "template": "{data.samples.*.[@params.col]}",
+      "expect": "b, e, h"
+    },
+    {
+      "template": "{data.matrix[@params.mrow][@params.mcol]}",
+      "expect": "y"
+    },
+    {
+      "template": "{data.groups[label='Missing'].items.0.key|'none'}",
+      "expect": "none"
+    },
+    {
+      "template": "{data.list:first1}",
+      "expect": "x"
+    },
+    {
+      "template": "{data.groups.*.items.*.key:first2}",
+      "expect": "outreach/a, outreach/b"
+    },
+    {
+      "template": "{data.access.*}",
+      "expect": "editor, viewer"
+    },
+    {
+      "template": "{data.money / 100}",
+      "expect": "1234.56"
+    },
+    {
+      "template": "{max(0, data.money - 200000)}",
+      "expect": "0"
+    },
+    {
+      "template": "{max(0, data.money - 100000) / 1000 * 2}",
+      "expect": "46.912"
+    },
+    {
+      "template": "{round(data.ratio * 100) / 100}",
+      "expect": "0.46"
+    },
+    {
+      "template": "{(data.money - 56) * 2}",
+      "expect": "246800"
+    },
+    {
+      "template": "{min(3, 2 + 5, data.money / 1000)}",
+      "expect": "3"
+    },
+    {
+      "template": "{ceil(data.ratio * 10)} {floor(data.ratio * 10)} {abs(0 - 5)}",
+      "expect": "5 4 5"
+    },
+    {
+      "template": "{data.missing * 2}",
+      "expect": ""
+    },
+    {
+      "template": "{data.money / 0}",
+      "expect": ""
+    },
+    {
+      "template": "{data.missing? * 2 + 1}",
+      "expect": "1"
+    },
+    {
+      "template": "{data.members.*.joined * 2}",
+      "expect": "3582662400"
+    },
+    {
+      "template": "{- data.hundred * 2 + 250}",
+      "expect": "50"
+    },
+    {
+      "template": "{round(data.money / 100):number}",
+      "expect": "1,235"
+    },
+    {
+      "template": "{data.hundred * 1.5:dollars}",
+      "expect": "$150.00"
+    },
+    {
+      "template": "{data.hundred * 0.00001:usd} {data.hundred * 0.5:usd}",
+      "expect": "<$0.01 $50.00"
+    },
+    {
+      "template": "{data.depKey:head} | {data.depKey:tail}",
+      "expect": "layout | main-layout"
+    },
+    {
+      "template": "{data.noSlash:head}|{data.noSlash:tail}",
+      "expect": "plain|"
+    },
+    {
+      "template": "{data.listResource:instance}|{data.wholeResource:instance}|",
+      "expect": "abc123||"
     },
     {
       "template": "{data.stub.one:percentof/data.stub.num}",
@@ -970,6 +1273,191 @@
           "gone": ""
         }
       }
+    },
+    {
+      "body": {
+        "a": {
+          "$if": "form.scope == org",
+          "then": "{form.scope}"
+        },
+        "b": {
+          "$if": "form.scope == user",
+          "then": true
+        },
+        "c": {
+          "$if": "form.scope == org",
+          "then": {
+            "$if": "form.scope == org,host",
+            "then": true,
+            "else": false
+          },
+          "else": false
+        },
+        "until": {
+          "$afterHours": "{form.hours}"
+        },
+        "none": {
+          "$afterHours": "{form.blank}"
+        }
+      },
+      "expect": {
+        "a": "org",
+        "c": true,
+        "until": 1790007200000
+      }
+    },
+    {
+      "body": {
+        "types": {
+          "$put": {
+            "map": {},
+            "key": "{params.uid}",
+            "value": {
+              "enabled": true
+            }
+          }
+        }
+      },
+      "expect": {
+        "types": {
+          "u2": {
+            "enabled": true
+          }
+        }
+      }
+    },
+    {
+      "body": {
+        "quotas": {
+          "$collect": {
+            "prefix": "quota.",
+            "as": "number"
+          }
+        },
+        "features": {
+          "$collect": {
+            "prefix": "feature.",
+            "as": "flag"
+          }
+        },
+        "comp": {
+          "$if": "form.scope == org",
+          "then": "$null"
+        },
+        "other": {
+          "$if": "form.scope == user",
+          "then": "$null"
+        }
+      },
+      "expect": {
+        "quotas": {
+          "hostLimit": 5,
+          "typed": 12
+        },
+        "features": {
+          "a": true,
+          "b": false
+        },
+        "comp": null
+      }
+    },
+    {
+      "body": {
+        "on": {
+          "$if": "data.perms[org.settings]",
+          "then": "{params.uid}",
+          "else": {
+            "$delete": true
+          }
+        },
+        "off": {
+          "$if": "data.flag",
+          "then": "{params.uid}",
+          "else": {
+            "$delete": true
+          }
+        }
+      },
+      "expect": {
+        "on": "u2",
+        "off": {
+          "$delete": true
+        }
+      }
+    },
+    {
+      "body": {
+        "merged": {
+          "$merge": [
+            {
+              "$index": {
+                "rows": "data.picklists",
+                "key": "{item.fieldId}",
+                "value": "{item.proposals}"
+              }
+            },
+            {
+              "status": {
+                "x": {
+                  "action": "addValue"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expect": {
+        "merged": {
+          "status": {
+            "x": {
+              "action": "addValue"
+            }
+          },
+          "tier": {
+            "gold": {
+              "action": "mapTo",
+              "valueId": "g"
+            }
+          }
+        }
+      }
+    },
+    {
+      "body": {
+        "a?": "{data.missing}",
+        "b?": "",
+        "c?": "{data.flag}",
+        "d": "x",
+        "e?": "{data.list}",
+        "f?": "{org.name}",
+        "g?": []
+      },
+      "expect": {
+        "c": false,
+        "d": "x",
+        "e": [
+          "x",
+          "y"
+        ],
+        "f": "Acme"
+      }
+    },
+    {
+      "body": {
+        "kept": {
+          "$index": {
+            "rows": "data.members",
+            "filter": "item.role != owner",
+            "key": "{item.$id}",
+            "value": "{item.email}"
+          }
+        }
+      },
+      "expect": {
+        "kept": {
+          "u2": "b@acme.test"
+        }
+      }
     }
   ],
   "condition": [
@@ -1116,6 +1604,168 @@
     {
       "when": "data.members.*.role != owner",
       "expect": false
+    },
+    {
+      "when": "data.money > 100000",
+      "expect": true
+    },
+    {
+      "when": "data.money >= 123456",
+      "expect": true
+    },
+    {
+      "when": "data.money < data.bytes",
+      "expect": true
+    },
+    {
+      "when": "data.money <= 100",
+      "expect": false
+    },
+    {
+      "when": "data.missing > 1",
+      "expect": false
+    },
+    {
+      "when": "data.list ~= x",
+      "expect": true
+    },
+    {
+      "when": "data.list ~= z",
+      "expect": false
+    },
+    {
+      "when": "org.name ~= cm",
+      "expect": true
+    },
+    {
+      "when": "params.uid == @data.members.1.$id",
+      "expect": true
+    },
+    {
+      "when": "params.uid != @data.members.0.$id",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= z",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= x",
+      "expect": false
+    },
+    {
+      "when": "data.list ~= @data.pick",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= @data.pick",
+      "expect": false
+    },
+    {
+      "when": "data.groups.*.label ~= @data.missing",
+      "expect": false
+    },
+    {
+      "when": "staff.is && org.manager || org.role == admin",
+      "expect": true
+    },
+    {
+      "when": "staff.is && org.manager || org.role == owner",
+      "expect": false
+    },
+    {
+      "when": "data.from <= data.monthKey",
+      "expect": true
+    },
+    {
+      "when": "data.monthKey <= data.from",
+      "expect": false
+    },
+    {
+      "when": "data.monthKey >= data.from",
+      "expect": true
+    },
+    {
+      "when": "data.missing <= data.monthKey",
+      "expect": false
+    },
+    {
+      "when": "data.from < 2026-10",
+      "expect": true
+    },
+    {
+      "when": "data.badFrom <= data.monthKey",
+      "expect": false
+    },
+    {
+      "when": "max(0, data.money - 100000) > 0",
+      "expect": true
+    },
+    {
+      "when": "max(0, data.money - 200000) > 0",
+      "expect": false
+    },
+    {
+      "when": "data.hundred + data.hundred >= 200",
+      "expect": true
+    },
+    {
+      "when": "data.hundred + data.hundred > data.money / 1000",
+      "expect": true
+    }
+  ],
+  "dollars": [
+    {
+      "typed": "60",
+      "cents": 6000
+    },
+    {
+      "typed": "$60.00",
+      "cents": 6000
+    },
+    {
+      "typed": " $1,250.5 ",
+      "cents": 125050
+    },
+    {
+      "typed": "1,250 USD",
+      "cents": 125000
+    },
+    {
+      "typed": "usd 12.34",
+      "cents": 1234
+    },
+    {
+      "typed": "$ 7",
+      "cents": 700
+    },
+    {
+      "typed": "60.",
+      "cents": null
+    },
+    {
+      "typed": "60.123",
+      "cents": null
+    },
+    {
+      "typed": "six",
+      "cents": null
+    },
+    {
+      "typed": "",
+      "cents": null
+    },
+    {
+      "typed": "-5",
+      "cents": null
+    },
+    {
+      "typed": "$$5",
+      "cents": null
+    },
+    {
+      "typed": "0.05",
+      "cents": 5
     }
   ]
 }

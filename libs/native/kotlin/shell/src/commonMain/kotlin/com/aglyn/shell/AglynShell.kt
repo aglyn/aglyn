@@ -2,6 +2,7 @@ package com.aglyn.shell
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,6 +21,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -84,7 +87,19 @@ internal fun Loading() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit) {
-  LaunchedEffect(uid) { services.push.register(uid) }
+  val impersonation by services.auth.impersonation.collectAsState()
+  // A support session reads the customer's workspaces but never registers this device's notifications under their account.
+  LaunchedEffect(uid) { if (services.auth.impersonation.value == null) services.push.register(uid) }
+  // Entering or leaving a support session starts from home: nothing open belonged to the other person.
+  val supporting = impersonation != null
+  var wasSupporting by remember { mutableStateOf(supporting) }
+  LaunchedEffect(supporting) {
+    if (supporting != wasSupporting) {
+      wasSupporting = supporting
+      navigator.select(ShellNavigator.HOME)
+    }
+  }
+  val exitScope = rememberCoroutineScope()
   val workspace by services.workspace.state.collectAsState()
   val version by services.registry.version.collectAsState()
   val widthClass = currentWidthClass()
@@ -139,7 +154,13 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
   val authState by services.auth.state.collectAsState()
   val user = (authState as? AuthState.SignedIn)?.user
+  // A passkey can be made where the app is configured for one and the platform bound a creator.
+  val passkeyRelyingParty = services.config.passkeyRelyingParty.takeIf { com.aglyn.screens.LocalPasskeyCreator.current != null }
+  // Google can be connected where the platform bound a way to sign in to it.
+  val googleSource = com.aglyn.screens.LocalGoogleCredentialSource.current
   val screenSession = com.aglyn.screens.ScreenSession(
+    passkeyRelyingParty = passkeyRelyingParty,
+    googleConfigured = googleSource != null,
     email = user?.email,
     displayName = user?.displayName,
     orgName = workspace.org?.name,
@@ -148,12 +169,22 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     claims = claims,
     origin = services.config.consoleOrigin,
     reauthenticate = { password -> services.auth.signInWithEmail(user?.email.orEmpty(), password) },
+    impersonate = { token, tenantId -> services.auth.beginImpersonation(token, tenantId) },
     refreshClaims = { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull()) },
     openHostedPage = services.openHostedPage,
     back = { navigator.back() },
     account = com.aglyn.screens.AccountOperations(
       changePassword = { current, new -> services.auth.changePassword(current, new) },
       updateDisplayName = { name -> services.auth.updateDisplayName(name) },
+      linkGoogle = {
+        val source = googleSource ?: throw com.aglyn.core.GoogleLinkError("Connecting Google is not set up in this build.")
+        services.auth.linkGoogle(source.idToken(user?.email))
+        claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull())
+      },
+      unlinkProvider = { provider ->
+        services.auth.unlinkProvider(provider)
+        claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull())
+      },
     ),
   )
 
@@ -181,6 +212,8 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     Scaffold(
       containerColor = MaterialTheme.colorScheme.background,
       topBar = {
+        Column {
+        impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
         TopAppBar(
           title = {
             if (route == null && navigator.top == ShellNavigator.HOME) {
@@ -203,6 +236,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           },
           colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         )
+        }
       },
     ) { padding ->
       Box(Modifier.padding(padding).fillMaxSize()) {
