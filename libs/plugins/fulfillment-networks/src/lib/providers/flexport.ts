@@ -226,7 +226,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
     providerRequest(options.http, {
       provider: 'Flexport',
       method,
-      url: `${root}${path}`,
+      url: `${root}/${path}`,
       headers: {
         Authorization: `Bearer ${credential.accessToken}`,
         Accept: 'application/json',
@@ -249,7 +249,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
     const byLogisticsSku = new Map<string, string>()
     for (let page = 0; page < CATALOG_MAX_PAGES; page += 1) {
       const query = new URLSearchParams({ limit: String(PRODUCT_PAGE), offset: String(page * PRODUCT_PAGE) })
-      const answer = await call(credential, 'GET', `/products?${query.toString()}`)
+      const answer = await call(credential, 'GET', `products?${query.toString()}`)
       const list: any[] = Array.isArray(answer) ? answer : []
       for (const product of list) {
         const sku = text(product?.merchantSku)
@@ -286,7 +286,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
   /** https://docs.logistics-api.flexport.com/2026-02/#tag/Orders/operation/GetOrderByExternalIdV2 */
   const byReference = async (credential: NetworkCredential, reference: string): Promise<any | null> => {
     try {
-      const raw = await call(credential, 'GET', `/orders/external_id/${encodeURIComponent(reference)}`)
+      const raw = await call(credential, 'GET', `orders/external_id/${encodeURIComponent(reference)}`)
       return raw && typeof raw === 'object' && text(raw.id) ? remember(credential, raw) : null
     } catch (error) {
       if (error instanceof ProviderError && error.kind === 'not-found') return null
@@ -296,7 +296,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
 
   /** https://docs.logistics-api.flexport.com/2026-02/#tag/Orders/operation/GetOrder */
   const byId = async (credential: NetworkCredential, id: string): Promise<any> =>
-    remember(credential, await call(credential, 'GET', `/orders/${encodeURIComponent(id)}`))
+    remember(credential, await call(credential, 'GET', `orders/${encodeURIComponent(id)}`))
 
   /** The order as Flexport holds it, by its id, or by our reference where no id was kept. */
   const readRaw = async (credential: NetworkCredential, id: string, reference: string): Promise<any> => {
@@ -312,7 +312,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
       const answer = await call(
         credential,
         'GET',
-        `/products/${encodeURIComponent(logisticsSku)}/inventory?${new URLSearchParams({ aggregatePacks: 'true' }).toString()}`,
+        `products/${encodeURIComponent(logisticsSku)}/inventory?${new URLSearchParams({ aggregatePacks: 'true' }).toString()}`,
       )
       return Math.max(0, Math.floor(Number(answer?.available) || 0))
     } catch (error) {
@@ -327,7 +327,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
     async account(credential) {
       // Reads every connection needs: the catalog, and an order lookup. A
       // refused or under-scoped token is a 401 or 403 here, not at the first order.
-      await call(credential, 'GET', `/products?${new URLSearchParams({ limit: '1', offset: '0' }).toString()}`)
+      await call(credential, 'GET', `products?${new URLSearchParams({ limit: '1', offset: '0' }).toString()}`)
       await byReference(credential, PROBE_ORDER)
       return { accountName: null }
     },
@@ -368,7 +368,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
       }
       let answer: any
       try {
-        answer = await call(credential, 'POST', '/orders', body, { retry: false, idempotencyKey: request.reference })
+        answer = await call(credential, 'POST', 'orders', body, { retry: false, idempotencyKey: request.reference })
       } catch (error) {
         // Flexport already has an order under this reference: adopt it.
         if (error instanceof ProviderError && error.status === 409) {
@@ -402,7 +402,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
       if (SHIPPED_ORDER_STATUSES.has(before)) return 'too_late'
       let after: any
       try {
-        after = await call(credential, 'POST', `/orders/${encodeURIComponent(String(raw.id))}/cancel`, undefined, { retry: false })
+        after = await call(credential, 'POST', `orders/${encodeURIComponent(String(raw.id))}/cancel`, undefined, { retry: false })
       } catch (error) {
         // Flexport refuses to cancel an order it has already processed.
         if (error instanceof ProviderError && error.kind === 'invalid') return 'too_late'
@@ -434,7 +434,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
       for (let page = 0; page < 200 && found.size < max; page += 1) {
         const query = new URLSearchParams({ limit: String(INVENTORY_PAGE) })
         if (cursor) query.set('cursor', cursor)
-        const answer = await call(credential, 'GET', `/products/inventory/cursor?${query.toString()}`)
+        const answer = await call(credential, 'GET', `products/inventory/cursor?${query.toString()}`)
         for (const record of Array.isArray(answer?.inventories) ? answer.inventories : []) {
           // A record for a pack or a SKU outside the merchant's catalog is not a store SKU.
           const sku = byLogisticsSku.get(String(record?.logisticsSku ?? ''))
@@ -464,11 +464,11 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
      * earlier connect stops working.
      */
     async syncWebhooks(credential, target) {
-      const existing = await call(credential, 'GET', '/webhooks')
+      const existing = await call(credential, 'GET', 'webhooks')
       for (const hook of Array.isArray(existing) ? existing : []) {
         if (typeof hook?.url !== 'string' || !hook.url.startsWith(target.prefix) || hook?.id === undefined) continue
         try {
-          await call(credential, 'DELETE', `/webhooks/${encodeURIComponent(String(hook.id))}`)
+          await call(credential, 'DELETE', `webhooks/${encodeURIComponent(String(hook.id))}`)
         } catch (error) {
           if (!(error instanceof ProviderError && error.kind === 'not-found')) throw error
         }
@@ -478,7 +478,7 @@ export function createFlexportProvider(options: { http: ProviderHttp }): Fulfill
         await call(
           credential,
           'POST',
-          '/webhooks',
+          'webhooks',
           {
             type,
             url: target.url,
