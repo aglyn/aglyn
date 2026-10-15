@@ -19,7 +19,8 @@
  * ios-archive: `xcodebuild archive` of the Release configuration
  *   (Config/Release.xcconfig: the production project) for a generic iOS
  *   device or the Mac, signed automatically for team R3B7G75SWA with
- *   -allowProvisioningUpdates, so Xcode needs an account for that team
+ *   -allowProvisioningUpdates (and -allowProvisioningDeviceRegistration, which
+ *   registers this Mac with the team), so Xcode needs an account for that team
  *   (Xcode → Settings → Accounts). CURRENT_PROJECT_VERSION is the UTC time
  *   as yyyyMMddHHmm, so every archive outnumbers the last upload.
  * ios-upload: `xcodebuild -exportArchive` with destination `upload`, which
@@ -149,6 +150,8 @@ function iosArchive(scheme, platform) {
         join(IOS, 'build', 'SourcePackages'),
         '-skipPackagePluginValidation',
         '-allowProvisioningUpdates',
+        // Registers the Mac it runs on with the team when a development profile needs a device.
+        '-allowProvisioningDeviceRegistration',
         `CURRENT_PROJECT_VERSION=${build}`,
         // The schemes share package intermediates; coverage instrumentation would make Aglyn and
         // AglynPOS rebuild each other's (AGL-3783), and nothing reads coverage from an archive.
