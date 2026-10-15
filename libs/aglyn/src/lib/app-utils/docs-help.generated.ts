@@ -374,8 +374,8 @@ export const PLUGIN_DOCS = {
   },
   inventorySync: {
     path: '/commerce-and-bookings/commerce/inventory-and-erp-sync',
-    title: 'Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl)',
-    excerpt: 'Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory or Brightpearl account. Rolling out.',
+    title: 'Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl, Ordoro)',
+    excerpt: 'Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account. Rolling out.',
   },
   inviteTeammates: {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',

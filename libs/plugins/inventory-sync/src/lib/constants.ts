@@ -27,7 +27,7 @@ export const INVENTORY_SYNC_API_PREFIX = 'inventory-sync'
 export const INVENTORY_SYNC_API_ROUTES = {
   /** `GET ?hostId` — what the deployment offers, and the site's connection. */
   connection: `${INVENTORY_SYNC_API_PREFIX}/connection`,
-  /** `POST` — connect with the merchant's own API keys (Cin7 Core, inFlow). */
+  /** `POST` — connect with the merchant's own API keys (Cin7 Core, inFlow, Ordoro). */
   connectKeys: `${INVENTORY_SYNC_API_PREFIX}/connect/keys`,
   /** `POST` — start connecting Brightpearl: answers its consent page address. */
   connectOAuth: `${INVENTORY_SYNC_API_PREFIX}/connect/oauth`,

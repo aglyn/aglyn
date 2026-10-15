@@ -1008,13 +1008,13 @@ Each merchant registers the webhook in their own DoorDash developer portal, at
 `https://<console>/api/couriers/webhooks/doordash?site=<siteId>` with the token
 their Couriers card shows; the card gives them both.
 
-### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
+### Inventory sync: Cin7 Core, inFlow, Brightpearl and Ordoro {#inventory-sync}
 
 A store can keep its stock counts, products and paid orders in step with the
-merchant's **own** Cin7 Core, inFlow Inventory or Brightpearl account. Cin7
-Core and inFlow need nothing registered by the deployment: the merchant pastes
-API keys from their own account, and both are offered once the token key that
-seals those keys is set. Brightpearl needs a developer app the deployment
+merchant's **own** Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account.
+Cin7 Core, inFlow and Ordoro need nothing registered by the deployment: the
+merchant pastes API keys from their own account, and all three are offered
+once the token key that seals those keys is set. Brightpearl needs a developer app the deployment
 registers with Brightpearl, and is offered only when its references **and** the
 token key are set. With no token key, no Inventory and ERP card appears and
 nothing is sent. Set these on the **console only**: the job runs there, and the

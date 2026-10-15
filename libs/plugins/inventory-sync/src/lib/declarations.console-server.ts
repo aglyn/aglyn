@@ -31,7 +31,7 @@ export function registerInventorySyncConsoleServerDeclarations(): void {
       id: INVENTORY_SYNC_JOB_ID,
       label: 'Inventory sync',
       drives:
-        'Sends paid orders to each store’s connected Cin7 Core, inFlow or Brightpearl account, keeps stock counts in step in the direction the store chose, and syncs products. If it stops, orders wait unsent and stock counts drift between the store and the system.',
+        'Sends paid orders to each store’s connected Cin7 Core, inFlow, Brightpearl or Ordoro account, keeps stock counts in step in the direction the store chose, and syncs products. If it stops, orders wait unsent and stock counts drift between the store and the system.',
       run: async (context) => {
         const [{ runInventoryTick }, { createEngine }, deps, { offeredProviders, readInventorySyncConfig }] =
           await Promise.all([

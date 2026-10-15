@@ -457,6 +457,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/besigner/interactions-and-custom-html',
     title: 'Interactions & custom HTML',
   },
+  inventoryAndErpSync: {
+    path: '/commerce-and-bookings/commerce/inventory-and-erp-sync',
+    title: 'Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl, Ordoro)',
+  },
   inviteTeammates: {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',
     title: 'Invite teammates',
@@ -1021,6 +1025,7 @@ export const DOCS_HELP_ANCHORS = {
   insights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#manage-plugins', '#find-plugins', '#built-in-plugins', '#a-plugins-page', '#where-a-plugin-runs', '#permissions-and-data', '#site-plugins', '#plugin-on-one-site', '#what-to-do-next', '#related'],
   interactions: ['#fluent-interactions', '#interactions-belong-to-the-page-they-are-on', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#scroll-to-element-step', '#play-video-step', '#open-a-lightbox', '#analytics-event-step', '#analytics-event-name', '#analytics-event-parameters', '#analytics-event-delivery', '#custom-html-block', '#related'],
+  inventoryAndErpSync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#member-page', '#member-access', '#member-activity', '#member-changes', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#site-activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   layouts: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],

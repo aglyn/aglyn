@@ -24,6 +24,10 @@
           {
             "id": "brightpearl",
             "label": "Brightpearl"
+          },
+          {
+            "id": "ordoro",
+            "label": "Ordoro"
           }
         ],
         "statuses": [

@@ -70,6 +70,10 @@ export function createCredentialOpener(deps: CredentialDeps) {
       await reseal()
       return { provider: 'inflow', companyId: payload.companyId, apiKey: payload.apiKey }
     }
+    if (payload.provider === 'ordoro') {
+      await reseal()
+      return { provider: 'ordoro', clientId: payload.clientId, clientSecret: payload.clientSecret }
+    }
     const accountCode = connection.accountCode ?? ''
     if (!accountCode || !connection.apiDomain) throw new ProviderError('auth', 'The Brightpearl connection is incomplete. Connect again.')
     const expires = connection.accessTokenExpiresAtMs

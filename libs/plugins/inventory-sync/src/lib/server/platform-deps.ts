@@ -35,6 +35,7 @@ import { createBrightpearlProvider } from '../providers/brightpearl'
 import { createCin7CoreProvider } from '../providers/cin7-core'
 import { defaultProviderHttp, type ProviderHttp } from '../providers/http'
 import { createInflowProvider } from '../providers/inflow'
+import { createOrdoroProvider } from '../providers/ordoro'
 import type { InventorySystemProvider } from '../providers/provider'
 import { offeredProviders, readInventorySyncConfig } from './config'
 import { createCredentialOpener } from './credentials'
@@ -75,6 +76,7 @@ export const platformInventoryStore = (): InventoryStore => (store ??= createFir
 export function platformProvider(id: InventoryProviderId): InventorySystemProvider {
   if (id === 'cin7-core') return createCin7CoreProvider({ http: http() })
   if (id === 'inflow') return createInflowProvider({ http: http() })
+  if (id === 'ordoro') return createOrdoroProvider({ http: http() })
   const app = readInventorySyncConfig().brightpearl
   return createBrightpearlProvider({ http: http(), app: { appRef: app?.appRef ?? '', devRef: app?.devRef ?? '' } })
 }
