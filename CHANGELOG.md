@@ -15,6 +15,10 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **native:** start from a template and save as a template ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** an email block starts as a header or footer ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** a site's theme shows what it changed, with a reset for each ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** a component's icon is picked from the icon set and saved with its details ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **ai:** templates and theme ask medium effort, text low, from the golden A/B ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **ai:** a paid site plan asks medium effort, layout-language pages and frames low ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 
