@@ -308,7 +308,7 @@ export const FLAG_DOC_PAGES: Partial<
   ],
 
   // AGL-3614. The flag closes the organization's Accounting tab, and each of
-  // the two guides is ABOUT connecting one ledger to it, so both take the
+  // the three guides is ABOUT connecting one ledger to it, so all take the
   // admonition, whole-file. They are also `unlisted: true` until the flag is
   // on, which keeps them out of the sidebar and the help registry; the
   // disclosure is what covers a reader who arrives by direct link.
@@ -320,6 +320,11 @@ export const FLAG_DOC_PAGES: Partial<
     },
     {
       path: 'docs/commerce-and-bookings/commerce/connect-xero.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/commerce-and-bookings/commerce/connect-other-accounting-software.md',
       disclosure: 'admonition',
       checkNoPriceClaim: true,
     },
