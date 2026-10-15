@@ -228,6 +228,18 @@ jobs:
           --scratch "$RUNNER_TEMP/spm-scratch"
           --build-system "$SPM_BUILD_SYSTEM"
 
+      # Coverage is off for both schemes, so the two builds share every package.
+      # Neither app has a shared scheme, and Xcode's generated `Aglyn` scheme
+      # builds with coverage where `AglynPOS`'s does not: the swiftc lines of
+      # one package target differ between the two builds by exactly
+      # `-profile-generate -profile-coverage-mapping`. Both builds write the
+      # same intermediates, so each threw the other's away: AglynPOS
+      # recompiled all ~650 package files right after Aglyn had, and the next
+      # run's Aglyn recompiled them again from the POS-shaped cache. This is a
+      # build, not a test run, so nothing reads the coverage.
+      # `CLANG_COVERAGE_MAPPING` is the setting both the Swift and the clang
+      # flags hang off; `-enableCodeCoverage NO` is refused outside `test`.
+      #
       # The full log goes to a file. What is printed: how many tasks of each
       # kind ran (a warm build should compile next to nothing, so this is
       # where a cache that stopped working shows), the timing summary, every
@@ -249,6 +261,7 @@ jobs:
               -showBuildTimingSummary \
               CODE_SIGNING_ALLOWED=NO \
               COMPILER_INDEX_STORE_ENABLE=NO \
+              CLANG_COVERAGE_MAPPING=NO \
               > "$log" 2>&1 || status=$?
             echo "tasks run:"
             grep -oE '^(SwiftCompile|SwiftEmitModule|SwiftDriver|CompileC|Ld|Libtool|ProcessXCFramework|CopySwiftLibs|PhaseScriptExecution|ScanDependencies|PrecompileModule) ' "$log" | sort | uniq -c || true
