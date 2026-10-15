@@ -148,6 +148,9 @@ function iosArchive(scheme, platform) {
         '-skipPackagePluginValidation',
         '-allowProvisioningUpdates',
         `CURRENT_PROJECT_VERSION=${build}`,
+        // The schemes share package intermediates; coverage instrumentation would make Aglyn and
+        // AglynPOS rebuild each other's (AGL-3783), and nothing reads coverage from an archive.
+        'CLANG_COVERAGE_MAPPING=NO',
         '-quiet',
       ],
       { cwd: IOS },
