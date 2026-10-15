@@ -103,19 +103,20 @@ const now = new Date()
 const orgId = 'mobile-demo-org'
 const hostId = 'mobile-demo-site'
 
-await put(`users/${uid}`, { email: EMAIL, displayName: 'Mobile Owner', createdAt: now })
-await put(`orgs/${orgId}`, { name: 'Demo Workspace', slug: 'demo-workspace', plan: 'pro', memberRoles: { [uid]: 'owner' }, createdAt: now })
-await put(`users/${uid}/orgs/${orgId}`, { orgName: 'Demo Workspace', slug: 'demo-workspace', role: 'owner' })
-await put(`hosts/${hostId}`, { orgId, displayName: 'Demo Site', subdomain: 'demo-site', memberRoles: { [uid]: 'admin' }, createdAt: now })
+await put(`users/${uid}`, { email: EMAIL, displayName: 'Hannah Reyes', createdAt: now })
+await put(`orgs/${orgId}`, { name: 'Juniper Street Co.', slug: 'juniper-street', plan: 'pro', memberRoles: { [uid]: 'owner' }, createdAt: now })
+await put(`users/${uid}/orgs/${orgId}`, { orgName: 'Juniper Street Co.', slug: 'juniper-street', role: 'owner' })
+await put(`hosts/${hostId}`, { orgId, displayName: 'Juniper Street Bakery', subdomain: 'juniper-street', memberRoles: { [uid]: 'admin' }, createdAt: now })
 await put(`users/${uid}/hostMemberships/${hostId}`, {
   orgId,
-  displayName: 'Demo Site',
-  nameLower: 'demo site',
-  subdomain: 'demo-site',
+  displayName: 'Juniper Street Bakery',
+  nameLower: 'juniper street bakery',
+  subdomain: 'juniper-street',
   role: 'admin',
   createdAt: now,
   updatedAt: now,
 })
+for (const id of [hostId, 'mobile-bloom-bakery', 'mobile-studio-north']) await put(`hostIndex/${id}`, { orgId })
 const rules = [
   ['old-pricing', '/pricing-2025', '/pricing', 301, 'exact'],
   ['blog-move', '/news', '/blog', 301, 'prefix'],

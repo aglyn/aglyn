@@ -782,8 +782,28 @@ describe('the passes', () => {
     await step()(context({ plan: long }))
     const seo = mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
     expect(seo.title.length).toBeLessThanOrEqual(SCREEN_SEO_TEXT_GUIDANCE.title)
-    expect(seo.title).toBe('Spring roof inspections for homes across Springfield,')
+    expect(seo.title).toBe('Spring roof inspections for homes across Springfield')
     expect(seo.description).toBe(SCREEN.seoDescription)
+  })
+
+  it('takes a joining word off a listing the cut leaves dangling (AGL-3813)', async () => {
+    await buildSections()
+    // The live golden law-firm page (2026-10-15): 61 characters, cut at 60 to "…Practice Areas and".
+    const long = { ...PLAN, screens: [{ ...SCREEN, seoTitle: 'About Brightwater Law | Our Firm, Practice Areas and Approach', seoDescription: SCREEN.seoDescription }] }
+    seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, effort: null, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
+    await step()(context({ plan: long }))
+    const seo = mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
+    expect(seo.title).toBe('About Brightwater Law | Our Firm, Practice Areas')
+  })
+
+  it('keeps a word in any script whole when it clips a listing', async () => {
+    await buildSections()
+    const long = { ...PLAN, screens: [{ ...SCREEN, seoTitle: 'Galería de la panadería familiar con conchas recién horneadas cada día', seoDescription: SCREEN.seoDescription }] }
+    seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, effort: null, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
+    await step()(context({ plan: long }))
+    const seo = mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
+    expect(seo.title.length).toBeLessThanOrEqual(SCREEN_SEO_TEXT_GUIDANCE.title)
+    expect(seo.title).toBe('Galería de la panadería familiar con conchas recién')
   })
 
   it('asks for no listing when the SEO model cannot answer inside the pass, and writes the plan’s', async () => {

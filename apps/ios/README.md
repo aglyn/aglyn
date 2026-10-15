@@ -79,7 +79,7 @@ Links: `aglyn://<console path>` (and `aglyn-pos://` for the register) opens a
 console path, natively when a plugin answers it, otherwise in the console WebView:
 
 ```bash
-xcrun simctl openurl booted 'aglyn://demo-workspace/hosts/demo-site/redirects'
+xcrun simctl openurl booted 'aglyn://juniper-street/hosts/juniper-street/redirects'
 ```
 
 From the command line (the build directory is git-ignored):
@@ -99,6 +99,16 @@ register: the `StripePaymentSheet` product of `stripe-ios-spm`, pinned exact in
 `Aglyn.xcodeproj`, filtered to iOS (the Mac build never sees it). The first build
 resolves it from GitHub. The Aglyn app target does not link it, and
 `check-mobile-isolation` keeps it that way.
+
+The Stripe Terminal SDK (Tap to Pay on iPhone, Bluetooth readers) is placed the
+same way: the `StripeTerminal` product of `stripe-terminal-ios`, pinned exact in
+`Aglyn.xcodeproj`, filtered to iOS and linked by Aglyn POS alone.
+`AglynPOS/StripeTerminalCollector.swift` binds it to the hardware kit's
+`CardCollector`, and the app publishes it as `DeviceCardReaders.shared` at
+launch, which is where the commerce register finds it. No plugin package may
+depend on it: both apps link the plugin manifest, so that would put the SDK
+(and its location and Bluetooth references) in the Aglyn app, which declares no
+purpose strings for them.
 
 ## Test
 
@@ -151,6 +161,19 @@ xcodebuild lock, to `/private/tmp/aglyn-release/`:
 node tools/scripts/native-release.mjs ios-archive Aglyn ios       # or AglynPOS, and macos
 node tools/scripts/native-release.mjs ios-upload /private/tmp/aglyn-release/Aglyn-ios-<build>.xcarchive
 ```
+
+Archives sign with a development profile, which Apple issues only to a team
+with a registered device. This Mac is registered; on another Mac, register it
+once by building against it:
+
+```bash
+cd apps/ios && xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -configuration Release \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration
+```
+
+The upload re-signs for the App Store (cloud-managed distribution signing), so
+testers' devices never need registering.
 
 The build number (`CURRENT_PROJECT_VERSION`) is the UTC time as
 `yyyyMMddHHmm`, so every archive outnumbers the last; `MARKETING_VERSION`

@@ -134,6 +134,7 @@ export const SUPPRESSION_REASON_LABELS: Readonly<
   Record<string, { label: string; color: 'default' | 'warning' | 'error' }>
 > = {
   bounce: { label: 'Bounced', color: 'warning' },
+  soft_bounce: { label: 'Bounced (temporary)', color: 'warning' },
   complaint: { label: 'Marked as spam', color: 'error' },
   staff: { label: 'Recorded by staff', color: 'default' },
   no_mail_server: { label: 'No mail server', color: 'warning' },

@@ -326,16 +326,71 @@ describe('Omnisend', () => {
 describe('Attentive', () => {
   const token = { kind: 'oauth' as const, token: 'att-token' }
 
-  it('subscribes and unsubscribes by consent, and reads nothing back', async () => {
+  const ELIGIBILITY = 'https://api.attentivemobile.com/v1/subscriptions?email='
+  const SUBSCRIBE = 'https://api.attentivemobile.com/v1/subscriptions'
+  const UNSUBSCRIBE = 'https://api.attentivemobile.com/v1/subscriptions/unsubscribe'
+
+  it('subscribes a person Attentive has never seen, by email alone, and reads nothing back', async () => {
+    const { http, calls } = mockFetch((url, init) =>
+      String(init.method ?? 'GET') === 'GET' ? { status: 404, body: { message: 'Not found' } } : { body: {} },
+    )
+    const provider = createAttentiveProvider(http)
+    const result = await provider.pushContacts(token, { listId: null, tag: '' }, [contact({ phone: '+15125550100' })])
+    expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+      `GET ${ELIGIBILITY}pat%40example.com`,
+      `POST ${SUBSCRIBE}`,
+    ])
+    // No phone: Attentive picks channels from the identifiers, and a phone
+    // would opt the person into text messages too.
+    expect(calls[1].body).toEqual({ user: { email: 'pat@example.com' }, subscriptionType: 'MARKETING' })
+    expect(calls[1].headers['Authorization']).toBe('Bearer att-token')
+    expect(result).toEqual({ pushed: 1, skipped: [] })
+    expect(await provider.pullConsent(token, { listId: null, tag: '' }, null)).toBeNull()
+  })
+
+  it('leaves a person Attentive already knows exactly as Attentive has them, eligible or not', async () => {
+    const answers: Record<string, unknown> = {
+      'left@example.com': {
+        subscriptionEligibilities: [
+          { subscription: { type: 'MARKETING', channel: 'EMAIL' }, eligibility: { isEligible: false } },
+        ],
+      },
+      'here@example.com': {
+        subscriptionEligibilities: [
+          { subscription: { type: 'MARKETING', channel: 'EMAIL' }, eligibility: { isEligible: true } },
+        ],
+      },
+      'text-only@example.com': { subscriptionEligibilities: [] },
+    }
+    const { http, calls } = mockFetch((url) => ({ body: answers[decodeURIComponent(url.split('email=')[1] ?? '')] ?? {} }))
+    const provider = createAttentiveProvider(http)
+    const result = await provider.pushContacts(token, { listId: null, tag: '' }, [
+      contact({ email: 'left@example.com' }),
+      contact({ email: 'here@example.com' }),
+      contact({ email: 'text-only@example.com' }),
+    ])
+    expect(calls.every((call) => call.method === 'GET')).toBe(true)
+    expect(result).toEqual({ pushed: 0, skipped: [] })
+  })
+
+  it('unsubscribes a person the site may not market to, without asking first', async () => {
     const { http, calls } = mockFetch(() => ({ body: {} }))
     const provider = createAttentiveProvider(http)
-    await provider.pushContacts(token, { listId: null, tag: '' }, [contact(), contact({ email: 'gone@example.com', status: 'unsubscribed' })])
-    expect(calls.map((call) => call.url)).toEqual([
-      'https://api.attentivemobile.com/v1/subscriptions',
-      'https://api.attentivemobile.com/v1/subscriptions/unsubscribe',
-    ])
-    expect(calls[0].headers['Authorization']).toBe('Bearer att-token')
-    expect(await provider.pullConsent(token, { listId: null, tag: '' }, null)).toBeNull()
+    await provider.pushContacts(token, { listId: null, tag: '' }, [contact({ email: 'gone@example.com', status: 'unsubscribed', phone: '+15125550100' })])
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      method: 'POST',
+      url: UNSUBSCRIBE,
+      body: { user: { email: 'gone@example.com' }, subscriptions: [{ type: 'MARKETING', channel: 'EMAIL' }] },
+    })
+  })
+
+  it('stops on any eligibility failure other than "never seen", rather than subscribing blind', async () => {
+    const { http, calls } = mockFetch(() => ({ status: 400, body: { message: 'bad email' } }))
+    const provider = createAttentiveProvider(http)
+    const error = await provider.pushContacts(token, { listId: null, tag: '' }, [contact()]).catch((e) => e)
+    expect(error).toBeInstanceOf(ProviderError)
+    expect(calls.some((call) => call.method === 'POST')).toBe(false)
   })
 
   it('sends a purchase through the e-commerce event, the rest as custom events', async () => {
