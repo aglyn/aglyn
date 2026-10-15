@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **native:** continue with Google and Sign in with Apple, at sign-in and sign-up ([AGL-3816](https://linear.app/aglyn/issue/AGL-3816))
+- **native:** sign-up, email verification and account recovery in the apps ([AGL-3819](https://linear.app/aglyn/issue/AGL-3819))
 - **web:** aglyn.com and app.aglyn.com serve apple-app-site-association and assetlinks.json from env, for the native apps' passkeys and links ([AGL-3817](https://linear.app/aglyn/issue/AGL-3817))
 - **native:** android App Check through Play Integrity, Kotlin token plumbing ([AGL-3818](https://linear.app/aglyn/issue/AGL-3818))
 - **native:** apple apps send Firebase App Check tokens via App Attest and DeviceCheck ([AGL-3818](https://linear.app/aglyn/issue/AGL-3818))
