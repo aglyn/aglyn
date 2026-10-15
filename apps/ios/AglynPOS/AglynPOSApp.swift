@@ -21,6 +21,11 @@ struct AglynPOSApp: App {
     #if os(iOS) && canImport(StripePaymentSheet)
       DeviceKeyedCardEntry.shared = StripeKeyedCardEntry()
     #endif
+    // This device's card reader (Tap to Pay on iPhone, Bluetooth readers), on iPhone and iPad only:
+    // the register, the readers screen and any plugin's counter payment take cards through it.
+    #if os(iOS) && canImport(StripeTerminal)
+      DeviceCardReaders.shared = StripeTerminalCollector.shared
+    #endif
     #if DEBUG && os(macOS)
       DebugSnapshot.scheduleIfAsked()
     #endif

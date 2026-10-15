@@ -1,7 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
-#if os(iOS)
+#if os(iOS) && canImport(StripeTerminal)
   import AglynHardware
   import CoreLocation
   import Foundation
@@ -15,7 +15,11 @@
    * Tap to Pay on iPhone, or a Bluetooth reader (Stripe M2, WisePad 3) near
    * the iPhone or iPad. The collect sequence and every word the cashier reads
    * live in AglynHardware (`collectCardPayment`, tested with a fake); this
-   * file only binds the SDK to it.
+   * file only binds the SDK to it. Aglyn POS alone links the SDK, and only on
+   * iPhone and iPad: it publishes this collector as `DeviceCardReaders.shared`
+   * at launch, and the commerce plugin's register, readers screen and kiosk
+   * (and a booking paid at the counter) see only `CardCollector`. The Aglyn
+   * app links no card reader SDK.
    *
    * Connection tokens come from `commerce/pos-terminal-connection-token` for
    * the site's Terminal Location. In test mode the SDK's simulated readers
@@ -23,6 +27,12 @@
    * payments settle on the platform account: the connection never sets
    * `onBehalfOf`, and the server's intent alone decides where money goes.
    */
+
+  /// No connection token to hand the SDK, or no reader where one was expected.
+  private enum ReaderSetupError: Error, LocalizedError {
+    case notSetUp
+    var errorDescription: String? { "Card readers are not set up for this store yet." }
+  }
 
   /// The SDK asks for a connection token whenever it needs one; the site's
   /// session source mints it. The first token of a connect is the one the
@@ -38,7 +48,7 @@
         return completion(token, nil)
       }
       guard let hostID, let sessions else {
-        return completion(nil, TerminalSessionError.notSetUp as NSError)
+        return completion(nil, ReaderSetupError.notSetUp as NSError)
       }
       Task {
         do {
@@ -272,7 +282,7 @@
         }
         _ = Terminal.shared.discoverReaders(config, delegate: events) { error in
           Task { @MainActor in
-            if let error { answer(.failure(error)) } else { answer(.failure(TerminalSessionError.notSetUp)) }
+            if let error { answer(.failure(error)) } else { answer(.failure(ReaderSetupError.notSetUp)) }
           }
         }
       }
@@ -282,7 +292,7 @@
       try await withCheckedThrowingContinuation { continuation in
         Terminal.shared.connectReader(reader, connectionConfig: config) { connected, error in
           if let connected { continuation.resume(returning: connected) } else {
-            continuation.resume(throwing: error ?? TerminalSessionError.notSetUp)
+            continuation.resume(throwing: error ?? ReaderSetupError.notSetUp)
           }
         }
       }
@@ -331,7 +341,7 @@
               self.intent = intent
               continuation.resume(returning: .success(terminalIntent(intent)))
             } else {
-              continuation.resume(returning: .failure(terminalError(error ?? TerminalSessionError.notSetUp)))
+              continuation.resume(returning: .failure(terminalError(error ?? ReaderSetupError.notSetUp)))
             }
           }
         }
@@ -355,7 +365,7 @@
               self.intent = collected
               continuation.resume(returning: .success(terminalIntent(collected)))
             } else {
-              continuation.resume(returning: .failure(terminalError(error ?? TerminalSessionError.notSetUp)))
+              continuation.resume(returning: .failure(terminalError(error ?? ReaderSetupError.notSetUp)))
             }
           }
         }
@@ -374,7 +384,7 @@
               continuation.resume(returning: .success(terminalIntent(confirmed)))
             } else {
               continuation.resume(
-                returning: .failure(terminalError(error ?? TerminalSessionError.notSetUp, intent: intent)))
+                returning: .failure(terminalError(error ?? ReaderSetupError.notSetUp, intent: intent)))
             }
           }
         }
