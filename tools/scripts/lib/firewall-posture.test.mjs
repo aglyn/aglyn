@@ -270,6 +270,19 @@ function healthyTenantConfig() {
           { conditions: [{ type: 'path', op: 'eq', value: '/api/screen' }] },
         ],
       },
+      {
+        name: 'Store review + app verification bypass',
+        id: 'rule_store_review_tenant',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ type: 'path', op: 'eq', value: '/support' }] },
+          { conditions: [{ type: 'path', op: 'eq', value: '/contact' }] },
+          { conditions: [{ type: 'path', op: 'pre', value: '/legal/' }] },
+          { conditions: [{ type: 'path', op: 'pre', value: '/.well-known/' }] },
+        ],
+      },
     ],
   }
 }
@@ -416,6 +429,14 @@ function healthyConsoleConfig() {
           { conditions: [{ type: 'path', op: 'pre', value: '/api/commerce/shipstation/' }] },
           { conditions: [{ type: 'path', op: 'pre', value: '/api/commerce/shippingeasy/' }] },
         ],
+      },
+      {
+        name: 'Store review + app verification bypass',
+        id: 'rule_store_review_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/.well-known/' }] }],
       },
     ],
   }
@@ -975,6 +996,17 @@ function docsConfig() {
       conditionGroup: ['/robots.txt', '/sitemap.xml'].map((value) => ({
         conditions: [{ type: 'path', op: 'eq', value }],
       })),
+    },
+    {
+      name: 'Store review + app verification bypass',
+      id: 'rule_store_review_docs',
+      active: true,
+      valid: true,
+      action: bypass(),
+      conditionGroup: [
+        '/workspace-and-billing/manage-account',
+        '/workspace-and-billing/manage-account/',
+      ].map((value) => ({ conditions: [{ type: 'path', op: 'eq', value }] })),
     },
   ]
   return config

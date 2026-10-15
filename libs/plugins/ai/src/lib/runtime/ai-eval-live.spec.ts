@@ -345,9 +345,11 @@ describe('the live run', () => {
     const sent = mockRunAiRequest.mock.calls.map((call) => call[0])
     const plans = sent.filter((request) => request.tools?.[0]?.name === AI_BUILD_PLAN_TOOL.name)
     expect(plans).toHaveLength(2)
-    // The one re-ask names both rules, and tells this Free workspace to draw its form.
+    // The one re-ask tells this Free workspace to draw its form. The hero that
+    // placed the page's own layout is settled in code, so it is not asked
+    // about (AGL-3807).
     const reask = String(plans[1].messages.at(-1).content)
-    expect(reask).toContain(`Rule 2 (${AI_DOCTRINE_RULES[2]}): A section places a layout.`)
+    expect(reask).not.toContain(`Rule 2 (${AI_DOCTRINE_RULES[2]}): A section places a layout.`)
     expect(reask).toContain(
       `Rule 7 (${AI_DOCTRINE_RULES[7]}): The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace's plan does not include saved forms. Place a form the site already has, or leave the form off the page.`,
     )

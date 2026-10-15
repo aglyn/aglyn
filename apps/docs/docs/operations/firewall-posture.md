@@ -177,10 +177,34 @@ Measured 2026-10-01.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules, 1 rate limit (enforcing) |
-| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 4 scoped bypass rules |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 8 scoped bypass rules, 1 rate limit (enforcing) |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 11 scoped bypass rules, 1 rate limit (enforcing) |
+| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 5 scoped bypass rules |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 10 scoped bypass rules, 1 rate limit (enforcing) |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
+
+### Store reviewers and app-association verifiers (AGL-3804)
+
+Bot protection answers any client that cannot run JavaScript and is not a
+Vercel-verified bot with `429` and `x-vercel-mitigated: challenge`. Google
+Play's and the App Store's URL checks are such clients, and so are Apple's
+`apple-app-site-association` fetcher and Google's Digital Asset Links
+verifier. A challenged privacy policy or account-deletion page gets a store
+listing flagged; a challenged `/.well-known/` file means app links and
+passkeys never verify, with no error on our side.
+
+The rule **Store review + app verification bypass** lifts the challenge, and
+nothing else, for these public, read-only paths:
+
+| Project | Paths |
+| --- | --- |
+| `aglyn-tenant` | exactly `/support` and `/contact`; prefixes `/legal/` and `/.well-known/` |
+| `aglyn-docs` | exactly `/workspace-and-billing/manage-account` (with and without the trailing slash) |
+| `aglyn-console` | prefix `/.well-known/` |
+
+Prefixes end in a slash, so the bare `/legal` index and look-alike paths such
+as `/supportx` or `/.well-knownx` stay challenged. A new page a store listing
+links to, or a new association file under another path, needs its own entry
+here and in `tools/scripts/lib/firewall-posture.mjs`.
 
 ### How the console was closed, and why the order mattered
 
