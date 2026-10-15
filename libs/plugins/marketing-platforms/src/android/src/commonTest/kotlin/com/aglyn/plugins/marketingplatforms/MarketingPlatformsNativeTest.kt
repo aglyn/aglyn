@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 class MarketingPlatformsNativeTest {
   private val declared = mapOf(
     "screens" to listOf("marketing-platforms.service", "marketing-platforms.platform"),
+    "widgets" to listOf("marketing-platforms.service.card"),
     "deepLinks" to listOf(),
   )
 
@@ -25,5 +26,6 @@ class MarketingPlatformsNativeTest {
     val specs = MarketingPlatformsScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("marketing-platforms.service", "marketing-platforms.platform").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "sitePluginSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertEquals("hostSettings", specs.first { it.id == "marketing-platforms.service" }.cardSlot, "its Setup > Integrations card")
   }
 }

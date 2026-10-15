@@ -70,3 +70,21 @@ describe('the walk-in availability check (AGL-3321)', () => {
     ).toEqual([])
   })
 })
+
+describe('the walk-in refuses a stay the quote refuses (AGL-3794)', () => {
+  const problemAt = walkIn.indexOf('quote.problem')
+
+  it('reads the quote’s problem, the one rule the booking widget and the native apps share', () => {
+    expect(walkIn).toContain('CommerceModel.computeReservationQuote(')
+    expect(problemAt).toBeGreaterThan(-1)
+  })
+
+  it('says it before the availability query and before anything is written', () => {
+    expect(problemAt).toBeLessThan(walkIn.indexOf('getDocs('))
+    expect(problemAt).toBeLessThan(walkIn.indexOf('setDoc('))
+  })
+
+  it('does not price the stay a second time after the check', () => {
+    expect(walkIn.match(/computeReservationQuote\(/g)).toHaveLength(1)
+  })
+})

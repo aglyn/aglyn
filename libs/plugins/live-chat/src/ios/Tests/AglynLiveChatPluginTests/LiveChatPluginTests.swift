@@ -12,7 +12,7 @@ final class LiveChatPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["live-chat.settings"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["live-chat.settings"], widgets: ["live-chat.settings.card"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "live-chat", contributes: declared, register: registerLiveChatNative)], into: registry)
     XCTAssertEqual(result.failed, [])

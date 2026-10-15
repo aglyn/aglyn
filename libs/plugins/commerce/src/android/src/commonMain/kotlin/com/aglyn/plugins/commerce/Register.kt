@@ -12,8 +12,10 @@ import com.aglyn.plugins.commerce.orders.COMMERCE_ORDER_SCREEN
 import com.aglyn.plugins.commerce.orders.OrdersScreen
 import com.aglyn.plugins.commerce.orders.OrdersToShipWidget
 import com.aglyn.plugins.commerce.products.COMMERCE_PRODUCTS_SCREEN
+import com.aglyn.plugins.commerce.products.COMMERCE_PRODUCT_MEDIA_SCREEN
 import com.aglyn.plugins.commerce.products.COMMERCE_PRODUCT_SCREEN
 import com.aglyn.plugins.commerce.products.COMMERCE_SCAN_SCREEN
+import com.aglyn.plugins.commerce.products.ProductMediaScreen
 import com.aglyn.plugins.commerce.products.ProductsScreen
 import com.aglyn.plugins.commerce.products.ScanScreen
 import com.aglyn.plugins.commerce.sales.COMMERCE_SALES_SCREEN
@@ -98,6 +100,10 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   }
   r.screen(COMMERCE_PRODUCT_SCREEN, title = "Product", requiresSite = true, icon = "inventory", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     ProductsScreen(context, initialProductId = params["product"] ?: params["productId"], startNew = params["new"] == "1")
+  }
+  // A product's images and, for a digital product, its downloads and members videos.
+  r.screen(COMMERCE_PRODUCT_MEDIA_SCREEN, title = "Images and files", requiresSite = true, icon = "photo_library") { context, params ->
+    ProductMediaScreen(context, params["productId"].orEmpty())
   }
   r.screen(COMMERCE_SCAN_SCREEN, title = "Scan stock", requiresSite = true, icon = "qr_code_scanner") { context, _ -> ScanScreen(context) }
   r.screen(COMMERCE_SALES_SCREEN, title = "Sales", requiresSite = true, icon = "insights") { context, _ -> SalesScreen(context) }

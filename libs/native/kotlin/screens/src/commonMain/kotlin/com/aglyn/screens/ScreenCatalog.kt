@@ -27,13 +27,19 @@ object SpecScreens {
   /** The deep-link ids a spec registers: `<screen id>.link`, `.link2`, … */
   fun linkIds(spec: ScreenSpec): List<String> = spec.links.indices.map { if (it == 0) "${spec.id}.link" else "${spec.id}.link${it + 1}" }
 
-  /** What a set of specs contributes, in the manifest's shape. */
-  fun declaration(specs: List<ScreenSpec>): Map<String, List<String>> = mapOf(
-    "screens" to specs.map { it.id }.sorted(),
-    "deepLinks" to specs.flatMap { linkIds(it) }.sorted(),
-  )
+  /** The id of the widget a spec's `cardSlot` registers. */
+  fun cardId(spec: ScreenSpec): String = "${spec.id}.card"
 
-  /** Registers each spec as a screen and each link as a deep link, and catalogs them. */
+  /** What a set of specs contributes, in the manifest's shape. */
+  fun declaration(specs: List<ScreenSpec>): Map<String, List<String>> {
+    val cards = specs.filter { it.cardSlot != null }.map { cardId(it) }.sorted()
+    return mapOf(
+      "screens" to specs.map { it.id }.sorted(),
+      "deepLinks" to specs.flatMap { linkIds(it) }.sorted(),
+    ) + (if (cards.isEmpty()) emptyMap() else mapOf("widgets" to cards))
+  }
+
+  /** Registers each spec as a screen, each link as a deep link and each `cardSlot` as a widget, and catalogs them. */
   fun register(specs: List<ScreenSpec>, registrar: NativePluginRegistrar) {
     ScreenCatalog.add(specs)
     for (spec in specs) {
@@ -41,6 +47,11 @@ object SpecScreens {
         SpecScreen(spec, context, params)
       }
       spec.links.forEachIndexed { index, path -> registrar.deepLink(linkIds(spec)[index], path, spec.id) }
+      spec.cardSlot?.let { slot ->
+        registrar.widget(cardId(spec), spec.label, spec.order, requiresSite = spec.requiresSite, slot = slot) { context ->
+          SpecCard(spec, registrar.pluginId, context)
+        }
+      }
     }
   }
 }

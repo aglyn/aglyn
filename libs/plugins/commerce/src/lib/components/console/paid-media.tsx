@@ -31,6 +31,15 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import {
+  PAID_MEDIA_COPY,
+  paidMediaConfirmation,
+  paidMediaScopeBody,
+  usesBesideProduct,
+  type PaidMediaKind,
+  type PaidMediaReference,
+  type PaidMediaUsageCheck,
+} from '../../model/paid-media'
 
 /**
  * A product's members videos (AGL-2814) and paid downloads (AGL-2847) are
@@ -49,102 +58,14 @@ import { useCallback, useEffect, useState } from 'react'
  * delete.
  */
 
-/** A where-used row, reduced to what the confirmation reads. */
-export interface PaidMediaReference {
-  kind: string
-  id: string
-  name: string
-  hostId: string
-  collectionId?: string
-}
-
-/** How far the where-used scan got before the author was asked. */
-export type PaidMediaUsageCheck = 'full' | 'partial' | 'failed'
-
-/** Which list a flow adds to, for the words it uses. */
-export type PaidMediaKind = 'video' | 'download'
-
-const PAID_MEDIA_COPY: Record<
-  PaidMediaKind,
-  { title: string; lead: string; notAdded: string; unusable: string; choose: string }
-> = {
-  video: {
-    title: 'Make this video private?',
-    lead:
-      'Members videos are private: buyers play them through a link that ' +
-      'expires, and nobody else can open them.',
-    notAdded: 'The video was not added.',
-    unusable: 'Members cannot play it until it is private.',
-    choose: 'Choose the video from the media library, so its links can expire.',
-  },
-  download: {
-    title: 'Make this file private?',
-    lead:
-      'Paid downloads are private: buyers get a link that expires, and nobody ' +
-      'else can open the file.',
-    notAdded: 'The file was not added.',
-    unusable: 'Buyers cannot download it until it is private.',
-    choose: 'Choose the file from the media library, so its links can expire.',
-  },
-}
-
-/** The request body that names an asset's library to the media routes. */
-export function paidMediaScopeBody(
-  scope: string,
-): { orgId: string } | { hostId: string } {
-  return scope.startsWith('org:')
-    ? { orgId: scope.slice('org:'.length).split(':')[0] }
-    : { hostId: scope }
-}
-
-/**
- * Where an asset is used, apart from the product it is being added to. That
- * product's own row is not a place making it private could break.
- */
-export function usesBesideProduct(
-  references: readonly PaidMediaReference[],
-  product: { hostId: string; productId?: string },
-): PaidMediaReference[] {
-  return references.filter(
-    (reference) =>
-      !(
-        product.productId &&
-        reference.kind === 'plugin' &&
-        reference.collectionId === 'products' &&
-        reference.hostId === product.hostId &&
-        reference.id === product.productId
-      ),
-  )
-}
-
-/** What the author reads before a video becomes private. */
-export function paidMediaConfirmation(options: {
-  others: readonly PaidMediaReference[]
-  checked: PaidMediaUsageCheck
-  kind?: PaidMediaKind
-}): string {
-  const { others, checked } = options
-  const { lead } = PAID_MEDIA_COPY[options.kind ?? 'video']
-  let usage: string
-  if (others.length) {
-    const names = others
-      .slice(0, 3)
-      .map((reference) => `“${reference.name}”`)
-      .join(', ')
-    const more = others.length > 3 ? ` and ${others.length - 3} more` : ''
-    usage = `It is also used on ${names}${more}, and it stops showing there.`
-  } else if (checked === 'full') {
-    usage = 'Nothing else uses it.'
-  } else if (checked === 'partial') {
-    usage =
-      'We could not check everywhere it might be used, so something else ' +
-      'could still rely on it.'
-  } else {
-    usage = 'We could not check where else it is used.'
-  }
-  return `${lead} ${usage} Any public link to it that was already shared stops working too.`
-}
-
+export {
+  paidMediaConfirmation,
+  paidMediaScopeBody,
+  usesBesideProduct,
+  type PaidMediaKind,
+  type PaidMediaReference,
+  type PaidMediaUsageCheck,
+} from '../../model/paid-media'
 /**
  * Adds a picked file to a product as paid media, making it private first when
  * it is not, and makes an already-added one private.
