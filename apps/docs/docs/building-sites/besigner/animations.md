@@ -92,6 +92,38 @@ Only offered for **on scroll into view**. Off by default, so an animation
 plays once and then leaves the element alone. Turn it on and the element
 re-animates every time it scrolls back into view.
 
+## Pages that already move {#pages-that-already-move}
+
+Some pages start out with their animations set up for you:
+
+- **A new site's home page**, and the pages of a starter from the template
+  gallery. A starter already in your template library keeps the pages it was
+  added with.
+- **Every page and template Aglyn AI builds**, whether from
+  [Start your site with AI](../../ai/start-with-ai.md) or from a request to
+  Assist.
+
+On these pages the first section's words and picture arrive one after another
+as the page opens, every later section slides in as it scrolls into view, and
+a grid of cards, a list or a set of questions arrives one item at a time.
+Forms, the header and footer, and anything pinned to the screen stay still.
+
+A site Aglyn AI builds moves in a way that suits its style: a law firm or a
+clinic fades in gently, a gym or a design studio arrives with more energy, and
+a portfolio's pictures zoom in one after another. Two sites of the same style
+still move a little differently.
+
+None of it is locked. Select any element and its **Animation** settings show
+exactly what was chosen, so you can change it, or pick **None** to turn it
+off. A setting you change is never put back.
+
+## Ask Assist to change an animation {#ask-assist}
+
+With a page open in the Besigner, select an element and ask Assist, for
+example *make the cards zoom in one after another* or *stop the heading
+moving*. Assist proposes the change using the same settings described above,
+and nothing changes until you press **Apply**.
+
 ## Animations do not play on the canvas
 
 The besigner shows every element in its finished, un-animated state so you
