@@ -44,6 +44,12 @@
 	<string>Card payments need this device's location, as card networks require.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
+	<!-- Firebase Auth's app-delegate proxy (iOS) takes the APNs callbacks and calls the app's own only when the
+	     delegate class implements them; SwiftUI's delegate forwards them to PushAppDelegate instead, so with the
+	     proxy on the device token never reaches PushCenter. The apps sign in with credentials only (no phone auth,
+	     no Firebase-hosted web flows), so nothing else relies on it. -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
 	<!-- HTTPS (TLS) only, which is exempt: no export-compliance question per upload. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

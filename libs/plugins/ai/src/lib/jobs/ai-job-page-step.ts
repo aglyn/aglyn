@@ -37,11 +37,13 @@ import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/
 import {
   aiDanglingWord,
   aiSettleMechanicalRules,
+  aiSettlePlaceholderItems,
   aiSettleUnrelatedScreenLinks,
   validateAiDoctrineTree,
   type AiDoctrineTree,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
+import { aiHasPlaceholderToken } from '../runtime/ai-placeholder-tokens'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
@@ -111,6 +113,7 @@ import {
   aiLayoutPageTargets,
   aiLayoutLeftOutNote,
   aiRunLayoutPage,
+  type AiLayoutStartPage,
 } from './ai-job-page-language'
 import {
   aiCreationUnit,
@@ -350,16 +353,17 @@ const LISTING_TRAILING_JOINERS = /[\s,;:|/&—–-]+$/
  * A plan's listing value held to the length the SEO editor guides it to, cut
  * at a word. A cut that leaves a joining word or mark at the end ("…Practice
  * Areas and", "…across Springfield,") takes it off too, so a search result
- * never shows a phrase that stops mid-thought (AGL-3813).
+ * never shows a phrase that stops mid-thought (AGL-3813), in the plan's
+ * language (AGL-3828): a Spanish title cut to "Pan dulce y" reads "Pan dulce".
  */
-function clip(value: string, max: number): string {
+function clip(value: string, max: number, language?: string): string {
   const text = value.trim()
   if (text.length <= max) return text
   const cut = text.slice(0, max + 1)
   const space = cut.lastIndexOf(' ')
   let clipped = (space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).replace(LISTING_TRAILING_JOINERS, '').trim()
   for (let guard = 0; guard < 6; guard += 1) {
-    const word = aiDanglingWord(clipped)
+    const word = aiDanglingWord(clipped, language)
     if (!word) break
     const shorter = clipped.slice(0, clipped.length - word.length).replace(LISTING_TRAILING_JOINERS, '').trim()
     if (!shorter) break
@@ -450,6 +454,27 @@ export const aiPageJobAdmission: AiJobAdmission = async (context) => {
         }
       : {}),
   })
+}
+
+/**
+ * The site's page a page of a build or a site starts from (AGL-3832): the
+ * plan's `duplicateOf`, by its name and its words, for the page's prompt.
+ * Only a page the site has, and never its starter home page, which is a
+ * placeholder rather than words of the owner's (AGL-3596) — nor an entry
+ * template, whose words are its records'. `null` when there is no such page
+ * or its words cannot be read: the page is then built from its plan alone.
+ */
+export async function aiPageStartPage(
+  firestore: Parameters<typeof readAiDraftNodes>[0],
+  input: { hostId: string; screen: Pick<AiBuildPlanScreen, 'duplicateOf'>; inventory: Pick<AiSiteInventory, 'screens'> },
+  readNodes: typeof readAiDraftNodes = readAiDraftNodes,
+): Promise<AiLayoutStartPage | null> {
+  const id = input.screen.duplicateOf
+  const row = id ? input.inventory.screens.find((one) => one.id === id && !one.template && !one.replaceable) : undefined
+  if (!row) return null
+  const stored = await readNodes(firestore, { kind: 'screen', hostId: input.hostId, id: row.id }).catch(() => null)
+  const text = stored ? buildPageMarkdown({ nodes: stored.nodes as never, rootId: CANVAS_ROOT_ELEMENT_ID }).trim() : ''
+  return text ? { label: row.name, text } : null
 }
 
 /**
@@ -581,8 +606,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const record = aiPageRecordTemplate(screen.record, inventory, plan)
     const recordNote = record ? aiPageRecordNote(record) : null
 
-    // The plan starts from a copy of a screen the site has (rule 15): the copy
-    // is the draft — unrouted, as every copy is — and nothing is generated.
+    // A page job's plan starts from a copy of a screen the site has (rule
+    // 15): the copy is the draft — unrouted, as every copy is — and nothing
+    // is generated.
     // Only a page is a page's start: a collection entry template's copy stays
     // a template, so a plan naming one builds the page instead.
     // A copy shows what its SOURCE shows, and this branch generates nothing.
@@ -601,8 +627,16 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       screen.duplicateOf &&
         inventory.screens.some((row) => row.id === screen.duplicateOf && row.replaceable),
     )
+    // A page a build or a site makes (every one designed in the layout
+    // language) counts as built only once its plan's sections are in it,
+    // under the ids this step writes them by (AGL-3596). A copy holds its
+    // source's sections under the source's ids, so it never counts: a build
+    // that copied "Our Story" for its About page failed the page and left the
+    // copy behind (AGL-3832). Such a page is generated from its plan, its
+    // prompt shown the words of the page it starts from (`aiPageStartPage`).
+    const generatedWhole = aiJobUsesLayoutLanguage(job)
     const sourceReview =
-      !written && screen.duplicateOf && !copiesStarter
+      !written && screen.duplicateOf && !copiesStarter && !generatedWhole
         ? await aiCopiedPageReview(firestore, { hostId, id: screen.duplicateOf, name, screen })
         : null
     const sourceShort = Boolean(sourceReview?.findings.length)
@@ -610,6 +644,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       !written &&
       !sourceShort &&
       !copiesStarter &&
+      !generatedWhole &&
       screen.duplicateOf &&
       inventory.screens.some((row) => row.id === screen.duplicateOf && !row.template)
     ) {
@@ -694,12 +729,17 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // and stored (AGL-3660): this pass asks no model, so a page refused
       // here for one would be refused the same way on every Try again. A
       // Portfolio page whose opening photos all loaded eagerly was (2026-10-10).
-      // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729).
+      // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729),
+      // and an item of a list that shows only placeholders is taken out where the list keeps a real one (AGL-3827).
       const settle = <T extends AiDoctrineTree>(tree: T): T =>
-        aiSettleUnrelatedScreenLinks(aiSettleMechanicalRules(tree, 'page'), 'page', {
-          ...context,
-          ownScreenIds: [screen.id, draftId],
-        })
+        aiSettleUnrelatedScreenLinks(
+          aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page'), 'page', context),
+          'page',
+          {
+            ...context,
+            ownScreenIds: [screen.id, draftId],
+          },
+        )
       const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
       if (settled.nodes !== (page as unknown as AiDoctrineTree['nodes'])) {
         // Never written once the job is canceled (AGL-3616).
@@ -775,8 +815,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         // listing cannot be written inside this pass's time on the model the
         // job runs.
         let values = {
-          title: clip(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title),
-          description: clip(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description),
+          title: clip(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title, plan.language),
+          description: clip(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description, plan.language),
         }
         if (
           // A listing is written from the page's own text, with no inventory
@@ -803,9 +843,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           })
           spent = { ...spent, ...aiGenerationSpent(result) }
           if (result.status === 'ok') {
+            // A written field that shows a placeholder keeps the plan's, which
+            // the plan's own check already held to rule 14 (AGL-3827).
+            const usable = (text: string | null | undefined): string =>
+              text?.trim() && !aiHasPlaceholderToken(text) ? text.trim() : ''
             values = {
-              title: result.value.title?.trim() || values.title,
-              description: result.value.description?.trim() || values.description,
+              title: usable(result.value.title) || values.title,
+              description: usable(result.value.description) || values.description,
             }
           }
         }
@@ -824,6 +868,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (language) {
       // ── The whole page in one answer, in the layout language ──
       const targets = aiLayoutPageTargets({ job, inventory, own: [screen.id, draftId] })
+      const startsFrom = await aiPageStartPage(firestore, { hostId, screen, inventory })
       const result = await aiRunLayoutPage({
         job,
         plan,
@@ -834,6 +879,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         reusableComponents,
         inventory,
         model,
+        startsFrom,
         ...(signal ? { signal } : {}),
       })
       const spent = aiGenerationSpent(result)
@@ -847,17 +893,19 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const seed = `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`
       // A photo another page of the job already shows is not placed here.
       const avoid = await aiJobPagesPlacedPhotos(firestore, { hostId, job, draftId })
+      const photoWords = aiStockPhotoWordsOf(job)
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         sectionIds,
         sectionNames,
         seed,
+        ...(photoWords.language ? { language: photoWords.language } : {}),
         source: (deps.stockPhotos ?? aiLayoutStockPhotoSource)({
           hostId,
           uid: job.createdBy,
           seed,
           business: aiSiteWords(job.inputs).about,
-          ...aiStockPhotoWordsOf(job),
+          ...photoWords,
           sectionNames,
           jobId: aiOriginJobId(job),
           ...(avoid.length ? { avoid } : {}),

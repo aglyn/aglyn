@@ -681,6 +681,41 @@ describe('copy', () => {
     expect(texts).toEqual(['Café pastries baked for you', 'Crème brûlée, éclairs'])
   })
 
+  describe('a dangling word in the site’s language (AGL-3828)', () => {
+    const sections: AiLayoutSection[] = [
+      {
+        blocks: [
+          // 81 characters: the page title's 70 cut it after "…del barrio y".
+          { kind: 'heading', text: 'Pan dulce recién horneado cada mañana en la panadería del barrio y pasteles finos' },
+          { kind: 'text', text: 'Pasteles de tres leches para la' },
+        ],
+      },
+    ]
+    const typography = (language?: string) => {
+      const compiled = aiCompileLayoutPage(sections, pagePlan, TARGETS, {
+        reusableComponents: false,
+        ...(language ? { language } : {}),
+      })
+      return Object.values(compiled.tree.nodes)
+        .filter((node) => node.componentId === 'muiTypography')
+        .map((node) => node.props?.['children'])
+    }
+
+    it('takes a Spanish article, conjunction or preposition off a Spanish line, cut or whole', () => {
+      expect(typography('es')).toEqual([
+        'Pan dulce recién horneado cada mañana en la panadería del barrio',
+        'Pasteles de tres leches',
+      ])
+    })
+
+    it('reads a page with no language by English’s words, as before', () => {
+      expect(typography()).toEqual([
+        'Pan dulce recién horneado cada mañana en la panadería del barrio y',
+        'Pasteles de tres leches para la',
+      ])
+    })
+  })
+
   it('writes a unicode escape the model spelled out as the character it names', () => {
     const { compiled } = build([{ blocks: [{ kind: 'heading', text: 'Drop in \\u2014 no experience needed' }] }], pagePlan, false)
     const [title] = Object.values(compiled.tree.nodes)

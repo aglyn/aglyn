@@ -24,6 +24,8 @@ import {
   assistBuildDraftsBlock,
   assistDraftBesignerHref,
   assistDraftLabel,
+  assistDraftsForTurn,
+  isAssistFollowUpDue,
   isLiveAssistFollowUp,
   parseAssistBuildDrafts,
 } from './assist-follow-up'
@@ -100,6 +102,18 @@ describe('parseAssistBuildDrafts', () => {
     expect(parseAssistBuildDrafts(many)).toHaveLength(ASSIST_BUILD_DRAFTS_MAX)
   })
 
+  it('keeps the open mark only as a literal true (AGL-3833)', () => {
+    expect(
+      parseAssistBuildDrafts([
+        { ref: 'd1', label: 'Home', noun: 'page', open: 'yes' },
+        { ref: 'd2', label: 'About', noun: 'page', open: true },
+      ]),
+    ).toEqual([
+      { ref: 'd1', label: 'Home', noun: 'page' },
+      { ref: 'd2', label: 'About', noun: 'page', open: true },
+    ])
+  })
+
   it('bounds a label', () => {
     expect(assistDraftLabel('x'.repeat(500))).toHaveLength(80)
   })
@@ -116,6 +130,41 @@ describe('assistBuildDraftsBlock', () => {
   it('is empty with no drafts', () => {
     expect(assistBuildDraftsBlock([])).toBe('')
   })
+
+  it('names the open draft as the canvas below, to edit rather than open (AGL-3833)', () => {
+    const block = assistBuildDraftsBlock([
+      { ref: 'd1', label: 'Home', noun: 'page' },
+      { ref: 'd2', label: 'Book a tasting', noun: 'page', open: true },
+    ])
+    expect(block).toContain('- d2: page “Book a tasting” (open now: the canvas described below is this draft)')
+    expect(block).toContain('d2 is the document open in this editor')
+    expect(block).toContain('never by offering to open it')
+    expect(block).toContain(`propose id "${ASSIST_OPEN_DRAFT_ACTION_ID}"`)
+    expect(block).toContain('for a ref other than d2')
+  })
+
+  it('offers no navigation when the only draft is the open one (AGL-3833)', () => {
+    const block = assistBuildDraftsBlock([{ ref: 'd1', label: 'Book a tasting', noun: 'page', open: true }])
+    expect(block).not.toContain(ASSIST_OPEN_DRAFT_ACTION_ID)
+    expect(block).toContain('Do not propose a new build')
+  })
+})
+
+describe('assistDraftsForTurn (AGL-3833)', () => {
+  const drafts = [
+    { ref: 'd1', label: 'Home', noun: 'page' },
+    { ref: 'd2', label: 'About', noun: 'page', open: true as const },
+  ]
+  it('lists nothing away from a site', () => {
+    expect(assistDraftsForTurn(drafts, { onSite: false, canvasRead: true })).toEqual([])
+  })
+  it('believes the open mark only on a turn that reads the canvas', () => {
+    expect(assistDraftsForTurn(drafts, { onSite: true, canvasRead: true })).toEqual(drafts)
+    expect(assistDraftsForTurn(drafts, { onSite: true, canvasRead: false })).toEqual([
+      { ref: 'd1', label: 'Home', noun: 'page' },
+      { ref: 'd2', label: 'About', noun: 'page' },
+    ])
+  })
 })
 
 describe('a follow-up waiting for its canvas', () => {
@@ -127,6 +176,17 @@ describe('a follow-up waiting for its canvas', () => {
     expect(isLiveAssistFollowUp({ ...pending, question: ' ' }, now)).toBe(false)
     expect(isLiveAssistFollowUp({ ...pending, path: 'https://evil.example' }, now)).toBe(false)
     expect(isLiveAssistFollowUp(null, now)).toBe(false)
+  })
+
+  it('is due on its address, on its version, and only once the canvas has loaded (AGL-3833)', () => {
+    const pending = { path: '/acme/x/versions/v-1/besigner', question: 'Shorter', at: now }
+    const stand = { path: pending.path, versionId: 'v-1', canvasLoaded: true }
+    expect(isAssistFollowUpDue(pending, stand)).toBe(true)
+    // The editor has registered from the route; the document has not loaded.
+    expect(isAssistFollowUpDue(pending, { ...stand, canvasLoaded: false })).toBe(false)
+    expect(isAssistFollowUpDue(pending, { ...stand, versionId: 'v-2' })).toBe(false)
+    expect(isAssistFollowUpDue(pending, { ...stand, versionId: null })).toBe(false)
+    expect(isAssistFollowUpDue(pending, { ...stand, path: '/acme/x' })).toBe(false)
   })
 
   it('reads the version a Besigner address names', () => {

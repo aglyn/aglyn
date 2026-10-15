@@ -15,8 +15,15 @@
  * limitations under the License.
  */
 
-import { aiDefaultModelFor, aiCatalogEntry } from './catalog'
-import { anthropicResultFrom, buildAnthropicRequestBody } from './anthropic'
+import {
+  aiBilledRatesForModel,
+  aiDefaultModelFor,
+  aiCatalogEntry,
+  aiProviderRatesForModel,
+  estimateAiBilledUsd,
+} from './catalog'
+import { AI_CACHE_WRITE_HOUR_FACTOR, aiCacheWriteHourSum, aiCacheWriteHourSurchargeUsd } from './cache-write-hour'
+import { anthropicResultFrom, anthropicUsageFrom, buildAnthropicRequestBody } from './anthropic'
 import type { AiTool } from './contract'
 
 const TOOL: AiTool = {
@@ -127,6 +134,55 @@ describe('the cache lifetime a request asks for', () => {
   it('asks for the hour on every breakpoint when the request does', () => {
     const system = body('claude-sonnet-5', { cacheTtl: '1h' })['system'] as Array<Record<string, unknown>>
     expect(system[0]['cache_control']).toEqual({ type: 'ephemeral', ttl: '1h' })
+  })
+})
+
+describe('an hour-long cache write is priced at twice the input (AGL-3830)', () => {
+  const model = 'claude-sonnet-5-5'
+  const usage = {
+    input_tokens: 600,
+    output_tokens: 900,
+    cache_read_input_tokens: 2_000,
+    cache_creation_input_tokens: 3_000,
+    cache_creation: { ephemeral_5m_input_tokens: 1_000, ephemeral_1h_input_tokens: 2_000 },
+  }
+
+  it('reads the hour-long share of the writes, inside the total, and nothing where there is none', () => {
+    expect(anthropicUsageFrom(usage)).toEqual({
+      inputTokens: 600,
+      outputTokens: 900,
+      cacheReadTokens: 2_000,
+      cacheWriteTokens: 3_000,
+      cacheWriteHourTokens: 2_000,
+    })
+    const fiveMinutes = { ...usage, cache_creation: { ephemeral_5m_input_tokens: 3_000, ephemeral_1h_input_tokens: 0 } }
+    expect(anthropicUsageFrom(fiveMinutes)).not.toHaveProperty('cacheWriteHourTokens')
+    expect(anthropicUsageFrom({ input_tokens: 1 })).not.toHaveProperty('cacheWriteHourTokens')
+  })
+
+  it('bills each hour-long token the difference between 2x and the table’s 1.25x input', () => {
+    for (const rates of [aiBilledRatesForModel(model), aiProviderRatesForModel(model)]) {
+      const surcharge = aiCacheWriteHourSurchargeUsd({ cacheWriteHourTokens: 1_000_000 }, rates)
+      expect(surcharge).toBeCloseTo(rates.inputPerToken * 1_000_000 * (AI_CACHE_WRITE_HOUR_FACTOR - 1.25), 6)
+      expect(rates.cacheWritePerToken + surcharge / 1_000_000).toBeCloseTo(rates.inputPerToken * 2, 12)
+    }
+    expect(aiCacheWriteHourSurchargeUsd({}, aiBilledRatesForModel(model))).toBe(0)
+  })
+
+  it('draws the surcharge on the answer it came with', () => {
+    const answer = anthropicResultFrom({ content: [], stop_reason: 'end_turn', usage }, model)
+    const fiveMinute = estimateAiBilledUsd(anthropicUsageFrom(usage), model)
+    expect(answer.estCostUsd).toBeCloseTo(
+      fiveMinute + aiCacheWriteHourSurchargeUsd({ cacheWriteHourTokens: 2_000 }, aiBilledRatesForModel(model)),
+      6,
+    )
+    expect(answer.estCostUsd).toBeGreaterThan(fiveMinute)
+  })
+
+  it('adds two exchanges’ hour-long writes, and leaves the field out where neither had one', () => {
+    expect(aiCacheWriteHourSum({ cacheWriteHourTokens: 5 }, {})).toEqual({ cacheWriteHourTokens: 5 })
+    expect(aiCacheWriteHourSum({ cacheWriteHourTokens: 5 }, { cacheWriteHourTokens: 7 })).toEqual({ cacheWriteHourTokens: 12 })
+    expect(aiCacheWriteHourSum({}, {})).toEqual({})
   })
 })
 

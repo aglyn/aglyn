@@ -52,6 +52,8 @@ const CHUNK = 16 * 1024
 interface HarnessReport {
   /** Leak warnings from one bare `createReadStream` read. */
   control: string[]
+  /** Leak warnings from one bare `download()`, the read a site icon used to make. */
+  downloadControl: string[]
   /** Leak warnings from five reads through `openStorageReadStream`, two of them ranged. */
   streamed: string[]
   /** Peak listeners per event on the body: 2 chunks, 200 chunks, 1st and 10th read. */
@@ -125,6 +127,9 @@ async function peakBodyListeners(name) {
 const control = await leakWarningsDuring(() =>
   pipeline(file('chunks-4').createReadStream({ validation: false }), slowSink()),
 )
+const downloadControl = await leakWarningsDuring(() =>
+  file('chunks-4').download({ validation: false }),
+)
 const streamed = await leakWarningsDuring(async () => {
   for (let read = 0; read < 5; read++) {
     await pipeline(
@@ -149,6 +154,7 @@ await deleteApp(app)
 server.close()
 process.stdout.write(JSON.stringify({
   control,
+  downloadControl,
   streamed,
   peaks: { small, large, first, tenth },
   buffered: { warnings: bufferedWarnings, length },
@@ -177,6 +183,12 @@ beforeAll(async () => {
 describe('Storage reads (AGL-3795)', () => {
   it('control: the bare createReadStream trips the warning on one read', () => {
     expect(report.control.some((message) => message.includes('[PassThrough]'))).toBe(true)
+  })
+
+  it('control: a bare download() trips it too, since it is the same read underneath', () => {
+    expect(report.downloadControl.some((message) => message.includes('[PassThrough]'))).toBe(
+      true,
+    )
   })
 
   it('a streamed read raises no leak warning, across reads and ranges', () => {

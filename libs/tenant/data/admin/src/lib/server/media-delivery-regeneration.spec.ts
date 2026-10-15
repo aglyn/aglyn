@@ -25,6 +25,7 @@
  * naming exactly those, and the objects it stopped naming deleted only after.
  */
 
+import { Readable } from 'node:stream'
 import {
   MEDIA_VARIANT_ENCODER_VERSION,
   MEDIA_VARIANT_ENCODER_VERSION_FIELD,
@@ -152,10 +153,15 @@ function memoryBucket(objects: Record<string, Buffer>) {
     deleted,
     bucket: {
       file: (path: string) => ({
-        download: async (): Promise<[Buffer]> => {
+        createReadStream: () => {
           const bytes = store.get(path)
-          if (!bytes) throw new Error(`No such object: ${path}`)
-          return [bytes]
+          return bytes
+            ? Readable.from([bytes])
+            : new Readable({
+                read() {
+                  this.destroy(new Error(`No such object: ${path}`))
+                },
+              })
         },
         save: async (bytes: Buffer, options: { contentType: string }) => {
           store.set(path, bytes)
@@ -247,16 +253,16 @@ describe('regenerateMediaDeliveryCopies (AGL-3486)', () => {
     const original = await photo(800, 450, false)
     const { bucket } = memoryBucket({ [BASE]: original })
     const doc = memoryDoc({ ...LEGACY, width: 800, sizeBytes: original.length })
-    const download = bucket.file(BASE).download
+    const read = bucket.file(BASE).createReadStream
     const racing = {
       file: (path: string) => {
         const file = bucket.file(path)
         return path === BASE
           ? {
               ...file,
-              download: async () => {
+              createReadStream: () => {
                 doc.externalWrite({ contentHash: 'replaced', variants: [160] })
-                return download()
+                return read()
               },
             }
           : file

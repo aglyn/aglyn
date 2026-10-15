@@ -20,10 +20,13 @@
  * limitations under the License.
  */
 
+import { EventEmitter } from 'node:events'
+import { PassThrough } from 'node:stream'
 import { parseSiteIconSpec } from '@aglyn/aglyn/app-utils/site-icon-set'
 import sharp from 'sharp'
 
 import { mediaCdnIconEtag, serveMediaCdnIcon } from './media-cdn-icon'
+import { STORAGE_READ_BODY_LISTENER_BUDGET } from './storage-read-stream'
 
 /**
  * The `?icon=` representation on the media CDN (AGL-3484): drawn once per
@@ -85,7 +88,18 @@ async function serve(options: {
   method?: string
 }) {
   const res = fakeResponse()
-  const download = jest.fn(async () => [options.source ?? (await pngSource())])
+  const source = options.source ?? (await pngSource())
+  // Like the Storage client: the HTTP response body arrives as the read
+  // stream's `response` event, then the bytes follow.
+  const body = new EventEmitter()
+  const read = jest.fn(() => {
+    const stream = new PassThrough()
+    setImmediate(() => {
+      stream.emit('response', body)
+      stream.end(source)
+    })
+    return stream
+  })
   const rateLimit = jest.fn(async () => null)
   const spec = parseSiteIconSpec(options.query['icon'])
   if (!spec) throw new Error('bad spec in test')
@@ -103,37 +117,44 @@ async function serve(options: {
       stablePath: STABLE,
       file: {
         getMetadata: async () => [{ size: options.size ?? 2048 }],
-        download: download as never,
+        createReadStream: read,
       },
     },
     setCacheControl: (value) => res.setHeader('Cache-Control', value),
     cacheControl: CACHE,
     rateLimit,
   })
-  return { res, download, rateLimit }
+  return { res, read, body, rateLimit }
 }
 
 describe('a current version', () => {
   it('is drawn and cached for a year', async () => {
-    const { res, download } = await serve({
+    const { res, read } = await serve({
       query: { icon: 'png-32', v: 'hashB' },
     })
     expect(res.statusCode).toBe(200)
     expect(res.headers.get('content-type')).toBe('image/png')
     expect(res.headers.get('cache-control')).toBe(CACHE.immutable)
     expect(res.headers.get('etag')).toBe('"hashB-icon-png-32"')
-    expect(download).toHaveBeenCalledTimes(1)
+    expect(read).toHaveBeenCalledTimes(1)
     const meta = await sharp(res.body as Buffer).metadata()
     expect([meta.width, meta.height]).toEqual([32, 32])
   })
 
+  it('reads the source within the Storage listener budget, so no leak warning is logged', async () => {
+    const { res, read, body } = await serve({ query: { icon: 'png-32', v: 'hashB' } })
+    expect(res.statusCode).toBe(200)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(body.getMaxListeners()).toBe(STORAGE_READ_BODY_LISTENER_BUDGET)
+  })
+
   it('answers a revalidation from its validator, without drawing', async () => {
-    const { res, download } = await serve({
+    const { res, read } = await serve({
       query: { icon: 'png-32', v: 'hashB' },
       ifNoneMatch: '"hashB-icon-png-32"',
     })
     expect(res.statusCode).toBe(304)
-    expect(download).not.toHaveBeenCalled()
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('serves the multi-size ICO as an icon', async () => {
@@ -145,7 +166,7 @@ describe('a current version', () => {
 
 describe('a DAM Replace', () => {
   it('re-points a stale version at the current one, keeping the representation', async () => {
-    const { res, download } = await serve({
+    const { res, read } = await serve({
       query: { icon: 'flat-180', bg: 'fafaf9', v: 'hashA', exp: '9', sig: 's' },
       contentHash: 'hashB',
     })
@@ -155,7 +176,7 @@ describe('a DAM Replace', () => {
     )
     // Revalidated rather than pinned: the pointer moves with the next Replace.
     expect(res.headers.get('cache-control')).toBe(CACHE.stable)
-    expect(download).not.toHaveBeenCalled()
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('changes the validator, so no cache can hand back the old icon', () => {
@@ -182,23 +203,23 @@ describe('an unversioned URL', () => {
 
 describe('a source it cannot draw', () => {
   it('redirects an uploaded ICO to the original', async () => {
-    const { res, download } = await serve({
+    const { res, read } = await serve({
       query: { icon: 'png-16', v: 'hashB' },
       contentType: 'image/x-icon',
     })
     expect(res.statusCode).toBe(302)
     expect(res.headers.get('location')).toBe(STABLE)
-    expect(download).not.toHaveBeenCalled()
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('redirects a source over the fetch ceiling to the original', async () => {
-    const { res, download } = await serve({
+    const { res, read } = await serve({
       query: { icon: 'png-16', v: 'hashB' },
       size: 16 * 1024 * 1024,
     })
     expect(res.statusCode).toBe(302)
     expect(res.headers.get('location')).toBe(STABLE)
-    expect(download).not.toHaveBeenCalled()
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('redirects a file that will not decode, uncached, so a Replace can fix it', async () => {

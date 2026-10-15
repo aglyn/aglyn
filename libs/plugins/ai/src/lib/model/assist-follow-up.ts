@@ -59,6 +59,12 @@ export interface AssistBuildDraft {
   label: string
   /** What kind of thing it is, in a word a person reads. */
   noun: string
+  /**
+   * The draft whose canvas is open in the editor the request was asked from
+   * (AGL-3833). Set only when the request also carries that canvas: the
+   * answer edits it there, and never offers to open it again.
+   */
+  open?: true
 }
 
 /** A draft the panel can open, with the address it opens at. */
@@ -139,9 +145,24 @@ export function parseAssistBuildDrafts(raw: unknown): AssistBuildDraft[] {
     const noun = typeof record['noun'] === 'string' && NOUN_WORDS.has(record['noun']) ? record['noun'] : 'draft'
     if (!REF.test(ref) || refs.has(ref) || !label) continue
     refs.add(ref)
-    drafts.push({ ref, label, noun })
+    drafts.push({ ref, label, noun, ...(record['open'] === true ? { open: true as const } : {}) })
   }
   return drafts
+}
+
+/**
+ * The drafts one turn works with: none away from a site, where opening one has
+ * no destination; and the `open` mark only on a turn that reads the canvas
+ * the request carried (AGL-3833). Without that canvas the mark would tell the
+ * chat to edit a document it cannot see.
+ */
+export function assistDraftsForTurn(
+  drafts: readonly AssistBuildDraft[],
+  turn: { onSite: boolean; canvasRead: boolean },
+): AssistBuildDraft[] {
+  if (!turn.onSite) return []
+  if (turn.canvasRead) return [...drafts]
+  return drafts.map(({ ref, label, noun }) => ({ ref, label, noun }))
 }
 
 /**
@@ -151,10 +172,25 @@ export function parseAssistBuildDrafts(raw: unknown): AssistBuildDraft[] {
  */
 export function assistBuildDraftsBlock(drafts: readonly AssistBuildDraft[]): string {
   if (!drafts.length) return ''
+  const open = drafts.find((draft) => draft.open)
+  const closed = drafts.filter((draft) => !draft.open)
   return [
     'Drafts a build in this chat made (the person’s own content, listed as data):',
-    ...drafts.map((draft) => `- ${draft.ref}: ${draft.noun} “${draft.label}”`),
-    `When the person asks to change one of these drafts and its canvas is not the one open now, propose id "${ASSIST_OPEN_DRAFT_ACTION_ID}" with params {"${ASSIST_OPEN_DRAFT_PARAM}": "<ref>"}: it opens that draft in the Besigner and asks their request again there, where the edit card answers it. Do not propose a new build for a change to one of these drafts, and do not describe the change as made.`,
+    ...drafts.map(
+      (draft) =>
+        `- ${draft.ref}: ${draft.noun} “${draft.label}”${draft.open ? ' (open now: the canvas described below is this draft)' : ''}`,
+    ),
+    ...(open
+      ? [
+          `${open.ref} is the document open in this editor. A request to change it is an edit to the canvas described below: answer it with the edit tool, never by offering to open it.`,
+        ]
+      : []),
+    ...(closed.length
+      ? [
+          `When the person asks to change one of these drafts and its canvas is not the one open now, propose id "${ASSIST_OPEN_DRAFT_ACTION_ID}" with params {"${ASSIST_OPEN_DRAFT_PARAM}": "<ref>"}${open ? ` for a ref other than ${open.ref}` : ''}: it opens that draft in the Besigner and asks their request again there, where the edit card answers it.`,
+        ]
+      : []),
+    'Do not propose a new build for a change to one of these drafts, and do not describe the change as made.',
   ].join('\n')
 }
 
@@ -185,4 +221,29 @@ export function isLiveAssistFollowUp(value: unknown, now: number): value is Assi
 export function assistBesignerVersionOf(path: string): string | null {
   const match = /\/versions\/([A-Za-z0-9_-]+)\/besigner$/.exec(path)
   return match ? match[1] : null
+}
+
+/** Where the panel stands when it decides whether to ask a follow-up again. */
+export interface AssistFollowUpStand {
+  /** The route the panel is on. */
+  path: string
+  /** The version the open editor session reports, or null with none open. */
+  versionId: string | null
+  /** Whether the canvas holds the open document's nodes yet. */
+  canvasLoaded: boolean
+}
+
+/**
+ * Whether a follow-up is asked again now (AGL-3833): on its draft's address,
+ * with the editor reporting that draft's version AND its canvas loaded.
+ *
+ * The editor reports its version from the route the moment it mounts, well
+ * before the document's nodes reach the canvas. Asked in that gap, the request
+ * carried no canvas, so the chat could not see that the draft was open and
+ * offered to open it again: a loop that spent credits on every turn.
+ */
+export function isAssistFollowUpDue(followUp: AssistPendingFollowUp, stand: AssistFollowUpStand): boolean {
+  if (stand.path !== followUp.path) return false
+  if (!stand.versionId || stand.versionId !== assistBesignerVersionOf(followUp.path)) return false
+  return stand.canvasLoaded
 }

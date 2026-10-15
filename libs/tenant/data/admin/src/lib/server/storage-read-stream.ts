@@ -45,6 +45,10 @@
  * the measured fan-out plus a little headroom. The process default stays at
  * 10, so a real leak anywhere still warns, and so does a real leak on this
  * body once it grows past the budget.
+ *
+ * `File#download()` makes the same read but never exposes the stream, so its
+ * body cannot be budgeted and it still warns. A read that wants the whole
+ * object uses {@link readStorageObject} instead.
  */
 
 import type { Readable } from 'node:stream'

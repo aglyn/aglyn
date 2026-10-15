@@ -90,6 +90,12 @@ import {
   type AiOutputKind,
 } from './ai-palette'
 import { AI_PALETTE, AI_SX_TOKENS } from './ai-palette.generated'
+import {
+  aiIsOnlyPlaceholders,
+  aiPlaceholderTokens,
+  type AiPlaceholderOptions,
+  type AiPlaceholderToken,
+} from './ai-placeholder-tokens'
 
 /**
  * The building doctrine's validators (AGL-2935): the rules a generated
@@ -2514,6 +2520,59 @@ const OPENING_WORDS = new Set([
   'without',
 ])
 
+/**
+ * The words no finished line ends on in a language other than English, keyed
+ * by its primary subtag (AGL-3828): its articles, its joining conjunctions,
+ * the prepositions it never leaves at a phrase's end, and the possessives
+ * that only ever come before a noun. A word that can close a phrase on its
+ * own is left out, though a cut can end on it too: French "un" ("Tout en
+ * un"), "son" (sound) and "vers" (verse), Portuguese "um" ("Dois em um") and
+ * "pelos" ("Remoção de pelos"), Italian "uno" and "su" ("Torna su"), and
+ * German's articles and the prepositions its separable verbs end on ("Rufen
+ * Sie uns an"). One-letter words count in lowercase only, as English's "a"
+ * does: "Vitamina E" ends on a name. Written precomposed (NFC).
+ */
+const DANGLING_WORDS_BY_LANGUAGE: Readonly<Record<string, string>> = {
+  es: 'a al con de del desde e el en entre hacia hasta la las los mi mis ni o para pero por que sin sino su sus tu tus u un una unas unos y',
+  pt: 'a à ao aos as às com da das de do dos e em entre mas na nas nem no nos num numa o os ou para pela pelas por que sem',
+  fr: 'à au aux avec chez dans de des du en entre et la le les ma mais mes mon ni nos notre ou par pour que sa sans ses sur ta tes ton vos votre',
+  it: 'a ai al alla alle che col con da dai dal dalla degli dei del della delle di e ed fra gli i il in la le lo ma né nei nel nella o per sui sul sulla tra un una',
+  de: 'am beim dass des für im ins oder sondern sowie und vom von zum zur',
+}
+
+/**
+ * The elided words a French or Italian line cannot end on, without their
+ * apostrophe: a cut that stops at "de l’" or "dell’" leaves the article
+ * waiting for the word it was joined to.
+ */
+const ELIDED_WORDS_BY_LANGUAGE: Readonly<Record<string, string>> = {
+  fr: 'c d j jusqu l lorsqu m n puisqu qu s t',
+  it: 'all d dall dell l nell quest sull un',
+}
+
+/** A language's dangling words, read once from its table; `null` for English and every language with none. */
+interface AiDanglingTable {
+  words: ReadonlySet<string>
+  elided: ReadonlySet<string>
+}
+const danglingTables = new Map<string, AiDanglingTable | null>()
+
+function danglingTableFor(language: unknown): AiDanglingTable | null {
+  const code = typeof language === 'string' ? (/^([a-z]{2,3})(?:[-_]|$)/i.exec(language.trim())?.[1] ?? '').toLowerCase() : ''
+  if (!code || code === 'en') return null
+  let table = danglingTables.get(code)
+  if (table === undefined) {
+    const words = Object.prototype.hasOwnProperty.call(DANGLING_WORDS_BY_LANGUAGE, code) ? DANGLING_WORDS_BY_LANGUAGE[code] : ''
+    const elided = Object.prototype.hasOwnProperty.call(ELIDED_WORDS_BY_LANGUAGE, code) ? ELIDED_WORDS_BY_LANGUAGE[code] : ''
+    table = words ? { words: new Set(words.split(' ')), elided: new Set(elided.split(' ').filter(Boolean)) } : null
+    danglingTables.set(code, table)
+  }
+  return table
+}
+
+/** An elided word at a line's end, apostrophe and all: the "l’" of "Pain de l’". */
+const ELIDED_TAIL = /(?<![\p{L}\p{M}\p{N}&'’])(\p{L}[\p{L}\p{M}]*)['’]$/u
+
 /** A line that closes itself: a sentence's end, a closing quote or bracket, or a colon that introduces what follows. */
 const CLOSED_LINE = /[.!?…:;"'”’»)\]]$/
 
@@ -2532,10 +2591,17 @@ const LAST_WORD = /(?<![\p{L}\p{M}\p{N}&'’])(?:\p{L}[\p{L}\p{M}]*|&)$/u
  * `null`. A line that closes itself, ends on a binding or a bracketed fact the
  * member fills, or ends on any other word, is finished as far as a check can
  * tell. Exported for the specs that hold the closed list.
+ *
+ * `language` is the site's language code (`es`, `pt-BR`): a line in one with
+ * a table above is held to that table's words (AGL-3828), and every other
+ * line, an unknown language's included, to English's.
  */
-export function aiDanglingWord(line: string): string | null {
+export function aiDanglingWord(line: string, language?: string | null): string | null {
   const text = line.trim()
-  if (!text || CLOSED_LINE.test(text)) return null
+  if (!text) return null
+  const table = danglingTableFor(language)
+  if (table) return danglingWordIn(text, table)
+  if (CLOSED_LINE.test(text)) return null
   const word = LAST_WORD.exec(text)?.[0]
   if (!word) return null
   const lower = word.toLowerCase()
@@ -2544,6 +2610,27 @@ export function aiDanglingWord(line: string): string | null {
   // of "Drop-in" or "Add-on" joins one word and breaks nothing.
   const before = text.slice(0, text.length - word.length)
   return OPENING_WORDS.has(lower) && /(?:[,;—–]|\s-)\s*$/.test(before) ? word : null
+}
+
+/**
+ * The dangling word a line in a language with a table ends on, or `null`.
+ * An elided article counts before the apostrophe could close the line. A
+ * word joined by a hyphen to the one before it ends a compound, never a
+ * phrase: French "Profitez-en" and Portuguese "Siga-nos" are finished.
+ */
+function danglingWordIn(text: string, table: AiDanglingTable): string | null {
+  if (table.elided.size) {
+    const elided = ELIDED_TAIL.exec(text)
+    if (elided && table.elided.has(elided[1].normalize('NFC').toLowerCase())) return elided[0]
+  }
+  if (CLOSED_LINE.test(text)) return null
+  const word = LAST_WORD.exec(text)?.[0]
+  if (!word) return null
+  const whole = word.normalize('NFC')
+  const lower = whole.toLowerCase()
+  if (whole.length === 1 && whole !== lower) return null
+  if (/[\p{L}\p{M}\p{N}]-$/u.test(text.slice(0, text.length - word.length))) return null
+  return lower === '&' || table.words.has(lower) ? word : null
 }
 
 /** The last words of a line, as a re-ask quotes them. */
@@ -2849,6 +2936,203 @@ export function detectEmptyItems(tree: AiDoctrineTree): AiDoctrineViolation[] {
         ? 'A list item holds no words, so its row shows empty. Write the words of its List Item Text, or take the item out.'
         : 'A card holds nothing to read or see. Give it its words, or take the card out.'
   return [{ rule: 16, code: 'empty-item', message, nodeIds: empty.map((entry) => entry.id) }]
+}
+
+// ── Rule 14: placeholders never reach a page (AGL-3827) ───────────────────
+
+/** Text props whose value is markup, where angle brackets are syntax. */
+const MARKUP_PROPS = new Set(['html', 'css'])
+
+/** One piece of copy that holds a placeholder: where it sits, its tokens, and whether it holds nothing else. */
+interface AiPlaceholderCopy {
+  at: string
+  tokens: AiPlaceholderToken[]
+  only: boolean
+}
+
+/** A sample's copy, read for placeholders as its output reads them. */
+function placeholderCopyOf(
+  at: string,
+  text: string,
+  options: AiPlaceholderOptions,
+): AiPlaceholderCopy | null {
+  const tokens = aiPlaceholderTokens(text, options)
+  return tokens.length ? { at, tokens, only: aiIsOnlyPlaceholders(text, options) } : null
+}
+
+/**
+ * Every piece of copy a tree shows that holds a placeholder: each text prop
+ * of each node, an Image's alt and a link's words among them, and the copy an
+ * instance fills in, as `aiTreeCopy` reads them. An email's own step owns its
+ * merge tokens, bare spellings included.
+ */
+function treePlaceholderCopy(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: AiNodeTreeContext,
+): AiPlaceholderCopy[] {
+  const found: AiPlaceholderCopy[] = []
+  const mergeTokens = outputKind === 'email'
+  for (const { id, node } of walkTree(tree)) {
+    const roles = AI_PALETTE[node.componentId]?.propRoles ?? {}
+    for (const [name, value] of Object.entries(node.props ?? {})) {
+      if (roles[name] !== 'text' || typeof value !== 'string') continue
+      const entry = placeholderCopyOf(id, value, { mergeTokens, markup: MARKUP_PROPS.has(name) })
+      if (entry) found.push(entry)
+    }
+    const refId = node.props?.[AI_INSTANCE_REF_PROP]
+    const values = node.props?.[REUSABLE_INSTANCE_PROP_VALUES_KEY]
+    if (typeof refId === 'string' && isRecord(values)) {
+      const declared = context.componentProps?.[refId] ?? {}
+      for (const [name, value] of Object.entries(values)) {
+        const type = declared[name] ?? 'text'
+        if ((type !== 'text' && type !== 'richText') || typeof value !== 'string') continue
+        const entry = placeholderCopyOf(id, value, { mergeTokens })
+        if (entry) found.push(entry)
+      }
+    }
+  }
+  return found
+}
+
+/** The violation for copy that holds placeholders, naming nodes by id and plan entries by path. */
+function placeholderViolation(found: readonly AiPlaceholderCopy[]): AiDoctrineViolation[] {
+  if (!found.length) return []
+  const ids = unique(found.map((entry) => entry.at))
+  const paths = ids.filter((id) => /[.[\]]/.test(id))
+  const nodeIds = ids.filter((id) => !/[.[\]]/.test(id))
+  const tokens = unique(found.flatMap((entry) => entry.tokens.map((token) => token.token)))
+  const slots = found.some((entry) => entry.tokens.some((token) => token.kind === 'repeat-slot'))
+  const listed = tokens.slice(0, 6).map((token) => `"${token}"`)
+  return [
+    {
+      rule: 14,
+      code: 'placeholder-token',
+      message:
+        "This copy shows a template placeholder where its words belong, and a visitor would read it as written. Write the real words in the site's voice, from what the brief and the site already say.",
+      detail:
+        `Placeholders left in the copy: ${listed.join(', ')}${tokens.length > listed.length ? ` and ${tokens.length - listed.length} more` : ''}.` +
+        (slots
+          ? ' {{1}}, {{2}} and on are filled only inside an item with "repeat", from one list of values a copy; anywhere else, write the words out.'
+          : ''),
+      ...(nodeIds.length ? { nodeIds } : {}),
+      ...(paths.length ? { paths } : {}),
+    },
+  ]
+}
+
+/**
+ * Rule 14, for a placeholder left in copy (AGL-3827): `{{1}}`, `{{name}}`,
+ * `[[Customer name]]`, `<Your business name>` (`ai-placeholder-tokens.ts`).
+ * A visitor reads it exactly as written. A live About page's two testimonials
+ * did, quote and name. A fact the brief never gave, in single square
+ * brackets, is the honest marker this rule asks for and is never one
+ * (AGL-3056); Lorem ipsum is `filler-copy`'s.
+ */
+export function detectPlaceholderTokens(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: AiNodeTreeContext = {},
+): AiDoctrineViolation[] {
+  return placeholderViolation(treePlaceholderCopy(tree, outputKind, context))
+}
+
+/** Rule 14 on copy that is not a tree, such as a plan's titles and search fields, named by path. */
+export function detectPlaceholderCopy(samples: readonly AiCopySample[]): AiDoctrineViolation[] {
+  return placeholderViolation(
+    samples.flatMap((sample) => {
+      const entry = placeholderCopyOf(sample.at, sample.text, {})
+      return entry ? [entry] : []
+    }),
+  )
+}
+
+/**
+ * An item of a list that shows only placeholders, taken out where its list
+ * keeps a real one (AGL-3827). Its copy says nothing a reader could keep, so
+ * taking it out loses no word, and the list still shows what it is for. This
+ * is the one answer the rule has without a model: anything else is the
+ * model's to write, through `placeholder-token`'s re-ask.
+ *
+ * An ITEM is the nearest node, from the copy up, that sits beside another
+ * of its own shape under one parent (`indexShapes`, with the components its
+ * instances place): a testimonial instance in a row of them, or the Grid item
+ * that holds it. It is taken out only when
+ *
+ *  - every piece of its copy that holds a placeholder holds nothing else,
+ *    such as a quote of `{{1}}` (a quote of `Thanks, {{name}}!` says
+ *    something, and is the model's to finish);
+ *  - an item of its shape beside it holds no placeholder, so the list keeps
+ *    a real item: a list of only placeholders is not trimmed to nothing;
+ *  - it is not a section, nor in one above the section it sits in: a page's
+ *    sections are its plan's, and a section is never taken out here.
+ *
+ * Reads and returns the tree; a tree with nothing to settle comes back as the
+ * same object, so settling is idempotent, and a parent that is changed is
+ * copied, never edited in place.
+ */
+export function aiSettlePlaceholderItems<T extends AiDoctrineTree>(
+  tree: T,
+  outputKind: AiOutputKind,
+  context: AiNodeTreeContext = {},
+): T {
+  if (!tree.nodes[tree.rootId]) return tree
+  const found = treePlaceholderCopy(tree, outputKind, context)
+  if (!found.length) return tree
+  // A node holds only placeholders where every piece of its copy that holds one holds nothing else.
+  const hollow = new Map<string, boolean>()
+  for (const entry of found) hollow.set(entry.at, (hollow.get(entry.at) ?? true) && entry.only)
+
+  const index = indexShapes(tree)
+  const parentOf = new Map<string, string>()
+  for (const visit of index.visits) {
+    if (visit.ancestors.length) parentOf.set(visit.id, visit.ancestors[visit.ancestors.length - 1])
+  }
+  const subtreeOf = (id: string): string[] => walkTree({ rootId: id, nodes: tree.nodes }).map((visit) => visit.id)
+  const signatures = new Map<string, string>()
+  const signatureOf = (id: string): string => {
+    let signature = signatures.get(id)
+    if (signature === undefined) {
+      const places = subtreeOf(id)
+        .map((node) => tree.nodes[node]?.props?.[AI_INSTANCE_REF_PROP])
+        .filter((refId): refId is string => typeof refId === 'string')
+      signature = `${index.shapeOf.get(id) ?? ''}|${places.join(',')}`
+      signatures.set(id, signature)
+    }
+    return signature
+  }
+  const itemOf = (id: string): { id: string; parent: string; alike: string[] } | null => {
+    for (let at: string | undefined = id; at && at !== tree.rootId; at = parentOf.get(at)) {
+      if (tree.nodes[at]?.componentId === 'section') return null
+      const parent = parentOf.get(at)
+      if (!parent) return null
+      const signature = signatureOf(at)
+      const alike = (tree.nodes[parent]?.nodes ?? []).filter(
+        (child) => tree.nodes[child] && signatureOf(child) === signature,
+      )
+      if (alike.length >= 2) return { id: at, parent, alike }
+    }
+    return null
+  }
+
+  const drops = new Map<string, Set<string>>()
+  for (const id of hollow.keys()) {
+    const item = itemOf(id)
+    if (!item) continue
+    const inside = subtreeOf(item.id)
+    if (!inside.every((node) => hollow.get(node) !== false)) continue
+    const kept = item.alike.filter((sibling) => !subtreeOf(sibling).some((node) => hollow.has(node)))
+    if (!kept.length) continue
+    drops.set(item.parent, (drops.get(item.parent) ?? new Set()).add(item.id))
+  }
+  if (!drops.size) return tree
+
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  for (const [parent, items] of drops) {
+    nodes[parent] = { ...nodes[parent], nodes: (nodes[parent].nodes ?? []).filter((child) => !items.has(child)) }
+    for (const item of items) for (const node of subtreeOf(item)) delete nodes[node]
+  }
+  return { ...tree, nodes } as T
 }
 
 // ── Rule 17: the budget, measured ────────────────────────────────────────
@@ -3561,6 +3845,7 @@ export function validateAiDoctrineTree(
     ...detectAdHocWidths(tree, outputKind),
     ...detectUnresponsiveGrids(tree, outputKind, writtenOf),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
+    ...detectPlaceholderTokens(tree, outputKind, context),
     ...detectCutLines(validated.repairs, written, (id) => minted.get(id) ?? id),
     ...detectDanglingWords(tree),
     ...detectHeavyDocument(tree, outputKind, context),
@@ -5404,6 +5689,7 @@ export function validateAiBuildPlan(
     ...detectPlanTypedData(plan, inventory, capabilities),
     ...detectMissingNavAndSeo(plan, inventory),
     ...detectOffVoiceCopy(aiPlanCopy(plan), framing),
+    ...detectPlaceholderCopy(aiPlanCopy(plan)),
     ...detectMissedDuplicate(plan, inventory),
   ]
 }

@@ -40,7 +40,10 @@ caches its own conversation. The rest are proposals for the owner below.
 - **Prices** are the provider's list in `providers/catalog.ts`. Claude Sonnet 5.5
   is $2 in, $10 out, $0.10 a cache read (0.05×) and $2.50 a five-minute write
   (1.25×). Claude Haiku 5.5 is a twentieth of that, except its read is 0.1×.
-  Opus 5 is $5 in and $25 out. An hour-long write is 2×.
+  Opus 5 is $5 in and $25 out. An hour-long write is 2× ($4 on Sonnet 5.5).
+  Until AGL-3830 the meter priced every write at 1.25×, so a development
+  run's ledger read its hour-long writes low by 0.75× input; it now adds the
+  difference (`aiCacheWriteHourSurchargeUsd`).
 
 ## Per route
 
@@ -218,18 +221,45 @@ generate writes on single-use routes.
 | # | lever | $/week now | per 1,000 paid starts | quality risk | status |
 | -- | -- | --: | --: | -- | -- |
 | 1 | **The plan caches its conversation** (finding 1) | ~$0.01 | ~$8 (3.2%) | none: no prompt byte changes | **implemented** |
-| 2 | **Share one prefix across a job's routes**: every generate route offered the same sorted tool list, with the route's own tool forced by `tool_choice` (which does not invalidate the tools or system cache). About five writes per job become one write and four reads. | ~$0.05 | ~$30 (12%) | the model sees tools it must not call; a forced `tool_choice` is refused with thinking on some models | proposal; needs a live golden sweep, about $2–4 batched |
+| 2 | **Share one prefix across a job's routes**: every generate route offered the same sorted tool list, with the route's own tool forced by `tool_choice` (which does not invalidate the tools or system cache). About five writes per job become one write and four reads. | ~$0.05 | ~$30 (12%) | the model sees tools it must not call; a forced `tool_choice` is refused with thinking on some models | **rejected 2026-10-15** (AGL-3830, #1637 closed): a forced `tool_choice` returns 400 on Sonnet 5.5 and Opus 5.5, so the route's tool can only be named in its instructions. Re-measured, only the tools (2,086 tokens) and the doctrine block are shared, about $0.0006 a job at best. The first live request on the fast tier was refused outright: "The compiled grammar is too large" for the combined strict tool list on Haiku 5.5. |
 | 3 | **Drop system markers on single-use routes in a deployed runtime** (look, frame, theme, email, products, dataset, posts): no 0.25× write on a prefix nothing reads. Development keeps them. | ~$0.11 | ~$6 (2.3%) | none to answers; it costs more once jobs run within five minutes of each other, and a re-ask then pays full input | proposal: a traffic call for the owner |
 | 4 | **Development batches warm a cold prefix first**: one `max_tokens: 0` request per cold prefix with three or more entries, then the batch | ~$0.3–0.5 of development | — | none; adds a few seconds per batch | proposal |
 | 5 | **Development sweeps re-run within the hour, or `AGLYN_AI_CACHE_TTL=5m` for a one-off sweep** (finding 7) | ~$0.1–0.3 of development | — | none | operational note |
 | 6 | **A per-job tail cache for pages**: the brief and the whole plan move ahead of the inventory and the screen in the page turn, with a breakpoint after them, so pages 2…n read them | ~$0.01 | ~$5 (2%) | prompt order changes, so it needs a live eval | proposal; about $1–2 for the page cases |
-| 7 | **Production hour-long cache**: positive only once site jobs arrive more often than about one an hour, when each job would read the last one's route prefixes | $0 now (negative) | ~$44 (17%) at that traffic | none | revisit at that traffic |
+| 7 | **Production hour-long cache**: positive only once site jobs arrive more often than about one an hour, when each job would read the last one's route prefixes | $0 now (negative) | ~$44 (17%) at that traffic | none | **implemented 2026-10-15** (AGL-3830): every step a site job runs asks for `1h` through its routing row; the meter prices those writes at 2× |
 | 8 | **Console chat caches its history**: the docs block moves from the system into the last user turn, and the last turn is marked | ~$0.02 | — | prompt order changes | proposal; needs the chat's live eval |
 
 The cache is not where the money is. A paid start's output is 57% of its
 cost, and development is most of the provider bill (AI_JOBS, *Verifying a
 prompt change*). The next lever after this round is output, the effort A/B
 already in flight, more than any further cache work.
+
+### Lever 7, as implemented (AGL-3830)
+
+Production now asks for the hour on every step a site job runs: the routing
+rows for the plan, the look (`job.theme`), the header and footer
+(`job.layout`), pages and sections (`job.page`), listings (`job.seo`), the
+creations (`job.form`, `job.template`, `job.component`), posts (`copy.blog`),
+products and datasets (`job.products`) and the welcome email (`job.email`).
+Chat, CRM, insights, experiments, logic, edits, workflows, campaigns and
+text keep five minutes. What it costs and saves, on the reference job:
+
+- **Cost while jobs stay more than an hour apart.** Every write pays 0.75×
+  input more. The reference job wrote 23.3k tokens (4,967 on the plan,
+  18,299 on generate), so on Sonnet 5.5 it costs 23.3k × 0.75 × $2/MTok =
+  **$0.035 a job**, 13% of its $0.259. At October 1–14's volume (48 jobs
+  on record in two weeks, most of them guided-start testing) that is under
+  $1 a week.
+- **Saving once jobs arrive within the hour.** The next job reads, at 0.05×,
+  the route prefixes the last one wrote at 2×: the look, the frame, the
+  page, the listing and the email prefixes (about 12k tokens a job) and the
+  plan's 4,967. Each read in place of a 1.25× write saves 1.2× input, about
+  $0.04 a job on Sonnet 5.5, and each read restarts the hour. The two cross
+  when about two jobs in five (0.75 / (0.75 + 1.2)) find the last one's
+  entries still warm; past that, it is the "~$44 per 1,000 paid starts"
+  above.
+- **No prompt byte changed**, only `cache_control`'s `ttl`, which no replay
+  key reads, so recorded answers still replay and no live eval was needed.
 
 ## What needs a live eval
 

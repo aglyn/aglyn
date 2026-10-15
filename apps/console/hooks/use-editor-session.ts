@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { canvas } from '@aglyn/aglyn'
 import {
   notifyEditorSessionChanged,
   registerEditorSession,
@@ -48,6 +49,12 @@ export interface EditorSessionInput {
  * Registered once per document and version. Every answer is read through a
  * ref when asked, so the session never holds one from an earlier render, and
  * a change to the live pointer is announced without registering again.
+ *
+ * So is the canvas taking in the document's nodes (AGL-3833). The session is
+ * registered from the route as the page mounts, well before the document
+ * loads, and a reader that needs the canvas itself — Assist asking a request
+ * again once a draft is open — waits for this second announcement. Read
+ * during render, so the observer page calling this re-renders when it flips.
  */
 export function useEditorSession(input: EditorSessionInput): void {
   const latest = useRef(input)
@@ -77,7 +84,8 @@ export function useEditorSession(input: EditorSessionInput): void {
     })
   }, [documentKind, documentId, versionId, hasVersions, fieldKeys])
 
+  const loaded = canvas.didSetInitial
   useEffect(() => {
     notifyEditorSessionChanged()
-  }, [live])
+  }, [live, loaded])
 }

@@ -367,6 +367,23 @@ vendor, and it does not move as a conversation grows.
   door measured to continue may turn it on. Today that is the plan alone; the
   cache spec lists the doors. The audit behind it, and the levers left as
   proposals, are in `docs/AI_CACHE_AUDIT_2026-10.md`.
+- **A site job's routes cache for the hour, in production too (AGL-3830).**
+  Each step a site job runs (the plan, the look, the header and footer, the
+  pages and their listings, the creations, the first posts and products, the
+  welcome email) carries `cacheTtl: '1h'` on its routing row
+  (`AiRoutingRow.cacheTtl` in `providers/routing.ts`), and
+  `runValidatedGeneration` puts it on the request, so every breakpoint goes
+  out as `ttl: "1h"`. A guided start writes each route's prefix once and the
+  next one, minutes or an hour later, reads it instead of writing it again.
+  Every other row keeps the provider's five minutes. An hour-long write
+  costs 2× the input price, where a five-minute one costs 1.25×: the
+  Anthropic adapter reads the hour's share of the writes
+  (`cache_creation.ephemeral_1h_input_tokens`) into `cacheWriteHourTokens`,
+  and the adapter's figure, the meter's two dollar figures and a live run's
+  ledger add the difference (`aiCacheWriteHourSurchargeUsd`), so neither
+  the credits drawn nor the provider cost reads low. The cache spec's
+  *a site job's routes keep their prefix for the hour* section holds which
+  rows ask for it and that a deployed request sends it on every marker.
 
 Two consequences worth knowing before writing a prompt. A door on the fast
 tier has the HIGHEST minimum on the platform, so a step moved there to save
@@ -494,10 +511,11 @@ request and 16 batched.
   alone and the others follow it. Production's beat runs one step at a
   time, so it never needed this and never gets it.
 - **The hour-long cache.** In a live run every breakpoint asks for
-  `ttl: "1h"` (`AGLYN_AI_CACHE_TTL=5m` turns it back), since an agent re-runs
-  an eval every ten to forty minutes, past the default five. Production
-  keeps five minutes: a job's steps run a beat apart, and a one-call step
-  with no re-ask would pay the hour's dearer write for nothing.
+  `ttl: "1h"`, since an agent re-runs an eval every ten to forty minutes,
+  past the default five. `AGLYN_AI_CACHE_TTL=5m` turns every request back to
+  five minutes, a site job's routes included, for a one-off sweep that will
+  not run again within the hour. Production asks for the hour only on a
+  site job's routes (above, AGL-3830); the variable never reaches it.
 - **A retired model is refused by name in a live run** (AGL-3781). Routing
   serves a retired catalog row's successor wherever a setting or an override
   names it, so a retired id that reaches the runtime in a live run was asked
@@ -2654,7 +2672,9 @@ wall and does not move, so the answer writes the item once (AGL-3053):
   document wrapper or the Section), `repeat-nested`, `repeat-shape` (not one list of
   values a copy), `repeat-count` (under 2 copies, or over `AI_REPEAT_MAX_COPIES`, 7,
   the most rule 8 leaves a typed list), `repeat-placeholder-without-value` (a copy
-  gives no value for a placeholder, `{{0}}`, or a placeholder in no repeated item),
+  gives no value for a placeholder, `{{0}}`, or a placeholder in no repeated item, on
+  every workspace: one that keeps components is told the same placeholders for an item
+  of instances, AGL-3827),
   `repeat-value-without-placeholder` (a value past the last placeholder, a gap in the
   numbering, or values with no numbered placeholder at all, such as `{{title}}`), and
   `repeat-id-collision` (a copy's id the answer already gives another node).
@@ -2891,6 +2911,48 @@ model's own nodes and says what to write instead:
   for each of the four. The section eval case's call to action now links a path.
 - **What it costs.** No prompt line: a rule costs nothing until an answer breaks it, and
   then one re-ask. No credit figure the Free arithmetic quotes moves.
+
+### A placeholder never reaches a page
+
+The live golden check of 2026-10-15 built `page-meet-the-crew` with its two
+testimonials' quote and name left as `{{1}}` and `{{2}}` (AGL-3827): the customer-words
+pass placed one Testimonial instance with the repeated-item placeholders and no
+`repeat`, and on a workspace that keeps components `expandAiRepeatedItems` handed such
+an answer back as copy. Now it is refused there as everywhere else, and a placeholder
+that reaches a tree any other way is rule 14's:
+
+- **Rule 14, `placeholder-token`** (`detectPlaceholderTokens`, `detectPlaceholderCopy`,
+  `runtime/ai-placeholder-tokens.ts`). Every text prop a tree shows (a heading, a
+  paragraph, a button's words, an Image's alt, an accessible name) and the copy an
+  instance fills in, on every page, template, layout, component, form and email tree,
+  and a plan's page titles and search fields. A placeholder is a repeated item's slot
+  (`{{1}}`); anything else in double braces that the platform does not fill
+  (`{{name}}`, `{{Customer name}}`), leaving the platform's scoped bindings
+  (`{{item.title}}`, `{{entry.url}}`, `{{prop.heading}}`, `{{contact.firstName}}`) and
+  id tokens (`{{var:…}}`, `{{fn:…}}`) to the checks that own them; `[[Customer name]]`;
+  `${name}`; and words in angle brackets that are no HTML tag (`<Your business name>`,
+  `<placeholder>`), outside an HTML or CSS field. An email's step owns its bare merge
+  tokens. NOT a placeholder: a fact the brief never gave in single square brackets,
+  which is the honest marker [above](#what-a-draft-asks-the-member-to-fill), `[sic]`, a
+  Markdown link, a price, `Press <Enter>`, `x < y`. Lorem ipsum stays `filler-copy`'s.
+  The re-ask lists the placeholders and, for a slot, says where `{{1}}` is filled.
+- **One answer, settled in code** (`aiSettlePlaceholderItems`). An item of a list (the
+  nearest node, from the copy up, that sits beside another of its shape and of the
+  components it places) whose every placeholder-holding copy is ONLY placeholders, such
+  as a testimonial whose quote is `{{1}}`, is taken out where an item of its shape
+  beside it holds none. Nothing is invented and no word is lost. A list of only
+  placeholders, the only item, copy around a slot ("Thanks, {{name}}!") and a section
+  are never settled: each is the re-ask's. It runs in the page section check and on the
+  stored page at the last pass.
+- **The listing.** A search title or description the SEO step writes with a placeholder
+  keeps the plan's, which the plan's own check already held to the rule.
+- **The eval.** `meet-the-crew.json` holds the recorded live shape as a control that
+  fails `readable`, and a control of slots in other syntaxes that fails `rules`; the copy
+  and SEO checks read placeholders too, and the grader's copy criterion grades one a 1.
+  `jobs/ai-job-page-placeholder-tokens.spec.ts` replays the case through the real page
+  step: the recorded pass is re-asked and the saved page shows no placeholder.
+- **What it costs.** No prompt line: one re-ask when an answer breaks it. The grader's
+  cached prefix is up 44 estimated tokens.
 
 ### A link to a section of the same page
 

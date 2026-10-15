@@ -132,7 +132,27 @@ export interface AiRoutingRow {
   /** What the ceiling is sized from. */
   maxTokensBasis: string
   eval: AiRoutingEval
+  /**
+   * How long the step's prompt cache lives (AGL-3830): `1h` on every step a
+   * site job runs, in production as in a live run, and the provider's five
+   * minutes on a row that leaves it out. A guided start's routes each write
+   * their prefix once and read it only inside the job, a beat or more apart,
+   * so a five-minute entry is gone before the next job could read it; at an
+   * hour the next site job reads what the last one wrote. The write costs 2x
+   * the input price instead of 1.25x, so a step no job runs leaves it out.
+   * Read by `runValidatedGeneration` into the request's `cacheTtl`; a door
+   * that sends its own request on the same step (the copy assistant's blog
+   * draft) keeps five minutes.
+   */
+  cacheTtl?: '1h'
 }
+
+/**
+ * The cache lifetime every step a site job runs asks for (AGL-3830): the
+ * plan, the look, the header and footer, every page and its listing, the
+ * creations, the first posts and products, and the welcome email.
+ */
+const AI_SITE_JOB_CACHE_TTL = '1h' as const
 
 export interface AiRoutingEval {
   /** The golden-brief kinds the step answers. */
@@ -196,6 +216,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokens: 2048,
     maxTokensBasis: 'one blog post body in markdown-lite',
     eval: { kinds: ['blog'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'generate.section': {
     thinking: null,
@@ -215,6 +236,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "tighter than the doctrine's default for a layout, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['layout'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.template': {
     // Medium since the golden A/B of 2026-10-14 (AGL-3781): both template
@@ -226,6 +248,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "tighter than the doctrine's default for a template, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['template'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.component': {
     // A component's tree and the properties it declares, in one answer, from a
@@ -236,6 +259,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "the ceiling the layout and template steps keep, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['component'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.crm': {
     // CRM by AI (AGL-2917): short answers through a strict tool, written from
@@ -273,6 +297,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "the largest form the doctrine's output budget admits, a form's fields, its consent and routing declaration and the design that renders them written as JSON at the wordiest golden's characters a stored byte, under it with room; ai-job-form-step.spec.ts measures it",
     eval: { kinds: ['form'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.insight': {
     // Readers chosen, then their tables phrased (AGL-2915): short sentences
@@ -301,6 +326,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "a section of a page written as JSON, about forty elements at the step's measured 45 tokens an element; a pass lowers it to the worst case that fits AI_JOB_PAGE_STEP_MINIMUM_MS on the model it runs",
     eval: { kinds: ['page'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.products': {
     // A product's copy from its name, text and photo, or a store's first
@@ -318,6 +344,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       passRate: 1,
       meanScore: 0.9922,
     },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.email': {
     // One email design from the email palette, written against the brief with
@@ -329,6 +356,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "an email's node map written as JSON, with three subject lines and three preheaders beside it",
     eval: { kinds: ['email'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.campaign': {
     // The campaign job generates its email through the email step, so it is
@@ -385,6 +413,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "the largest listing the tool accepts, at three characters a token with a quarter again, as ai-job-seo-step.spec.ts measures it; an audit's site proposal and fix batches keep ceilings of their own, measured the same way",
     eval: { kinds: ['seo'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.text': {
     // Low since the golden A/B of 2026-10-14 (AGL-3781): the tagline brief
@@ -405,6 +434,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       'the largest answer the theme tool accepts, about 2,500 tokens of JSON as ai-job-theme-step.spec.ts measures it, with as much again to think in',
     eval: { kinds: ['theme'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.plan': {
     // A site's plan is an outline written without thinking (AGL-3594), and a
@@ -424,6 +454,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       passRate: 1,
       meanScore: null,
     },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
 }
 

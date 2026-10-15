@@ -9,6 +9,45 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.258 — 2026-10-15
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.257...v1.0.0-beta.258)
+
+### Added
+
+- **console:** new-site staff notification links the live site ([AGL-3829](https://linear.app/aglyn/issue/AGL-3829))
+
+### Fixed
+
+- **console:** run the native sign-in hand-off on the auth origin ([AGL-3836](https://linear.app/aglyn/issue/AGL-3836))
+- **native:** let the APNs device token reach the app on iOS ([AGL-3835](https://linear.app/aglyn/issue/AGL-3835))
+- **ai:** insights name every published page and read an unsubmitted form as 0 ([AGL-3834](https://linear.app/aglyn/issue/AGL-3834))
+- **ai:** an Assist follow-up waits for its canvas and never re-offers the open draft ([AGL-3833](https://linear.app/aglyn/issue/AGL-3833))
+- **ai:** a menu item is built without a page that failed, not skipped ([AGL-3832](https://linear.app/aglyn/issue/AGL-3832))
+- **ai:** a build's page planned from a copy is generated from its plan ([AGL-3832](https://linear.app/aglyn/issue/AGL-3832), [AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **ai:** a caterer's hero gets a catering photo, never a mislabeled starter ([AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+- **ai:** placeholder tokens never reach a page ([AGL-3827](https://linear.app/aglyn/issue/AGL-3827), [AGL-3056](https://linear.app/aglyn/issue/AGL-3056))
+- **firewall:** declare the native app API bypass on the console ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **ai:** a cut never ends on a dangling word in Spanish and other languages ([AGL-3828](https://linear.app/aglyn/issue/AGL-3828))
+- **media:** read site icons and lazy regeneration through the Storage listener budget ([AGL-3826](https://linear.app/aglyn/issue/AGL-3826), [AGL-3795](https://linear.app/aglyn/issue/AGL-3795))
+
+### Performance
+
+- **ai:** production AI jobs cache prompts for an hour ([AGL-3830](https://linear.app/aglyn/issue/AGL-3830))
+
+### Documentation
+
+- **ai:** a shared tool prefix per job is rejected, with the measurements ([AGL-3830](https://linear.app/aglyn/issue/AGL-3830))
+- **ai:** a placeholder never reaches a page ([AGL-3827](https://linear.app/aglyn/issue/AGL-3827))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **ai:** record the fixture's verbatim Pixabay "centre" in the baseline ([AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+- **ai:** the eval reads template placeholders in copy and grades them ([AGL-3827](https://linear.app/aglyn/issue/AGL-3827))
+
+</details>
+
 ## v1.0.0-beta.257 — 2026-10-15
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.256...v1.0.0-beta.257)

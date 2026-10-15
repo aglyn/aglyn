@@ -89,6 +89,7 @@ import {
   AI_SEO_SITE_MAX_TOKENS,
   aiSeoGenerationMaxTokens,
 } from './ai-job-seo-budget'
+import { aiCacheWriteHourSum } from '../providers/cache-write-hour'
 import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
 
 /**
@@ -227,6 +228,7 @@ function addSpent(a: Spent, b: Spent): Spent {
       outputTokens: a.usage.outputTokens + b.usage.outputTokens,
       cacheReadTokens: a.usage.cacheReadTokens + b.usage.cacheReadTokens,
       cacheWriteTokens: a.usage.cacheWriteTokens + b.usage.cacheWriteTokens,
+      ...aiCacheWriteHourSum(a.usage, b.usage),
     },
     estCostUsd: round6(a.estCostUsd + b.estCostUsd),
     model: b.model || a.model,

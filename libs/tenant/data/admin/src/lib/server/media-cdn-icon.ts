@@ -31,6 +31,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import type { MediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
 import { MEDIA_VARIANT_SOURCE_MAX_BYTES } from './media-variants'
 import { renderSiteIcon } from './site-icon-render'
+import { readStorageObject, type StorageReadableFile } from './storage-read-stream'
 
 /**
  * The `?icon=` representation of a media CDN URL (AGL-3484): one icon of a
@@ -68,9 +69,8 @@ export interface MediaCdnIconSource {
   /** `/api/media/cdn/{scope}/{mediaId}` — the asset's stable URL. */
   stablePath: string
   /** The Storage object, as far as this reads it. */
-  file: {
+  file: StorageReadableFile & {
     getMetadata(): Promise<[{ size?: string | number } | null | undefined]>
-    download(): Promise<[Buffer]>
   }
 }
 
@@ -191,7 +191,9 @@ export async function serveMediaCdnIcon(options: {
 
   let icon: { body: Buffer; contentType: string }
   try {
-    const [bytes] = await source.file.download()
+    // Not `file.download()`: that is the same read without the listener
+    // budget, so every rendered icon would log a false leak warning.
+    const bytes = await readStorageObject(source.file)
     icon = await renderSiteIcon({ source: bytes, spec, background })
   } catch (error) {
     // A file that will not decode is a property of the upload, not of the

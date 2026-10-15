@@ -117,7 +117,7 @@ describe('a language page fills its picture slots with photos the site serves it
     expect(slots.every((slot) => slot.iconId && slot.frameId)).toBe(true)
   })
 
-  it('fills every slot with a starter photo, keeps the alt text and takes out the placeholder icon', async () => {
+  it('fills every slot with a starter photo described by its own words, and takes out the placeholder icon', async () => {
     const before = towingPage()
     const after = await aiResolveLayoutPictures(before, input('job-a:home'))
     const images = imagesOf(after)
@@ -127,11 +127,10 @@ describe('a language page fills its picture slots with photos the site serves it
       expect(photo.props?.['intrinsicWidth']).toEqual(expect.any(Number))
       expect(photo.props?.['src']).not.toMatch(/^https?:/)
     }
-    expect(images.map((photo) => photo.props?.['alt'])).toEqual([
-      'A tow truck lifting a car on a highway at dusk',
-      'The owner beside the truck',
-      'A flatbed carrying a van',
-    ])
+    // The model wrote of a tow truck; a starter shows something else, and
+    // says what it shows (AGL-3831).
+    const starterAlts = new Map<string, string>(Object.values(AI_LAYOUT_STARTER_PHOTOS).map((photo) => [photo.src, photo.alt]))
+    for (const photo of images) expect(photo.props?.['alt']).toBe(starterAlts.get(photo.props?.['src'] as string))
     const icons = Object.values(after as unknown as Record<string, Node>).filter((node) => node.componentId === 'icon')
     expect(icons).toHaveLength(0)
     // Every child listed still exists: the icon left its frame's list too.

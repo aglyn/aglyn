@@ -80,11 +80,15 @@ export function aiLayoutCleanText(value: unknown): string {
     .trim()
 }
 
-/** The line with every trailing dangling word taken off, as rule 14 reads one. */
-function withoutDanglingTail(line: string): string {
+/**
+ * The line with every trailing dangling word taken off, as rule 14 reads one,
+ * in the site's language (AGL-3828): a Spanish line cut to "…para la" loses
+ * both words, as an English one cut to "…for the" does.
+ */
+function withoutDanglingTail(line: string, language?: string): string {
   let text = line.replace(TRAILING_JOINERS, '').trim()
   for (let guard = 0; guard < 6; guard += 1) {
-    const word = aiDanglingWord(text)
+    const word = aiDanglingWord(text, language)
     if (!word) break
     text = text
       .slice(0, text.length - word.length)
@@ -100,10 +104,10 @@ function withoutDanglingTail(line: string): string {
  * room, else the last clause boundary that does, else the last whole word. A
  * line that fits is returned clean, with any dangling tail taken off.
  */
-function fitText(value: unknown, place: AiLayoutTextPlace): string {
+function fitText(value: unknown, place: AiLayoutTextPlace, language?: string): string {
   const text = aiLayoutCleanText(value)
   const limit = AI_LAYOUT_TEXT_LIMITS[place]
-  if (text.length <= limit) return withoutDanglingTail(text)
+  if (text.length <= limit) return withoutDanglingTail(text, language)
   const room = text.slice(0, limit + 1)
   const half = Math.floor(limit * 0.4)
   const lastMatch = (pattern: RegExp): number => {
@@ -115,12 +119,13 @@ function fitText(value: unknown, place: AiLayoutTextPlace): string {
     return at
   }
   const sentence = lastMatch(SENTENCE_END)
-  if (sentence > 0) return withoutDanglingTail(room.slice(0, sentence))
+  if (sentence > 0) return withoutDanglingTail(room.slice(0, sentence), language)
   const clause = lastMatch(CLAUSE_END)
-  if (clause > 0) return withoutDanglingTail(room.slice(0, clause))
+  if (clause > 0) return withoutDanglingTail(room.slice(0, clause), language)
   const space = room.lastIndexOf(' ', limit)
   return withoutDanglingTail(
     space > half ? room.slice(0, space) : room.slice(0, limit),
+    language,
   )
 }
 
@@ -154,27 +159,34 @@ export function aiLayoutGuardContacts(line: string, facts: string): string {
     })
 }
 
-/** A line fitted to its place with invented contact details written as gaps. */
+/**
+ * A line fitted to its place with invented contact details written as gaps;
+ * `language` is the site's (see `aiLayoutFitText`).
+ */
 export function aiLayoutWords(
   value: unknown,
   place: AiLayoutTextPlace,
   facts: string,
+  language?: string,
 ): string {
   return aiLayoutFitText(
     aiLayoutGuardContacts(aiLayoutCleanText(value), facts),
     place,
+    language,
   )
 }
 
 /**
  * A line held to the characters its place holds (see `fitText`), and none at
- * all where what is left is filler.
+ * all where what is left is filler. `language` is the site's language code,
+ * which says what a dangling word is (AGL-3828); absent, English.
  */
 export function aiLayoutFitText(
   value: unknown,
   place: AiLayoutTextPlace,
+  language?: string,
 ): string {
-  const text = fitText(value, place)
+  const text = fitText(value, place, language)
   return aiLayoutIsFiller(text) ? '' : text
 }
 
@@ -187,8 +199,8 @@ export function aiLayoutIsFiller(text: string): boolean {
 }
 
 /** A quote that cannot be a real customer's, written as the gap the owner fills with one (rule 14). */
-export function aiLayoutQuoteGap(value: unknown): string {
-  const text = aiLayoutFitText(value, 'quote')
+export function aiLayoutQuoteGap(value: unknown, language?: string): string {
+  const text = aiLayoutFitText(value, 'quote', language)
     .replace(/^["“'‘]+|["”'’]+$/g, '')
     .trim()
   if (!text) return ''

@@ -664,4 +664,14 @@ describe('the open-draft navigation (AGL-3616)', () => {
     const view = withAssistOpenDraftAction(describeView('/acme/hosts/host-1/screens'), drafts) as AssistView
     expect(assertInertActions([view])).toEqual([])
   })
+
+  it('never opens the draft already open in this editor (AGL-3833)', () => {
+    const openHere = [drafts[0], { ...drafts[1], open: true as const }]
+    const besigner = describeView('/acme/hosts/host-1/screens')
+    // The only draft is the open one: there is nothing to navigate to.
+    expect(withAssistOpenDraftAction(besigner, [openHere[1]])).toBe(besigner)
+    const view = withAssistOpenDraftAction(besigner, openHere)
+    expect(resolveAssistProposal(block('d2'), view, draftScope, openHere)).toBeNull()
+    expect(resolveAssistProposal(block('d1'), view, draftScope, openHere)?.draft).toEqual(drafts[0])
+  })
 })

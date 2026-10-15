@@ -139,7 +139,7 @@ export const AI_INSIGHT_RULES = [
   '- Name nobody, and write no email address or phone number.',
   '- Plain sentences: no markdown, no headings, no lists.',
   '- When the tables cannot answer part of the question, say so in gap in one sentence with no numbers; otherwise gap is null.',
-  '- Whether the site is published, and its address, come only from the Site status table. Page views and visitors never show whether a site is live: never say or suggest a site is not live, not launched or not published because of its traffic.',
+  '- Whether the site is published, its address and which pages are published come only from the Site status table. Page views and visitors never show whether a site or a page is live: never say or suggest a site is not live, not launched or not published because of its traffic, and never call the pages a views table lists the published ones.',
   '- Write in the language of the question.',
 ].join('\n')
 

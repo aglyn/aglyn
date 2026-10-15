@@ -199,10 +199,21 @@ describe('refusing a repeated item written once', () => {
         nodeIds: ['card'],
       },
     ])
-    // A placeholder such a workspace was never told of is its copy, as it always was.
+    // Such a workspace is told the same placeholders for an item of instances
+    // (AGL-3024), so one in no repeated item is refused there too (AGL-3827):
+    // a live About page showed its testimonials' `{{1}}` and `{{2}}` as written.
     const stray = section(undefined)
     delete stray.nodes['card'].repeat
-    expect(expandAiRepeatedItems(stray, { inline: false, noun: 'section' })).toEqual({ ok: true, tree: stray, sourceIds: {}, items: 0 })
+    expect(refused(stray, { inline: false, noun: 'section' }).map(({ code, nodeIds }) => [code, nodeIds])).toEqual([
+      ['repeat-placeholder-without-value', ['title']],
+      ['repeat-placeholder-without-value', ['text']],
+    ])
+    // An answer with no placeholder and no "repeat" is handed back as it came.
+    const plain = section(undefined)
+    delete plain.nodes['card'].repeat
+    plain.nodes['title'].props = { children: 'Estate planning' }
+    plain.nodes['text'].props = { children: 'Wills and trusts.' }
+    expect(expandAiRepeatedItems(plain, { inline: false, noun: 'section' })).toEqual({ ok: true, tree: plain, sourceIds: {}, items: 0 })
   })
 
   it('refuses it on the document wrapper, on the section, and inside another item', () => {

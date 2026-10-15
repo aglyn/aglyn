@@ -300,6 +300,10 @@ function healthyTenantConfig() {
  * healthy" means, and it had drifted three paths behind the declaration
  * without any test noticing.
  */
+const NATIVE_BEARER_RE = '^Bearer [A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'
+const NATIVE_DOORS_RE =
+  '^/api/auth/(native-handoff/redeem|sso-lookup|resolve-identifier|send-password-reset|passkeys/signin/(options|verify))$'
+
 function healthyConsoleConfig() {
   const paths = [
     '/api/billing/webhook',
@@ -438,6 +442,22 @@ function healthyConsoleConfig() {
         action: bypass(),
         conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/.well-known/' }] }],
       },
+      {
+        name: 'Native app API bypass',
+        id: 'rule_native_app_api',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'path', op: 'pre', value: '/api/' },
+              { type: 'header', op: 're', key: 'authorization', value: NATIVE_BEARER_RE },
+            ],
+          },
+          { conditions: [{ type: 'path', op: 're', value: NATIVE_DOORS_RE }] },
+        ],
+      },
     ],
   }
 }
@@ -505,6 +525,41 @@ test('the console cron bypass decayed to PATH-ONLY fails', () => {
   rule.conditionGroup[0].conditions = [{ type: 'path', op: 're', value: '^/api/(admin|billing)/' }]
   const findings = evalConsole(config).findings.join('\n')
   assert.match(findings, /NO LONGER REQUIRES header x-cron-secret exists/)
+  assert.equal(evalConsole(config).ok, false)
+})
+
+test('the native app bypass decayed to PATH-ONLY fails — every /api route would skip the challenge', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, 'Native app API bypass').conditionGroup[0].conditions = [
+    { type: 'path', op: 'pre', value: '/api/' },
+  ]
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES header authorization re/)
+})
+
+test('the native app bypass loosened to ANY authorization header fails', () => {
+  // `Bearer x` and a bare header would then skip the challenge too.
+  const config = healthyConsoleConfig()
+  ruleNamed(config, 'Native app API bypass').conditionGroup[0].conditions[1] = {
+    type: 'header',
+    op: 'ex',
+    key: 'authorization',
+  }
+  assert.equal(evalConsole(config).ok, false)
+})
+
+test('the native sign-in doors widened to the whole /api/auth prefix fails', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, 'Native app API bypass').conditionGroup[1].conditions = [
+    { type: 'path', op: 'pre', value: '/api/auth/' },
+  ]
+  assert.equal(evalConsole(config).ok, false)
+})
+
+test('the native app bypass missing its sign-in doors group fails — the apps could not sign in', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, 'Native app API bypass').conditionGroup.pop()
   assert.equal(evalConsole(config).ok, false)
 })
 
