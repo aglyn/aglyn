@@ -79,7 +79,7 @@ Links: `aglyn://<console path>` (and `aglyn-pos://` for the register) opens a
 console path, natively when a plugin answers it, otherwise in the console WebView:
 
 ```bash
-xcrun simctl openurl booted 'aglyn://demo-workspace/hosts/demo-site/redirects'
+xcrun simctl openurl booted 'aglyn://juniper-street/hosts/juniper-street/redirects'
 ```
 
 From the command line (the build directory is git-ignored):

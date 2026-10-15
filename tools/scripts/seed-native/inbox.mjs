@@ -170,8 +170,8 @@ export async function seedInbox({ put, uid, orgId, hostId, now }) {
       read: false,
       fields: {
         name: 'Aisha Rahman',
-        email: 'aisha@northwind.example',
-        company: 'Northwind Studio',
+        email: 'aisha@harbormarket.example',
+        company: 'Harbor Studio',
         budget: 'Over $20k',
         details: 'We need a full rebrand site with a members area for 400 clients.',
       },
@@ -244,10 +244,10 @@ export async function seedInbox({ put, uid, orgId, hostId, now }) {
     if (submission.replied) {
       await put(`hosts/${hostId}/formSubmissions/${submission.id}/replies/reply-1`, {
         to: submission.fields.email,
-        subject: 'Re: your message to Demo Site',
+        subject: 'Re: your message to Juniper Street Bakery',
         message: 'Yes, we are open Sundays from 10 to 4. See you soon!',
         replyTo: 'mobile-owner@example.test',
-        fromName: 'Demo Site',
+        fromName: 'Juniper Street Bakery',
         sentByUid: uid,
         providerMessageId: null,
         sentAtMs,

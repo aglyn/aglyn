@@ -41,7 +41,7 @@ export async function seedMarketing({ put, uid, orgId, hostId, now }) {
   const nowMs = now.getTime()
   const day = 24 * 60 * 60 * 1000
   const site = { hostId, visibleTo: [`host:${hostId}`] }
-  const from = { from: 'hello@demo-site.example.test', fromName: 'Demo Site' }
+  const from = { from: 'hello@juniperstreet.example', fromName: 'Juniper Street Bakery' }
 
   await put(`orgs/${orgId}/members/${uid}`, { uid, role: 'owner', allHosts: true, joinedAt: now })
 
@@ -75,7 +75,7 @@ export async function seedMarketing({ put, uid, orgId, hostId, now }) {
       audience: 'list',
       listId: 'newsletter',
       listName: 'Newsletter',
-      fromName: 'Demo Site',
+      fromName: 'Juniper Street Bakery',
       emailCampaignId: campaignId,
       sendAtMs: nowMs + 3 * day,
       createdAtMs: nowMs - 2 * day,
@@ -120,7 +120,7 @@ export async function seedMarketing({ put, uid, orgId, hostId, now }) {
       createdAtMs: nowMs - 30 * day,
       sentAt: new Date(nowMs - 29 * day),
       sendCount: 1,
-      sentAs: { ...from, replyTo: 'support@demo-site.example.test' },
+      sentAs: { ...from, replyTo: 'support@juniperstreet.example' },
       resume: { remaining: 0, batch: 1, nextAtMs: 0 },
       stats: {
         audienceSize: 1240,
@@ -143,9 +143,9 @@ export async function seedMarketing({ put, uid, orgId, hostId, now }) {
         gatewayHeld: 0,
       },
       links: {
-        a1: { url: 'https://demo-site.example.test/gallery', clicks: 131 },
-        a2: { url: 'https://demo-site.example.test/shop', clicks: 71 },
-        a3: { url: 'https://demo-site.example.test/contact', clicks: 12 },
+        a1: { url: 'https://juniperstreet.example/gallery', clicks: 131 },
+        a2: { url: 'https://juniperstreet.example/shop', clicks: 71 },
+        a3: { url: 'https://juniperstreet.example/contact', clicks: 12 },
       },
     },
     {
