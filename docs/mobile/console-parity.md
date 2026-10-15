@@ -61,8 +61,8 @@ hand-off says so.
 | First verified session: the workspace the sign-up named created once, the AGL-1523 notice with "Create it now", and "Create an organization" | the `(home)` chooser, `/api/orgs/create` | [x] | [x] |
 | Account recovery and choosing a new password from the emailed link | `/account-recovery`, `/reset-password`, `/api/auth/send-password-reset` | [x] | [x] |
 | Passkey sign-in (shown once the build has a relying party) | `/api/auth/passkeys/signin/*` | [x] | [x] |
-| Continue with Google, sign in and sign up; a new person goes through the agreement and the workspace step (AGL-1415, AGL-1497) | `/signin`, `/signup` | [ ] | [ ] |
-| Sign in with Apple, sign in and sign up (App Store guideline 4.8) | `apple.com` through `accounts:signInWithIdp` | [ ] | n/a |
+| Continue with Google, sign in and sign up; a new person goes through the agreement and the workspace step (AGL-1415, AGL-1497) | `/signin`, `/signup` | [x] | [x] |
+| Sign in with Apple, sign in and sign up (App Store guideline 4.8) | `apple.com` through `accounts:signInWithIdp` | [x] | n/a |
 | Single sign-on, through the console in the system auth session and a one-time hand-off back to the app | `/sso`, `/api/auth/sso-lookup`, `/api/auth/sso-jit` | [ ] | [ ] |
 | Desktop (Windows) sign in and sign up through the console and the same hand-off | `/signin`, `/signup` | n/a | [ ] |
 | Workspace invites: the invite email opens the app, and pending invites are answered from the empty workspace list | `/api/orgs/invites?mine=1`, `/api/orgs/invites` | [ ] | [ ] |

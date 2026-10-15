@@ -172,6 +172,26 @@ suspend fun ShellServices.finishProviderSignUp(door: SignUpDoor, isNew: Boolean,
 }
 
 /**
+ * Continue with Google from the sign-in or sign-up screen: the platform's Google sheet (every account on the device offered,
+ * never one silently reused, AGL-1415), then the credential signs in. On sign-up the account is recorded and provisioned as the
+ * console's Google door does; on sign-in a credential that created an account is stood down for the agreement (AGL-1497).
+ */
+suspend fun ShellServices.continueWithGoogle(source: com.aglyn.core.GoogleCredentialSource, signingUp: Boolean, marketing: Boolean) {
+  val googleIdToken = source.idToken(null)
+  if (signingUp) authFlow.landing = true
+  try {
+    val isNew = auth.signInWithGoogle(googleIdToken)
+    if (signingUp) {
+      finishProviderSignUp(SignUpDoor.GOOGLE, isNew, marketing)
+    } else if (isNew) {
+      standDownUnconsentedAccount()
+    }
+  } finally {
+    if (signingUp) authFlow.landing = false
+  }
+}
+
+/**
  * A provider sign-in from the sign-in screen that created an account: the person never saw the terms, so the account is
  * stood back down and they are sent to sign up, where the consent is (`rejectUnconsentedNewAccount`).
  */

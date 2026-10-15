@@ -55,7 +55,11 @@ class MainActivity : ComponentActivity() {
     }
     setContent {
       // The register's camera button scans with CameraX + ML Kit.
-      CompositionLocalProvider(LocalCameraScanner provides CameraXBarcodeScanner) {
+      CompositionLocalProvider(
+        LocalCameraScanner provides CameraXBarcodeScanner,
+        // "Continue with Google": the Credential Manager's Google ID token.
+        com.aglyn.screens.LocalGoogleCredentialSource provides com.aglyn.shell.rememberAndroidGoogleCredentialSource(BuildConfig.GOOGLE_WEB_CLIENT_ID),
+      ) {
         PosShell(services, autoSignIn = autoSignIn)
       }
     }

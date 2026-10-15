@@ -22,8 +22,9 @@ import kotlinx.coroutines.launch
 enum class ProviderMode { SIGN_IN, SIGN_UP }
 
 /**
- * The doors under a sign-in or sign-up form besides the password: a passkey on sign-in where the build has a relying party
- * and the platform bound a way to sign in with one (the console's sign-in page offers one too).
+ * The doors under a sign-in or sign-up form besides the password: Google where the platform bound a way to sign in to it, and
+ * on sign-in a passkey where the build has a relying party and the platform bound a way to sign in with one (the console's
+ * sign-in page offers both). On sign-up each is gated on the agreement first.
  */
 @Composable
 internal fun ProviderSignInButtons(
@@ -41,7 +42,8 @@ internal fun ProviderSignInButtons(
   val asserter = com.aglyn.screens.LocalPasskeyAsserter.current
   val relyingParty = services.config.passkeyRelyingParty
   val passkey = mode == ProviderMode.SIGN_IN && asserter != null && relyingParty != null
-  if (!passkey) return
+  val google = com.aglyn.screens.LocalGoogleCredentialSource.current
+  if (!passkey && google == null) return
   Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       HorizontalDivider(Modifier.weight(1f))
@@ -51,6 +53,29 @@ internal fun ProviderSignInButtons(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
       HorizontalDivider(Modifier.weight(1f))
+    }
+    if (google != null) {
+      OutlinedButton(
+        onClick = {
+          if (busy || (mode == ProviderMode.SIGN_UP && !gate())) return@OutlinedButton
+          onBusy(true)
+          onError(null)
+          scope.launch {
+            try {
+              services.continueWithGoogle(google, signingUp = mode == ProviderMode.SIGN_UP, marketing = marketing)
+            } catch (failure: AuthError) {
+              onError(failure.message)
+            } catch (failure: com.aglyn.core.GoogleLinkError) {
+              // Closing Google's sheet is not a failure (the console ignores `popup-closed-by-user`).
+              if (failure.message != "Google sign-in was canceled.") onError(failure.message)
+            } finally {
+              onBusy(false)
+            }
+          }
+        },
+        enabled = enabled && !busy,
+        modifier = Modifier.fillMaxWidth().height(48.dp).testTag("sign-in-google"),
+      ) { Text("Google") }
     }
     if (passkey) {
       OutlinedButton(

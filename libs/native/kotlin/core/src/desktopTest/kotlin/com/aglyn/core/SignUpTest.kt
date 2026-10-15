@@ -259,4 +259,23 @@ class SignUpTest {
     assertEquals("INVALID_OOB_CODE", refused.code)
     assertEquals("This link is invalid or has already been used. Request a new password reset link.", refused.message)
   }
+
+  /** Google's credential signs in through `accounts:signInWithIdp`, which says whether it signed somebody up. */
+  @Test
+  fun aGoogleCredentialSignsInAndSaysWhetherItWasNew() = runTest {
+    val posted = mutableListOf<String>()
+    val token = jwt("""{"user_id":"g1","email_verified":true}""")
+    val http = HttpClient(MockEngine { request ->
+      posted += String(request.body.toByteArray())
+      respond(
+        """{"idToken":"$token","refreshToken":"good-g","expiresIn":"3600","localId":"g1","email":"g@example.test","displayName":"Grace","isNewUser":true}""",
+        HttpStatusCode.OK, json,
+      )
+    })
+    val session = IdentityToolkitAuthSession(http, "key", "127.0.0.1:9299", credentials = InMemoryCredentialStore(), credentialKey = "k")
+    assertTrue(session.signInWithGoogle("google-id"))
+    assertEquals(AuthState.SignedIn(AuthUser("g1", "g@example.test", "Grace", emailVerified = true)), session.state.value)
+    val body = Json.parseToJsonElement(posted[0]) as JsonObject
+    assertEquals("id_token=google-id&providerId=google.com", (body["postBody"] as kotlinx.serialization.json.JsonPrimitive).content)
+  }
 }

@@ -62,6 +62,12 @@ interface AuthSession {
   suspend fun signUpWithEmail(email: String, password: String): AuthUser =
     throw AuthError("Creating an account is not available here.")
 
+  /**
+   * Signs in with Google's ID token (a [GoogleCredentialSource]'s), which signs up a person the project has not seen; returns
+   * whether it did, the console's `isNewAccount(credential)`. Throws [AuthError] with the form's words.
+   */
+  suspend fun signInWithGoogle(googleIdToken: String): Boolean = throw AuthError("Google sign-in is not available here.")
+
   /** Re-reads the account (the console's `user.reload()`), so a confirmed address shows as confirmed in [state]. */
   suspend fun reload() {}
 

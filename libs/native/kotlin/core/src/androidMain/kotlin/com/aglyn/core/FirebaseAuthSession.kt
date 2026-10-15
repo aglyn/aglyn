@@ -77,6 +77,15 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     return created.toAuthUser().also { if (!supportSessions.active) mutable.value = AuthState.SignedIn(it) }
   }
 
+  override suspend fun signInWithGoogle(googleIdToken: String): Boolean = try {
+    val result = auth.signInWithCredential(GoogleAuthProvider.getCredential(googleIdToken, null)).await()
+    result.additionalUserInfo?.isNewUser == true
+  } catch (error: FirebaseAuthException) {
+    throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+  } catch (error: Exception) {
+    throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error, appCheckRefusalCode(error))
+  }
+
   override suspend fun reload() {
     val user = auth.currentUser ?: return
     runCatching { user.reload().await() }

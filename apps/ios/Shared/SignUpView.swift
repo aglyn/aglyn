@@ -92,7 +92,9 @@ struct SignUpView: View {
           AglynNotice("New signups are temporarily paused — \(paused)", tone: .warning)
         }
         if let error { AuthMessage(text: error) }
-        ProviderSignInButtons(mode: .signUp, enabled: paused == nil, gate: gate, busy: $busy, error: $error, marketing: marketing)
+        ProviderSignInButtons(
+          mode: .signUp, enabled: paused == nil, gate: gate, busy: $busy, error: $error, marketing: marketing,
+          consented: consented && paused == nil)
       }
     } footer: {
       HStack(spacing: 4) {

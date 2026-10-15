@@ -166,6 +166,43 @@ extension AppModel {
       auth.user ?? user, name: derivedWorkspaceName(displayName: user.displayName, email: user.email), nameWasTyped: false)
   }
 
+  /// Continue with Google from the sign-in or sign-up screen: Google's sheet (its account chooser always shown,
+  /// AGL-1415), then the credential signs in. On sign-up the account is recorded and provisioned as the console's
+  /// Google door does; on sign-in a credential that created an account is stood down for the agreement (AGL-1497).
+  func continueWithGoogle(
+    signingUp: Bool, marketing: Bool,
+    authenticate: @escaping @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
+  ) async throws {
+    guard let auth, let config, let client = config.google else {
+      throw ConsoleAPIError(status: 0, message: "Google sign-in is not set up in this build.")
+    }
+    let googleIDToken = try await GoogleLink.idToken(
+      iosClientID: client.iosClientID, loginHint: nil, transport: firebaseHTTP, authenticate: authenticate)
+    if signingUp { authFlow.landing = true }
+    defer { if signingUp { authFlow.landing = false } }
+    let isNew = try await auth.signIn(googleIDToken: googleIDToken)
+    await afterProviderSignIn(door: .google, isNew: isNew, signingUp: signingUp, marketing: marketing)
+  }
+
+  /// Sign in with Apple's credential, from the sign-in or sign-up screen, with the same outcome rules as Google.
+  func continueWithApple(
+    identityToken: String, rawNonce: String, fullName: PersonNameComponents?, signingUp: Bool, marketing: Bool
+  ) async throws {
+    guard let auth else { throw ConsoleAPIError(status: 0, message: "This build is not configured.") }
+    if signingUp { authFlow.landing = true }
+    defer { if signingUp { authFlow.landing = false } }
+    let isNew = try await auth.signIn(appleIDToken: identityToken, rawNonce: rawNonce, fullName: fullName)
+    await afterProviderSignIn(door: .apple, isNew: isNew, signingUp: signingUp, marketing: marketing)
+  }
+
+  private func afterProviderSignIn(door: SignUpDoor, isNew: Bool, signingUp: Bool, marketing: Bool) async {
+    if signingUp {
+      await finishProviderSignUp(door: door, isNew: isNew, marketing: marketing)
+    } else if isNew {
+      await standDownUnconsentedAccount()
+    }
+  }
+
   /// A provider sign-in from the sign-in screen that created an account: the person never saw the terms, so the account
   /// is stood back down and they are sent to sign up, where the consent is (`rejectUnconsentedNewAccount`).
   func standDownUnconsentedAccount() async {

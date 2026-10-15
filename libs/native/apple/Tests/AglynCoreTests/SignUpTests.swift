@@ -222,3 +222,31 @@ final class SignUpTests: XCTestCase {
     XCTAssertFalse(isCredentialRefusal(IdentityToolkitError(code: "TOO_MANY_ATTEMPTS_TRY_LATER", status: 400)))
   }
 }
+
+final class ProviderSignInTests: XCTestCase {
+  func testTheAppleNonceIsHashedForTheRequestAndKeptRawForFirebase() {
+    let (raw, hashed) = AppleSignInNonce.make()
+    XCTAssertEqual(raw.count, 32)
+    XCTAssertEqual(hashed, AppleSignInNonce.sha256(raw))
+    XCTAssertEqual(AppleSignInNonce.sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    XCTAssertNotEqual(AppleSignInNonce.make().raw, raw)
+  }
+
+  func testAClosedSheetIsNotAFailure() {
+    XCTAssertTrue(isCanceledSignIn(NSError(domain: "com.apple.AuthenticationServices.WebAuthenticationSession", code: 1)))
+    XCTAssertTrue(isCanceledSignIn(NSError(domain: "com.apple.AuthenticationServices.AuthorizationError", code: 1001)))
+    XCTAssertTrue(isCanceledSignIn(GoogleLinkError(message: "Google sign-in was canceled.")))
+    XCTAssertFalse(isCanceledSignIn(IdentityToolkitError(code: "INVALID_IDP_RESPONSE", status: 400)))
+  }
+
+  /// A Google or Apple credential signs in through `accounts:signInWithIdp`, which says whether it signed somebody up.
+  func testTheAppleCredentialCarriesItsRawNonce() async throws {
+    let transport = RecordingTransport([
+      (200, #"{"localId":"a1","email":"x@privaterelay.appleid.com","idToken":"t","refreshToken":"r","isNewUser":false}"#)
+    ])
+    let auth = IdentityToolkitAuth(apiKey: "key", emulatorHost: nil, transport: transport, store: MemoryCredentialStore())
+    let (_, isNew) = try await auth.signIn(idpPostBody: "id_token=apple&providerId=apple.com&nonce=raw-1")
+    XCTAssertFalse(isNew)
+    XCTAssertEqual(transport.json(0)["postBody"] as? String, "id_token=apple&providerId=apple.com&nonce=raw-1")
+  }
+}

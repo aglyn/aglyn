@@ -8,6 +8,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Parameters
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -169,6 +170,18 @@ class IdentityToolkitAuthSession(
       put("email", email.trim()); put("password", password); put("returnSecureToken", true)
     }
     return accept(body)
+  }
+
+  override suspend fun signInWithGoogle(googleIdToken: String): Boolean {
+    val body = call("accounts:signInWithIdp", { signUpErrorMessage(it) }) {
+      put("postBody", "id_token=${googleIdToken.encodeURLParameter()}&providerId=google.com")
+      put("requestUri", "http://localhost")
+      put("returnSecureToken", true)
+      put("returnIdpCredential", true)
+    }
+    if (body["idToken"] == null) throw AuthError(signUpErrorMessage("NEED_CONFIRMATION"), code = "NEED_CONFIRMATION")
+    accept(body)
+    return body["isNewUser"]?.jsonPrimitive?.content == "true"
   }
 
   override suspend fun reload() {
