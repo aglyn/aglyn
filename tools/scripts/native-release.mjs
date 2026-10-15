@@ -150,7 +150,9 @@ function iosArchive(scheme, platform) {
         join(IOS, 'build', 'SourcePackages'),
         '-skipPackagePluginValidation',
         '-allowProvisioningUpdates',
-        // Registers the Mac it runs on with the team when a development profile needs a device.
+        // Lets Xcode register a device when a development profile needs one. A generic
+        // destination names no device, so a Mac new to the team is registered first by a
+        // build against itself (apps/ios/README.md, "Release to private testing").
         '-allowProvisioningDeviceRegistration',
         `CURRENT_PROJECT_VERSION=${build}`,
         // The schemes share package intermediates; coverage instrumentation would make Aglyn and
