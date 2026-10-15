@@ -35,6 +35,7 @@
  * new URL — so the CDN caches them forever.
  */
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { readStorageObject } from '@aglyn/tenant-data-admin/server/storage-read-stream'
 import { NextRequest, NextResponse } from 'next/server'
 
 // lockdown-423: exempt — content-addressed public artifact delivery (immutable sha-named
@@ -91,7 +92,8 @@ export async function GET(
         { status: 404, headers: CORS_HEADERS },
       )
     }
-    const [bytes] = await object.download()
+    // `download()` without the Storage client's false leak warning (AGL-3795).
+    const bytes = await readStorageObject(object)
     return new NextResponse(new Uint8Array(bytes), {
       status: 200,
       headers: {
