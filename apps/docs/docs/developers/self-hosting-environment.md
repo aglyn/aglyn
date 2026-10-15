@@ -979,6 +979,7 @@ never opens a grant.
 | `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
 | `SHIPMONK_ENABLED` | Optional | Runtime, console | `true` offers ShipMonk. It needs no app: each merchant pastes their own ShipMonk API key and store id, sealed with the token key. |
 | `SHIPMONK_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipMonk's sandbox (`sandbox.shipmonk.dev`), which takes test orders only and needs sandbox keys. Unset is production. |
+| `FLEXPORT_ENABLED` | Optional | Runtime, console | `true` offers Flexport. It needs no app: each merchant pastes an API token from their own Flexport Seller Portal, sealed with the token key. Flexport's production and sandbox accounts share one address (`logistics-api.flexport.com`); the token decides which one a call reaches, so a connection is always treated as production. |
 
 Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
 redirect URI in both apps. ShipBob's webhooks are subscribed for each
@@ -987,7 +988,10 @@ with a token of their own; nothing needs registering for them. ShipMonk's
 webhooks are set up by each merchant in their ShipMonk account, at the
 address and with the signing secret the card shows once, and are answered at
 `https://<console>/api/fulfillment-networks/webhooks/shipmonk`; each is
-verified by its HMAC-SHA512 `X-Sm-Signature`.
+verified by its HMAC-SHA512 `X-Sm-Signature`. Flexport's webhooks are
+registered through its API for each connection, at
+`https://<console>/api/fulfillment-networks/webhooks/flexport`, with a token
+of their own sent in a header; nothing needs registering for them.
 
 ### Couriers: DoorDash Drive {#couriers}
 
