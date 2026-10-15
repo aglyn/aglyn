@@ -63,6 +63,7 @@ import {
   aiSettlePlanLayouts,
   aiSettlePlanLayoutsInSections,
   aiSettlePlanRefs,
+  aiSettlePlanSeo,
   aiSettleWrittenGridItems,
   aiSettleWrittenMechanicalRules,
   validateAiBuildPlan,
@@ -718,7 +719,9 @@ export function aiDoctrinePlanCheck(
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
     // last, once every creation the wall counts is settled. The door's own
     // settling (a build's events page, AGL-3755) runs first, so every rule
-    // after it holds what it added.
+    // after it holds what it added. A search title or description a few words
+    // past its length is cut at a word right after it (AGL-3837), so a page
+    // the door added is held to the same lengths.
     const plan = aiSettlePlanFreeWall(
       aiSettlePlanForms(
         aiSettlePlanLayouts(
@@ -726,7 +729,10 @@ export function aiDoctrinePlanCheck(
             aiSettlePlanFormDatasets(
               aiSettlePlanGalleries(
                 aiSettlePlanLayoutRegionSections(
-                  aiSettlePlanLayoutsInSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
+                  aiSettlePlanLayoutsInSections(
+                    aiSettlePlanRefs(aiSettlePlanSeo(settle ? settle(parsed.plan) : parsed.plan), inventory),
+                    inventory,
+                  ),
                   inventory,
                 ),
                 inventory,

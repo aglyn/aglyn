@@ -911,6 +911,17 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   layout, it only comes out of the sections; where the page names none, or a reference
   that resolves to nothing, the page is put in it. A page in a different layout (or a
   record of another kind), or whose sections name two layouts, is re-asked as before.
+- **A search title or description a few words too long is cut at a word (AGL-3837).** Rule
+  10's `plan-seo` refuses a page's `seoTitle` past `AI_SEO_TITLE_MAX` (70) or
+  `seoDescription` past `AI_SEO_DESCRIPTION_MAX` (170), and "shorter" has one answer, so
+  `aiSettlePlanSeo` cuts it right after the door's own settling and before every other
+  rule reads the plan: the live Free travel-blog start of 2026-10-15 wrote a home
+  description of 173 characters on both answers and stopped. The cut is the one the page
+  step stores a listing with (`aiClipAtWord`, AGL-3813): the last whole word inside the
+  limit, with no joining mark (" |", ",", ":", "–") and no word `aiDanglingWord` reads as
+  unfinished in the plan's language (AGL-3828) at its end. A missing or empty title or
+  description, and one whose cut would split a word or keep under half the limit, are
+  re-asked as before.
 - **A section that shows the work gets its fewest pieces (AGL-3754).** A site start's
   `plan-empty-gallery` names one answer, "plan it with 3 to 6 items", so
   `aiSettlePlanGalleries` raises a gallery, portfolio or selected-works section (by the
