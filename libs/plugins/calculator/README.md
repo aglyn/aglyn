@@ -10,8 +10,8 @@ Canvas elements, all in the plugin's namespace `aglyn.calculator`:
 
 - `aglyn.calculator.widget`, **Function Widget**: a whole calculator in one block (inputs, a button, the result).
 - `aglyn.calculator.scope`, **Calculator**: a container bound to one site function. Everything below sits inside one.
-- `aglyn.calculator.input`, **Calculator Input**: asks one parameter, as a number box, a list, a switch or quick picks.
-- `aglyn.calculator.result`, **Calculator Result**: shows one value of the function.
+- `aglyn.calculator.input`, **Calculator Input**: asks one parameter, as a number box, a list, a date picker, a switch or quick picks.
+- `aglyn.calculator.result`, **Calculator Result**: shows one value of the function, as it is or, for a picked date, the way a person writes one.
 - `aglyn.calculator.showWhen`, **Show When**: a container that appears only while a value is true.
 - `aglyn.calculator.document`, **Calculator Document**: a receipt, invoice or quote laid out on the canvas and filled by results.
 - `aglyn.calculator.saveButton`, **Calculator Save Button**: saves the document as a PDF (the browser's print-to-PDF, scoped to the document), shares it, or copies it as text.

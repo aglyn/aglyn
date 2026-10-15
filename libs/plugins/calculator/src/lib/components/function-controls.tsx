@@ -35,6 +35,7 @@ export type FunctionControlKind =
   | 'auto'
   | 'number'
   | 'text'
+  | 'date'
   | 'select'
   | 'chips'
   | 'switch'
@@ -43,6 +44,7 @@ export const FUNCTION_CONTROL_KINDS: readonly FunctionControlKind[] = [
   'auto',
   'number',
   'text',
+  'date',
   'select',
   'chips',
   'switch',
@@ -86,6 +88,42 @@ export function isFunctionValueTruthy(
   if (typeof value === 'number') return value !== 0 && !Number.isNaN(value)
   const text = String(value ?? '').trim().toLowerCase()
   return text !== '' && text !== 'false' && text !== '0' && text !== 'no'
+}
+
+/** A calendar date as a date picker hands it over: `2026-10-15`. */
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * A date picker's value as a person reads it — `2026-10-15` becomes
+ * "Oct 15, 2026" in the page's language. Anything that is not a calendar
+ * date is returned as it is, so a result set to show a date never hides
+ * what the function actually put there.
+ *
+ * The date is read and written in UTC: it is a day on a calendar, not an
+ * instant, and a visitor west of Greenwich must not see the day before.
+ */
+export function formatFunctionDate(value: string, locale?: string): string {
+  const match = ISO_DATE.exec(value.trim())
+  if (!match) return value
+  const [, year, month, day] = match
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+  if (date.getUTCDate() !== Number(day)) return value
+  return new Intl.DateTimeFormat(locale ?? pageLocale(), {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date)
+}
+
+/** The page's own language, or US English where there is no page. */
+function pageLocale(): string {
+  const lang = typeof document === 'undefined' ? '' : document.documentElement.lang
+  try {
+    return lang && Intl.DateTimeFormat.supportedLocalesOf(lang).length ? lang : 'en-US'
+  } catch {
+    return 'en-US'
+  }
 }
 
 /** `control: auto` resolved against what the parameter is. */
@@ -133,6 +171,8 @@ export interface FunctionParameterControlProps {
  * - **select** is NATIVE. A portal-mounted menu is one more thing a
  *   transformed or clipped ancestor can misplace, and on a phone the platform
  *   picker is the better control.
+ * - **date** is native for the same reason: the browser's calendar, and the
+ *   phone's own date wheel. Its value is the ISO day, `2026-10-15`.
  * - **chips** are quick picks: buttons that SET the value, pressed when the
  *   value matches. They are how a number box gets "10 · 25 · 50 · 100"
  *   beside it — two controls on one parameter, which is why this takes a
@@ -233,14 +273,17 @@ export function FunctionParameterControl(props: FunctionParameterControlProps) {
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
       size="small"
-      type={kind === 'number' ? 'number' : undefined}
+      type={kind === 'number' || kind === 'date' ? kind : undefined}
       slotProps={{
+        // A date input always draws its own mm/dd/yyyy, which an unshrunk
+        // label would sit on top of.
+        ...(kind === 'date' ? { inputLabel: { shrink: true } } : {}),
         htmlInput: {
           ...(kind === 'number' ? { inputMode: 'decimal' } : {}),
           ...(hideLabel ? { 'aria-label': text } : {}),
         },
       }}
-      sx={{ width: width ?? (label ? 200 : 140) }}
+      sx={{ width: width ?? (label || kind === 'date' ? 200 : 140) }}
     />
   )
 }

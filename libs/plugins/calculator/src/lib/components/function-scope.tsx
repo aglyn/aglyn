@@ -64,6 +64,7 @@ import {
   FUNCTION_CONTROL_KINDS,
   FunctionParameterControl,
   displayFunctionValue,
+  formatFunctionDate,
   initialFunctionArguments,
   isFunctionValueTruthy,
   type FunctionControlKind,
@@ -268,6 +269,8 @@ export interface FunctionOutputProps {
   /** Read a change aloud. One result per calculator, usually the sentence. */
   announce?: boolean
   element?: 'div' | 'p' | 'span'
+  /** `date` reads a date picker's `2026-10-15` as "Oct 15, 2026". */
+  format?: 'text' | 'date'
 }
 
 const OUTPUT_ELEMENTS = ['div', 'p', 'span'] as const
@@ -291,7 +294,7 @@ export function renderFunctionEmphasis(text: string): ReactNode {
 
 const FunctionOutput = forwardRef<HTMLElement, FunctionOutputProps>(
   (props, ref) => {
-    const { name, placeholder, announce, element, ...rest } = props
+    const { name, placeholder, announce, element, format, ...rest } = props
     const scope = useContext(FunctionScopeContext)
     const { suppressNavigation } = useContext(ScreenLinkContext)
     const key = String(name ?? '').trim()
@@ -299,6 +302,7 @@ const FunctionOutput = forwardRef<HTMLElement, FunctionOutputProps>(
     let text = ''
     if (run?.ok) {
       text = displayFunctionValue(key ? run.scope[key] : run.value)
+      if (format === 'date') text = formatFunctionDate(text)
     } else if (suppressNavigation || !scope?.definition) {
       // Designing: show what will stand here. On a published page a missing
       // function shows nothing rather than a placeholder dressed as a price.
@@ -522,6 +526,7 @@ const CONTROL_LABELS: Record<FunctionControlKind, string> = {
   auto: 'Automatic',
   number: 'Number box',
   text: 'Text box',
+  date: 'Date picker',
   select: 'List',
   chips: 'Quick picks',
   switch: 'Switch',
@@ -554,7 +559,7 @@ export const functionInputSchema: Aglyn.ComponentSchema<FunctionInputProps> = {
   displayName: 'Calculator Input',
   description:
     'Asks one parameter of the Calculator it sits in: a number box, a list, ' +
-    'a switch, or quick-pick chips.',
+    'a date picker, a switch, or quick-pick chips.',
   category: ComponentCategory.INPUT,
   icon: { path: mdiFormTextbox.path, sx: { color: ICON_COLOR } },
   flags: { selfClosing: FEATURE_FLAG.ENABLED },
@@ -569,8 +574,9 @@ export const functionInputSchema: Aglyn.ComponentSchema<FunctionInputProps> = {
       name: 'control',
       description:
         'Automatic follows the parameter: a list when it has choices, a ' +
-        'number box for a number, a switch for a true/false. Quick picks ' +
-        'are buttons that set the value, for beside a number box.',
+        'number box for a number, a switch for a true/false. Date picker ' +
+        'opens a calendar and gives the function the day as 2026-10-15. ' +
+        'Quick picks are buttons that set the value, for beside a number box.',
       component: FieldComponentType.SELECT,
       label: 'Ask as',
       options: FUNCTION_CONTROL_KINDS.map((kind) => ({
@@ -629,6 +635,18 @@ export const functionOutputSchema: Aglyn.ComponentSchema<FunctionOutputProps> = 
       description: 'What the besigner shows here, e.g. $625. Visitors never see it.',
       component: FieldComponentType.TEXT_FIELD,
       label: 'Placeholder',
+    },
+    {
+      name: 'format',
+      description:
+        'Date reads a date picker’s value, 2026-10-15, as Oct 15, 2026 in the ' +
+        'page’s language. Anything that is not a date shows as it is.',
+      component: FieldComponentType.SELECT,
+      label: 'Show as',
+      options: [
+        { value: 'text', label: 'Text, as it is' },
+        { value: 'date', label: 'Date' },
+      ],
     },
     {
       name: 'element',

@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { formatFunctionDate } from './function-controls'
 import { PRINT_HIDE_ATTRIBUTE, PRINT_TARGET_ATTRIBUTE } from './function-document-save'
 import FunctionScope, {
   FunctionDocument,
@@ -319,6 +320,58 @@ describe('the schemas', () => {
   it('offers every control kind the renderer draws', () => {
     const control = (functionInputSchema.attributes ?? []).find((a) => a.name === 'control')
     const values = (control as unknown as { options: { value: string }[] }).options.map((o) => o.value)
-    expect(values).toEqual(['auto', 'number', 'text', 'select', 'chips', 'switch'])
+    expect(values).toEqual(['auto', 'number', 'text', 'date', 'select', 'chips', 'switch'])
+  })
+
+  it('lets a result show a date (AGL-3825)', () => {
+    const format = (functionOutputSchema.attributes ?? []).find((a) => a.name === 'format')
+    const values = (format as unknown as { options: { value: string }[] }).options.map((o) => o.value)
+    expect(values).toEqual(['text', 'date'])
+  })
+})
+
+/**
+ * A DATE ON A RECEIPT (AGL-3825). The job receipt that asked for this has a
+ * Date field: it is picked from a calendar and printed the way a person
+ * writes it, while the function still receives the plain ISO day.
+ */
+describe('A date picker and a result that shows a date', () => {
+  const dated: Aglyn.HostFunction = {
+    name: 'dated',
+    parameters: [{ name: 'job_date', type: 'text', label: 'Date' }],
+    variables: [{ name: 'echo', type: 'text' }],
+    operations: [
+      { if: { left: '1', comparator: '==', right: '1' }, then: [{ set: 'echo', expression: 'job_date' }], otherwise: [] },
+    ],
+    returnValue: 'echo',
+  }
+  const page = (
+    <FunctionScope functionName="dated" definition={dated}>
+      <FunctionInput parameter="job_date" control="date" />
+      <FunctionOutput name="job_date" format="date" />
+      <FunctionOutput name="echo" />
+    </FunctionScope>
+  )
+
+  it('asks with the browser’s date input, labelled above its own mm/dd/yyyy', () => {
+    render(page)
+    const input = screen.getByLabelText('Date') as HTMLInputElement
+    expect(input.type).toBe('date')
+    expect(input.closest('.MuiFormControl-root')?.querySelector('label')?.getAttribute('data-shrink')).toBe('true')
+  })
+
+  it('prints the picked day as a person writes it, and hands the function the ISO day', () => {
+    render(page)
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-15' } })
+    expect(screen.getByText('Oct 15, 2026')).toBeTruthy()
+    expect(screen.getByText('2026-10-15')).toBeTruthy()
+  })
+
+  it('formats the day itself, never the instant, and leaves a non-date alone', () => {
+    expect(formatFunctionDate('2026-01-01', 'en-US')).toBe('Jan 1, 2026')
+    expect(formatFunctionDate('2026-10-15', 'en-GB')).toBe('15 Oct 2026')
+    expect(formatFunctionDate('next Tuesday', 'en-US')).toBe('next Tuesday')
+    expect(formatFunctionDate('2026-02-30', 'en-US')).toBe('2026-02-30')
+    expect(formatFunctionDate('', 'en-US')).toBe('')
   })
 })
