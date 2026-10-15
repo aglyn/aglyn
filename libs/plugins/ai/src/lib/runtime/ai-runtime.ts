@@ -35,7 +35,7 @@ import {
 } from '../providers/contract'
 import { resolveAiProvider, type AiPluginSettings } from '../providers/routing'
 import {
-  aiDevCacheTtl,
+  aiRequestCacheTtl,
   aiDevReplayMode,
   aiIsDeployedRuntime,
   aiLiveBatchWanted,
@@ -382,7 +382,7 @@ export async function runAiRequest(
   validateAiMessages(input.messages, () => aiModelReadsImages(provider, input.model))
   const { stream, settings: _settings, provider: _provider, ...request } = input
   aiWarnIfReplayAskedInDeployment()
-  const cacheTtl = request.cacheTtl ?? aiDevCacheTtl()
+  const cacheTtl = aiRequestCacheTtl(request.cacheTtl)
   const providerRequest: AiProviderRequest = { ...request, ...(cacheTtl ? { cacheTtl } : {}), apiKey }
   try {
     if (aiIsDeployedRuntime()) {

@@ -40,6 +40,7 @@ import { aiLayoutCopyCheck, aiLayoutWithoutSections } from '../layout-language/a
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
+import { aiCacheWriteHourSum } from '../providers/cache-write-hour'
 import {
   runValidatedGeneration,
   type AiGenerationCheck,
@@ -748,6 +749,7 @@ function spentTogether(first: AiGenerationSpend, second: AiGenerationSpend): AiG
     outputTokens: first.usage.outputTokens + second.usage.outputTokens,
     cacheReadTokens: first.usage.cacheReadTokens + second.usage.cacheReadTokens,
     cacheWriteTokens: first.usage.cacheWriteTokens + second.usage.cacheWriteTokens,
+    ...aiCacheWriteHourSum(first.usage, second.usage),
   }
   return {
     attempts: first.attempts + second.attempts,

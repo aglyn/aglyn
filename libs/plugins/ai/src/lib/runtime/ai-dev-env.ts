@@ -80,9 +80,9 @@ export function aiDevReplayMode(env: AiDevEnv = process.env): AiDevReplayMode {
  * live eval every ten to forty minutes while it iterates, which is past the
  * default five-minute entry and inside an hour, so under the launcher the
  * breakpoints ask for the hour: the second run reads the prefix the first one
- * wrote instead of writing it again. Production keeps the default — its
- * steps run a minute apart on the beat, inside five minutes — and never reads
- * this: `undefined` there.
+ * wrote instead of writing it again. A deployed server never reads this:
+ * `undefined` there, where the lifetime is the route's own
+ * (`aiRequestCacheTtl`).
  */
 export function aiDevCacheTtl(env: AiDevEnv = process.env): '1h' | undefined {
   if (aiIsDeployedRuntime(env)) return undefined
@@ -90,6 +90,21 @@ export function aiDevCacheTtl(env: AiDevEnv = process.env): '1h' | undefined {
   if (raw === '1h') return '1h'
   if (raw === '5m') return undefined
   return aiUnderLiveRun(env) ? '1h' : undefined
+}
+
+/**
+ * The lifetime a request goes out with: the one its door asked for, which a
+ * site job's routes set to the hour through their routing rows (AGL-3830),
+ * else this process's own. A deployed server sends what the door asked for
+ * and nothing else. In development `AGLYN_AI_CACHE_TTL=5m` turns every
+ * request back to five minutes, the route's hour included, for a one-off
+ * sweep that will not run again within the hour (docs/AI_CACHE_AUDIT_2026-10.md,
+ * lever 5).
+ */
+export function aiRequestCacheTtl(requested: '1h' | undefined, env: AiDevEnv = process.env): '1h' | undefined {
+  if (aiIsDeployedRuntime(env)) return requested
+  if (String(env[AI_DEV_CACHE_TTL_ENV] ?? '').trim().toLowerCase() === '5m') return undefined
+  return requested ?? aiDevCacheTtl(env)
 }
 
 /** A deployed server that was handed the variable says so once, and runs without it. */

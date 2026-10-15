@@ -355,9 +355,11 @@ export interface AiRequestBase {
   /**
    * How long a cache entry the breakpoints write should live, where the
    * provider offers a choice: the provider's default (five minutes on the
-   * Messages API) when absent. Only a development run asks for `1h`
-   * (`runtime/ai-dev-replay.ts`); it changes no answer, only what a second
-   * request within the hour pays for the prefix.
+   * Messages API) when absent. A step a site job runs asks for `1h` through
+   * its routing row (`AiRoutingRow.cacheTtl`, AGL-3830), in production too,
+   * and a development live run asks for it on every request
+   * (`runtime/ai-dev-env.ts`). It changes no answer, only what a request
+   * within the hour pays for the prefix, so a replay key does not read it.
    */
   cacheTtl?: '1h'
   /**
@@ -396,6 +398,17 @@ export interface AiUsage {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  /**
+   * How many of `cacheWriteTokens` went to an hour-long cache entry
+   * (AGL-3830), where the provider breaks the writes down; absent where none
+   * did or the provider does not say.
+   *
+   * Inside `cacheWriteTokens`, never beside it, like `thinkingTokens` below.
+   * An hour-long write is billed at twice the input price where a rate
+   * table's `cacheWritePerToken` is the five-minute 1.25 times, so a price
+   * reads this to add the difference (`aiCacheWriteHourSurchargeUsd`).
+   */
+  cacheWriteHourTokens?: number
   /**
    * How many of `outputTokens` the model spent thinking, where the provider
    * reports it; absent where it does not (AGL-3143).

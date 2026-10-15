@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { aiModelIdsForProvider, estimateAiBilledUsd, aiCatalogEntry } from './catalog'
+import { aiBilledRatesForModel, aiCatalogEntry, aiModelIdsForProvider, estimateAiBilledUsd } from './catalog'
+import { aiCacheWriteHourSurchargeUsd } from './cache-write-hour'
 import {
   AiBatchUnfinishedError,
   AiUpstreamError,
@@ -143,13 +144,28 @@ export function anthropicUsageFrom(usage: unknown): AiUsage {
     details && typeof details === 'object'
       ? (details as Record<string, unknown>)['thinking_tokens']
       : undefined
+  // The writes split by lifetime (AGL-3830). Only an hour-long write is kept,
+  // because it is the one billed above the rate table's write rate, and only
+  // where there was one, so every five-minute exchange keeps its shape.
+  const creation = record['cache_creation']
+  const hour =
+    creation && typeof creation === 'object'
+      ? aiTokenCount((creation as Record<string, unknown>)['ephemeral_1h_input_tokens'])
+      : 0
   return {
     inputTokens: aiTokenCount(record['input_tokens']),
     outputTokens: aiTokenCount(record['output_tokens']),
     cacheReadTokens: aiTokenCount(record['cache_read_input_tokens']),
     cacheWriteTokens: aiTokenCount(record['cache_creation_input_tokens']),
+    ...(hour > 0 ? { cacheWriteHourTokens: hour } : {}),
     ...(thinking === undefined ? {} : { thinkingTokens: aiTokenCount(thinking) }),
   }
+}
+
+/** What an exchange draws, its hour-long cache writes included (AGL-3830). */
+function anthropicBilledUsd(usage: AiUsage, model: string): number {
+  const usd = estimateAiBilledUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiBilledRatesForModel(model))
+  return Math.round(usd * 1_000_000) / 1_000_000
 }
 
 /**
@@ -341,7 +357,7 @@ export function anthropicResultFrom(raw: unknown, model: string, priceFactor = 1
       input: aiToolInputOf(block['input']),
     }))
   const usage = anthropicUsageFrom(payload?.usage)
-  const estCostUsd = Math.round(estimateAiBilledUsd(usage, model) * priceFactor * 1_000_000) / 1_000_000
+  const estCostUsd = Math.round(anthropicBilledUsd(usage, model) * priceFactor * 1_000_000) / 1_000_000
   const stopReason =
     typeof payload?.stop_reason === 'string' && payload.stop_reason
       ? payload.stop_reason
@@ -430,6 +446,7 @@ async function* streamEvents(
             usage.inputTokens = start.inputTokens
             usage.cacheReadTokens = start.cacheReadTokens
             usage.cacheWriteTokens = start.cacheWriteTokens
+            if (start.cacheWriteHourTokens) usage.cacheWriteHourTokens = start.cacheWriteHourTokens
             break
           }
           case 'content_block_start': {
@@ -511,7 +528,7 @@ async function* streamEvents(
   yield {
     type: 'done',
     usage,
-    estCostUsd: estimateAiBilledUsd(usage, model),
+    estCostUsd: anthropicBilledUsd(usage, model),
     stopReason,
     // What the model emitted into its tool calls, for a stream its ceiling
     // cut off (AGL-3143): the `tool` events carry only what parsed out.

@@ -796,6 +796,36 @@ describe('the passes', () => {
     expect(seo.title).toBe('About Brightwater Law | Our Firm, Practice Areas')
   })
 
+  describe('a listing clipped in the plan’s language (AGL-3828)', () => {
+    const title = 'Panadería Flor de Oaxaca: conchas, bolillos, pan dulce y pasteles'
+    const description =
+      'Horneamos cada mañana conchas, bolillos, orejas y cuernitos en el centro de Oaxaca, y preparamos pasteles de tres leches por encargo, con amor, para la fiesta de tus hijos'
+    const listing = async (language?: string) => {
+      await buildSections()
+      const plan = { ...PLAN, ...(language ? { language } : {}), screens: [{ ...SCREEN, seoTitle: title, seoDescription: description }] }
+      seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, effort: null, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
+      await step()(context({ plan }))
+      return mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
+    }
+
+    it('takes a Spanish conjunction, article or preposition off a Spanish plan’s clipped listing', async () => {
+      // Cut at 60 and 155: "…pan dulce y" and "…con amor, para la".
+      expect(await listing('es')).toEqual({
+        title: 'Panadería Flor de Oaxaca: conchas, bolillos, pan dulce',
+        description:
+          'Horneamos cada mañana conchas, bolillos, orejas y cuernitos en el centro de Oaxaca, y preparamos pasteles de tres leches por encargo, con amor',
+      })
+    })
+
+    it('clips a plan with no language by English’s words, as before', async () => {
+      expect(await listing()).toEqual({
+        title: 'Panadería Flor de Oaxaca: conchas, bolillos, pan dulce y',
+        description:
+          'Horneamos cada mañana conchas, bolillos, orejas y cuernitos en el centro de Oaxaca, y preparamos pasteles de tres leches por encargo, con amor, para la',
+      })
+    })
+  })
+
   it('keeps a word in any script whole when it clips a listing', async () => {
     await buildSections()
     const long = { ...PLAN, screens: [{ ...SCREEN, seoTitle: 'Galería de la panadería familiar con conchas recién horneadas cada día', seoDescription: SCREEN.seoDescription }] }

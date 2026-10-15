@@ -31,6 +31,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
+import { aiCacheWriteHourSum } from '../providers/cache-write-hour'
 import { aiCutOffFigures, aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
@@ -1209,6 +1210,9 @@ export async function runValidatedGeneration(
   // A development run's effort A/B arm (AGL-3781) asks its step at the arm's
   // effort; everywhere else the door's own stands.
   const effort = aiDevEffortFor(input.step) ?? input.effort
+  // The route's cache lifetime (AGL-3830): an hour on every step a site job
+  // runs, so the next job reads the prefix this one writes.
+  const cacheTtl = input.step ? AI_ROUTING_TABLE[input.step].cacheTtl : undefined
   const spend: AiGenerationSpend = {
     attempts: 0,
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
@@ -1259,6 +1263,7 @@ export async function runValidatedGeneration(
       ...(effort ? { effort } : {}),
       ...(cacheConversation ? { cacheConversation } : {}),
       ...(cacheTools ? { cacheTools } : {}),
+      ...(cacheTtl ? { cacheTtl } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.settings ? { settings: input.settings } : {}),
       ...(input.provider ? { provider: input.provider } : {}),
@@ -1275,6 +1280,7 @@ export async function runValidatedGeneration(
       outputTokens: spend.usage.outputTokens + result.usage.outputTokens,
       cacheReadTokens: spend.usage.cacheReadTokens + result.usage.cacheReadTokens,
       cacheWriteTokens: spend.usage.cacheWriteTokens + result.usage.cacheWriteTokens,
+      ...aiCacheWriteHourSum(spend.usage, result.usage),
       ...(thinking === undefined ? {} : { thinkingTokens: thinking }),
     }
     spend.estCostUsd = Math.round((spend.estCostUsd + result.estCostUsd) * 1_000_000) / 1_000_000

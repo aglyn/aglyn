@@ -363,6 +363,17 @@ describe('estimateAssistCostUsd', () => {
     expect(cost).toBe(0.3)
   })
 
+  it('prices an hour-long cache write at twice input, on both figures (AGL-3830)', () => {
+    // Sonnet 5.5: $2 in at provider list, billed at 1.5x. A five-minute write
+    // is 1.25x input; an hour-long one, which a site job's routes now write
+    // in production, is 2x.
+    const written = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 1_000_000 }
+    expect(estimateAssistProviderCostUsd(written, 'claude-sonnet-5-5')).toBe(2.5)
+    expect(estimateAssistProviderCostUsd({ ...written, cacheWriteHourTokens: 1_000_000 }, 'claude-sonnet-5-5')).toBe(4)
+    expect(estimateAssistCostUsd({ ...written, cacheWriteHourTokens: 1_000_000 }, 'claude-sonnet-5-5')).toBe(6)
+    expect(estimateAssistCostUsd({ ...written, cacheWriteHourTokens: 400_000 }, 'claude-sonnet-5-5')).toBe(4.65)
+  })
+
   it('follows the SERVING model, so an ASSIST_MODEL swap cannot understate cost', () => {
     // The whole point of the meter is that per-org cost is trustworthy. A
     // model override that kept reporting Sonnet money would read as
