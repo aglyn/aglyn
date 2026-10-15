@@ -25,6 +25,7 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { operatorContactLine } from '@aglyn/aglyn/app-utils/operator-identity'
 
 /**
  * Close your own account (AGL-1140).
@@ -137,8 +138,7 @@ async function handler(request: Request): Promise<Response> {
         // is the person this refusal protects.
         return Response.json(
           {
-            error:
-              'Your account shares an email address with another account, so it cannot be closed here yet. Email privacy@aglyn.com and we will finish it for you.',
+            error: sharedAddressRefusal(),
             skippedReason: 'shared-address',
           },
           { status: 409 },
@@ -169,6 +169,20 @@ async function handler(request: Request): Promise<Response> {
     console.error('[account/close] failed', error)
     return Response.json({ error: 'Closing the account failed' }, { status: 500 })
   }
+}
+
+/**
+ * The 409 copy for a closure staff must finish. The address is this
+ * deployment's legal contact, so a self-hosted console never sends its
+ * customers to Aglyn about an account only its own operator holds.
+ */
+function sharedAddressRefusal(): string {
+  const lead =
+    'Your account shares an email address with another account, so it cannot be closed here yet.'
+  const address = operatorContactLine('legal').address
+  return address
+    ? `${lead} Email ${address} and we will finish it for you.`
+    : `${lead} Contact the operator of this site and they will finish it for you.`
 }
 
 export const dynamic = 'force-dynamic'
