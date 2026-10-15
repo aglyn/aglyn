@@ -64,6 +64,7 @@ export const PORTABLE_COMPONENT_ID_ALLOWLIST: readonly string[] = [
   'muiButton',
   // MUI's form elements, one element each (they replace the all-in-one formField).
   'muiCheckbox',
+  'muiDatePicker',
   'muiFormControl',
   'muiFormControlLabel',
   'muiFormHelperText',
@@ -74,6 +75,7 @@ export const PORTABLE_COMPONENT_ID_ALLOWLIST: readonly string[] = [
   'muiRating',
   'muiSelect',
   'muiSelectOption',
+  'muiTimePicker',
   'muiContainer',
   'muiList',
   'muiListItem',

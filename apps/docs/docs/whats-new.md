@@ -28,6 +28,23 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
+<!--
+  AGL-3824 — Help desks are built and hidden until a deployment sets
+  HELP_DESKS_TOKEN_KEY on the console (the key merchants' help desk credentials
+  are sealed under; no developer app of Aglyn's is needed). The guide is listed
+  with a "Rolling out" note. Once the key is set on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the heading below, and delete the
+  "Rolling out" note from commerce-and-bookings/commerce/help-desks.md.
+
+## October 2026 — your help desk sees every buyer's orders
+
+- **[Help desks](commerce-and-bookings/commerce/help-desks.md)** — connect your own
+  Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and each customer who
+  ordered from your site arrives there with their recent orders and a link to each
+  one, so agents answer with the order in front of them. Turn on one switch and
+  contact form messages open as new tickets too.
+-->
+
 ## October 2026 — store settings, a page each (newest)
 
 - **[Store settings](commerce-and-bookings/commerce/overview.md#products-hub)** — the

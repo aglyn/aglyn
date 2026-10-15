@@ -58,6 +58,7 @@ const NEVER_OFFERED = [
 
 const FORM_ELEMENT_IDS: readonly string[] = [
   'muiCheckbox',
+  'muiDatePicker',
   'muiFormControl',
   'muiFormControlLabel',
   'muiFormHelperText',
@@ -68,6 +69,7 @@ const FORM_ELEMENT_IDS: readonly string[] = [
   'muiRating',
   'muiSelect',
   'muiSelectOption',
+  'muiTimePicker',
 ]
 
 describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
@@ -117,6 +119,7 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
         'form',
         'muiButton',
         'muiCheckbox',
+        'muiDatePicker',
         'muiFormControl',
         'muiFormControlLabel',
         'muiFormHelperText',
@@ -127,6 +130,7 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
         'muiRating',
         'muiSelect',
         'muiSelectOption',
+        'muiTimePicker',
       ],
     })
   })

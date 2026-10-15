@@ -887,8 +887,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // catalog lists each piece of a field, and the instructions say how a
       // field, a choice and a checkbox are put together. Most requests that
       // carry the document doctrine are up 1, from rule 17's larger form
-      // budget, which the same fields now need.
-      form: { prefixTokens: 3_365, minimum: 512, caches: true, toolsStable: true },
+      // budget, which the same fields now need. Up 139 at AGL-3825: the form
+      // catalog lists the Date Picker and Time Picker with their settings, and
+      // the instructions say a day and a time of day are answers a form takes.
+      form: { prefixTokens: 3_504, minimum: 512, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_588, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
@@ -979,7 +981,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // Under even Claude Haiku 5.5's 512-token minimum (AGL-3781).
       'copy.element': { prefixTokens: 339, minimum: 512, caches: false, toolsStable: true },
       'copy.blog': { prefixTokens: 340, minimum: 512, caches: false, toolsStable: true },
-      'copy.section': { prefixTokens: 736, minimum: 512, caches: true, toolsStable: true },
+      // Up 8 at AGL-3825: its element list names the Date and Time Pickers.
+      'copy.section': { prefixTokens: 744, minimum: 512, caches: true, toolsStable: true },
     })
   })
 

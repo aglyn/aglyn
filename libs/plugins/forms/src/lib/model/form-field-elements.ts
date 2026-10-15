@@ -82,6 +82,8 @@ export const FORM_FIELD_ELEMENT_IDS = {
   checkbox: 'muiCheckbox',
   choiceLabel: 'muiFormControlLabel',
   rating: 'muiRating',
+  datePicker: 'muiDatePicker',
+  timePicker: 'muiTimePicker',
 } as const
 
 /** The all-in-one element's types; anything else drew as a one-line text box. */

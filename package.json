@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.256",
+  "version": "1.0.0-beta.257",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -384,6 +384,7 @@
     "clsx": "^2.1.1",
     "cookie": "^2.0.1",
     "cors": "^2.8.6",
+    "dayjs": "^1.11.23",
     "deep-equal": "^2.2.3",
     "deepmerge-ts": "^8.0.2",
     "dnd-core": "^16.0.1",

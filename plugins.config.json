@@ -43,6 +43,8 @@
             "muiRadio",
             "muiFormControlLabel",
             "muiRating",
+            "muiDatePicker",
+            "muiTimePicker",
             "videoEmbed",
             "socialLinks",
             "dataTable",
@@ -1013,6 +1015,16 @@
             "maxRows": 5000
           },
           "description": "Tracking numbers from a label tool, each recorded as a shipment on the order it names."
+        }
+      ],
+      "recordPages": [
+        {
+          "kind": "order",
+          "path": "/products/orders",
+          "record": {
+            "path": "/products/orders",
+            "param": "order"
+          }
         }
       ],
       "contributes": {
@@ -3329,6 +3341,56 @@
         "siteOff": {
           "stops": "Switching Email platforms off for this site stops its contacts, unsubscribes and order events syncing with the email platforms it connected.",
           "keeps": "The connections and everything already synced are kept, and an unsubscribe already read back stays on the site’s list."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
+    },
+    {
+      "id": "help-desks",
+      "package": "@aglyn/plugins-help-desks",
+      "register": {
+        "console": "registerHelpDesksConsole",
+        "consoleApi": "registerHelpDesksConsoleApi",
+        "serverDeclarations": "registerHelpDesksServerDeclarations",
+        "consoleServerDeclarations": "registerHelpDesksConsoleServerDeclarations",
+        "subprocessors": "helpDesksSubprocessors"
+      },
+      "apiPrefixes": [
+        "help-desks"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, the credential sealed, with its sync cursors and its log subcollection (AGL-3824). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "helpDeskConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Orders and contact form messages owed to one connection, written by the server declarations and delivered by the console job (AGL-3824).",
+          "name": "helpDeskOutbox",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "What one connection knows of one buyer: the help desk's id for them and their latest orders (AGL-3824).",
+          "name": "helpDeskCustomers",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 40,
+        "$comment": "Each buyer and their recent orders kept in step with a merchant's OWN help desk, and contact form messages sent there as tickets when the merchant switches it on (AGL-3824): Gorgias, Re:amaze, Kustomer, Gladly and Richpanel, each by the merchant's own API credential. It reaches the CRM's people only through core's person-records seam, commerce's orders only through the domain-event outbox and the `commerce.orderHistory` service by its id, and form submissions only through the runtime's host event listeners; it imports none of those plugins. Sold with the store (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: the card draws nothing until the console sets HELP_DESKS_TOKEN_KEY, the key merchants' credentials are sealed under.",
+        "label": "Help desks",
+        "alwaysOnForWorkspace": true,
+        "description": "Your buyers and their recent orders in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and contact form messages as tickets.",
+        "siteOff": {
+          "stops": "Switching Help desks off for this site stops its buyers, orders and contact form messages reaching the help desks it connected.",
+          "keeps": "The connections are kept, and everything already sent stays in the help desk."
         },
         "publishedSiteImpact": "console-only"
       },

@@ -214,6 +214,8 @@ const FORM_ELEMENT_IDS = new Set([
   'muiRadio',
   'muiFormControlLabel',
   'muiRating',
+  'muiDatePicker',
+  'muiTimePicker',
 ])
 
 const NEVER_IDS = new Set([

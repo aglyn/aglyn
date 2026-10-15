@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.257 — 2026-10-15
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.256...v1.0.0-beta.257)
+
+### Added
+
+- **forms:** date and time pickers as form fields, from MUI X ([AGL-3825](https://linear.app/aglyn/issue/AGL-3825))
+- **help-desks:** buyers, orders and form tickets in the merchant's own help desk ([AGL-3824](https://linear.app/aglyn/issue/AGL-3824))
+
+### Fixed
+
+- **mui:** one shared form-controls import, so the pickers never read it half-loaded ([AGL-3825](https://linear.app/aglyn/issue/AGL-3825))
+
+### Performance
+
+- **forms:** load the date and time pickers from inside form-controls ([AGL-3825](https://linear.app/aglyn/issue/AGL-3825))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **help-desks:** package versions follow main to 1.0.0-beta.256 ([AGL-3824](https://linear.app/aglyn/issue/AGL-3824))
+- **help-desks:** regenerate the native contracts for the new plugin row ([AGL-3824](https://linear.app/aglyn/issue/AGL-3824))
+
+</details>
+
 ## v1.0.0-beta.256 — 2026-10-15
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.255...v1.0.0-beta.256)

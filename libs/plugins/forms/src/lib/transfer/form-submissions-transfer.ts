@@ -142,6 +142,8 @@ export function formAnswerTransferType(fieldType: FormFieldType | undefined): Tr
       return 'longText'
     case 'rating':
       return 'integer'
+    case 'date':
+      return 'date'
     default:
       return 'text'
   }
