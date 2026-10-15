@@ -30,6 +30,10 @@ public struct ScreenSpec: Identifiable, Sendable {
   public let links: [String]
   /// Core screens' zones this plugin screen contributes to (`orgMember`, `staffOrg`, …).
   public let zones: [String]
+  /// A core page's slot (`hostSettings`) this screen also puts a one-row card in, which opens the screen: the native twin of
+  /// the console's `registerConsoleExtension` widget for a plugin whose settings are a whole screen. The card is a widget
+  /// named `<screen id>.card`, so the page that hosts the slot draws it without naming the plugin.
+  public let cardSlot: String?
   public let loads: [LoadSpec]
   public let blocks: [BlockSpec]
   public let raw: JSONValue
@@ -50,6 +54,7 @@ public struct ScreenSpec: Identifiable, Sendable {
     self.showWhen = json["showWhen"]?.stringValue
     self.links = json["links"].arrayOfStrings
     self.zones = json["zones"].arrayOfStrings
+    self.cardSlot = json["cardSlot"]?.stringValue
     self.loads = json["load"].objectEntries.map { LoadSpec(key: $0.key, $0.value) }
     self.blocks = json["blocks"].array.compactMap(BlockSpec.init)
     self.raw = json
