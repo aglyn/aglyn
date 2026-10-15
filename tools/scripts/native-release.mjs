@@ -114,7 +114,7 @@ function headCommit() {
 
 function sizeOf(path) {
   const out = execFileSync('du', ['-sh', path], { encoding: 'utf8' })
-  return out.split(/\s+/)[0]
+  return out.trim().split(/\s+/)[0]
 }
 
 function iosArchive(scheme, platform) {
