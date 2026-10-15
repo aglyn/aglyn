@@ -36,6 +36,7 @@ const mockStore = new Map<string, Data>()
 const mockListeners = new Set<() => void>()
 const mockWrites: Array<{ id: string; patch: Data }> = []
 const mockBatchSizes: number[] = []
+let mockPageReads = 0
 
 interface FakeQuery {
   wheres: Array<[string, string, unknown]>
@@ -87,7 +88,10 @@ jest.mock('firebase/firestore', () => ({
   orderBy: () => (q: FakeQuery) => ({ ...q, ordered: true }),
   startAfter: (snapshot: { id: string }) => (q: FakeQuery) => ({ ...q, after: snapshot }),
   limit: (n: number) => (q: FakeQuery) => ({ ...q, lim: n }),
-  getDocs: async (q: FakeQuery) => mockRun(q),
+  getDocs: async (q: FakeQuery) => {
+    mockPageReads += 1
+    return mockRun(q)
+  },
   onSnapshot: (q: FakeQuery, next: (snapshot: unknown) => void) => {
     const listener = () => next(mockRun(q))
     mockListeners.add(listener)
@@ -205,6 +209,7 @@ beforeEach(() => {
   mockListeners.clear()
   mockWrites.length = 0
   mockBatchSizes.length = 0
+  mockPageReads = 0
 })
 
 describe('the bell inbox (AGL-3720)', () => {
@@ -229,6 +234,23 @@ describe('the bell inbox (AGL-3720)', () => {
     await waitFor(() => expect(rowsShown()).toHaveLength(45))
     // No duplicates across pages: the cursor resumed after the last row.
     expect(new Set(rowsShown().map((node) => node.textContent)).size).toBe(45)
+  })
+
+  it('stops reading once the last page is in, however often the end is scrolled', async () => {
+    seed(25)
+    render(<NotificationsMenu />)
+    await openMenu()
+    await waitFor(() => expect(rowsShown()).toHaveLength(20))
+    scrollToEnd(screen.getByTestId('notifications-menu-list'))
+    await waitFor(() => expect(rowsShown()).toHaveLength(25))
+    await waitFor(() => expect(screen.queryByLabelText('Loading more notifications')).toBeNull())
+    const reads = mockPageReads
+    for (let i = 0; i < 5; i += 1) scrollToEnd(screen.getByTestId('notifications-menu-list'))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mockPageReads).toBe(reads)
+    expect(screen.queryByLabelText('Loading more notifications')).toBeNull()
   })
 
   it('refills from the cursor after the loaded rows are read one by one', async () => {

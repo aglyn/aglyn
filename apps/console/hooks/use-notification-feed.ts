@@ -144,6 +144,15 @@ export function useNotificationFeed(options: UseNotificationFeedOptions): Notifi
   const [generation, setGeneration] = useState(0)
   const cursorRef = useRef<QueryDocumentSnapshot | null>(null)
   const loadingRef = useRef(false)
+  /*
+   * Whether the cursor may hold another page, read by `loadMore` itself:
+   * every scroll event near the end calls it, and the `hasMore` STATE is not
+   * in its closure. Without this an exhausted feed re-read its empty last
+   * page on each event, and the "Loading more" spinner that read showed and
+   * hid resized the list, which fired the next scroll event — a bounce that
+   * never settled once every notification had loaded.
+   */
+  const hasMoreRef = useRef(true)
   /** Bumped on every reset, so a page from a superseded feed is dropped. */
   const epochRef = useRef(0)
   const headIdsRef = useRef<Set<string>>(new Set())
@@ -160,7 +169,7 @@ export function useNotificationFeed(options: UseNotificationFeedOptions): Notifi
 
   const loadMore = useCallback(() => {
     const base = baseQuery()
-    if (!base || !enabled || loadingRef.current) return
+    if (!base || !enabled || loadingRef.current || !hasMoreRef.current) return
     const epoch = epochRef.current
     loadingRef.current = true
     setLoading(true)
@@ -175,13 +184,16 @@ export function useNotificationFeed(options: UseNotificationFeedOptions): Notifi
       .then((page) => {
         if (epochRef.current !== epoch) return
         cursorRef.current = page.cursor
+        hasMoreRef.current = page.hasMore
         setHasMore(page.hasMore)
         const fresh = page.entries.filter((entry) => !removedRef.current.has(entry.$id))
         setItems((current) => mergeFeedEntries(current, fresh))
       })
       .catch((error) => {
         console.error(error)
-        if (epochRef.current === epoch) setHasMore(false)
+        if (epochRef.current !== epoch) return
+        hasMoreRef.current = false
+        setHasMore(false)
       })
       .finally(() => {
         if (epochRef.current !== epoch) return
@@ -195,6 +207,7 @@ export function useNotificationFeed(options: UseNotificationFeedOptions): Notifi
     epochRef.current += 1
     cursorRef.current = null
     loadingRef.current = false
+    hasMoreRef.current = true
     headIdsRef.current = new Set()
     removedRef.current = new Set()
     setItems([])
