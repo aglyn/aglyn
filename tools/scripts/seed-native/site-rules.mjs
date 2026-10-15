@@ -76,7 +76,7 @@ export async function seedAutomation({ put, uid, orgId, hostId, now }) {
       'Welcome new subscribers',
       trigger('formSubmission', { conditions: [{ field: 'subscribe', op: 'notEmpty' }], combinator: 'and' }),
       [
-        { type: 'sendEmail', subject: 'Welcome to Demo Site', body: 'Hi {{firstName|there}}, thanks for signing up.', transactional: true },
+        { type: 'sendEmail', subject: 'Welcome to Juniper Street Bakery', body: 'Hi {{firstName|there}}, thanks for signing up.', transactional: true },
         { type: 'wait', delayMinutes: 1440 },
         { type: 'addContactTag', tag: 'subscriber' },
       ],
@@ -132,7 +132,7 @@ export async function seedAutomation({ put, uid, orgId, hostId, now }) {
     ['run-1', 'act-welcome', 'Welcome new subscribers', 'formSubmission', 'succeeded', 'Sent email · tagged subscriber', 12, { kind: 'visitor', email: 'ana@example.com' }, 340],
     ['run-2', 'act-welcome', 'Welcome new subscribers', 'formSubmission', 'skipped', 'Skipped: subscribe is empty', 95, { kind: 'visitor' }, 20],
     ['run-3', 'act-welcome', 'Welcome new subscribers', 'formSubmission', 'failed', 'Email bounced: mailbox full', 60 * 26, { kind: 'visitor', email: 'old@example.com' }, 910],
-    ['run-4', 'act-booking', 'Tell the team about bookings', 'booking', 'succeeded', 'Notified 2 admins · ran Booking follow-up', 45, { kind: 'visitor', email: 'mary@example.com' }, 180],
+    ['run-4', 'act-booking', 'Tell the team about bookings', 'booking', 'succeeded', 'Notified 2 admins · ran Booking follow-up', 45, { kind: 'visitor', email: 'aaliyah@example.com' }, 180],
     ['run-5', 'wf-lead', 'Score a lead', 'lead', 'succeeded', 'Notified 2 admins', 30, { kind: 'apiKey', apiKeyName: 'Zapier' }, 75],
     ['run-6', 'wf-quote', 'Party quote', 'webhook', 'succeeded', 'Returned 432', 200, { kind: 'webhook', name: 'Quote requests' }, 12],
     ['run-7', 'org-welcome', 'Welcome every new lead', 'lead', 'succeeded', 'Sent email · created a task', 15, { kind: 'member', email: 'priya.shah@example.test' }, 260],

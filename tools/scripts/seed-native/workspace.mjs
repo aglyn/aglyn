@@ -97,7 +97,7 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now }) {
 
   // --- Team: the owner's own row, three members and a pending invite. ----
   const people = [
-    { uid, role: 'owner', allHosts: true, hostAccess: {}, email: 'mobile-owner@example.test', displayName: 'Mobile Owner', joined: 60 },
+    { uid, role: 'owner', allHosts: true, hostAccess: {}, email: 'mobile-owner@example.test', displayName: 'Hannah Reyes', joined: 60 },
     { uid: 'seed-admin-priya', role: 'admin', allHosts: true, hostAccess: {}, email: 'priya.shah@example.test', displayName: 'Priya Shah', title: 'Operations lead', joined: 40 },
     {
       uid: 'seed-editor-riley',
@@ -147,9 +147,9 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now }) {
   const sites = [
     {
       id: 'mobile-bloom-bakery',
-      displayName: 'Bloom Bakery',
-      subdomain: 'bloom-bakery',
-      cname: 'bloombakery.example',
+      displayName: 'Juniper Street Catering',
+      subdomain: 'juniper-catering',
+      cname: 'juniperstreetcatering.example',
       created: 30,
       homeId: 'bloom-home',
       screens: { 'bloom-home': '/', 'bloom-menu': 'menu', 'bloom-visit': 'visit-us' },
@@ -157,8 +157,8 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now }) {
     },
     {
       id: 'mobile-studio-north',
-      displayName: 'Studio North',
-      subdomain: 'studio-north',
+      displayName: 'Juniper Street Cafe',
+      subdomain: 'juniper-cafe',
       cname: '',
       created: 12,
       homeId: 'studio-home',
@@ -216,7 +216,7 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now }) {
     ['hosts', hostId, 'seed-media-storefront', 'storefront-morning.jpg', 'image/jpeg', 1_258_291, 1600, 1067, 'The bakery storefront at sunrise', 'seed-storefront', 9],
     ['hosts', hostId, 'seed-media-croissants', 'croissant-tray.jpg', 'image/jpeg', 842_116, 1200, 1500, 'A tray of fresh croissants', 'seed-storefront', 8],
     ['hosts', hostId, 'seed-media-team', 'team-photo.png', 'image/png', 2_097_152, 2000, 1333, '', null, 6],
-    ['hosts', hostId, 'seed-media-logo', 'logo-square.png', 'image/png', 48_213, 512, 512, 'Demo Site logo', null, 5],
+    ['hosts', hostId, 'seed-media-logo', 'logo-square.png', 'image/png', 48_213, 512, 512, 'Juniper Street Bakery logo', null, 5],
     ['hosts', hostId, 'seed-media-menu', 'fall-menu.pdf', 'application/pdf', 356_002, 0, 0, '', null, 3],
     ['hosts', hostId, 'seed-media-hero', 'hero-banner-wide.webp', 'image/webp', 412_880, 2400, 900, 'Loaves on a wooden counter', null, 1],
     ['orgs', orgId, 'seed-media-brand-mark', 'brand-mark.png', 'image/png', 64_512, 1024, 1024, 'Workspace brand mark', 'seed-brand', 20],

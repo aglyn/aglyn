@@ -31,13 +31,29 @@ function zonedAt(now, dayOffset, hour, minute = 0) {
 
 const words = (text) => [...new Set(text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean))]
 
+/**
+ * Product photos are optional: set `AGLYN_SEED_IMAGE_BASE` to a folder of `<name>.jpg` files
+ * (a hosted bucket or a local static server) and every product carries one; unset, no product has a photo.
+ */
+const IMG = (process.env.AGLYN_SEED_IMAGE_BASE || '').replace(/\/$/, '')
+export const imageUrl = (name) => (IMG ? `${IMG}/${name}.jpg` : undefined)
+export const imageFields = (name) => {
+  const url = imageUrl(name)
+  return url ? { mediaUrls: [url], imageUrl: url } : {}
+}
+
 export const COMMERCE_PRODUCTS = [
   { id: 'p-mug', name: 'Stoneware Mug', price: 24, sku: 'MUG-01', barcode: '0123456789012', stock: 18 },
   { id: 'p-beans', name: 'House Blend Coffee Beans', price: 16.5, sku: 'BEAN-12', barcode: '0850012345678', stock: 4 },
   { id: 'p-tote', name: 'Canvas Tote Bag', price: 19, sku: 'TOTE-01', barcode: '0850098765432', stock: 32 },
   { id: 'p-pour', name: 'Pour-Over Kettle', price: 58, sku: 'KETL-01', barcode: '0850011122233', stock: 0 },
-  { id: 'p-gift', name: 'Gift Card', price: 50, sku: 'GIFT-50', barcode: '', stock: null, type: 'digital' },
+  { id: 'p-cinnamon', name: 'Cinnamon Roll Box (6)', price: 22, sku: 'ROLL-06', barcode: '0850055566677', stock: 11, img: 'cinnamon' },
+  { id: 'p-cookies', name: 'Holiday Cookie Tin', price: 28, sku: 'COOK-TIN', barcode: '0850044455566', stock: 26, img: 'cookies' },
+  { id: 'p-concentrate', name: 'Cold Brew Concentrate', price: 14, sku: 'CB-32', barcode: '0850033344455', stock: 40, img: 'coldbrew-conc' },
+  { id: 'p-cake', name: 'Birthday Cake, 8 inch', price: 48, sku: 'CAKE-08', barcode: '', stock: null, img: 'cake' },
+  { id: 'p-gift', name: 'Gift Card', price: 50, sku: 'GIFT-50', barcode: '', stock: null, type: 'digital', img: 'gift' },
 ]
+const PRODUCT_IMAGES = { 'p-mug': 'mug', 'p-beans': 'beans', 'p-tote': 'tote', 'p-pour': 'pour' }
 
 export async function seedCommerce({ put, hostId, now: date, nameSearchFields }) {
   const now = date.getTime()
@@ -55,6 +71,7 @@ export async function seedCommerce({ put, hostId, now: date, nameSearchFields })
     await put(`hosts/${hostId}/products/${product.id}`, {
       ...nameSearchFields(product.name),
       slug: product.id.slice(2),
+      ...imageFields(product.img ?? PRODUCT_IMAGES[product.id]),
       type: product.type ?? 'physical',
       status: 'active',
       variants,
@@ -68,24 +85,31 @@ export async function seedCommerce({ put, hostId, now: date, nameSearchFields })
     })
   }
 
-  await put(`hosts/${hostId}/settings/store`, { currency: 'USD', name: 'Demo Coffee Co.' })
+  await put(`hosts/${hostId}/settings/store`, { currency: 'USD', name: 'Juniper Street Bakery', tax: { mode: 'manual', pricesIncludeTax: false, origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 8.25, label: 'TX sales tax' }] } })
   await put(`hosts/${hostId}`, { timeZone: ZONE }, { merge: true })
 
   const people = [
-    ['Ada Lovelace', 'ada@example.com'],
-    ['Grace Hopper', 'grace@example.com'],
-    ['Alan Turing', 'alan@example.com'],
-    ['Katherine Johnson', 'katherine@example.com'],
-    ['Linus Pauling', 'linus@example.com'],
-    ['Hedy Lamarr', 'hedy@example.com'],
+    ['Maya Rodriguez', 'maya@example.com'],
+    ['Daniel Kim', 'daniel@example.com'],
+    ['Priya Nair', 'priya@example.com'],
+    ['Renee Fournier', 'renee@example.com'],
+    ['Sam Whitaker', 'sam@example.com'],
+    ['Chloe Martin', 'chloe@example.com'],
+    ['Aaliyah Grant', 'aaliyah@example.com'],
+    ['Tyler Brooks', 'tyler@example.com'],
+    ['Isabel Moreno', 'isabel@example.com'],
+    ['Owen Parker', 'owen@example.com'],
+    ['Naomi Brooks', 'naomi@example.com'],
+    ['Marcus Hale', 'marcus@example.com'],
   ]
   const statuses = ['paid', 'paid', 'partially_fulfilled', 'fulfilled', 'delivered', 'refunded', 'paid', 'fulfilled']
   let number = 1040
   for (let index = 0; index < 16; index += 1) {
     number += 1
-    const [name, email] = people[index % people.length]
+    const [name, email] = people[(index * 5 + (index >> 2)) % people.length]
     const status = statuses[index % statuses.length]
-    const pick = products[index % 4]
+    const pool = products.filter((entry) => entry.type !== 'digital')
+    const pick = pool[(index * 5) % pool.length]
     const quantity = (index % 3) + 1
     const itemsCents = Math.round(pick.price * 100) * quantity
     const shippingCents = 599
@@ -130,7 +154,7 @@ export async function seedCommerce({ put, hostId, now: date, nameSearchFields })
         : {}),
       shippingAddress: { name, line1: '100 Main St', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
       paymentIntentId: `pi_demo_${number}`,
-      livemode: false,
+      livemode: true,
       createdAtMs,
     })
   }
@@ -143,7 +167,7 @@ export async function seedCommerce({ put, hostId, now: date, nameSearchFields })
 
   const weekdays = Object.fromEntries([1, 2, 3, 4, 5, 6].map((day) => [day, [{ start: 9 * 60, end: 17 * 60 }]]))
   await put(`hosts/${hostId}/services/s-cut`, {
-    name: 'Haircut',
+    name: 'Pastry class',
     durationMinutes: 45,
     priceUsd: 45,
     timezone: ZONE,
@@ -151,7 +175,7 @@ export async function seedCommerce({ put, hostId, now: date, nameSearchFields })
     status: 'active',
   })
   await put(`hosts/${hostId}/services/s-color`, {
-    name: 'Color consultation',
+    name: 'Custom cake consultation',
     durationMinutes: 30,
     timezone: ZONE,
     windows: weekdays,
@@ -160,14 +184,14 @@ export async function seedCommerce({ put, hostId, now: date, nameSearchFields })
 
   const at = (day, hour, minute) => zonedAt(now, day, hour, minute)
   const bookings = [
-    ['b-1', 's-cut', 'Haircut', 'Ada Lovelace', 'ada@example.com', 0, 9, 0, { paidAmountCents: 4500, checkedInAtMs: at(0, 8, 55) }],
-    ['b-2', 's-color', 'Color consultation', 'Grace Hopper', 'grace@example.com', 0, 10, 30, { phone: '+1 512 555 0142' }],
-    ['b-3', 's-cut', 'Haircut', 'Alan Turing', 'alan@example.com', 0, 13, 0, { paidAmountCents: 4500 }],
-    ['b-4', 's-cut', 'Haircut', 'Hedy Lamarr', 'hedy@example.com', 0, 15, 15, {}],
-    ['b-5', 's-color', 'Color consultation', 'Katherine Johnson', 'katherine@example.com', 1, 11, 0, {}],
-    ['b-6', 's-cut', 'Haircut', 'Linus Pauling', 'linus@example.com', 2, 14, 0, { paidAmountCents: 4500 }],
-    ['b-7', 's-cut', 'Haircut', 'Ada Lovelace', 'ada@example.com', 3, 9, 45, {}],
-    ['b-8', 's-color', 'Color consultation', 'Alan Turing', 'alan@example.com', 4, 16, 0, { status: 'canceled' }],
+    ['b-1', 's-cut', 'Pastry class', 'Maya Rodriguez', 'maya@example.com', 0, 9, 0, { paidAmountCents: 4500, checkedInAtMs: at(0, 8, 55) }],
+    ['b-2', 's-color', 'Custom cake consultation', 'Daniel Kim', 'daniel@example.com', 0, 10, 30, { phone: '+1 512 555 0142' }],
+    ['b-3', 's-cut', 'Pastry class', 'Priya Nair', 'priya@example.com', 0, 13, 0, { paidAmountCents: 4500 }],
+    ['b-4', 's-cut', 'Pastry class', 'Chloe Martin', 'chloe@example.com', 0, 15, 15, {}],
+    ['b-5', 's-color', 'Custom cake consultation', 'Renee Fournier', 'renee@example.com', 1, 11, 0, {}],
+    ['b-6', 's-cut', 'Pastry class', 'Sam Whitaker', 'sam@example.com', 2, 14, 0, { paidAmountCents: 4500 }],
+    ['b-7', 's-cut', 'Pastry class', 'Maya Rodriguez', 'maya@example.com', 3, 9, 45, {}],
+    ['b-8', 's-color', 'Custom cake consultation', 'Priya Nair', 'priya@example.com', 4, 16, 0, { status: 'canceled' }],
   ]
   for (const [id, serviceId, serviceName, name, email, day, hour, minute, extra] of bookings) {
     const startsAtMs = at(day, hour, minute)
