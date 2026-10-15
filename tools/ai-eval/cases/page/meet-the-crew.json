@@ -84,6 +84,49 @@
   ],
   "controls": [
     {
+      "why": "The shape the live golden check of 2026-10-15 recorded: the customer quotes written as ONE Grid item placing the Testimonial instance with {{1}} and {{2}} as its quote and name, and no \"repeat\" to fill them, so a visitor read the placeholders as written (rule 14, AGL-3827).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "words"] },
+            "intro": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Meet the crew" }, "nodes": ["title", "intro-body"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Meet the crew" } },
+            "intro-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Six roofers, most with more than ten years on Harbor County roofs." } },
+            "words": { "componentId": "section", "props": { "element": "section", "ariaLabel": "What customers say" }, "nodes": ["words-title", "words-row"] },
+            "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
+            "words-row": { "componentId": "muiGrid", "props": { "container": true, "spacing": 3 }, "nodes": ["cell"] },
+            "cell": { "componentId": "muiGrid", "props": { "size": "xs:12 md:6" }, "nodes": ["quote"] },
+            "quote": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "{{1}}", "name": "{{2}}" } } }
+          }
+        }
+      },
+      "fails": ["readable"]
+    },
+    {
+      "why": "A template's slots left where the words belong, in other syntaxes: a quote of [[Customer quote]], a name of {{customer_name}} and a photo described as <Your crew photo>. Each would reach a visitor as written (rule 14, AGL-3827).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "words"] },
+            "intro": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Meet the crew" }, "nodes": ["title", "intro-body", "crew-photo"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Meet the crew" } },
+            "intro-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Six roofers, most with more than ten years on Harbor County roofs." } },
+            "crew-photo": { "componentId": "image", "props": { "src": "media:host-harbor/asset-team", "alt": "<Your crew photo>" } },
+            "words": { "componentId": "section", "props": { "element": "section", "ariaLabel": "What customers say" }, "nodes": ["words-title", "words-row"] },
+            "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
+            "words-row": { "componentId": "muiGrid", "props": { "container": true, "spacing": 3 }, "nodes": ["cell-dana", "cell-next"] },
+            "cell-dana": { "componentId": "muiGrid", "props": { "size": "xs:12 md:6" }, "nodes": ["quote-dana"] },
+            "cell-next": { "componentId": "muiGrid", "props": { "size": "xs:12 md:6" }, "nodes": ["quote-next"] },
+            "quote-dana": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "They found the leak two other companies missed.", "name": "Dana, Harbor Point" } } },
+            "quote-next": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "[[Customer quote]]", "name": "{{customer_name}}" } } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
       "why": "The customer quotes DRAWN once with \"repeat\", on a site that keeps reusable components, where a repeated item places an instance of its component (rule 1, AGL-3053, AGL-3024).",
       "answer": {
         "tree": {

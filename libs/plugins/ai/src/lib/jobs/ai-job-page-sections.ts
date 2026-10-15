@@ -39,6 +39,7 @@ import {
   aiSettleDisagreeingNodes,
   aiSettleGridItems,
   aiSettleMechanicalRules,
+  aiSettlePlaceholderItems,
   detectCutLines,
   detectDisagreeingNodes,
   isAiLinkElement,
@@ -673,6 +674,18 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       } else if (!target && input.linkTarget && !inForm(id)) {
         node['props'] = { ...props, screenId: input.linkTarget }
       }
+    }
+    // An item of a list that shows only placeholders, such as a testimonial
+    // whose quote is `{{1}}`, is taken out where the list keeps a real one
+    // (AGL-3827); any other placeholder is the re-ask's.
+    const filled = aiSettlePlaceholderItems(
+      { rootId: sectionId, nodes: sectionNodes as unknown as Record<string, AiDoctrineNode> },
+      'page',
+      input.context,
+    )
+    for (const id of Object.keys(sectionNodes)) {
+      if (filled.nodes[id]) sectionNodes[id] = filled.nodes[id] as unknown as Record<string, unknown>
+      else delete sectionNodes[id]
     }
     const section: AiPageSection = { rootId: sectionId, nodes: sectionNodes as unknown as NodesMap, load: null }
 

@@ -928,7 +928,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // enumeration is kept deliberately: a schema that refuses a page outside
       // the batch is worth more than a prefix shared across batches.
       'seo-fixes': { prefixTokens: 921, minimum: 512, caches: true, toolsStable: false },
-      'eval-grade': { prefixTokens: 2_007, minimum: 512, caches: true, toolsStable: true },
+      // The grader's copy criterion is up 44 at AGL-3827: a template placeholder
+      // left where words belong grades a 1, and a bracketed fact is not filler.
+      'eval-grade': { prefixTokens: 2_051, minimum: 512, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
