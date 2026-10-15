@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **web:** aglyn.com and app.aglyn.com serve apple-app-site-association and assetlinks.json from env, for the native apps' passkeys and links ([AGL-3817](https://linear.app/aglyn/issue/AGL-3817))
 - **native:** android App Check through Play Integrity, Kotlin token plumbing ([AGL-3818](https://linear.app/aglyn/issue/AGL-3818))
 - **native:** apple apps send Firebase App Check tokens via App Attest and DeviceCheck ([AGL-3818](https://linear.app/aglyn/issue/AGL-3818))
 - **tools:** seed the store-review workspace with the Juniper Street data ([AGL-3812](https://linear.app/aglyn/issue/AGL-3812))
@@ -84,6 +85,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **native:** regenerate the staff screens for the soft-bounce suppression reason ([AGL-3820](https://linear.app/aglyn/issue/AGL-3820))
 - **native:** stripe terminal ships only in aglyn pos, and the guard holds it there ([AGL-3815](https://linear.app/aglyn/issue/AGL-3815))
 - **tools:** pin the review store's product photos and leave existing docs' list fields ([AGL-3812](https://linear.app/aglyn/issue/AGL-3812))
 - **email:** name the soft-bounce staff label without the brand ([AGL-3814](https://linear.app/aglyn/issue/AGL-3814))
