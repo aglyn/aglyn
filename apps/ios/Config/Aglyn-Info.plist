@@ -34,6 +34,9 @@
 	<string>$(AGLYN_DEBUG_PASSWORD)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
+	<!-- HTTPS (TLS) only, which is exempt: no export-compliance question per upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

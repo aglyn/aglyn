@@ -48,12 +48,12 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "ad-conversions",
-      contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"]],
+      contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"], "widgets": ["ad-conversions.service.card"]],
       register: AglynAdConversionsPlugin.registerAdConversionsNative
     ),
     NativePluginManifestEntry(
       id: "ai",
-      contributes: ["screens": ["ai.allotment", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"], "widgets": ["ai.seo-start", "ai.site-memory"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
+      contributes: ["screens": ["ai.allotment", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"], "widgets": ["ai.seo-audit", "ai.seo-start", "ai.site-memory"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
       register: AglynAiPlugin.registerAINative
     ),
     NativePluginManifestEntry(
@@ -63,7 +63,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "commerce",
-      contributes: ["screens": ["commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.glance", "commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
+      contributes: ["screens": ["commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productMedia", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.glance", "commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
       register: AglynCommercePlugin.registerCommerceNative
     ),
     NativePluginManifestEntry(
@@ -123,7 +123,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "live-chat",
-      contributes: ["screens": ["live-chat.settings"]],
+      contributes: ["screens": ["live-chat.settings"], "widgets": ["live-chat.settings.card"]],
       register: AglynLiveChatPlugin.registerLiveChatNative
     ),
     NativePluginManifestEntry(
@@ -143,7 +143,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "marketing-platforms",
-      contributes: ["screens": ["marketing-platforms.platform", "marketing-platforms.service"]],
+      contributes: ["screens": ["marketing-platforms.platform", "marketing-platforms.service"], "widgets": ["marketing-platforms.service.card"]],
       register: AglynMarketingPlatformsPlugin.registerMarketingPlatformsNative
     ),
     NativePluginManifestEntry(
@@ -208,7 +208,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "zapier",
-      contributes: ["screens": ["zapier.connections"]],
+      contributes: ["screens": ["zapier.connections"], "widgets": ["zapier.connections.card"]],
       register: AglynZapierPlugin.registerZapierNative
     ),
   ]

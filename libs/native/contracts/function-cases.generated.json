@@ -19487,6 +19487,864 @@
         }
       ]
     },
+    "paidMediaConfirmation": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "full"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. Nothing else uses it. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "partial"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. We could not check everywhere it might be used, so something else could still rely on it. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "failed"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. We could not check where else it is used. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "full"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "partial"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "failed"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "full"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "partial"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "failed"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "full"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "partial"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "failed"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "full",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. Nothing else uses it. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "partial",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. We could not check everywhere it might be used, so something else could still rely on it. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "failed",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. We could not check where else it is used. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "full",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "partial",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "failed",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "full",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "partial",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "failed",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "full",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "partial",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "failed",
+              "kind": "video"
+            }
+          ],
+          "result": "Members videos are private: buyers play them through a link that expires, and nobody else can open them. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "full",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. Nothing else uses it. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "partial",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. We could not check everywhere it might be used, so something else could still rely on it. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [],
+              "checked": "failed",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. We could not check where else it is used. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "full",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "partial",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "failed",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “Home”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "full",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "partial",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "pg1",
+                  "name": "Home",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "plugin",
+                  "id": "p2",
+                  "name": "Another product",
+                  "hostId": "host-1",
+                  "collectionId": "products"
+                }
+              ],
+              "checked": "failed",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “Home”, “Another product”, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "full",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "partial",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        },
+        {
+          "args": [
+            {
+              "others": [
+                {
+                  "kind": "page",
+                  "id": "a",
+                  "name": "About",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "b",
+                  "name": "Pricing",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "c",
+                  "name": "Contact",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "d",
+                  "name": "Blog",
+                  "hostId": "host-1"
+                },
+                {
+                  "kind": "page",
+                  "id": "e",
+                  "name": "Team",
+                  "hostId": "host-1"
+                }
+              ],
+              "checked": "failed",
+              "kind": "download"
+            }
+          ],
+          "result": "Paid downloads are private: buyers get a link that expires, and nobody else can open the file. It is also used on “About”, “Pricing”, “Contact” and 2 more, and it stops showing there. Any public link to it that was already shared stops working too."
+        }
+      ]
+    },
+    "paidMediaScopeBody": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "cases": [
+        {
+          "args": [
+            "host-1"
+          ],
+          "result": {
+            "hostId": "host-1"
+          }
+        },
+        {
+          "args": [
+            "org:acme"
+          ],
+          "result": {
+            "orgId": "acme"
+          }
+        },
+        {
+          "args": [
+            "org:acme:host-1"
+          ],
+          "result": {
+            "orgId": "acme"
+          }
+        },
+        {
+          "args": [
+            "org:"
+          ],
+          "result": {
+            "orgId": ""
+          }
+        }
+      ]
+    },
     "parseBookingWindows": {
       "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
       "cases": [
@@ -49721,6 +50579,130 @@
             }
           ],
           "result": "Installed before update tracking — version unknown"
+        }
+      ]
+    },
+    "usesBesideProduct": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "kind": "plugin",
+                "id": "p1",
+                "name": "Training program",
+                "hostId": "host-1",
+                "collectionId": "products"
+              },
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              },
+              {
+                "kind": "plugin",
+                "id": "p1",
+                "name": "Training program",
+                "hostId": "host-2",
+                "collectionId": "products"
+              }
+            ],
+            {
+              "hostId": "host-1",
+              "productId": "p1"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "host-1",
+              "id": "pg1",
+              "kind": "page",
+              "name": "Home"
+            },
+            {
+              "collectionId": "products",
+              "hostId": "host-1",
+              "id": "p2",
+              "kind": "plugin",
+              "name": "Another product"
+            },
+            {
+              "collectionId": "products",
+              "hostId": "host-2",
+              "id": "p1",
+              "kind": "plugin",
+              "name": "Training program"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "plugin",
+                "id": "p1",
+                "name": "Training program",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            {
+              "hostId": "host-1"
+            }
+          ],
+          "result": [
+            {
+              "collectionId": "products",
+              "hostId": "host-1",
+              "id": "p1",
+              "kind": "plugin",
+              "name": "Training program"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            {
+              "hostId": "host-1",
+              "productId": "p1"
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "plugin",
+                "id": "p1",
+                "name": "Training program",
+                "hostId": "host-1",
+                "collectionId": "products"
+              },
+              {
+                "kind": "plugin",
+                "id": "p1",
+                "name": "Training program",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            {
+              "hostId": "host-1",
+              "productId": "p1"
+            }
+          ],
+          "result": []
         }
       ]
     },

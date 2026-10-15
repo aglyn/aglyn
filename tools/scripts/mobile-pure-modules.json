@@ -402,6 +402,10 @@
       "why": "Pickup and local delivery on an order (AGL-3624): the statuses, labels, transitions and queue fields the native Aglyn app shows and queries; no imports."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "why": "What an author is told before a file becomes private paid media (the places that use it, and the sentence confirmed) and which library a media route is asked of. Pure string and list work; the native product page replays it from function-cases.generated.json."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
       "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
     },

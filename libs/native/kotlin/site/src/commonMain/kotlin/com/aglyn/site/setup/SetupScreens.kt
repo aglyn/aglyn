@@ -59,6 +59,7 @@ import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.LocalSeoZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.NativeWidget
 import com.aglyn.pluginhost.SeoZone
 import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
@@ -109,12 +110,18 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
   val hostId = context.hostId ?: return
   val host by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
   val api = remember(hostId, context.api, context.writer) { HostSettingsApi(context.api, context.writer, hostId) }
+  val org by remember(context.orgId, context.firestore) { context.firestore.observeDoc("orgs/${context.orgId}") }.collectAsState(Live.Loading)
+  // The cards plugins running on this site put in the `hostSettings` zone: the Integrations section exists while there is one.
+  val running = ((host as? Live.Ready)?.value?.data)?.let { hostData ->
+    (org as? Live.Ready)?.let { runningPlugins(it.value?.data, hostData) }
+  }
+  val integrations = running?.let { integrationWidgets(context.slotWidgets(INTEGRATIONS_SLOT), it) }.orEmpty()
   AglynListDetail(
     initialSelected = initialSection?.let { SetupSection.of(it).id },
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ListHeader("Setup")
-        SetupSection.entries.forEach { section ->
+        SetupSection.entries.filter { it != SetupSection.INTEGRATIONS || integrations.isNotEmpty() }.forEach { section ->
           AglynListItem(
             title = section.title,
             supporting = section.supporting,
@@ -150,6 +157,7 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
                 SetupSection.TRACKING -> TrackingSection(doc.data, api, canEdit)
                 SetupSection.THEME -> ThemeSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.EMAILS -> EmailsSection(context, hostId, api, canEdit)
+                SetupSection.INTEGRATIONS -> IntegrationsSection(context, integrations)
               }
             }
           }
@@ -335,11 +343,12 @@ private fun LanguagesCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit
 private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
   val c = Contracts
   // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
-  SeoCheckCard(context, hostId, host)
+  var checkedKeywords by remember { mutableStateOf("") }
+  SeoCheckCard(context, hostId, host, onChecked = { checkedKeywords = it })
   // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
   val draft = remember { FormDraft() }
   @Suppress("UNCHECKED_CAST")
-  val zone = remember(host, draft) { SeoZone(host.at("seo") as? Map<String, Any?>, draft::propose) }
+  val zone = remember(host, draft, checkedKeywords) { SeoZone(host.at("seo") as? Map<String, Any?>, checkedKeywords, draft::propose) }
   CompositionLocalProvider(LocalSeoZone provides zone) { SlotCards(context, "hostSeo") }
   HostTextCard(
     "Search appearance",
@@ -908,6 +917,25 @@ private fun NumberField(range: ThemeRange, value: Double?, enabled: Boolean, onV
     supporting = "${range.min}–${range.max}; empty uses the theme's own",
     keyboardType = KeyboardType.Number,
   )
+}
+
+// --- Integrations ---------------------------------------------------------
+
+/**
+ * The tools this site connects to (AGL-3711): a card for each plugin running on the site that has one in the
+ * `hostSettings` zone, which opens the plugin's own settings screen. The page never names the plugins.
+ */
+@Composable
+private fun IntegrationsSection(context: NativePluginContext, widgets: List<NativeWidget>) {
+  Text(
+    "Connect this site to the tools you already use.",
+    style = MaterialTheme.typography.bodyMedium,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+  )
+  if (widgets.isEmpty()) NoticeBanner("Nothing to connect for this site yet.", StatusTone.INFO)
+  widgets.forEach { widget ->
+    Box(Modifier.fillMaxWidth().testTag("zone-widget-${widget.id}")) { widget.content(context) }
+  }
 }
 
 // --- Emails ---------------------------------------------------------------

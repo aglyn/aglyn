@@ -152,8 +152,43 @@ model (`libs/native/kotlin/camera`, provided to the kit's `BarcodeScanSheet`
 through `LocalCameraScanner`). Each code goes through the same barcode-then-SKU
 lookup as a keyboard-wedge scan, and the sheet stays open for the next item.
 
-Release builds take no emulator host and default the console to
-`https://app.aglyn.com`; `AglynConfig.problems()` logs anything missing.
+Release builds take no emulator host and default to the production project
+(`aglyn-main`: each app's Firebase Android app id, the Android API key, sender
+id, `aglyn-main.firebaseapp.com`) and the console at `https://app.aglyn.com`,
+all public client config; `-Paglyn.<name>` overrides any of it.
+`AglynConfig.problems()` logs anything missing.
+
+## Release to private testing
+
+`tools/scripts/native-release.mjs android-bundle <app|pos>` runs
+`:<module>:bundleRelease` under the shared Gradle lock, signs it with the
+upload key and copies the bundle to
+`/private/tmp/aglyn-release/<Aglyn|AglynPOS>-android-<versionCode>.aab`, then
+checks the signature with `jarsigner -verify`:
+
+```bash
+node tools/scripts/native-release.mjs android-bundle app
+node tools/scripts/native-release.mjs android-bundle pos
+```
+
+- **versionCode** is the minutes since 1970 (UTC), passed as
+  `-Paglyn.versionCode`, so every bundle outnumbers the last and stays under
+  Play's 2,100,000,000. A build without it is versionCode 1.
+- **The upload key** is one keystore for both apps, kept outside the repo at
+  `~/.aglyn/release/aglyn-upload.jks` (alias `aglyn-upload`, RSA 4096, valid
+  to 2056). Its password is in the login Keychain (service
+  `aglyn-android-upload-keystore`, account `aglyn-upload`); the script reads it
+  and hands it to Gradle through the environment (`AGLYN_UPLOAD_KEYSTORE`,
+  `AGLYN_UPLOAD_KEY_ALIAS`, `AGLYN_UPLOAD_STORE_PASSWORD`,
+  `AGLYN_UPLOAD_KEY_PASSWORD`), never the command line, with the configuration
+  cache off so it is never written to disk. Without `AGLYN_UPLOAD_KEYSTORE` a
+  release build is simply unsigned, which is what CI builds.
+- Upload certificate fingerprints (registered on both Firebase Android apps):
+  SHA-1 `AE:2A:2F:D3:A5:71:4E:FC:DB:20:AF:0B:89:7C:67:A1:C8:69:62:1F`,
+  SHA-256 `7C:5A:6E:56:5F:02:61:63:65:25:E3:8B:FB:F0:48:C0:E8:19:A6:E0:28:29:B2:E2:05:32:D0:C5:31:D7:51:3E`.
+- Play App Signing re-signs each app with Google's app signing key. Its
+  SHA-1 and SHA-256 (Play Console → Test and release → App integrity) also
+  go on the Firebase Android app and in `assetlinks.json`.
 
 ## Test
 
@@ -171,18 +206,21 @@ and properties files from the plugin's `mobile.android` block; the apps load
 
 ## What Zach owes
 
-- Firebase Android app registrations for `com.aglyn.app` and `com.aglyn.pos`
-  (their app ids go into the release build fields), and FCM enabled on the project.
-- Google Play Console apps `com.aglyn.app` and `com.aglyn.pos`, with Play App
-  Signing and an upload key for each.
+Done: the Firebase Android app registrations for `com.aglyn.app` and
+`com.aglyn.pos` in `aglyn-main` (their app ids are the release defaults), and
+the upload key with its fingerprints on both.
+
+- Google Play Console apps `com.aglyn.app` and `com.aglyn.pos`, enrolled in Play
+  App Signing with the upload certificate above, and an internal testing track;
+  then each app signing key's SHA-1 and SHA-256 on its Firebase Android app.
+- FCM enabled on the project.
 - Stripe Terminal live mode, and Tap to Pay on Android for the POS app.
-- `assetlinks.json` on the console origin, with both apps' signing certificate
-  fingerprints, so console links open the apps.
-  Passkeys need one more on the apex, `https://aglyn.com/.well-known/assetlinks.json`, with the
-  `delegate_permission/common.get_login_creds` relation for `com.aglyn.app` and its signing certificate (template:
-  `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the certificate's hash is
-  listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden. The fingerprint is
-  the placeholder.
+- `assetlinks.json` at `https://app.aglyn.com/.well-known/assetlinks.json`
+  (app links, both apps) and `https://aglyn.com/.well-known/assetlinks.json`
+  (passkeys, `com.aglyn.app`), with the Play app signing certificates' SHA-256.
+  Passkeys also need the `delegate_permission/common.get_login_creds` relation for `com.aglyn.app` in the apex
+  file (template: `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the
+  certificate's hash is listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden.
 - Google sign-in for "Connect Google": the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId`) and an
   Android OAuth client in the same Google Cloud project for `com.aglyn.app` and its release signing certificate's SHA-1;
   on Windows a Desktop OAuth client (`AGLYN_GOOGLE_DESKTOP_CLIENT_ID` and `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET`). The

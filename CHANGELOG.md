@@ -9,6 +9,45 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.254 — 2026-10-15
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.253...v1.0.0-beta.254)
+
+### Added
+
+- **native:** a file staff disabled says so in the library and on its page ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** release script archives, uploads and bundles the apps ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **native:** android upload signing, increasing versionCode and production defaults ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **native:** apple release signing, entitlements and the production config ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **ai:** a Free blog's guided start writes one first post ([AGL-3798](https://linear.app/aglyn/issue/AGL-3798))
+- **native:** setup gets an integrations section for the plugins running on the site
+- **native:** a film is read on the device before it is uploaded, so it has a poster
+- **native:** a product's images, digital files and members videos ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **native:** the AI plugin proposes SEO fixes under the SEO check
+
+### Fixed
+
+- **signup:** an unacknowledged Firestore write no longer holds a sign-up for a minute ([AGL-3806](https://linear.app/aglyn/issue/AGL-3806))
+- **auth:** follow a peer tab's sign-in into the user's pool ([AGL-3803](https://linear.app/aglyn/issue/AGL-3803))
+- **native:** the release script prints each output's size ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **native:** release lint passes, fragment 1.3+ for the activity result api ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+- **seo:** render the Local business card's hours picker ([AGL-3801](https://linear.app/aglyn/issue/AGL-3801))
+- **commerce:** the console walk-in refuses a stay the quote refuses ([AGL-3794](https://linear.app/aglyn/issue/AGL-3794))
+- **native:** the image editor keeps its save buttons in view and has a UI test
+
+### Changed
+
+- **commerce:** paid media's words and rules in the model, for the apps to replay ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+
+<details>
+<summary>Also in this release: 1 chore, 1 ci, 1 legal</summary>
+
+- **legal:** declare www.apple.com as a plist DTD identifier, never fetched (AGL-3800)
+- **native:** both apps share one package build; self-host skips script-only PRs ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
+- **linear:** raise the issue ceiling to AGL-3799, read off Linear ([AGL-3799](https://linear.app/aglyn/issue/AGL-3799), [AGL-3798](https://linear.app/aglyn/issue/AGL-3798))
+
+</details>
+
 ## v1.0.0-beta.253 — 2026-10-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.252...v1.0.0-beta.253)

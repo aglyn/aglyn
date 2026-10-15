@@ -257,7 +257,7 @@ A widget may name a `slot` (`r.widget(…, slot: "hostSeo")`) and then renders i
 page's zone instead of Home: the native twin of the console's `PluginWidgetSlot`. A core page that hosts a zone draws
 `context.slotWidgets(slot)` and never names the plugins that contribute. Site setup hosts three (AGL-3668):
 `hostBusinessProfile` (what Aglyn AI learned from the site's edits), `hostSeo` under the SEO check (the listing the
-guided start proposed), and `hostSettings`. The SEO page also hands its widgets a `SeoZone` (Kotlin
+guided start proposed), and `hostSettings`, which Setup's Integrations section draws for the plugins running on the site (a plugin's settings screen gets its card from its spec's `cardSlot`, so email platforms, Zapier, live chat and ad conversions each need no Kotlin or Swift of their own). The SEO page also hands its widgets a `SeoZone` (Kotlin
 `LocalSeoZone`, Apple the `seoZone` environment value): the stored `seo` settings, and `proposeDraft(values, key)`,
 which puts values in the form below as unsaved edits (the same key twice applies once; the form's Save is the write).
 
@@ -948,6 +948,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `siteTemplate` (Backup & restore: a plugin that can publish the site as a template), `transferStep` (the import wizard's review: a step a plugin adds for its resource), `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
+| `cardSlot` | (plugins) a core page's widget slot (`hostSettings`) the screen also puts a one-row card in, named `<screen id>.card` and declared under `widgets`; the card opens the screen with `pluginId` set, so a `requires` of `params.pluginId == <plugin>` holds from either door |
 | `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503; `filters`: `{ field, op, value }` clauses for a staff list route, each kept when its value template is not empty), or `{ doc }` / `{ query: { collection, where, orderBy, limit, aggregate }, more }` for a Firestore read (below: `aggregate: { count: true }` answers `{ count }`, the server's tally, as the console's `getCountFromServer` does), `late: true` on any load to run it after the others, with their answers under `data` (a read keyed by something another read found), `each: <rows>` to run it once per row of an earlier load, `{ compute, args }` for a pure function over what has loaded, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |

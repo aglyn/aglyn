@@ -218,6 +218,15 @@ struct ProductDetailView: View {
           .accessibilityIdentifier("product-details")
         }
         ToolbarItem(placement: .secondaryAction) {
+          // The pictures, and a digital product's downloads and members videos.
+          Button {
+            context.navigate(commerceProductMediaScreen, ["productId": productID])
+          } label: {
+            Label("Images and files", systemImage: "photo.on.rectangle")
+          }
+          .accessibilityIdentifier("product-media")
+        }
+        ToolbarItem(placement: .secondaryAction) {
           Button {
             adjusting = true
           } label: {

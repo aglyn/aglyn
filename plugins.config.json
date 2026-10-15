@@ -472,7 +472,7 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
@@ -2789,6 +2789,7 @@
             "ai.import.productCopy"
           ],
           "widgets": [
+            "ai.seo-audit",
             "ai.seo-start",
             "ai.site-memory"
           ],
@@ -3292,7 +3293,8 @@
           "screens": [
             "marketing-platforms.service",
             "marketing-platforms.platform"
-          ]
+          ],
+          "widgets": ["marketing-platforms.service.card"]
         }
       },
       "package": "@aglyn/plugins-marketing-platforms",
@@ -3354,7 +3356,8 @@
           "screens": [
             "ad-conversions.service",
             "ad-conversions.provider"
-          ]
+          ],
+          "widgets": ["ad-conversions.service.card"]
         }
       },
       "package": "@aglyn/plugins-ad-conversions",
@@ -3420,7 +3423,8 @@
         "contributes": {
           "screens": [
             "zapier.connections"
-          ]
+          ],
+          "widgets": ["zapier.connections.card"]
         }
       },
       "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
@@ -4015,7 +4019,8 @@
         "contributes": {
           "screens": [
             "live-chat.settings"
-          ]
+          ],
+          "widgets": ["live-chat.settings.card"]
         }
       },
       "$comment": "AGL-3698: the merchant's OWN Tidio or LiveChat account on their site's pages, by the public key or license number its install code carries (not a secret; stored in hosts/{hostId}/pluginSettings/live-chat, written only by the console route /api/live-chat/settings, which a site admin reaches). tenantApi registers the page enricher: a page the chat shows on gets a `liveChat` slice, every other page nothing, so the site bundle loads only where the chat is. The site runtime draws a launcher once the page is idle and loads the vendor's widget only on a press, or for a site that chose 'load with the page', once idle AND for a visitor whose recorded consent grants analytics. `siteCsp` names the vendor hosts the tenant policy admits for a site that runs it. Off for a site until that site turns it on; no workspace switch, no release flag, no env: the merchant's own key is all it needs. Every plan.",

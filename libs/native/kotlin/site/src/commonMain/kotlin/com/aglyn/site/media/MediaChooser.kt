@@ -81,7 +81,8 @@ fun MediaChooserDialog(
   context: NativePluginContext,
   onChoose: (ChosenMedia) -> Unit,
   onDismiss: () -> Unit,
-  kind: String = "image",
+  kind: String? = "image",
+  allowPrivate: Boolean = false,
   /** The workspace's library alone, whichever site is picked: a workspace setting (its logo, its favicon) is chosen from the workspace's files, as the console's org media browser does. */
   workspaceOnly: Boolean = false,
 ) {
@@ -114,7 +115,7 @@ fun MediaChooserDialog(
         if (scope == null) {
           EmptyState("Pick a workspace first", icon = AglynIcons.named("photo_library"))
         } else {
-          MediaScopeGate(context, scope) { tokens -> MediaChooserGrid(context, scope, tokens, kind, onChoose) }
+          MediaScopeGate(context, scope) { tokens -> MediaChooserGrid(context, scope, tokens, kind, allowPrivate, onChoose) }
         }
       }
     }
@@ -122,7 +123,7 @@ fun MediaChooserDialog(
 }
 
 @Composable
-private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, scopeTokens: List<String>?, kind: String, onChoose: (ChosenMedia) -> Unit) {
+private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, scopeTokens: List<String>?, kind: String?, allowPrivate: Boolean, onChoose: (ChosenMedia) -> Unit) {
   val coroutines = rememberCoroutineScope()
   val model = remember(scope, context.firestore) { MediaListModel(scope, context.firestore, coroutines, initialType = kind) }
   LaunchedEffect(model, scopeTokens) { model.start(scopeTokens) }
@@ -151,7 +152,7 @@ private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, sc
           horizontalArrangement = Arrangement.spacedBy(space(1f)),
           verticalArrangement = Arrangement.spacedBy(space(1f)),
         ) {
-          items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, selected = false) { if (item.private) refusal = PRIVATE_FILE_REFUSAL else onChoose(ChosenMedia(item, scope)) } }
+          items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, selected = false) { if (item.private && !allowPrivate) refusal = PRIVATE_FILE_REFUSAL else onChoose(ChosenMedia(item, scope)) } }
           if (model.hasMore) item(span = { GridItemSpan(maxLineSpan) }) { SkeletonList(rows = 1) }
         }
       }

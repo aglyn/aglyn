@@ -50,12 +50,12 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "ad-conversions",
-            contributes = mapOf("screens" to listOf("ad-conversions.provider", "ad-conversions.service")),
+            contributes = mapOf("screens" to listOf("ad-conversions.provider", "ad-conversions.service"), "widgets" to listOf("ad-conversions.service.card")),
             register = ::registerAdConversionsNative,
         ),
         NativePluginManifestEntry(
             id = "ai",
-            contributes = mapOf("screens" to listOf("ai.allotment", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"), "widgets" to listOf("ai.seo-start", "ai.site-memory"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
+            contributes = mapOf("screens" to listOf("ai.allotment", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"), "widgets" to listOf("ai.seo-audit", "ai.seo-start", "ai.site-memory"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
             register = ::registerAINative,
         ),
         NativePluginManifestEntry(
@@ -65,7 +65,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "commerce",
-            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.glance", "commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.orders-page", "commerce.products-page")),
+            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productMedia", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.glance", "commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.orders-page", "commerce.products-page")),
             register = ::registerCommerceNative,
         ),
         NativePluginManifestEntry(
@@ -125,7 +125,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "live-chat",
-            contributes = mapOf("screens" to listOf("live-chat.settings")),
+            contributes = mapOf("screens" to listOf("live-chat.settings"), "widgets" to listOf("live-chat.settings.card")),
             register = ::registerLiveChatNative,
         ),
         NativePluginManifestEntry(
@@ -145,7 +145,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "marketing-platforms",
-            contributes = mapOf("screens" to listOf("marketing-platforms.platform", "marketing-platforms.service")),
+            contributes = mapOf("screens" to listOf("marketing-platforms.platform", "marketing-platforms.service"), "widgets" to listOf("marketing-platforms.service.card")),
             register = ::registerMarketingPlatformsNative,
         ),
         NativePluginManifestEntry(
@@ -210,7 +210,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "zapier",
-            contributes = mapOf("screens" to listOf("zapier.connections")),
+            contributes = mapOf("screens" to listOf("zapier.connections"), "widgets" to listOf("zapier.connections.card")),
             register = ::registerZapierNative,
         ),
     )
