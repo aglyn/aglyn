@@ -1495,6 +1495,16 @@
     },
     {
       "alwaysOnForWorkspace": true,
+      "description": "Your buyers and their recent orders in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and contact form messages as tickets.",
+      "id": "help-desks",
+      "label": "Help desks",
+      "siteOff": {
+        "keeps": "The connections are kept, and everything already sent stays in the help desk.",
+        "stops": "Switching Help desks off for this site stops its buyers, orders and contact form messages reaching the help desks it connected."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
       "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
       "id": "ad-conversions",
       "label": "Ad conversions",
