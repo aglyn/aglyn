@@ -78,6 +78,11 @@ private sealed interface ArtifactDialog {
   data class Duplicate(val row: ArtifactRow) : ArtifactDialog
   data class Delete(val row: ArtifactRow, val siblings: List<ArtifactRow> = emptyList()) : ArtifactDialog
   data class DeleteBundle(val lead: ArtifactRow, val pages: List<ArtifactRow>) : ArtifactDialog
+  /** The templates of this list's kind to start a new one from. */
+  data object Gallery : ArtifactDialog
+  /** Use this template: a page, component or layout (or a starter site's pages) made from it. */
+  data class Use(val row: ArtifactRow) : ArtifactDialog
+  data class SaveTemplate(val row: ArtifactRow) : ArtifactDialog
 }
 
 /**
@@ -104,6 +109,9 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
       Column(Modifier.fillMaxSize()) {
         ListHeader(kind.title) {
+          if (kind != ArtifactKind.TEMPLATE) {
+            OutlinedButton(onClick = { dialog = ArtifactDialog.Gallery }, enabled = canEdit, modifier = Modifier.testTag("from-template-${kind.singular}")) { Text("From a template") }
+          }
           Button(onClick = { dialog = ArtifactDialog.Create }, enabled = canEdit, modifier = Modifier.testTag("add-${kind.singular}")) {
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("New ${kind.singular}", Modifier.padding(start = space(1f)))
@@ -149,7 +157,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
   ArtifactDialogs(context, hostId, kind, dialog, api, runner, onCreated = { id ->
     model.reload()
     context.navigate(kind.screen, mapOf("id" to id))
-  }, onDeleted = model::drop) { dialog = null }
+  }, onDeleted = model::drop, onOpen = { dialog = it }) { dialog = null }
 }
 
 private fun emptyBody(kind: ArtifactKind) = when (kind) {
@@ -217,6 +225,7 @@ private fun ArtifactDetail(
               buildList {
                 add(MenuAction("details", "Edit details", "edit", enabled = canEdit) { open(ArtifactDialog.Details(row)) })
                 if (!row.isStarterBundle) add(MenuAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(ArtifactDialog.Duplicate(row)) })
+                if (kind != ArtifactKind.TEMPLATE) add(MenuAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(ArtifactDialog.SaveTemplate(row)) })
                 add(
                   MenuAction("delete", if (row.isStarterBundle) "Delete bundle" else "Delete", "delete", destructive = true, enabled = canEdit) {
                     open(if (row.isStarterBundle) ArtifactDialog.DeleteBundle(row, siblings.ifEmpty { listOf(row) }) else ArtifactDialog.Delete(row))
@@ -258,6 +267,12 @@ private fun ArtifactDetail(
             OutlinedButton(onClick = { previewPath?.let { context.openBesigner(it, ConsoleScope.SITE) } }, enabled = previewPath != null, modifier = Modifier.testTag("artifact-preview")) {
               Icon(AglynIcons.named("visibility"), contentDescription = null)
               Text("Preview", Modifier.padding(start = space(1f)))
+            }
+            if (kind == ArtifactKind.TEMPLATE) {
+              Button(onClick = { open(ArtifactDialog.Use(row)) }, enabled = canEdit, modifier = Modifier.testTag("use-template")) {
+                Icon(AglynIcons.named("add"), contentDescription = null)
+                Text(if (row.isStarterBundle) "Use this starter site" else "Use this template", Modifier.padding(start = space(1f)))
+              }
             }
           }
           if (kind == ArtifactKind.TEMPLATE) {
@@ -410,18 +425,44 @@ private fun ArtifactDialogs(
   runner: ActionRunner,
   onCreated: (String) -> Unit,
   onDeleted: (String) -> Unit,
+  onOpen: (ArtifactDialog) -> Unit,
   close: () -> Unit,
 ) {
   when (dialog) {
     null -> Unit
+    ArtifactDialog.Gallery -> TemplateGalleryDialog(context, hostId, if (kind == ArtifactKind.LAYOUT) "layout" else "component", onChoose = { onOpen(ArtifactDialog.Use(it)) }, onDismiss = close)
+    is ArtifactDialog.Use -> UseTemplateDialog(
+      context,
+      hostId,
+      dialog.row,
+      onDone = { usedKind, id ->
+        close()
+        val (screen, params) = templateUseDestination(usedKind, id)
+        context.navigate(screen, params)
+      },
+      onDismiss = close,
+    )
+    is ArtifactDialog.SaveTemplate -> SaveAsTemplateDialog(
+      context,
+      hostId,
+      kind = if (kind == ArtifactKind.LAYOUT) "layout" else "component",
+      defaultName = dialog.row.name,
+      load = { templates -> if (kind == ArtifactKind.LAYOUT) templates.layoutSource(dialog.row.id, dialog.row.versionId) else templates.componentSource(dialog.row.id) },
+      onSaved = { message ->
+        runner.notice = message
+        close()
+      },
+      onDismiss = close,
+    )
     ArtifactDialog.Create -> {
       var name by remember { mutableStateOf("") }
       var description by remember { mutableStateOf("") }
       var subKind by remember { mutableStateOf<String?>(if (kind == ArtifactKind.COMPONENT) "site" else if (kind == ArtifactKind.TEMPLATE) "page" else null) }
+      var starter by remember { mutableStateOf("header") }
       ActionDialog(
         title = "New ${kind.singular}",
         body = when (kind) {
-          ArtifactKind.COMPONENT -> "It starts blank; design it in the Besigner."
+          ArtifactKind.COMPONENT -> "Design it in the Besigner. A block for emails can start as a Header or a Footer."
           ArtifactKind.LAYOUT -> "It starts with the slot pages appear in; design the rest in the Besigner."
           ArtifactKind.TEMPLATE -> "It starts blank; design it in the Besigner, then start new pages from it."
         },
@@ -432,13 +473,24 @@ private fun ArtifactDialogs(
         error = runner.error,
         onDismiss = close,
         onConfirm = {
-          runner.run("${name.trim()} was created.", onDone = close) { onCreated(api.create(name, description, subKind)) }
+          runner.run("${name.trim()} was created.", onDone = close) { onCreated(api.create(name, description, subKind, starter)) }
         },
       ) {
         OutlinedTextField(name, { name = it.take(ARTIFACT_NAME_MAX) }, label = { Text("Name") }, singleLine = true, supportingText = { Text("${name.length}/$ARTIFACT_NAME_MAX") }, modifier = Modifier.fillMaxWidth().testTag("artifact-name"))
         OutlinedTextField(description, { description = it.take(ARTIFACT_DESCRIPTION_MAX) }, label = { Text("Description (optional)") }, supportingText = { Text("${description.length}/$ARTIFACT_DESCRIPTION_MAX") }, modifier = Modifier.fillMaxWidth())
         when (kind) {
-          ArtifactKind.COMPONENT -> SelectField("Used in", listOf(SelectOption("site", "Pages"), SelectOption("email", "Emails")), subKind, { subKind = it ?: "site" })
+          ArtifactKind.COMPONENT -> {
+            SelectField("Used in", listOf(SelectOption("site", "Pages"), SelectOption("email", "Emails")), subKind, { subKind = it ?: "site" })
+            if (subKind == "email") {
+              SelectField(
+                "Start with",
+                listOf(SelectOption("header", "Header — your logo and company name"), SelectOption("footer", "Footer — your address, and why people get your emails"), SelectOption("blank", "Blank — start with nothing")),
+                starter,
+                { starter = it ?: "header" },
+                supporting = "Change anything you like after.",
+              )
+            }
+          }
           ArtifactKind.TEMPLATE -> SelectField("Kind", com.aglyn.contracts.Contracts.templateKindOptions.map { SelectOption(it.value, it.label) }, subKind, { subKind = it ?: "page" })
           ArtifactKind.LAYOUT -> Unit
         }
@@ -448,6 +500,8 @@ private fun ArtifactDialogs(
       var name by remember(dialog) { mutableStateOf(dialog.row.name) }
       var description by remember(dialog) { mutableStateOf(dialog.row.description.orEmpty()) }
       var parent by remember(dialog) { mutableStateOf(dialog.row.parentLayoutId) }
+      var icon by remember(dialog) { mutableStateOf(dialog.row.icon) }
+      var choosingIcon by remember(dialog) { mutableStateOf(false) }
       val parents = if (kind == ArtifactKind.LAYOUT) layoutChoices(context, hostId, dialog.row.id) else emptyList()
       ActionDialog(
         title = "Edit details",
@@ -459,12 +513,18 @@ private fun ArtifactDialogs(
         onDismiss = close,
         onConfirm = {
           runner.run("Saved.", onDone = close) {
-            api.saveDetails(dialog.row.id, name, description, parent, setParent = kind == ArtifactKind.LAYOUT && parent != dialog.row.parentLayoutId)
+            api.saveDetails(
+              dialog.row.id, name, description, parent, setParent = kind == ArtifactKind.LAYOUT && parent != dialog.row.parentLayoutId,
+              icon = if (kind == ArtifactKind.COMPONENT && icon?.id != dialog.row.icon?.id) icon?.stored() ?: emptyMap() else null,
+            )
           }
         },
       ) {
         OutlinedTextField(name, { name = it.take(ARTIFACT_NAME_MAX) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("details-name"))
         OutlinedTextField(description, { description = it.take(ARTIFACT_DESCRIPTION_MAX) }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
+        if (kind == ArtifactKind.COMPONENT) {
+          ComponentIconField(icon, enabled = !runner.busy, onChoose = { choosingIcon = true }, onClear = { icon = null })
+        }
         if (kind == ArtifactKind.LAYOUT) {
           SelectField(
             "Renders inside",
@@ -476,6 +536,7 @@ private fun ArtifactDialogs(
           )
         }
       }
+      if (choosingIcon) ComponentIconPicker(context.api, icon, { icon = it; choosingIcon = false }, { choosingIcon = false })
     }
     is ArtifactDialog.Duplicate -> {
       var name by remember(dialog) { mutableStateOf((DUPLICATE_NAME_PREFIX + dialog.row.name).take(DUPLICATE_NAME_MAX)) }

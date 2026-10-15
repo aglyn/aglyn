@@ -30,6 +30,7 @@ import {
   mdiCodeTags,
 } from '@aglyn/shared-data-mdi'
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
+import { EMAIL_BLOCK_STARTER_TREES } from '@aglyn/aglyn/app-utils/email-block-starters'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import Box from '@mui/material/Box'
 import type { SxProps, Theme } from '@mui/material/styles'
@@ -763,40 +764,9 @@ export const EMAIL_HEADER_PRESET: Aglyn.PresetSchema = {
   category: Aglyn.ComponentCategory.BLOCKS,
   tags: ['logo', 'masthead', 'top', 'brand'],
   icon: { path: mdiPageLayoutHeader.path, sx: { color: '#f57c00' } },
-  data: {
-    $id: null,
-    componentId: SECTION_ID,
-    pluginId: BUNDLE_ID,
-    // Marks the band as the email's header, so the sender's own header is
-    // not drawn above it (AGL-3372).
-    props: { align: 'center', padding: 24, emailRole: 'header' },
-    nodes: [
-      {
-        $id: null,
-        componentId: IMAGE_ID,
-        pluginId: BUNDLE_ID,
-        props: { alt: 'Your company logo', width: 160, align: 'center' },
-      },
-      {
-        $id: null,
-        componentId: TEXT_ID,
-        pluginId: BUNDLE_ID,
-        props: {
-          children: 'Your company',
-          variant: 'subheading',
-          align: 'center',
-        },
-      },
-    ],
-  },
+  // The same tree the Components page and the native apps start a block from.
+  data: EMAIL_BLOCK_STARTER_TREES.header as Aglyn.PresetSchema['data'],
 }
-
-/**
- * The Footer's small print, a muted gray that still reads at 5:1 on white.
- * A literal on purpose: it is written into the sent mail's own HTML, where no
- * theme token resolves.
- */
-const FOOTER_TEXT_COLOR = '#6b6b6b'
 
 /** See {@link EMAIL_HEADER_PRESET}. */
 export const EMAIL_FOOTER_PRESET: Aglyn.PresetSchema = {
@@ -810,45 +780,8 @@ export const EMAIL_FOOTER_PRESET: Aglyn.PresetSchema = {
   category: Aglyn.ComponentCategory.BLOCKS,
   tags: ['address', 'bottom', 'contact', 'legal'],
   icon: { path: mdiPageLayoutFooter.path, sx: { color: '#f57c00' } },
-  data: {
-    $id: null,
-    componentId: SECTION_ID,
-    pluginId: BUNDLE_ID,
-    // Marks the band as the email's footer, so the sender's own footer is
-    // not drawn under it (AGL-3372).
-    props: { align: 'center', padding: 24, emailRole: 'footer' },
-    nodes: [
-      {
-        $id: null,
-        componentId: DIVIDER_ID,
-        pluginId: BUNDLE_ID,
-        props: {},
-      },
-      {
-        $id: null,
-        componentId: TEXT_ID,
-        pluginId: BUNDLE_ID,
-        props: {
-          children: 'Your company · 123 Main St, City',
-          variant: 'caption',
-          align: 'center',
-          color: FOOTER_TEXT_COLOR,
-        },
-      },
-      {
-        $id: null,
-        componentId: TEXT_ID,
-        pluginId: BUNDLE_ID,
-        props: {
-          children:
-            "You're receiving this because you're a customer of Your company.",
-          variant: 'caption',
-          align: 'center',
-          color: FOOTER_TEXT_COLOR,
-        },
-      },
-    ],
-  },
+  // The same tree the Components page and the native apps start a block from.
+  data: EMAIL_BLOCK_STARTER_TREES.footer as Aglyn.PresetSchema['data'],
 }
 
 export const emailPresets: Aglyn.PresetSchema[] = [

@@ -157,6 +157,8 @@ public struct ArtifactRow: Identifiable, Equatable, Sendable {
   public let libraryRow: Bool
   public let updatedAt: Date?
   public let createdAt: Date?
+  /// A component's icon (`ReusableComponentIcon`), drawn in the Besigner's drawers and its marketplace listing.
+  public let icon: ComponentIcon?
 
   public var isStarterBundle: Bool { starterID != nil }
 
@@ -177,6 +179,7 @@ public struct ArtifactRow: Identifiable, Equatable, Sendable {
     libraryRow = doc.bool("libraryRow") == true
     updatedAt = doc.date("updatedAt")
     createdAt = doc.date("createdAt")
+    icon = componentIcon(of: doc)
   }
 }
 
@@ -378,13 +381,19 @@ public struct ArtifactsAPI: Sendable {
   /// carries its blank design and no version (the first opens it); a layout
   /// gets its first version with the slot; a template is born through the
   /// route, never a client create.
-  public func create(name: String, description: String, subKind: String?) async throws -> String {
+  public func create(name: String, description: String, subKind: String?, starter: String? = nil) async throws -> String {
     let id = newDocumentID()
     var data: [String: Any?] = ["displayName": name.trimmed, "description": description.trimmed]
     switch kind {
     case .component:
-      data["rootId"] = canvasRoot
-      data["nodes"] = blankCanvas()
+      // An email block can start as the Header or Footer band the email plugin drops into an email, one tree wherever it starts.
+      if subKind == "email", let started = emailBlockStarter(starter) {
+        data["rootId"] = started.rootID
+        data["nodes"] = started.nodes
+      } else {
+        data["rootId"] = canvasRoot
+        data["nodes"] = blankCanvas()
+      }
       if subKind == "email" { data["kind"] = "email" }
       try await resources(["resource": kind.createResource, "id": id, "data": data])
     case .layout:
@@ -416,13 +425,15 @@ public struct ArtifactsAPI: Sendable {
   }
 
   /// The details form's save: the name with its search keys, the description, and a layout's parent.
-  public func saveDetails(_ id: String, name: String, description: String, parentLayoutID: String? = nil, setParent: Bool = false)
-    async throws
-  {
+  /// A component's `icon` is written only when the dialog changed it; an empty map clears it, as the console's picker does.
+  public func saveDetails(
+    _ id: String, name: String, description: String, parentLayoutID: String? = nil, setParent: Bool = false, icon: [String: Any]? = nil
+  ) async throws {
     var fields = displayNameSearchFields(name.trimmed)
     fields["displayName"] = name.trimmed
     fields["description"] = description.trimmed
     if setParent { fields["layoutId"] = parentLayoutID.map { $0 as Any } ?? FirestoreSentinel.delete }
+    if let icon { fields["icon"] = icon }
     fields["updatedAt"] = Date()
     try await writer.merge(path(id), fields)
   }

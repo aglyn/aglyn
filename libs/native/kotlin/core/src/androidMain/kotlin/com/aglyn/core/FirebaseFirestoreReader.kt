@@ -121,6 +121,8 @@ internal fun DocumentSnapshot.toDoc(): FirestoreDoc? {
 
 private fun plain(value: Any?): Any? = when (value) {
   is Timestamp -> FirestoreTimestamp(value.seconds, value.nanoseconds)
+  // Bytes (a stored node tree) arrive as base64 text, as the desktop readers hand them over.
+  is com.google.firebase.firestore.Blob -> android.util.Base64.encodeToString(value.toBytes(), android.util.Base64.NO_WRAP)
   is Map<*, *> -> value.entries.associate { it.key.toString() to plain(it.value) }
   is List<*> -> value.map(::plain)
   is Int -> value.toLong()

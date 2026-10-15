@@ -252,6 +252,55 @@ public struct SavedTheme: Identifiable, Equatable, Sendable {
 }
 
 /// Which theme the site picked (`themeSelection`): its kind (default, preset, custom, installed), id and name.
+/// What the theme editor's route answers: the controls, what they show, the built-in themes and "What you have changed".
+public struct ThemeEditorAnswer: Sendable {
+  public let catalog: ThemeCatalog
+  public let values: ThemeValues
+  public let presets: [ThemePreset]
+  public let changes: [ThemeChange]
+  /// The changes were made against a different theme than the one picked now.
+  public let stale: Bool
+  public let themeName: String?
+}
+
+/// One value the site set on top of its theme: what it is, the theme's own and the site's, as the console's card lists them.
+public struct ThemeChange: Equatable, Identifiable, Sendable {
+  public let path: String
+  public let label: String
+  public let scheme: String?
+  public let themeValue: String?
+  public let overrideValue: String?
+  public var id: String { path }
+
+  /// Whether the site's value is a color, for a swatch beside it.
+  public var isColor: Bool {
+    guard let value = overrideValue?.trimmingCharacters(in: .whitespaces).lowercased() else { return false }
+    return value.hasPrefix("#") || value.hasPrefix("rgb") || value.hasPrefix("hsl")
+  }
+}
+
+/// A value in words: text and numbers as they are, anything else compact and cut at 60 characters.
+public func themeChangeValue(_ value: JSONValue?) -> String? {
+  switch value {
+  case nil, .null?: return nil
+  case .string(let text)?: return text
+  case .bool(let flag)?: return flag ? "true" : "false"
+  case .number(let number)?: return number == number.rounded() && abs(number) < 1e15 ? String(Int64(number)) : String(number)
+  case let composite?:
+    let text = (try? composite.encoded()).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    return text.count > 60 ? String(text.prefix(57)) + "…" : text
+  }
+}
+
+public func themeChanges(of json: JSONValue?) -> [ThemeChange] {
+  (json?.arrayValue ?? []).compactMap { entry in
+    guard let path = entry["path"]?.stringValue else { return nil }
+    return ThemeChange(
+      path: path, label: entry["label"]?.stringValue ?? path, scheme: entry["scheme"]?.stringValue,
+      themeValue: themeChangeValue(entry["themeValue"]), overrideValue: themeChangeValue(entry["overrideValue"]))
+  }
+}
+
 public struct ThemeSelection: Equatable, Sendable {
   public let kind: String
   public let id: String?
@@ -531,11 +580,17 @@ public struct HostSettingsAPI: Sendable {
     try await api.request("/api/hosts/theme", method: .post, body: jsonBody(["hostId": hostID].merging(body) { _, new in new }))
   }
 
-  /// The editor's controls, what they show now and the built-in themes on offer.
-  public func themeEditor() async throws -> (ThemeCatalog, ThemeValues, [ThemePreset]) {
+  /// The editor's controls, what they show now, the built-in themes on offer, and what the site changed on top of its theme.
+  public func themeEditor() async throws -> ThemeEditorAnswer {
     let answer = try await theme(["action": "values"])
-    return (themeCatalog(of: answer?["catalog"]), themeValues(of: answer?["values"]), themePresets(of: answer?["presets"]))
+    return ThemeEditorAnswer(
+      catalog: themeCatalog(of: answer?["catalog"]), values: themeValues(of: answer?["values"]),
+      presets: themePresets(of: answer?["presets"]), changes: themeChanges(of: answer?["changes"]),
+      stale: answer?["stale"]?.boolValue == true, themeName: answer?["themeName"]?.stringValue)
   }
+
+  /// Puts one change back at the theme's own value and keeps the rest (`reset`, the Reset beside a change).
+  public func resetThemeChange(_ path: String) async throws { _ = try await theme(["action": "reset", "path": path]) }
 
   /// Saves the changed controls as the site's theme edits; answers what they show now.
   public func saveTheme(_ edits: [ThemeEdit]) async throws -> ThemeValues {

@@ -407,6 +407,7 @@
       }
     ]
   },
+  "COMPONENT_PROP_TOKEN_PREFIX": "prop.",
   "CONTACT_LIFECYCLE_STAGE_LABELS": {
     "customer": "Customer",
     "evangelist": "Evangelist",
@@ -903,6 +904,7 @@
     168
   ],
   "DROP_OFF_WATCHES_MAX": 12,
+  "EMAIL_BLOCK_STARTER_TREES_JSON": "{\"header\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"header\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailImage\",\"pluginId\":\"email\",\"props\":{\"alt\":\"Your company logo\",\"width\":160,\"align\":\"center\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company\",\"variant\":\"subheading\",\"align\":\"center\"}}]},\"footer\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"footer\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailDivider\",\"pluginId\":\"email\",\"props\":{}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company · 123 Main St, City\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"You're receiving this because you're a customer of Your company.\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}}]}}",
   "EMAIL_LIST_QUERY": {
     "fields": [
       {
@@ -4366,6 +4368,16 @@
   "REMINDER_WINDOW_START_HOURS": 23,
   "REPLY_BODY_MAX": 20000,
   "REPLY_SUBJECT_MAX": 150,
+  "RESERVED_SCREEN_ROUTE_SEGMENTS": [
+    "404",
+    "500",
+    "search",
+    "aglyn-preview",
+    "api",
+    "_next",
+    "_static",
+    "_aglyn"
+  ],
   "RETURN_REASON_LABELS": {
     "damaged": "Arrived damaged",
     "no_longer_needed": "No longer needed",
@@ -4383,6 +4395,8 @@
     "other"
   ],
   "SCOPED_SEARCH_JOIN": "~",
+  "SCREEN_ROOT_PATH": "/",
+  "SCREEN_SLUG_PATH_SEPARATOR_MESSAGE": "A slug is one path segment — remove the \"/\" and nest the page under a parent page instead",
   "SEARCH_ENGINE_VERIFICATION_LABELS": {
     "bing": "Bing Webmaster Tools",
     "google": "Google Search Console"

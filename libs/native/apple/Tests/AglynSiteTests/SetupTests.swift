@@ -188,6 +188,30 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(themeSelection(of: ["themeSelection": ["kind": "preset", "id": "themes.bootstrap", "name": "Bootstrap"]]).kind, "preset")
   }
 
+  func testReadsWhatTheSiteChangedOnTopOfItsTheme() {
+    let long = String(repeating: "a", count: 70)
+    let changes = themeChanges(
+      of: .array([
+        .object([
+          "path": "colorSchemes.dark.primary.main", "label": "Color · dark · primary", "scheme": "dark", "themeValue": "#90caf9",
+          "overrideValue": "#00e5ff",
+        ]),
+        .object(["path": "spacing", "label": "Spacing", "themeValue": 8, "overrideValue": 4]),
+        .object(["path": "fonts", "label": "Fonts", "themeValue": .null, "overrideValue": ["heading": [.string(long)]]]),
+        .object(["label": "No path"]),
+      ]))
+    XCTAssertEqual(changes.map(\.path), ["colorSchemes.dark.primary.main", "spacing", "fonts"])
+    XCTAssertEqual(changes[0].scheme, "dark")
+    XCTAssertTrue(changes[0].isColor)
+    XCTAssertEqual(changes[1].themeValue, "8")
+    XCTAssertFalse(changes[1].isColor)
+    XCTAssertNil(changes[2].themeValue)
+    // A structure is shown compact and cut at sixty characters.
+    XCTAssertEqual(changes[2].overrideValue?.count, 58)
+    XCTAssertTrue(changes[2].overrideValue?.hasSuffix("…") == true)
+    XCTAssertTrue(themeChanges(of: nil).isEmpty)
+  }
+
   func testFiltersTheFontCatalogByWordAndCategory() {
     let fonts = [
       ThemeFontOption(family: "Inter", category: "sans-serif"), ThemeFontOption(family: "Playfair Display", category: "serif"),
