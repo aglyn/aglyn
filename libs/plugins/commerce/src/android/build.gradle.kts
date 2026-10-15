@@ -57,6 +57,7 @@ kotlin {
     commonMain.dependencies {
       implementation(project(":native-plugin-host"))
       implementation(project(":native-screens"))
+      implementation(project(":native-site"))
       implementation(project(":native-ui"))
       implementation(project(":native-contracts"))
       implementation(libs.kotlinx.serialization.json)

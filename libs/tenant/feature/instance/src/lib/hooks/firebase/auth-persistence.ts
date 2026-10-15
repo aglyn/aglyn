@@ -24,6 +24,8 @@ import {
   initializeAuth,
 } from 'firebase/auth'
 
+import { followPeerTabPool } from './auth-cross-tab-pool'
+
 /**
  * How much of a session an origin is allowed to keep (AGL-1379).
  *
@@ -156,7 +158,13 @@ export function createAuthInstance(
     // No `popupRedirectResolver`: D6's second half. The auth helper iframe is
     // never loaded, so the custom domain needs no `frame-ancestors` entry and
     // can never need a Firebase authorized-domain entry for OAuth.
-    return sealPersistence(initializeAuth(app, { persistence: inMemoryPersistence }))
+    return followPeerTabPool(
+      sealPersistence(initializeAuth(app, { persistence: inMemoryPersistence })),
+    )
   }
-  return getAuth(app)
+  // Every instance this factory hands out follows a peer tab's sign-in into
+  // that user's pool (AGL-3803). Only `durable` has peer tabs today; the
+  // ephemeral one gets it too, so the property belongs to the factory rather
+  // than to one class of origin.
+  return followPeerTabPool(getAuth(app))
 }

@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 class ZapierNativeTest {
   private val declared = mapOf(
     "screens" to listOf("zapier.connections"),
+    "widgets" to listOf("zapier.connections.card"),
     "deepLinks" to listOf(),
   )
 
@@ -25,5 +26,6 @@ class ZapierNativeTest {
     val specs = ZapierScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("zapier.connections").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "sitePluginSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertEquals("hostSettings", specs.first { it.id == "zapier.connections" }.cardSlot, "its Setup > Integrations card")
   }
 }

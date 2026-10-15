@@ -12,6 +12,7 @@
       "zones": [
         "sitePluginSettings"
       ],
+      "cardSlot": "hostSettings",
       "requires": "params.pluginId == live-chat",
       "load": {
         "cfg": "/api/live-chat/settings?hostId={site.id}"

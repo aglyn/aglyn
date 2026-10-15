@@ -16,6 +16,9 @@ fun registerAINative(registrar: NativePluginRegistrar) {
   registrar.quickAction("ai.open", "AI jobs", "auto_awesome", 60, requiresSite = true, screen = "ai.jobs")
   // Setup → Business profile draws this in the console's `hostBusinessProfile` slot.
   // Setup → SEO draws this in the console's `hostSeo` slot, under the SEO check.
+  registrar.widget("ai.seo-audit", title = "SEO fixes", order = 80, size = WidgetSize.FULL, requiresSite = true, slot = "hostSeo") { context ->
+    AiSeoAuditCard(context)
+  }
   registrar.widget("ai.seo-start", title = "The listing your answers describe", order = 90, size = WidgetSize.FULL, requiresSite = true, slot = "hostSeo") { context ->
     AiSiteSeoStartCard(context)
   }
