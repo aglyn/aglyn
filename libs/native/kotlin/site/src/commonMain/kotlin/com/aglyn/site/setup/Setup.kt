@@ -1,5 +1,7 @@
 package com.aglyn.site.setup
 
+import com.aglyn.contracts.PluginCatalog
+import com.aglyn.contracts.resolveHostEnabledPlugins
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreDelete
@@ -8,6 +10,7 @@ import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.firestoreNow
 import com.aglyn.core.jsonValue
+import com.aglyn.pluginhost.NativeWidget
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -34,6 +37,9 @@ enum class SetupSection(val id: String, val title: String, val supporting: Strin
   TRACKING("tracking", "Tracking", "Analytics, ad tags and the consent banner", "analytics"),
   THEME("theme", "Theme", "Colors, font, shape and your saved themes", "palette"),
   EMAILS("emails", "Emails", "The emails your site sends to customers", "mail"),
+
+  /** The `hostSettings` zone (AGL-3711): offered only while a plugin running on the site has a card in it. */
+  INTEGRATIONS("integrations", "Integrations", "Email platforms, Zapier, live chat and the other tools your site connects to", "extension"),
   ;
 
   companion object {
@@ -46,6 +52,26 @@ enum class SetupSection(val id: String, val title: String, val supporting: Strin
     }
   }
 }
+
+/** The id of a setup page's zone the Integrations section fills. */
+const val INTEGRATIONS_SLOT = "hostSettings"
+
+/**
+ * The plugins that run on a site: the workspace's list less what the site turned off, plus the default-off ones it opted
+ * into (`resolveHostEnabledPlugins`, as the console's switchboard resolves them). A list the document does not hold reads
+ * as the defaults.
+ */
+fun runningPlugins(org: Map<String, Any?>?, host: Map<String, Any?>?): List<String> {
+  fun ids(doc: Map<String, Any?>?, key: String) = (doc?.get(key) as? List<*>)?.filterIsInstance<String>()
+  return resolveHostEnabledPlugins(ids(org, "enabledPlugins"), ids(host, "disabledPlugins"), ids(host, "enabledPlugins"))
+}
+
+/**
+ * The cards the Integrations section draws: those of plugins running on the site. A plugin the catalog has no switch for
+ * (Zapier is infrastructure) is not switchable, so its card is always offered.
+ */
+fun integrationWidgets(widgets: List<NativeWidget>, running: List<String>): List<NativeWidget> =
+  widgets.filter { PluginCatalog.plugin(it.pluginId) == null || it.pluginId in running }
 
 /** The value at a dotted [path] of a document's fields. */
 fun Map<String, Any?>?.at(path: String): Any? {

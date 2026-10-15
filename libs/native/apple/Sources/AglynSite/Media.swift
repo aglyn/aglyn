@@ -498,11 +498,17 @@ public struct MediaAPI: Sendable {
     confirmed ? fields.merging(["rightsConfirmed": true]) { $1 } : fields
   }
 
+  /// A film is read on this device before it is sent (neither server has a decoder): its length, frame size and a poster still.
+  private func filmFields(_ file: PickedFile, _ contentType: String) async -> [String: Any?] {
+    contentType.hasPrefix("video/") ? videoProbeFields(await probeVideo(file)) : [:]
+  }
+
   /// Uploads one picked file into `folderID`; answers its media id. An audio file is refused unless
   /// `rightsConfirmed` says its uploader confirmed they own it or hold a license (`AUDIO_RIGHTS_STATEMENT`).
   @discardableResult
   public func upload(_ file: PickedFile, folderID: String?, rightsConfirmed: Bool = false) async throws -> String? {
     let contentType = file.mimeType.isEmpty ? "application/octet-stream" : file.mimeType
+    let film = await filmFields(file, contentType)
     if file.size <= signedUploadThresholdBytes {
       let answer = try await post(
         "/api/media/upload",
@@ -510,7 +516,7 @@ public struct MediaAPI: Sendable {
           [
             "fileName": file.name, "contentType": contentType, "folderId": folderID,
             "data": file.data.base64EncodedString(),
-          ], rightsConfirmed))
+          ].merging(film) { $1 }, rightsConfirmed))
       return answer.field("mediaId")
     }
     let minted = try await post(
@@ -519,7 +525,8 @@ public struct MediaAPI: Sendable {
     guard let mediaID = minted.field("mediaId"), let uploadURL = minted.field("uploadUrl") else { return nil }
     try await api.putSigned(uploadURL, contentType: minted.field("contentType") ?? contentType, data: file.data)
     try await post(
-      "/api/media/upload-url", withRights(["mediaId": mediaID, "fileName": file.name, "folderId": folderID], rightsConfirmed),
+      "/api/media/upload-url",
+      withRights(["mediaId": mediaID, "fileName": file.name, "folderId": folderID].merging(film) { $1 }, rightsConfirmed),
       method: .patch)
     return mediaID
   }
@@ -527,6 +534,7 @@ public struct MediaAPI: Sendable {
   /// Replaces the file's bytes in place: the same id and address everywhere it is used.
   public func replace(_ item: MediaItem, with file: PickedFile, rightsConfirmed: Bool = false) async throws {
     let contentType = file.mimeType.isEmpty ? item.contentType : file.mimeType
+    let film = await filmFields(file, contentType)
     let expected = item.updatedAt.map { Int(($0.timeIntervalSince1970 * 1000).rounded()) }
     if file.size <= signedUploadThresholdBytes {
       try await post(
@@ -535,7 +543,7 @@ public struct MediaAPI: Sendable {
           [
             "mediaId": item.id, "contentType": contentType, "data": file.data.base64EncodedString(),
             "fileName": file.name, "expectedUpdatedAtMs": expected,
-          ], rightsConfirmed))
+          ].merging(film) { $1 }, rightsConfirmed))
       return
     }
     let minted = try await post(
@@ -550,7 +558,8 @@ public struct MediaAPI: Sendable {
     }
     try await api.putSigned(uploadURL, contentType: minted.field("contentType") ?? contentType, data: file.data)
     try await post(
-      "/api/media/replace", withRights(["mediaId": item.id, "fileName": file.name, "expectedUpdatedAtMs": expected], rightsConfirmed),
+      "/api/media/replace",
+      withRights(["mediaId": item.id, "fileName": file.name, "expectedUpdatedAtMs": expected].merging(film) { $1 }, rightsConfirmed),
       method: .patch)
   }
 

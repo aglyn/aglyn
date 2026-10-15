@@ -48,12 +48,12 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "ad-conversions",
-      contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"]],
+      contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"], "widgets": ["ad-conversions.service.card"]],
       register: AglynAdConversionsPlugin.registerAdConversionsNative
     ),
     NativePluginManifestEntry(
       id: "ai",
-      contributes: ["screens": ["ai.allotment", "ai.credits", "ai.hostMember", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"], "widgets": ["ai.seo-start", "ai.site-memory"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
+      contributes: ["screens": ["ai.allotment", "ai.credits", "ai.hostMember", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"], "widgets": ["ai.seo-audit", "ai.seo-start", "ai.site-memory"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
       register: AglynAiPlugin.registerAINative
     ),
     NativePluginManifestEntry(
@@ -123,7 +123,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "live-chat",
-      contributes: ["screens": ["live-chat.settings"]],
+      contributes: ["screens": ["live-chat.settings"], "widgets": ["live-chat.settings.card"]],
       register: AglynLiveChatPlugin.registerLiveChatNative
     ),
     NativePluginManifestEntry(
@@ -143,7 +143,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "marketing-platforms",
-      contributes: ["screens": ["marketing-platforms.platform", "marketing-platforms.service"]],
+      contributes: ["screens": ["marketing-platforms.platform", "marketing-platforms.service"], "widgets": ["marketing-platforms.service.card"]],
       register: AglynMarketingPlatformsPlugin.registerMarketingPlatformsNative
     ),
     NativePluginManifestEntry(
@@ -208,7 +208,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "zapier",
-      contributes: ["screens": ["zapier.connections"]],
+      contributes: ["screens": ["zapier.connections"], "widgets": ["zapier.connections.card"]],
       register: AglynZapierPlugin.registerZapierNative
     ),
   ]

@@ -12,6 +12,7 @@
       "zones": [
         "sitePluginSettings"
       ],
+      "cardSlot": "hostSettings",
       "requires": "params.pluginId == marketing-platforms",
       "load": {
         "conn": "/api/marketing-platforms/connections?hostId={site.id}"

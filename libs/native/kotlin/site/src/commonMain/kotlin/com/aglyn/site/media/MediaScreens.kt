@@ -87,6 +87,7 @@ import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LocalImageLoader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LocalMediaPicker
+import com.aglyn.ui.LocalVideoProbe
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
@@ -172,7 +173,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val coroutines = rememberCoroutineScope()
   val model = remember(scope, context.firestore) { MediaListModel(scope, context.firestore, coroutines) }
   LaunchedEffect(model, scopeTokens) { model.start(scopeTokens) }
-  val api = remember(scope, context.api) { MediaApi(context.api, scope) }
+  val videoProbe = LocalVideoProbe.current
+  val api = remember(scope, context.api, videoProbe) { MediaApi(context.api, scope, videoProbe) }
   val runner = remember(scope) { ActionRunner(coroutines) }
   val folders by remember(scope, scopeTokens, context.firestore) {
     context.firestore.observe(

@@ -52,14 +52,18 @@ public enum SpecScreens {
     spec.links.indices.map { $0 == 0 ? "\(spec.id).link" : "\(spec.id).link\($0 + 1)" }
   }
 
+  /// The id of the widget a spec's `cardSlot` registers.
+  public static func cardID(_ spec: ScreenSpec) -> String { "\(spec.id).card" }
+
   /// What a set of specs contributes, for a registrar's declaration.
   public static func declaration(_ specs: [ScreenSpec]) -> NativeContributionDeclaration {
     NativeContributionDeclaration(
       screens: specs.map(\.id).sorted(),
+      widgets: specs.filter { $0.cardSlot != nil }.map(cardID).sorted(),
       deepLinks: specs.flatMap(linkIDs).sorted())
   }
 
-  /// Registers each spec as a screen and each of its links as a deep link,
+  /// Registers each spec as a screen, each of its links as a deep link and each `cardSlot` as a widget,
   /// and adds the specs to the catalog so split views find their details.
   @MainActor
   public static func register(_ specs: [ScreenSpec], into registrar: NativePluginRegistrar) {
@@ -70,6 +74,14 @@ public enum SpecScreens {
       }
       for (index, path) in spec.links.enumerated() {
         registrar.deepLink(linkIDs(spec)[index], path: path, screen: spec.id)
+      }
+      if let slot = spec.cardSlot {
+        let pluginID = registrar.pluginID
+        registrar.widget(
+          cardID(spec), title: spec.label, order: spec.order, requiresSite: spec.requiresSite, slot: slot
+        ) { context in
+          SpecCard(spec: spec, pluginID: pluginID, context: context)
+        }
       }
     }
   }

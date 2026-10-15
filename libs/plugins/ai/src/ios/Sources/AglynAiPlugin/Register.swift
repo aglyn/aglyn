@@ -16,6 +16,9 @@ public func registerAINative(_ registrar: NativePluginRegistrar) {
     "ai.open", title: "AI jobs", icon: "sparkles", order: 60, screen: "ai.jobs", requiresSite: true)
   // Setup → SEO draws this in the console's `hostSeo` slot, under the SEO check.
   registrar.widget(
+    "ai.seo-audit", title: "SEO fixes", icon: "wand.and.stars", order: 80, size: .full, requiresSite: true, slot: "hostSeo"
+  ) { AiSeoAuditCard(context: $0) }
+  registrar.widget(
     "ai.seo-start", title: "The listing your answers describe", icon: "text.magnifyingglass", order: 90, size: .full, requiresSite: true,
     slot: "hostSeo"
   ) { AiSiteSeoStartCard(context: $0) }
