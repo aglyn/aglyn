@@ -158,6 +158,19 @@ node tools/scripts/native-release.mjs ios-archive Aglyn ios       # or AglynPOS,
 node tools/scripts/native-release.mjs ios-upload /private/tmp/aglyn-release/Aglyn-ios-<build>.xcarchive
 ```
 
+Archives sign with a development profile, which Apple issues only to a team
+with a registered device. This Mac is registered; on another Mac, register it
+once by building against it:
+
+```bash
+cd apps/ios && xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -configuration Release \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration
+```
+
+The upload re-signs for the App Store (cloud-managed distribution signing), so
+testers' devices never need registering.
+
 The build number (`CURRENT_PROJECT_VERSION`) is the UTC time as
 `yyyyMMddHHmm`, so every archive outnumbers the last; `MARKETING_VERSION`
 stays `0.1.0` until a store release. The upload goes to App Store Connect

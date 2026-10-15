@@ -146,8 +146,8 @@ export function ShippingSettingsCard(props: ShippingSettingsWidgetProps) {
   return (
     <CardDisplay
       header="Shipping labels"
-      help={pluginDocsHelp('shipping', {
-        anchor: '#where-parcels-ship-from',
+      help={pluginDocsHelp('shippingLabels', {
+        anchor: '#shipping-labels-settings',
         title: 'Shipping labels',
         excerpt:
           'Where labels ship from, the boxes you pack in, label format, signature and insurance, and which carrier services checkout offers.',

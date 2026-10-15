@@ -73,3 +73,11 @@ settings) can carry a postal address: choose **Add address** on its row, or **Ed
 once it has one. The address is the street, an optional apartment or suite,
 city, state or region, postal code, the two-letter country code and a phone
 number, saved beside the location's name.
+
+## Labels and live carrier rates {#labels-and-live-carrier-rates}
+
+Buying carrier labels from your orders, live carrier rates at checkout and
+carrier tracking are rolling out. See
+[Shipping labels and live carrier rates](./shipping-labels-and-live-rates.md),
+and [Ship with your own Easyship, Sendcloud or ShipperHQ](./ship-with-your-own-easyship-sendcloud-or-shipperhq.md)
+to use an account of your own.

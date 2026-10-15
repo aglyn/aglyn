@@ -19,7 +19,8 @@
  * ios-archive: `xcodebuild archive` of the Release configuration
  *   (Config/Release.xcconfig: the production project) for a generic iOS
  *   device or the Mac, signed automatically for team R3B7G75SWA with
- *   -allowProvisioningUpdates, so Xcode needs an account for that team
+ *   -allowProvisioningUpdates (and -allowProvisioningDeviceRegistration, which
+ *   registers this Mac with the team), so Xcode needs an account for that team
  *   (Xcode → Settings → Accounts). CURRENT_PROJECT_VERSION is the UTC time
  *   as yyyyMMddHHmm, so every archive outnumbers the last upload.
  * ios-upload: `xcodebuild -exportArchive` with destination `upload`, which
@@ -63,9 +64,11 @@ const PLATFORMS = {
 }
 const ANDROID_APPS = { app: 'Aglyn', pos: 'AglynPOS' }
 
+/** Stops the command. Thrown rather than exiting, so a held build lock is released on the way out. */
+class ReleaseError extends Error {}
+
 function fail(message) {
-  console.error(`native-release: ${message}`)
-  process.exit(1)
+  throw new ReleaseError(message)
 }
 
 function sleep(ms) {
@@ -147,7 +150,14 @@ function iosArchive(scheme, platform) {
         join(IOS, 'build', 'SourcePackages'),
         '-skipPackagePluginValidation',
         '-allowProvisioningUpdates',
+        // Lets Xcode register a device when a development profile needs one. A generic
+        // destination names no device, so a Mac new to the team is registered first by a
+        // build against itself (apps/ios/README.md, "Release to private testing").
+        '-allowProvisioningDeviceRegistration',
         `CURRENT_PROJECT_VERSION=${build}`,
+        // The schemes share package intermediates; coverage instrumentation would make Aglyn and
+        // AglynPOS rebuild each other's (AGL-3783), and nothing reads coverage from an archive.
+        'CLANG_COVERAGE_MAPPING=NO',
         '-quiet',
       ],
       { cwd: IOS },
@@ -276,18 +286,24 @@ function androidBundle(module) {
 }
 
 const [command, ...args] = process.argv.slice(2)
-switch (command) {
-  case 'ios-archive':
-    iosArchive(args[0], args[1])
-    break
-  case 'ios-upload':
-    iosUpload(args[0])
-    break
-  case 'android-bundle':
-    androidBundle(args[0])
-    break
-  default:
-    fail(
-      'usage: ios-archive <Aglyn|AglynPOS> <ios|macos> | ios-upload <archive> | android-bundle <app|pos>',
-    )
+try {
+  switch (command) {
+    case 'ios-archive':
+      iosArchive(args[0], args[1])
+      break
+    case 'ios-upload':
+      iosUpload(args[0])
+      break
+    case 'android-bundle':
+      androidBundle(args[0])
+      break
+    default:
+      fail(
+        'usage: ios-archive <Aglyn|AglynPOS> <ios|macos> | ios-upload <archive> | android-bundle <app|pos>',
+      )
+  }
+} catch (error) {
+  if (!(error instanceof ReleaseError)) throw error
+  console.error(`native-release: ${error.message}`)
+  process.exitCode = 1
 }
