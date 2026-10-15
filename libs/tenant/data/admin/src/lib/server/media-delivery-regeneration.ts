@@ -32,6 +32,7 @@ import {
   mediaVariantWidthsFor,
   type SaveMediaDerivedObject,
 } from './media-variants'
+import { readStorageObject, type StorageReadableFile } from './storage-read-stream'
 
 /**
  * Lazy regeneration of an asset's delivery copies (AGL-3486).
@@ -148,8 +149,7 @@ export function mediaDeliveryCopiesStale(
 
 /** The slice of a Storage bucket this needs. */
 export interface MediaRegenerationBucket {
-  file(path: string): {
-    download(): Promise<[Buffer]>
+  file(path: string): StorageReadableFile & {
     save(
       bytes: Buffer,
       options: { contentType: string; metadata: { cacheControl: string } },
@@ -227,7 +227,9 @@ export async function regenerateMediaDeliveryCopies(options: {
 
   let outcome: Awaited<ReturnType<typeof generateMediaVariants>>
   try {
-    const [source] = await bucket.file(basePath).download()
+    // Read through the listener budget, which `file.download()` skips (see
+    // `storage-read-stream.ts`).
+    const source = await readStorageObject(bucket.file(basePath))
     outcome = await generateMediaVariants({
       buffer: source,
       contentType,
