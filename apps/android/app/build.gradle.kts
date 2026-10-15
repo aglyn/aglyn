@@ -91,4 +91,6 @@ dependencies {
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)
+  // The permission prompts' Activity Result API needs fragment 1.3+ (gradle/libs.versions.toml).
+  constraints { implementation(libs.androidx.fragment) }
 }

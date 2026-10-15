@@ -95,6 +95,8 @@ dependencies {
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)
+  // The permission prompts' Activity Result API needs fragment 1.3+ (gradle/libs.versions.toml).
+  constraints { implementation(libs.androidx.fragment) }
   // Card-on-device: Tap to Pay and Bluetooth readers (Aglyn POS only, never the Aglyn app).
   implementation(libs.stripe.terminal)
   implementation(libs.stripe.terminal.taptopay)
