@@ -243,8 +243,8 @@ does not enforce it); debug builds, on the emulators, have it off.
   (app links, both apps) and `https://aglyn.com/.well-known/assetlinks.json`
   (passkeys, `com.aglyn.app`), with the Play app signing certificates' SHA-256.
   Passkeys also need the `delegate_permission/common.get_login_creds` relation for `com.aglyn.app` in the apex
-  file (template: `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the
-  certificate's hash is listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden.
+  file (template: `docs/mobile/well-known/`); release builds default to `passkeyRpId = aglyn.com` (AGL-3817), and the console's `PASSKEY_ANDROID_APK_KEY_HASHES` lists the
+  Play app-signing and upload certificates' hashes (base64url SHA-256), set on aglyn-console production and preview.
 - Google sign-in ("Continue with Google" on both apps' sign-in and sign-up, and "Connect Google"): release builds carry
   the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId` overrides it). Done 2026-10-15: the Android
   OAuth clients for `com.aglyn.app` and `com.aglyn.pos`, for the Play app-signing and upload-key SHA-1s. On Windows a
