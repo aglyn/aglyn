@@ -8,6 +8,9 @@ import Security
 /// (`INVALID_LOGIN_CREDENTIALS`, `TOO_MANY_ATTEMPTS_TRY_LATER`, …), or nil
 /// when nothing answered.
 public struct IdentityToolkitError: Error, Equatable, Sendable {
+  /// The code a refusal for the App Check token gets (the server says "Firebase App Check token is invalid.").
+  public static let appCheckRefused = "APP_CHECK_TOKEN_INVALID"
+
   public let code: String?
   public let status: Int
 
@@ -335,8 +338,9 @@ public actor IdentityToolkitAuth {
       if case .object(let record)? = body, case .object(let error)? = record["error"],
         case .string(let message)? = error["message"]
       {
-        // "TOO_MANY_ATTEMPTS_TRY_LATER : Access to this account…" carries a detail after the code.
-        code = message.components(separatedBy: " ").first
+        // "TOO_MANY_ATTEMPTS_TRY_LATER : Access to this account…" carries a detail after the code; an
+        // App Check refusal is a sentence instead of a code.
+        code = isAppCheckRefusalText(message) ? IdentityToolkitError.appCheckRefused : message.components(separatedBy: " ").first
       }
       throw IdentityToolkitError(code: code, status: response.statusCode)
     }

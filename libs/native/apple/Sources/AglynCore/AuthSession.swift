@@ -94,6 +94,7 @@ private func restBuildHash() -> String? {
 /// The words a failed sign-in shows, by Firebase Auth error code.
 public func signInErrorMessage(_ error: Error) -> String {
   let brand = AglynBrand.name
+  if isAppCheckRefusal(error) { return appCheckRefusalMessage }
   if let rest = error as? IdentityToolkitError {
     switch rest.code {
     case "INVALID_LOGIN_CREDENTIALS", "INVALID_PASSWORD", "EMAIL_NOT_FOUND", "INVALID_EMAIL":
@@ -201,17 +202,23 @@ public final class AuthSession {
     }
   }
 
-  /// The session for a config: REST when `transport` says so, else the SDK.
-  public static func make(_ config: AglynConfig, transport: AuthTransport = .resolve()) -> AuthSession {
+  /// The session for a config: REST when `transport` says so, else the SDK. Every REST call carries
+  /// `appCheck`'s token (the SDK takes its own from Firebase App Check).
+  public static func make(
+    _ config: AglynConfig, transport: AuthTransport = .resolve(), appCheck: AppCheckTokenProvider = NoAppCheck()
+  ) -> AuthSession {
+    let http = AppCheckTransport(appCheck: appCheck)
     // A support session signs in over REST in either case, and keeps nothing: the customer's session is never persisted.
     let impersonationAuth: @Sendable () -> IdentityToolkitAuth = {
-      IdentityToolkitAuth(apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost, store: MemoryCredentialStore())
+      IdentityToolkitAuth(
+        apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost, transport: http, store: MemoryCredentialStore())
     }
     guard transport == .rest else { return AuthSession(impersonationAuth: impersonationAuth) }
     return AuthSession(
       rest: IdentityToolkitAuth(
         apiKey: config.firebase.apiKey,
         emulatorHost: config.authEmulatorHost,
+        transport: http,
         store: KeychainCredentialStore(
           service: restAuthKeychainService(
             bundleID: Bundle.main.bundleIdentifier ?? "com.aglyn.app", buildHash: restBuildHash()),
