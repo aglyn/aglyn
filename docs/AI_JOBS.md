@@ -2548,6 +2548,18 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   provider caches each search 24 hours (`stockPhotoSearches`) and keeps the
   library's rate limit. No AI model is called, and the guided start's credit
   estimate is unchanged.
+- **Alt text that says what the photo shows (AGL-3805).** The slot's alt text is the model's,
+  written before any photo was found, so a stock photo placed in it answers for its own
+  words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
+  their subject is among the hit's first tags or its page's address; otherwise the photo
+  is described by the library's own description where it writes one (Pexels' `alt`),
+  else its first three tags ("Cake, homemade, dessert"). The libraries write in English
+  and no model translates them, so a site in another language takes the platform's own
+  phrase in its language (`illustrativePhoto` in `ai-layout-labels.ts`: "Foto
+  ilustrativa"), true of any photo. The library's asset keeps the same words. The
+  beta.253 Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
+  dusted "HOME MADE" as conchas on a tray, and none of its nine photos showed what its
+  words said. `ai-stock-photo-alt.spec.ts` replays its recorded "bakery" answer.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 
@@ -2760,6 +2772,16 @@ the same way, in a Grid with a row direction and no container.
   The platform reaches no section of another page by anchor (AGL-2867), so the link
   names the page. The layout language's page and layout checks and the page's last pass
   (which stores it) all repair.
+- **The form's page is not Home when another page places it (AGL-3805).** `aiLayoutFormPageOfPlan`
+  (`jobs/ai-job-page-language.ts`) names the page every such call to action goes to: the
+  first page of the plan placing the form that is not Home, and Home only when no other
+  page does. A plan lists Home first, and a home page that closes on "visit us or order"
+  places the form too, so the header's button and the footer's linked the home page on
+  every page, itself included: a Spanish bakery's "Pide tu pastel" and "Contáctanos"
+  (beta.253, job eg4maZMGtN) while /pasteles and /visitanos held the form, and eight of
+  the 21 newest AI-built sites the same way. A page that places the form itself still
+  scrolls to its own section. `ai-job-layout-form-page.spec.ts` holds the plan's choice,
+  the frame's buttons and a page's targets.
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
