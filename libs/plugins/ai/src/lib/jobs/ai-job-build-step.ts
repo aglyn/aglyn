@@ -28,6 +28,7 @@ import {
   aiBuildCreditRange,
   aiBuildDegradation,
   aiBuildInitialLedger,
+  aiBuildItemArgRefs,
   aiBuildItemDelivered,
   aiBuildItemOpen,
   aiBuildNextUnit,
@@ -36,6 +37,7 @@ import {
   aiBuildPlacedItemLines,
   aiBuildPlanMissingInput,
   aiBuildPlanShapeRefusal,
+  aiBuildRefName,
   aiBuildSmaller,
   aiBuildUnits,
   type AiBuildMade,
@@ -205,6 +207,23 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
 /** What the job drawer says under an item another plugin's writer made (`model/ai-build-job.ts`). */
 export { aiBuildItemOutputNote }
 
+/**
+ * An item's arguments without the list entries that link what this build
+ * could not make (AGL-3832): a menu's `About => new:About` once the page
+ * About failed. The item is built with the rest, and its note names what it
+ * is without, so its own report never shows a `new:` reference.
+ */
+export function aiBuildItemArgsWithout(
+  args: Readonly<Record<string, unknown>>,
+  dropped: ReadonlySet<string> | undefined,
+): Record<string, unknown> {
+  if (!dropped?.size) return { ...args }
+  const links = (entry: unknown) => aiBuildItemArgRefs({ entry }).some((ref) => dropped.has(aiBuildRefName(ref)))
+  return Object.fromEntries(
+    Object.entries(args).map(([key, value]) => [key, Array.isArray(value) ? value.filter((entry) => !links(entry)) : value]),
+  )
+}
+
 /** The id a unit's job, and so its draft, is named by. */
 export function aiBuildUnitJobId(job: Pick<AiJob, '$id'>, unit: AiBuildUnit): string {
   return unit.creation?.id ?? unit.screen?.id ?? unit.item?.id ?? `${job.$id}-${unit.slot}`
@@ -226,6 +245,8 @@ export function aiBuildUnitJob(
     ledger: readonly AiJobItemLedger[]
     ops: AiBuildOps
     briefLines?: readonly string[]
+    /** The `new:` names, lowercased, of what failed and the unit is built without (`aiBuildDegradation`). */
+    dropped?: ReadonlySet<string>
   },
 ): AiJob {
   const plan = job.plan as AiJobPlan
@@ -293,7 +314,7 @@ export function aiBuildUnitJob(
   brief.push(...(context.briefLines ?? []))
   const inputs: Record<string, unknown> = {
     ...job.inputs,
-    ...(item?.args ?? {}),
+    ...aiBuildItemArgsWithout(item?.args ?? {}, context.dropped),
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
@@ -800,7 +821,14 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     const kind = aiBuildUnitJobKind(unit, ops)
     const runner = kind ? runnerFor(kind) : null
     if (!kind || !runner) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy(noun) })
-    const derived = aiBuildUnitJob(job, unit, { kind, units, ledger, ops, briefLines: degradation.briefLines })
+    const derived = aiBuildUnitJob(job, unit, {
+      kind,
+      units,
+      ledger,
+      ops,
+      briefLines: degradation.briefLines,
+      dropped: degradation.dropped,
+    })
     // An item's kind is asked its own admission first (a campaign's plan,
     // a template's subject), once, before its first pass.
     if (unit.item && rows.get(unit.slot)?.status !== 'running') {
