@@ -18932,6 +18932,10 @@
             "label": "Bounced"
           },
           {
+            "value": "soft_bounce",
+            "label": "Bounced (temporary)"
+          },
+          {
             "value": "complaint",
             "label": "Marked as spam"
           },
