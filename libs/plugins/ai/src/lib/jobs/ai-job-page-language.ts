@@ -173,7 +173,20 @@ export const AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
   },
 ]
 
-/** The page of a site plan that places its form: the form the plan creates, or one the site has. */
+/**
+ * The page of a site plan that places its form: the form the plan creates, or
+ * one the site has. Home only when no other page places it (AGL-3805).
+ *
+ * Every call to action that asks a visitor to get in touch goes here — the
+ * header's button on every page, the footer's, a page's own — so a page whose
+ * purpose is the form outranks the home page that closes on a copy of it. A
+ * plan lists Home first, and a home page that ends "visit us or order" places
+ * the form too: the first page placing it was Home, and a Spanish bakery's
+ * header "Pide tu pastel" and footer "Contáctanos" (beta.253, job eg4maZMGtN)
+ * linked the home page on every page, itself included, while /pasteles and
+ * /visitanos held the form. Eight of the 21 newest AI-built sites linked their
+ * header's call to action home the same way, six of them with such a page.
+ */
 export function aiLayoutFormPageOfPlan(
   plan: Pick<AiJobPlan, 'create' | 'screens'>,
   formIds: readonly string[] = [],
@@ -184,14 +197,17 @@ export function aiLayoutFormPageOfPlan(
       .map((entry) => `new:${entry.name}`.toLowerCase()),
   )
   const forms = new Set(formIds)
-  const screen = plan.screens.find((entry) =>
-    entry.sections.some((section) =>
-      section.uses.some((ref) =>
-        isAiPlanNewRef(ref) ? created.has(ref.toLowerCase()) : forms.has(ref),
+  const placing = plan.screens.filter(
+    (entry) =>
+      typeof entry.id === 'string' &&
+      entry.sections.some((section) =>
+        section.uses.some((ref) =>
+          isAiPlanNewRef(ref) ? created.has(ref.toLowerCase()) : forms.has(ref),
+        ),
       ),
-    ),
   )
-  return typeof screen?.id === 'string' ? screen.id : null
+  const screen = placing.find((entry) => !aiLayoutIsHomeSlug(entry.slug)) ?? placing[0]
+  return screen?.id ?? null
 }
 
 /** Every word the job was given, which a page's contact details are held to. */
