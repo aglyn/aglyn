@@ -2514,6 +2514,59 @@ const OPENING_WORDS = new Set([
   'without',
 ])
 
+/**
+ * The words no finished line ends on in a language other than English, keyed
+ * by its primary subtag (AGL-3828): its articles, its joining conjunctions,
+ * the prepositions it never leaves at a phrase's end, and the possessives
+ * that only ever come before a noun. A word that can close a phrase on its
+ * own is left out, though a cut can end on it too: French "un" ("Tout en
+ * un"), "son" (sound) and "vers" (verse), Portuguese "um" ("Dois em um") and
+ * "pelos" ("Remoção de pelos"), Italian "uno" and "su" ("Torna su"), and
+ * German's articles and the prepositions its separable verbs end on ("Rufen
+ * Sie uns an"). One-letter words count in lowercase only, as English's "a"
+ * does: "Vitamina E" ends on a name. Written precomposed (NFC).
+ */
+const DANGLING_WORDS_BY_LANGUAGE: Readonly<Record<string, string>> = {
+  es: 'a al con de del desde e el en entre hacia hasta la las los mi mis ni o para pero por que sin sino su sus tu tus u un una unas unos y',
+  pt: 'a à ao aos as às com da das de do dos e em entre mas na nas nem no nos num numa o os ou para pela pelas por que sem',
+  fr: 'à au aux avec chez dans de des du en entre et la le les ma mais mes mon ni nos notre ou par pour que sa sans ses sur ta tes ton vos votre',
+  it: 'a ai al alla alle che col con da dai dal dalla degli dei del della delle di e ed fra gli i il in la le lo ma né nei nel nella o per sui sul sulla tra un una',
+  de: 'am beim dass des für im ins oder sondern sowie und vom von zum zur',
+}
+
+/**
+ * The elided words a French or Italian line cannot end on, without their
+ * apostrophe: a cut that stops at "de l’" or "dell’" leaves the article
+ * waiting for the word it was joined to.
+ */
+const ELIDED_WORDS_BY_LANGUAGE: Readonly<Record<string, string>> = {
+  fr: 'c d j jusqu l lorsqu m n puisqu qu s t',
+  it: 'all d dall dell l nell quest sull un',
+}
+
+/** A language's dangling words, read once from its table; `null` for English and every language with none. */
+interface AiDanglingTable {
+  words: ReadonlySet<string>
+  elided: ReadonlySet<string>
+}
+const danglingTables = new Map<string, AiDanglingTable | null>()
+
+function danglingTableFor(language: unknown): AiDanglingTable | null {
+  const code = typeof language === 'string' ? (/^([a-z]{2,3})(?:[-_]|$)/i.exec(language.trim())?.[1] ?? '').toLowerCase() : ''
+  if (!code || code === 'en') return null
+  let table = danglingTables.get(code)
+  if (table === undefined) {
+    const words = Object.prototype.hasOwnProperty.call(DANGLING_WORDS_BY_LANGUAGE, code) ? DANGLING_WORDS_BY_LANGUAGE[code] : ''
+    const elided = Object.prototype.hasOwnProperty.call(ELIDED_WORDS_BY_LANGUAGE, code) ? ELIDED_WORDS_BY_LANGUAGE[code] : ''
+    table = words ? { words: new Set(words.split(' ')), elided: new Set(elided.split(' ').filter(Boolean)) } : null
+    danglingTables.set(code, table)
+  }
+  return table
+}
+
+/** An elided word at a line's end, apostrophe and all: the "l’" of "Pain de l’". */
+const ELIDED_TAIL = /(?<![\p{L}\p{M}\p{N}&'’])(\p{L}[\p{L}\p{M}]*)['’]$/u
+
 /** A line that closes itself: a sentence's end, a closing quote or bracket, or a colon that introduces what follows. */
 const CLOSED_LINE = /[.!?…:;"'”’»)\]]$/
 
@@ -2532,10 +2585,17 @@ const LAST_WORD = /(?<![\p{L}\p{M}\p{N}&'’])(?:\p{L}[\p{L}\p{M}]*|&)$/u
  * `null`. A line that closes itself, ends on a binding or a bracketed fact the
  * member fills, or ends on any other word, is finished as far as a check can
  * tell. Exported for the specs that hold the closed list.
+ *
+ * `language` is the site's language code (`es`, `pt-BR`): a line in one with
+ * a table above is held to that table's words (AGL-3828), and every other
+ * line, an unknown language's included, to English's.
  */
-export function aiDanglingWord(line: string): string | null {
+export function aiDanglingWord(line: string, language?: string | null): string | null {
   const text = line.trim()
-  if (!text || CLOSED_LINE.test(text)) return null
+  if (!text) return null
+  const table = danglingTableFor(language)
+  if (table) return danglingWordIn(text, table)
+  if (CLOSED_LINE.test(text)) return null
   const word = LAST_WORD.exec(text)?.[0]
   if (!word) return null
   const lower = word.toLowerCase()
@@ -2544,6 +2604,27 @@ export function aiDanglingWord(line: string): string | null {
   // of "Drop-in" or "Add-on" joins one word and breaks nothing.
   const before = text.slice(0, text.length - word.length)
   return OPENING_WORDS.has(lower) && /(?:[,;—–]|\s-)\s*$/.test(before) ? word : null
+}
+
+/**
+ * The dangling word a line in a language with a table ends on, or `null`.
+ * An elided article counts before the apostrophe could close the line. A
+ * word joined by a hyphen to the one before it ends a compound, never a
+ * phrase: French "Profitez-en" and Portuguese "Siga-nos" are finished.
+ */
+function danglingWordIn(text: string, table: AiDanglingTable): string | null {
+  if (table.elided.size) {
+    const elided = ELIDED_TAIL.exec(text)
+    if (elided && table.elided.has(elided[1].normalize('NFC').toLowerCase())) return elided[0]
+  }
+  if (CLOSED_LINE.test(text)) return null
+  const word = LAST_WORD.exec(text)?.[0]
+  if (!word) return null
+  const whole = word.normalize('NFC')
+  const lower = whole.toLowerCase()
+  if (whole.length === 1 && whole !== lower) return null
+  if (/[\p{L}\p{M}\p{N}]-$/u.test(text.slice(0, text.length - word.length))) return null
+  return lower === '&' || table.words.has(lower) ? word : null
 }
 
 /** The last words of a line, as a re-ask quotes them. */
