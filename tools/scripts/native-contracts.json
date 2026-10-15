@@ -716,6 +716,23 @@
         "IMAGE_EDIT_PREVIEW_MAX",
         "IMAGE_EDIT_JPEG_QUALITY"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/screen-slug.ts": {
+      "values": [
+        "RESERVED_SCREEN_ROUTE_SEGMENTS",
+        "SCREEN_SLUG_PATH_SEPARATOR_MESSAGE",
+        "SCREEN_ROOT_PATH"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/reusable-component-keys.ts": {
+      "values": [
+        "COMPONENT_PROP_TOKEN_PREFIX"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/email-block-starters.ts": {
+      "values": [
+        "EMAIL_BLOCK_STARTER_TREES_JSON"
+      ]
     }
   },
   "ints": [
@@ -20707,6 +20724,867 @@
           {
             "subtotalCents": 30000,
             "totalGrams": 9000
+          }
+        ]
+      ]
+    },
+    "compress": {
+      "module": "libs/aglyn/src/lib/app-utils/compress.ts",
+      "args": [
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ],
+        [
+          true
+        ],
+        [
+          false
+        ],
+        [
+          ""
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        [
+          "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+        ],
+        [
+          [
+            0,
+            1,
+            127,
+            128,
+            255,
+            256,
+            65535,
+            65536,
+            4294967295,
+            4294967296,
+            9007199254740991,
+            -1,
+            -32,
+            -33,
+            -128,
+            -129,
+            -32768,
+            -32769,
+            -2147483648,
+            -2147483649,
+            -9007199254740991
+          ]
+        ],
+        [
+          [
+            0.1,
+            -2.5,
+            3.14159265358979,
+            1e+21,
+            -1e-07,
+            123456.789
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ]
+        ],
+        [
+          {
+            "k00": 0,
+            "k01": 1,
+            "k02": 2,
+            "k03": 3,
+            "k04": 4,
+            "k05": 5,
+            "k06": 6,
+            "k07": 7,
+            "k08": 8,
+            "k09": 9,
+            "k10": 10,
+            "k11": 11,
+            "k12": 12,
+            "k13": 13,
+            "k14": 14,
+            "k15": 15,
+            "k16": 16,
+            "k17": 17,
+            "k18": 18,
+            "k19": 19
+          }
+        ],
+        [
+          {
+            "a": {
+              "b": {
+                "c": {
+                  "d": [
+                    {
+                      "e": "deep"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        [
+          {
+            "mixed": [
+              null,
+              true,
+              false,
+              0,
+              -1,
+              1.25,
+              "s",
+              [],
+              {}
+            ]
+          }
+        ]
+      ]
+    },
+    "resolveNamedTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
+      "args": [
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          {
+            "name": "Ada"
+          }
+        ],
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          {
+            "name": "A.d{a}"
+          }
+        ],
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          {}
+        ],
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          null
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "{{ name }} and {{other}} and {{ name}}",
+                "list": [
+                  "{{name}}",
+                  {
+                    "deep": "x {{name}} y"
+                  }
+                ],
+                "count": 3
+              }
+            }
+          },
+          {
+            "name": "Zed",
+            "other": "Q"
+          }
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "Hi {{who}}"
+              }
+            }
+          },
+          {
+            "name": "Ada"
+          }
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "div"
+            }
+          },
+          {
+            "name": "Ada"
+          }
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "{{a.b}} {{a}}"
+              }
+            }
+          },
+          {
+            "a.b": "dot",
+            "a": "plain"
+          }
+        ]
+      ]
+    },
+    "normalizeScreenSlug": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "About us"
+        ],
+        [
+          "  /about/  "
+        ],
+        [
+          "/"
+        ],
+        [
+          ""
+        ],
+        [
+          "###"
+        ],
+        [
+          "Hello World!"
+        ],
+        [
+          "a_b-c"
+        ],
+        [
+          "/Team/"
+        ],
+        [
+          "alt/webflow"
+        ],
+        [
+          "search"
+        ],
+        [
+          "404"
+        ],
+        [
+          "Café Menu"
+        ],
+        [
+          "UPPER"
+        ],
+        [
+          "--x--"
+        ],
+        [
+          "a  b"
+        ],
+        [
+          "10%"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "reservedScreenRouteSegment": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "search"
+        ],
+        [
+          "404"
+        ],
+        [
+          "api/docs"
+        ],
+        [
+          "/_next"
+        ],
+        [
+          "about"
+        ],
+        [
+          "/"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "aglyn-preview/x"
+        ],
+        [
+          "_aglyn/leaving"
+        ],
+        [
+          "company/search"
+        ]
+      ]
+    },
+    "reservedScreenRouteMessage": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "search"
+        ],
+        [
+          "404"
+        ],
+        [
+          "_aglyn"
+        ]
+      ]
+    },
+    "screenSlugHasPathSeparator": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "alternatives/webflow"
+        ],
+        [
+          "/about/"
+        ],
+        [
+          "/"
+        ],
+        [
+          "about"
+        ],
+        [
+          "a/b/c"
+        ],
+        [
+          "  "
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          " /x/y "
+        ]
+      ]
+    },
+    "templateScreenAddressRefusal": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "args": [
+        [
+          {
+            "slug": "alt/webflow"
+          }
+        ],
+        [
+          {
+            "slug": "search",
+            "displayName": "Search"
+          }
+        ],
+        [
+          {
+            "slug": "###",
+            "displayName": "Search"
+          }
+        ],
+        [
+          {
+            "displayName": "API"
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home"
+          }
+        ],
+        [
+          {
+            "slug": "",
+            "displayName": "Pricing"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "slug": "404"
+          }
+        ]
+      ]
+    },
+    "resolveTemplateSlugAmong": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "args": [
+        [
+          {
+            "slug": "about",
+            "displayName": "About",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "slug": "about",
+            "displayName": "About",
+            "taken": [
+              "about"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "about",
+            "displayName": "About",
+            "taken": [
+              "about",
+              "about-2"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home",
+            "taken": [
+              "/"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home",
+            "taken": [
+              "/",
+              "home"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "###",
+            "displayName": "Our Team",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "displayName": "",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "slug": "Contact Us",
+            "displayName": "x",
+            "taken": [
+              "contact-us"
+            ]
+          }
+        ]
+      ]
+    },
+    "withBundleRootScreen": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "args": [
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ],
+          []
+        ],
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ],
+          [
+            "/"
+          ]
+        ],
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ],
+          [
+            "about"
+          ]
+        ],
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "H",
+              "slug": "/"
+            }
+          ],
+          []
+        ],
+        [
+          [],
+          []
+        ],
+        [
+          [
+            {
+              "displayName": "A"
+            }
+          ],
+          [
+            "x"
+          ]
+        ]
+      ]
+    },
+    "detectTemplatePlaceholders": {
+      "module": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
+      "args": [
+        [
+          {
+            "n": {
+              "props": {
+                "children": "Hello {{name}} and {{ company }}"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "a": "{{var:abc}} {{fn:xyz}} {{prop.title}} {{real}}"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "a": [
+                  "{{zeta}}",
+                  {
+                    "b": "{{alpha}} {{alpha}}"
+                  }
+                ]
+              }
+            },
+            "m": {
+              "props": {
+                "x": "{{beta.gamma}} {{a-b}} {{a_b}}"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "a": "{{1bad}} {{ }} {{}} {{x y}}"
+              }
+            }
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "count": 3,
+                "flag": true,
+                "nothing": null
+              }
+            }
           }
         ]
       ]

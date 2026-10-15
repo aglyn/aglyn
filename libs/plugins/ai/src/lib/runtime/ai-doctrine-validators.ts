@@ -4976,7 +4976,10 @@ function freePlanWall(
     aiPlanUncreatable(plan, capabilities).filter((entry) => entry.kind === 'form').length
   const fits =
     sitePages !== undefined
-      ? aiFreeSiteSectionsWithin({ layouts, pages, forms: Math.max(0, forms) }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      ? aiFreeSiteSectionsWithin(
+          { layouts, pages, forms: Math.max(0, forms), posts: capabilities.freeSitePosts ?? 0 },
+          FREE_AI_TASTE_CREDITS_PER_MONTH,
+        )
       : aiFreePageSectionsWithin({ layouts, pages })
   // A site start's home keeps its full five (AGL-3660): told only "plan at
   // most 8", the live yoga start of 2026-10-08 cut a home of 6 to 4 and kept

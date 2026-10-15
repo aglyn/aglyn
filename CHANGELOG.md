@@ -15,11 +15,17 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **legal:** v16, Privacy discloses ad conversion reporting on merchant sites ([AGL-3799](https://linear.app/aglyn/issue/AGL-3799))
+- **native:** start from a template and save as a template ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** an email block starts as a header or footer ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** a site's theme shows what it changed, with a reset for each ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** a component's icon is picked from the icon set and saved with its details ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **ai:** templates and theme ask medium effort, text low, from the golden A/B ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **ai:** a paid site plan asks medium effort, layout-language pages and frames low ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 
 ### Fixed
 
+- **media:** a storage read stops tripping MaxListenersExceededWarning ([AGL-3795](https://linear.app/aglyn/issue/AGL-3795))
 - **forms:** finish the manager notification before answering a submission ([AGL-3793](https://linear.app/aglyn/issue/AGL-3793))
 - **tenant:** a site's 404 names itself in the tab in the site's language ([AGL-3791](https://linear.app/aglyn/issue/AGL-3791), [AGL-3771](https://linear.app/aglyn/issue/AGL-3771))
 - **ai:** a non-English site's search listing sets no English around its answers ([AGL-3792](https://linear.app/aglyn/issue/AGL-3792))
@@ -30,6 +36,7 @@ content on the marketing site and is written separately.
 <details>
 <summary>Also in this release: 1 test</summary>
 
+- **ci:** nx-ci-setup retries the root npm ci on transient failures (AGL-3797)
 - **ci:** manifests cached in the scratch path; xcodebuild says what it rebuilt (AGL-3783)
 - **marketing:** the conversions card spec loads its module once, outside any test's budget
 

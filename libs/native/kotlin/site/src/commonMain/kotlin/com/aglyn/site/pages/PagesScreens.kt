@@ -45,6 +45,10 @@ import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.site.artifacts.ArtifactRow
+import com.aglyn.site.artifacts.SaveAsTemplateDialog
+import com.aglyn.site.artifacts.TemplateGalleryDialog
+import com.aglyn.site.artifacts.UseTemplateDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -97,6 +101,10 @@ private sealed interface PageDialog {
   data class Duplicate(val page: PageNode) : PageDialog
   data class Move(val page: PageNode) : PageDialog
   data class Delete(val page: PageNode, val livePath: String?) : PageDialog
+  /** The page templates to start a new page from. */
+  data object Gallery : PageDialog
+  data class UseTemplate(val row: ArtifactRow) : PageDialog
+  data class SaveTemplate(val page: PageNode) : PageDialog
 }
 
 /**
@@ -122,6 +130,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
       Column(Modifier.fillMaxSize()) {
         ListHeader("Pages") {
           OverflowMenu(listOf(MenuAction("new-group", "New group", "folder", enabled = canEdit) { dialog = PageDialog.NewGroup }))
+          OutlinedButton(onClick = { dialog = PageDialog.Gallery }, enabled = canEdit, modifier = Modifier.testTag("page-from-template")) { Text("From a template") }
           Button(onClick = { dialog = PageDialog.NewPage }, enabled = canEdit, modifier = Modifier.testTag("add-page")) {
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("New page", Modifier.padding(start = space(1f)))
@@ -161,7 +170,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
     },
   )
 
-  PageDialogs(dialog, live, api, runner, onSelectNew = { id -> context.navigate(SITE_PAGES_SCREEN, mapOf("page" to id)) }) { dialog = null }
+  PageDialogs(context, hostId, dialog, live, api, runner, onSelectNew = { id -> context.navigate(SITE_PAGES_SCREEN, mapOf("page" to id)) }, onOpen = { dialog = it }) { dialog = null }
 }
 
 @Composable
@@ -216,6 +225,7 @@ private fun PageDetail(
           add(MenuAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
           if (!page.isGroup) {
             add(MenuAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(PageDialog.Duplicate(page)) })
+            add(MenuAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(PageDialog.SaveTemplate(page)) })
             add(MenuAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
             if (row.livePath != null) add(MenuAction("unpublish", "Unpublish", "visibility_off", enabled = canPublish) { open(PageDialog.Unpublish(page)) })
           }
@@ -308,10 +318,24 @@ private fun PageVersions(context: NativePluginContext, hostId: String, page: Pag
 }
 
 @Composable
-private fun PageDialogs(dialog: PageDialog?, live: PagesLive, api: PagesApi, runner: ActionRunner, onSelectNew: (String) -> Unit, close: () -> Unit) {
+private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: PageDialog?, live: PagesLive, api: PagesApi, runner: ActionRunner, onSelectNew: (String) -> Unit, onOpen: (PageDialog) -> Unit, close: () -> Unit) {
   val done = { close() }
   when (dialog) {
     null -> Unit
+    PageDialog.Gallery -> TemplateGalleryDialog(context, hostId, "page", onChoose = { onOpen(PageDialog.UseTemplate(it)) }, onDismiss = close)
+    is PageDialog.UseTemplate -> UseTemplateDialog(context, hostId, dialog.row, onDone = { _, id -> close(); onSelectNew(id) }, onDismiss = close)
+    is PageDialog.SaveTemplate -> SaveAsTemplateDialog(
+      context,
+      hostId,
+      kind = "page",
+      defaultName = dialog.page.name,
+      load = { templates -> templates.pageSource(dialog.page.id, dialog.page.versionId) },
+      onSaved = { message ->
+        runner.notice = message
+        close()
+      },
+      onDismiss = close,
+    )
     PageDialog.NewPage -> {
       var name by remember { mutableStateOf("") }
       var description by remember { mutableStateOf("") }

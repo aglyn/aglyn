@@ -21,6 +21,7 @@ import {
   contrastRatio,
   describeTheme,
   describeThemeOverride,
+  themeOverrideAfterReset,
   describeThemePath,
   hostThemeSource,
   isOverrideForCurrentTheme,
@@ -491,6 +492,28 @@ describe('describeThemeOverride — "what have I changed?"', () => {
     expect(describeThemePath('components.MuiButton.defaultProps.color')).toBe(
       'Component · MuiButton · defaultProps · color',
     )
+  })
+})
+
+describe('themeOverrideAfterReset — the Reset beside one change', () => {
+  it('puts one value back at the theme’s and keeps the rest', () => {
+    const host = hostWith({
+      colorSchemes: { dark: { primary: { main: '#00e5ff' } } },
+      spacing: 4,
+    })
+    const next = themeOverrideAfterReset(host, 'spacing')
+    const after = describeThemeOverride({ ...host, themeOverride: next })
+    expect(after.map((entry) => entry.path)).toEqual(['colorSchemes.dark.primary.main'])
+    expect(after[0].overrideValue).toBe('#00e5ff')
+  })
+
+  it('stores nothing once the last change is reset', () => {
+    const host = hostWith({ spacing: 4 })
+    expect(themeOverrideAfterReset(host, 'spacing')).toBeNull()
+  })
+
+  it('is undefined when the site has no override to change', () => {
+    expect(themeOverrideAfterReset({ theme: goodTheme() }, 'spacing')).toBeUndefined()
   })
 })
 

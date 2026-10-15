@@ -26,6 +26,10 @@
       "why": "Reached by entry-list-declaration: the entry date fields and publish sort key, no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/compress.ts",
+      "why": "A stored node tree is msgpack bytes; the native readers decode them and the cases record what the console's encoder makes (AGL-3668). Its one import is the msgpack coder."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
       "why": "Which sites present as one sender, read by the CRM's scope (crmScopeTokens, crmReadTokens) in the apps (AGL-3669)."
     },
@@ -54,6 +58,18 @@
       "why": "The CRM's vocabularies, scope tokens and list fields, read by the native contracts and the CRM's replayed function cases (AGL-3669)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
+      "why": "The {{name}} placeholders a saved template asks for when it is used; the native Save as template declares the same (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/element-animation.ts",
+      "why": "Reached by reusable-component-keys: animation prop names."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/email-block-starters.ts",
+      "why": "The Header and Footer bands an email block starts from, as plain data: the email plugin registers them as presets and the native apps start a component from the same trees (AGL-3668). No imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/email-state.ts",
       "why": "Reached by crm.ts: an address's deliverability states."
     },
@@ -64,6 +80,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts",
       "why": "A collection's entry list declaration, filter fields and statuses; the native content screens plan the same Firestore query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/entry-preview-link.ts",
+      "why": "Reached by screen-slug: the reserved preview segment. No imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/functions.ts",
@@ -80,6 +100,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/image-edit.ts",
       "why": "The media image editor's arithmetic: the quarter-turn size, the crop a drag draws, where an edit cuts and how big it comes out, the copy's name and type (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/leaving-notice.ts",
+      "why": "Reached by screen-slug: the reserved leaving-notice segment. No imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/local-business.ts",
@@ -146,8 +170,16 @@
       "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
+      "why": "A template's {{name}} placeholders filled in as a page, component or layout is made from it (AGL-3668). Type-only import."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/retained-refusals.ts",
       "why": "Reached by contacts.ts: the refusals a removed contact keeps."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/reusable-component-keys.ts",
+      "why": "Reached by detect-template-placeholders: the {{prop.*}} prefix a template placeholder never takes (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
@@ -164,6 +196,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/screen-seo-fields.ts",
       "why": "Reached by seo-listing-fields: a page's search text fields (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "why": "A page address: the slug normalizer, the reserved segments and the one-segment rule the native publish and template screens ask the same way (AGL-3668). Leaf imports only."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
@@ -208,6 +244,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "why": "Where a page made from a template lands: de-conflicted against the taken addresses, refused when reserved (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",

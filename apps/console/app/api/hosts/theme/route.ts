@@ -19,7 +19,14 @@ import type { ThemeLibraryAction } from '@aglyn/aglyn/app-utils/theme-library'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
-import { resolveSiteTheme, themeOverridePatch } from '@aglyn/aglyn/app-utils/site-theme'
+import {
+  describeThemeOverride,
+  isOverrideForCurrentTheme,
+  resolveSiteTheme,
+  themeOverrideAfterReset,
+  themeOverridePatch,
+} from '@aglyn/aglyn/app-utils/site-theme'
+import { readThemeSelection } from '@aglyn/aglyn/app-utils/theme-library'
 import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import {
@@ -138,10 +145,11 @@ function readAction(body: Record<string, unknown>): ThemeLibraryAction | string 
  */
 async function editorAction(
   request: Request,
-  action: 'values' | 'edit',
+  action: 'values' | 'edit' | 'reset',
   hostId: string,
   rawEdits: unknown,
   decoded: { uid: string; email?: string | null; staff?: unknown },
+  resetPath?: unknown,
 ): Promise<Response> {
   const edits = action === 'edit' ? readThemeEditorEdits(rawEdits) : []
   if (typeof edits === 'string') return Response.json({ error: edits }, { status: 400 })
@@ -163,6 +171,7 @@ async function editorAction(
         values: readThemeEditorValues(resolveSiteTheme(host)),
         catalog: THEME_EDITOR_CATALOG,
         presets: summarizeThemePresets(listServerThemePresets()),
+        ...whatYouChanged(host),
       },
       { status: 200 },
     )
@@ -175,6 +184,7 @@ async function editorAction(
     host,
   })
   if (locked) return locked
+  if (action === 'reset') return resetOneChange(hostRef, host, hostId, decoded, resetPath)
   const edited = applyThemeEditorEdits((resolveSiteTheme(host) ?? {}) as HostTheme, edits)
   const installedSha = host['themeInstalledFrom']?.listingId
     ? (host['themeInstalledFrom']?.sha256 ?? null)
@@ -193,6 +203,54 @@ async function editorAction(
   return Response.json({ ok: true, values: readThemeEditorValues(edited) }, { status: 200 })
 }
 
+/**
+ * "What you have changed" (the console's card of that name): each value this
+ * site set on top of its theme, with the theme's own beside it, and whether
+ * the changes were made against a different theme than the one picked now.
+ */
+function whatYouChanged(host: Record<string, any>) {
+  return {
+    changes: describeThemeOverride(host).map((entry) => ({
+      path: entry.path,
+      label: entry.label,
+      ...(entry.scheme ? { scheme: entry.scheme } : {}),
+      themeValue: entry.themeValue ?? null,
+      overrideValue: entry.overrideValue ?? null,
+    })),
+    stale: !isOverrideForCurrentTheme(host),
+    themeName: readThemeSelection(host).name,
+  }
+}
+
+/** The Reset beside one change: that value goes back to the theme's, and the rest stay. */
+async function resetOneChange(
+  hostRef: FirebaseFirestore.DocumentReference,
+  host: Record<string, any>,
+  hostId: string,
+  decoded: { uid: string; email?: string | null },
+  rawPath: unknown,
+): Promise<Response> {
+  const path = typeof rawPath === 'string' ? rawPath.trim() : ''
+  const known = describeThemeOverride(host).some((entry) => entry.path === path)
+  if (!path || !known) {
+    return Response.json({ error: 'That is not one of your changes' }, { status: 400 })
+  }
+  const next = themeOverrideAfterReset(host, path)
+  await hostRef.update({ themeOverride: next ?? null, updatedAt: Timestamp.now() })
+  await dropPluginSiteCache({ hostIds: [hostId], reason: 'theme change reset' })
+  await logHostActivity(
+    hostId,
+    { uid: decoded.uid, email: decoded.email ?? null },
+    'Updated theme',
+    { type: 'theme' },
+  ).catch(() => undefined)
+  const updated = { ...host, themeOverride: next ?? null }
+  return Response.json(
+    { ok: true, values: readThemeEditorValues(resolveSiteTheme(updated)), ...whatYouChanged(updated) },
+    { status: 200 },
+  )
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -201,7 +259,10 @@ async function handler(request: Request): Promise<Response> {
   }
   const hostId = String(body?.hostId ?? '')
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
-  const editor = body?.action === 'values' || body?.action === 'edit' ? (body.action as 'values' | 'edit') : null
+  const editor =
+    body?.action === 'values' || body?.action === 'edit' || body?.action === 'reset'
+      ? (body.action as 'values' | 'edit' | 'reset')
+      : null
   const action = editor ? null : readAction((body ?? {}) as Record<string, unknown>)
   if (typeof action === 'string') {
     return Response.json({ error: action }, { status: 400 })
@@ -218,7 +279,7 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    if (editor) return await editorAction(request, editor, hostId, body?.edits, decoded)
+    if (editor) return await editorAction(request, editor, hostId, body?.edits, decoded, body?.path)
     if (!action) return Response.json({ error: 'Unknown action.' }, { status: 400 })
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)

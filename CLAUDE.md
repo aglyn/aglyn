@@ -1,5 +1,26 @@
 # Working in this repository
 
+## Before you do X, read Y
+
+The auto-memory index (`MEMORY.md`) holds one-line hooks; the rules live in
+the topic files beside it, in
+`~/.claude/projects/-Users-zgover-Documents-VCS-aglyn/memory/`. These are the
+ones sessions keep missing. Open the files BEFORE the first step of that kind
+of task, not after it goes wrong.
+
+| before you… | read |
+| -- | -- |
+| export, upload or show anyone a Figma mockup image (even one sent for a decision) | `feedback_a_figma_export_is_not_the_frame.md`, `feedback_figma_mockup_export_crop_recipe.md` |
+| change a file in the media library (DAM) | `project_dam_replace_in_place_directive.md`, `feedback_dam_upload_via_input_injection.md`: replace in place from the org library's Details drawer (`/aglyn-org/hosts/<host>/media?tab=org`), never upload a second copy |
+| open a PR, or push to one | `feedback_every_pr_details_every_change_and_commit.md` |
+| cut, update or merge a promotion | `feedback_a_promotion_pr_must_be_a_pinned_branch_not_main.md`, `feedback_open_promotion_pr_carries_all_of_main.md`, `feedback_every_promotion_ends_with_tag_and_rules_deploy.md`, `project_zach_decision_2026_09_29_three_promotions_a_day.md` |
+| fix how a site looks | `feedback_site_look_fixes_go_in_the_besigner_not_mui_code.md` |
+| write a guide, a site build step or an AI site part | `feedback_no_code_for_users_ever.md` |
+| change a legal document | `feedback_legal_gdocs_are_source_of_truth.md`: the Google Doc first, then the website |
+
+For any other kind of task, `grep -rli '<2–3 task keywords>'` that folder and
+read every `feedback_*` hit first (`feedback_grep_memory_before_each_kind_of_task.md`).
+
 ## A fix for a sign-up or access blocker ships to production the same hour
 
 If a bug stops anyone from signing up, signing in, verifying, getting a
