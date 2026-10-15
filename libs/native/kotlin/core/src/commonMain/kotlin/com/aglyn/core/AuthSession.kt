@@ -55,6 +55,14 @@ interface AuthSession {
   suspend fun signInWithCustomToken(token: String): Unit = throw AuthError("Signing in with a passkey is not available here.")
 
   /**
+   * Signs in with a custom token minted in the identity pool [tenantId] names (an SSO account lives in its workspace's tenant):
+   * the console hand-off's. The project pool when null.
+   */
+  suspend fun signInWithCustomToken(token: String, tenantId: String?) {
+    if (tenantId.isNullOrEmpty()) signInWithCustomToken(token) else throw AuthError("Single sign-on is not available here.")
+  }
+
+  /**
    * Creates an email and password account in the project pool and signs in as it, as the console's sign-up does
    * (`createUserWithEmailAndPassword`); the blocking functions and abuse checks run on it as on the console's. Throws [AuthError]
    * with the sign-up form's words and the Identity Toolkit code.

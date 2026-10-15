@@ -412,6 +412,17 @@ public struct SignUpService: Sendable {
       body: .object(["email": .string(email.trimmingCharacters(in: .whitespacesAndNewlines))]), anonymous: true)
   }
 
+  /// Whether `email`'s domain signs in through a workspace's single sign-on (`/api/auth/sso-lookup`, the console's `/sso`
+  /// discovery): such an address lives in that workspace's identity pool, so a password sign-in in the project pool is not
+  /// its account. An unreadable answer is no.
+  public func usesSingleSignOn(_ email: String) async -> Bool {
+    let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard trimmed.contains("@"),
+      let answer = try? await api.request("/api/auth/sso-lookup", query: [("email", trimmed)], anonymous: true)
+    else { return false }
+    return answer["ssoEnabled"] == .bool(true) && (answer["tenantId"]?.stringValue ?? "").isEmpty == false
+  }
+
   /// The confirmed alternative address an account signs in with (`/api/auth/resolve-identifier`), or nil.
   public func resolveIdentifier(_ typed: String) async -> String? {
     guard

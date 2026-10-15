@@ -3,6 +3,7 @@ package com.aglyn.pos
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,7 @@ import com.aglyn.camera.CameraXBarcodeScanner
 import com.aglyn.core.AuthState
 import com.aglyn.ui.LocalCameraScanner
 import com.aglyn.shell.AglynMessagingService
+import com.aglyn.shell.handleConsoleHandoffReturn
 import com.aglyn.pos.terminal.PermissionGate
 import com.aglyn.shell.PosShell
 import kotlinx.coroutines.CompletableDeferred
@@ -50,6 +52,8 @@ class MainActivity : ComponentActivity() {
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.
     val autoSignIn = BuildConfig.DEBUG && intent.getBooleanExtra("autoSignIn", false)
     AglynMessagingService.ensureChannel(this)
+    // Single sign-on's console page hands its code back to `aglyn-pos://auth/handoff`.
+    services.handleConsoleHandoffReturn(intent?.dataString, lifecycleScope)
     lifecycleScope.launch {
       services.auth.state.collect { state -> if (state is AuthState.SignedIn) askForNotificationsOnce() }
     }
@@ -63,6 +67,11 @@ class MainActivity : ComponentActivity() {
         PosShell(services, autoSignIn = autoSignIn)
       }
     }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    (application as AglynPosApplication).services.handleConsoleHandoffReturn(intent.dataString, lifecycleScope)
   }
 
   override fun onDestroy() {

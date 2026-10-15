@@ -160,7 +160,7 @@ internal fun StorePicker(
           )
           workspace.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-        if (workspace.orgs.size > 1) {
+        if (workspace.orgs.size > 1 || workspace.hasMoreOrgs) {
           Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = space(2f)),
             horizontalArrangement = Arrangement.spacedBy(space(1f)),
@@ -171,6 +171,9 @@ internal fun StorePicker(
                 onClick = { services.workspace.selectOrg(org.id) },
                 label = { Text(org.name) },
               )
+            }
+            if (workspace.hasMoreOrgs) {
+              androidx.compose.material3.AssistChip(onClick = { services.workspace.loadMoreOrgs() }, label = { Text("Load more workspaces") })
             }
           }
         }

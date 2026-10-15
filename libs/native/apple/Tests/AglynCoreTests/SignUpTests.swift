@@ -250,3 +250,73 @@ final class ProviderSignInTests: XCTestCase {
     XCTAssertEqual(transport.json(0)["postBody"] as? String, "id_token=apple&providerId=apple.com&nonce=raw-1")
   }
 }
+
+final class ConsoleHandoffTests: XCTestCase {
+  func testOpensTheConsolePageWithAChallengeOnlyTheAppCanAnswer() throws {
+    let pending = ConsoleHandoff.begin(origin: "https://app.aglyn.com", app: .aglyn, start: .singleSignOn)
+    let items = URLComponents(url: pending.url, resolvingAgainstBaseURL: false)!.queryItems!
+    func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+    XCTAssertEqual(pending.url.path, "/auth/native")
+    XCTAssertEqual(value("start"), "sso")
+    XCTAssertEqual(value("redirect_uri"), "aglyn://auth/handoff")
+    XCTAssertEqual(value("challenge"), GoogleLink.challenge(for: pending.verifier))
+    XCTAssertEqual(value("state"), pending.state)
+    XCTAssertEqual(pending.callbackScheme, "aglyn")
+    XCTAssertEqual(ConsoleHandoff.begin(origin: "https://app.aglyn.com", app: .pos, start: .signIn).callbackScheme, "aglyn-pos")
+  }
+
+  func testTheCodeIsReadOnlyFromThisSignInsReturn() throws {
+    let pending = ConsoleHandoff.begin(origin: "https://app.aglyn.com", app: .aglyn, start: .signIn)
+    let back = URL(string: "aglyn://auth/handoff?code=abc&state=\(pending.state)")!
+    XCTAssertEqual(try ConsoleHandoff.code(from: back, pending: pending), "abc")
+    XCTAssertThrowsError(try ConsoleHandoff.code(from: URL(string: "aglyn://auth/handoff?code=abc&state=other")!, pending: pending))
+  }
+
+  func testRedeemsTheCodeWithTheVerifierForATokenInItsPool() async throws {
+    let transport = RecordingTransport([(200, #"{"ok":true,"token":"custom","tenantId":"aglyn-org-1"}"#)])
+    let api = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in nil }, transport: transport, sleep: { _ in })
+    let pending = ConsoleHandoff.begin(origin: "https://console.test", app: .aglyn, start: .signIn)
+    let grant = try await ConsoleHandoff.redeem(api: api, code: "abc", pending: pending)
+    XCTAssertEqual(grant, ConsoleHandoff.Grant(token: "custom", tenantID: "aglyn-org-1"))
+    XCTAssertEqual(transport.requests[0].url?.path, "/api/auth/native-handoff/redeem")
+    XCTAssertNil(transport.requests[0].value(forHTTPHeaderField: "Authorization"))
+    XCTAssertEqual(
+      transport.json(0) as NSDictionary,
+      ["code": "abc", "verifier": pending.verifier, "redirectUri": "aglyn://auth/handoff"])
+  }
+
+  /// The acceptance case (AGL-3816): an address on a workspace's SSO domain is routed to SSO, and the hand-off's token signs
+  /// the app in as the TENANT account, whose uid is what every Firestore read then runs as.
+  func testAnSsoAddressIsRoutedToItsWorkspaceAndSignsInAsTheTenantAccount() async throws {
+    let lookup = RecordingTransport([
+      (200, #"{"ssoEnabled":true,"tenantId":"aglyn-org-y5v14","providerId":"saml.aglyn"}"#), (200, #"{"ssoEnabled":false}"#),
+    ])
+    let service = SignUpService(
+      api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in nil }, transport: lookup, sleep: { _ in }),
+      writer: RecordingWriter())
+    let routed = await service.usesSingleSignOn(" Sso-Member@Aglyn.com ")
+    let notRouted = await service.usesSingleSignOn("someone@example.test")
+    XCTAssertTrue(routed)
+    XCTAssertFalse(notRouted)
+    XCTAssertEqual(lookup.requests[0].url?.query, "email=sso-member%40aglyn.com")
+    let pending = ConsoleHandoff.begin(
+      origin: "https://app.aglyn.com", app: .aglyn, start: .singleSignOn, loginHint: "sso-member@aglyn.com")
+    XCTAssertTrue(pending.url.absoluteString.contains("login_hint=sso-member@aglyn.com"))
+
+    func encode(_ object: [String: Any]) -> String {
+      let data = try! JSONSerialization.data(withJSONObject: object)
+      return "h." + data.base64EncodedString().replacingOccurrences(of: "=", with: "")
+        .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_") + ".s"
+    }
+    let idToken = encode([
+      "user_id": "SsoTenantMemberUid0000000001", "email": "sso-member@aglyn.com", "email_verified": true,
+      "firebase": ["tenant": "aglyn-org-y5v14"],
+    ])
+    let exchange = RecordingTransport([(200, #"{"idToken":"\#(idToken)","refreshToken":"r","expiresIn":"3600"}"#)])
+    let auth = IdentityToolkitAuth(apiKey: "key", emulatorHost: nil, transport: exchange, store: MemoryCredentialStore())
+    let user = try await auth.signIn(customToken: "custom-for-sso-member", tenantId: "aglyn-org-y5v14")
+    XCTAssertEqual(user.uid, "SsoTenantMemberUid0000000001")
+    XCTAssertTrue(user.emailVerified)
+    XCTAssertEqual(exchange.json(0)["tenantId"] as? String, "aglyn-org-y5v14")
+  }
+}

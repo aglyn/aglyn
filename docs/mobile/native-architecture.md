@@ -403,6 +403,31 @@ How this shapes the code:
   so every Firebase call carries a token (next section). Windows has no
   built-in attestation, so the desktop build has no provider yet and its
   sign-in goes through a console hand-off instead.
+- **The console hand-off** (AGL-3816) is how an app signs in where the
+  console has to run the sign-in itself: workspace single sign-on on every
+  app, and every sign-in and sign-up on the Windows build against a project
+  that enforces App Check. The app makes a PKCE pair and opens
+  `/auth/native?start=signin|signup|sso&challenge=…&redirect_uri=…&state=…`
+  (`ASWebAuthenticationSession` on Apple, a Custom Tab on Android, the system
+  browser on the desktop). The page sends a signed-out visitor through the
+  console's own `/signin`, `/signup` or `/sso`, then shows who is signed in
+  and asks before continuing (AGL-1415). Continuing calls
+  `POST /api/auth/native-handoff/authorize` (bearer ID token; verified
+  address, no support session, the lockdown verdict), which stores a
+  one-time code as its SHA-256 in the server-only `nativeHandoffs`
+  collection, bound to the uid, the identity pool, the challenge and the
+  return address, for 120 seconds. The page goes to the return address
+  (`aglyn://auth/handoff`, `aglyn-pos://auth/handoff`, or
+  `http://127.0.0.1:<port>/handoff` on the desktop) with the code and
+  `state`. The app posts the code, its verifier and the same return address
+  to `POST /api/auth/native-handoff/redeem`, which consumes the record in one
+  transaction and mints a custom token in the account's own pool, and signs
+  in with it in that pool. A sign-in on an address whose domain has workspace
+  SSO (`/api/auth/sso-lookup`) goes this way from the email field, so an SSO
+  account signs in as its tenant uid rather than as a project-pool account.
+  On Android the SDK aims its one instance at the tenant
+  (`setTenantId`), which it cannot undo, so after a single sign-on in one
+  process the other doors ask for the app to be reopened.
 - **The macOS app is the SwiftUI build,** so the JVM desktop target ships
   only for Windows (and Linux, which is not committed).
 

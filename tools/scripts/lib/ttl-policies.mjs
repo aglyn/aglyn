@@ -156,6 +156,14 @@ export const TTL_POLICIES = Object.freeze([
     why: 'cross-domain session handoff records',
   },
   {
+    collection: 'nativeHandoffs',
+    field: 'expiresAt',
+    // AGL-3816 — a native app's console hand-off code (its SHA-256, the PKCE
+    // challenge and the uid). Redeemable for 120 seconds and consumed on
+    // redemption; this bounds a code nobody redeemed.
+    why: 'native app console hand-off codes',
+  },
+  {
     collection: 'packageImports',
     field: 'expiresAt',
     // AGL-3543 — a site package import's record under

@@ -228,11 +228,9 @@ does not enforce it); debug builds, on the emulators, have it off.
   file (template: `docs/mobile/well-known/`); then the release is built with `-Paglyn.passkeyRpId=aglyn.com` and the
   certificate's hash is listed in the console's `PASSKEY_ANDROID_APK_KEY_HASHES`. Until then "Set up a passkey" is hidden.
 - Google sign-in ("Continue with Google" on both apps' sign-in and sign-up, and "Connect Google"): release builds carry
-  the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId` overrides it). Owed: an Android OAuth client in
-  Google Cloud project `aglyn-main` for each of `com.aglyn.app` and `com.aglyn.pos`, with the SHA-1 of the Play app
-  signing key (and one with the upload key's SHA-1, for sideloaded release builds); until then Google refuses the
-  Credential Manager request. On Windows a Desktop OAuth client (`AGLYN_GOOGLE_DESKTOP_CLIENT_ID` and
-  `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET`), used against the emulator stack only: production desktop sign-in goes through
-  the console (AGL-3816).
+  the Firebase project's Web OAuth client id (`-Paglyn.googleWebClientId` overrides it). Done 2026-10-15: the Android
+  OAuth clients for `com.aglyn.app` and `com.aglyn.pos`, for the Play app-signing and upload-key SHA-1s. On Windows a
+  Desktop OAuth client (`AGLYN_GOOGLE_DESKTOP_CLIENT_ID` and `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET`), used against the
+  emulator stack only: production desktop sign-in goes through the console (AGL-3816).
 - Desktop (Windows): code signing (Azure Trusted Signing or an EV certificate)
   and/or a Microsoft Store account.

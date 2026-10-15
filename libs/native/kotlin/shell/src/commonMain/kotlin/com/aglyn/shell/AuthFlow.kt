@@ -62,6 +62,10 @@ class AuthFlow {
   /** A console link to open once the shell is up: where a new workspace with a plan lands. */
   var landingLink by mutableStateOf<String?>(null)
   var firstRun by mutableStateOf<FirstRunState>(FirstRunState.Idle)
+  /** A console sign-in in flight (single sign-on, the desktop's sign-in): what the app keeps until the code comes back. */
+  var pendingHandoff by mutableStateOf<com.aglyn.core.ConsoleHandoff.Pending?>(null)
+  /** Why the last console sign-in failed, for the sign-in screen. */
+  var handoffError by mutableStateOf<String?>(null)
   internal var firstRunSettledFor: String? = null
 
   /**
@@ -251,4 +255,34 @@ suspend fun ShellServices.createWorkspace(name: String): String? {
     return null
   }
   return outcome.error ?: "Organization creation failed"
+}
+
+/**
+ * Signing in through the console (AGL-3816): single sign-on on every platform, and every sign-in and sign-up on the Windows
+ * build. The platform opens the console's `/auth/native` page; its one-time code comes back (now, or later to the app's
+ * scheme) and is traded, with this sign-in's verifier, for a custom token in the account's own pool.
+ */
+suspend fun ShellServices.signInThroughConsole(start: com.aglyn.core.ConsoleHandoff.Start, loginHint: String? = null) {
+  val transport = consoleHandoff ?: throw AuthError("Signing in through ${config.brandName} is not available here.")
+  authFlow.handoffError = null
+  val callback = transport.run { redirectUri ->
+    val pending = com.aglyn.core.ConsoleHandoff.begin(config.consoleOrigin, redirectUri, start, loginHint)
+    authFlow.pendingHandoff = pending
+    pending.url
+  }
+  if (callback != null) finishConsoleHandoff(callback)
+}
+
+/** Whether [link] is the console hand-off coming back to this app's scheme. */
+fun ShellServices.isConsoleHandoffReturn(link: String?): Boolean =
+  com.aglyn.core.ConsoleHandoff.isReturn(link, com.aglyn.core.ConsoleHandoff.appRedirectUri(config.app))
+
+/** Finishes a console sign-in with the return URL its page went to; a return no sign-in is waiting for is refused. */
+suspend fun ShellServices.finishConsoleHandoff(callback: String) {
+  val pending = authFlow.pendingHandoff
+    ?: throw AuthError("That sign-in has expired or was already used. Sign in again.")
+  authFlow.pendingHandoff = null
+  val code = com.aglyn.core.ConsoleHandoff.code(callback, pending)
+  val grant = com.aglyn.core.ConsoleHandoff.redeem(api, code, pending)
+  auth.signInWithCustomToken(grant.token, grant.tenantId)
 }

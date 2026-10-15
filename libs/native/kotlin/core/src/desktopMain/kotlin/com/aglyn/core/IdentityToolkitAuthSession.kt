@@ -184,6 +184,28 @@ class IdentityToolkitAuthSession(
     return body["isNewUser"]?.jsonPrimitive?.content == "true"
   }
 
+  override suspend fun signInWithCustomToken(token: String) = signInWithCustomToken(token, null)
+
+  /** A custom token (the console hand-off's, a passkey's) in the pool [tenantId] names; the person is read off the ID token. */
+  override suspend fun signInWithCustomToken(token: String, tenantId: String?) {
+    val body = call("accounts:signInWithCustomToken", ::authErrorMessage) {
+      put("token", token)
+      put("returnSecureToken", true)
+      if (!tenantId.isNullOrEmpty()) put("tenantId", tenantId)
+    }
+    val claims = TokenClaims.fromIdToken(body["idToken"]?.jsonPrimitive?.content)
+    val uid = (claims.values["user_id"] as? JsonPrimitive)?.content ?: (claims.values["sub"] as? JsonPrimitive)?.content
+      ?: throw AuthError(authErrorMessage(null))
+    val email = (claims.values["email"] as? JsonPrimitive)?.content
+    val name = (claims.values["name"] as? JsonPrimitive)?.content
+    accept(
+      JsonObject(
+        body + mapOf("localId" to JsonPrimitive(uid)) +
+          listOfNotNull(email?.let { "email" to JsonPrimitive(it) }, name?.let { "displayName" to JsonPrimitive(it) }),
+      ),
+    )
+  }
+
   override suspend fun reload() {
     val signedIn = (mutable.value as? AuthState.SignedIn)?.user ?: return
     if (support.active) return

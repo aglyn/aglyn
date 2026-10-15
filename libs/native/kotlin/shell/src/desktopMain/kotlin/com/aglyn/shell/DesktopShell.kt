@@ -145,6 +145,13 @@ object DesktopShell {
       },
       mediaPicker = DesktopMediaPicker,
       fileExporter = DesktopFileExporter,
+      // Signing in through the console: the system browser, back to a loopback listener (AGL-3816). Against a project that
+      // enforces App Check it is the only way in, since this build has no attestation provider.
+      consoleHandoff = com.aglyn.core.ConsoleLoopback(openBrowser = { url ->
+        runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+          .onFailure { System.err.println("Aglyn: could not open the browser: ${it.message}") }
+      }),
+      signInThroughConsoleOnly = config.appCheck && appCheck == com.aglyn.core.NoAppCheck,
     )
   }
 }
