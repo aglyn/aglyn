@@ -32,11 +32,10 @@ AGLYN_GOOGLE_IOS_CLIENT_ID_AglynPOS = 543499566626-9kbdi3d79f120600bvj5obmsacv3t
 // The project's Web OAuth client, the audience of the Google ID token Firebase verifies.
 AGLYN_GOOGLE_WEB_CLIENT_ID = 543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com
 
-// The domain passkeys are made for (aglyn.com). Set it only once aglyn.com
-// serves an apple-app-site-association naming R3B7G75SWA.com.aglyn.app
-// (docs/mobile/well-known); the entitlement webcredentials:aglyn.com is
-// already on the Aglyn target.
-AGLYN_PASSKEY_RP_ID =
+// The domain passkeys are made for. aglyn.com serves an
+// apple-app-site-association naming both apps under webcredentials (AGL-3817,
+// docs/mobile/well-known), and both targets carry webcredentials:aglyn.com.
+AGLYN_PASSKEY_RP_ID = aglyn.com
 
 // The published Terms of Service and Privacy Policy the sign-up links to (<origin>/legal/terms, /legal/privacy).
 AGLYN_LEGAL_ORIGIN = https:/$()/aglyn.com

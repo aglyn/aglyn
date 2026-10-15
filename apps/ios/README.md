@@ -217,8 +217,9 @@ Still owed:
    both apps: `R3B7G75SWA.com.aglyn.app`, `R3B7G75SWA.com.aglyn.pos`) and at
    `https://aglyn.com/.well-known/apple-app-site-association` (`webcredentials`
    for `R3B7G75SWA.com.aglyn.app`, for passkeys; template: `docs/mobile/well-known/`).
-   Then `AGLYN_PASSKEY_RP_ID = aglyn.com` in `Config/Release.xcconfig`; until
-   then "Set up a passkey" is hidden.
+   `AGLYN_PASSKEY_RP_ID = aglyn.com` is set in `Config/Release.xcconfig` since
+   aglyn.com serves that file (AGL-3817); both targets carry
+   `webcredentials:aglyn.com`.
 7. **TestFlight**: listing, privacy labels and a tester group per app.
 8. **DeviceCheck in Firebase App Check** for both apps (a DeviceCheck `.p8`
    key, its Key ID and the team), which the Mac builds use; until then a Mac
