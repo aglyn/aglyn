@@ -823,7 +823,8 @@ export const AI_EVAL_RUBRIC_TOOL: AiTool = {
       },
       copy: {
         type: 'integer',
-        description: 'From 1 to 5: the words fit the brief, the site and its audience, with no filler.',
+        description:
+          'From 1 to 5: the words fit the brief, the site and its audience, with no filler. A template placeholder left where words belong, such as {{1}}, [[name]] or <Your business name>, is a 1; a fact the brief did not give, in single square brackets, is not filler.',
       },
       reuse: {
         anyOf: [{ type: 'integer' }, { type: 'null' }],

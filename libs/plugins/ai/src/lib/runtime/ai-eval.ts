@@ -106,6 +106,7 @@ import {
   AI_SEO_TITLE_MAX,
   aiPlanEmbedBriefViolations,
   detectOffVoiceCopy,
+  detectPlaceholderCopy,
   detectPublishIntent,
   type AiAssetFacts,
   type AiCopyFraming,
@@ -254,7 +255,7 @@ export type AiEvalCheck = 'readable' | 'rules' | 'budget' | 'plan' | 'responsive
 export interface AiEvalRubric {
   /** Organized the way the brief needs, nothing missing, nothing extra. */
   structure: number
-  /** The words fit the brief, the site and its audience, with no filler. */
+  /** The words fit the brief, the site and its audience, with no filler and no template placeholder (AGL-3827). */
   copy: number
   /** Reuses what the site lists before creating; `null` for a kind that places nothing. */
   reuse: number | null
@@ -757,6 +758,8 @@ function checkCopy(
   ]
   const broken = [
     ...codes(detectOffVoiceCopy([{ at: 'answer', text }], evalCase.framing)),
+    // A chat answer may quote a binding token to explain it; copy for a page never shows one (AGL-3827).
+    ...(evalCase.kind === 'chat' ? [] : codes(detectPlaceholderCopy([{ at: 'answer', text }]))),
     ...(MARKUP.test(text) ? ['copy-markup'] : []),
     ...own(text),
   ]
@@ -816,6 +819,12 @@ function checkSeo(evalCase: AiEvalCase, answer: unknown): Checked {
         ],
         evalCase.framing,
       ),
+    ),
+    ...codes(
+      detectPlaceholderCopy([
+        { at: 'title', text: title },
+        { at: 'description', text: description },
+      ]),
     ),
     ...(MARKUP.test(title) || MARKUP.test(description) ? ['seo-markup'] : []),
   ]
