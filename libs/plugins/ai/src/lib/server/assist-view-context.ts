@@ -1084,12 +1084,16 @@ export const ASSIST_OPEN_DRAFT_ACTION: AssistNavigateAction = orgAction(
   [ASSIST_OPEN_DRAFT_PARAM],
 )
 
-/** The view with the open-draft navigation added, where the request listed drafts. */
+/**
+ * The view with the open-draft navigation added, where the request listed a
+ * draft that is not the one open in this editor (AGL-3833): the open one is
+ * edited where it stands, never opened again.
+ */
 export function withAssistOpenDraftAction(
   view: AssistView | null,
   drafts: readonly AssistBuildDraft[],
 ): AssistView | null {
-  if (!view || !drafts.length) return view
+  if (!view || !drafts.some((draft) => !draft.open)) return view
   return { ...view, actions: [...view.actions, ASSIST_OPEN_DRAFT_ACTION] }
 }
 
@@ -1169,7 +1173,8 @@ export function resolveAssistProposal(
   // The open-draft navigation names a draft the request listed, or nothing.
   if (action.id === ASSIST_OPEN_DRAFT_ACTION_ID) {
     const ref = values.find((value) => value.name === ASSIST_OPEN_DRAFT_PARAM)?.value
-    const draft = drafts.find((one) => one.ref === ref)
+    // Never the draft already open here (AGL-3833): that offer is a loop.
+    const draft = drafts.find((one) => one.ref === ref && !one.open)
     if (!draft) return null
     return {
       id: action.id,

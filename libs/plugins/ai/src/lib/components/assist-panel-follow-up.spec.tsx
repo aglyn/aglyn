@@ -24,7 +24,9 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { canvas, CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import {
+  notifyEditorSessionChanged,
   registerEditorSession,
   resetEditorSessionsForTests,
 } from '@aglyn/aglyn/plugin-manager/editor-sessions'
@@ -135,10 +137,11 @@ function chatStream(text: string, proposed: unknown) {
   }
 }
 
-function dockProps() {
+/** The dock; `generative` takes a plan that carries AI generation, so the edit rung is reachable. */
+function dockProps(generative = false) {
   return {
     orgId: 'org-1',
-    org: { plan: 'pro' as const, billingStatus: 'active' as const },
+    org: generative ? { plan: 'free' as const } : { plan: 'pro' as const, billingStatus: 'active' as const },
     orgReady: true,
     scopedOrgId: 'org-1',
     orgSlug: 'acme',
@@ -170,10 +173,42 @@ const editor = (versionId: string) =>
 
 const chatPosts = () => posts.filter(([url]) => url === '/api/assist/chat')
 
+const ROOT = CANVAS_ROOT_ELEMENT_ID
+
+/** The About draft as its document loads onto the canvas. */
+const ABOUT_PAGE = {
+  [ROOT]: { $id: ROOT, componentId: 'div', props: {}, nodes: ['intro'] },
+  intro: {
+    $id: 'intro',
+    componentId: 'muiTypography',
+    parentId: ROOT,
+    props: { children: 'About us', variant: 'h1' },
+    nodes: [],
+  },
+}
+
+/** The document reaches the canvas, and the editor says so, as the Besigner does. */
+function loadAboutCanvas(): void {
+  act(() => {
+    canvas.setNodes(ABOUT_PAGE as never)
+    canvas.updateInitialNodes()
+    notifyEditorSessionChanged()
+  })
+}
+
+/** Confirm the open-draft card, then stand on the draft's address. */
+async function confirmAndArrive(): Promise<void> {
+  await ask('Make the about page shorter')
+  fireEvent.click((await screen.findByText('Take me there')).closest('a') as Element)
+  await waitFor(() => expect(chatPosts()).toHaveLength(1))
+  route.pathname = ABOUT_HREF
+}
+
 beforeEach(() => {
   posts.length = 0
   proposal = OPEN_ABOUT
   route.pathname = '/acme/hosts/host-1/screens'
+  canvas.reset()
   sessionStorage.clear()
   sessionStorage.setItem('aglyn-assist:org-1', JSON.stringify(THREAD))
   resetAiJobsStoreForTests()
@@ -236,11 +271,13 @@ describe('a follow-up on a draft the build made (AGL-3616)', () => {
     rerender(<AssistPanelComponent {...dockProps()} />)
     expect(chatPosts()).toHaveLength(1)
 
-    // The draft's own version opens: the request is asked once, from here.
+    // The draft's own version opens and its document loads: the request is
+    // asked once, from here.
     resetEditorSessionsForTests()
     act(() => {
       registerEditorSession(editor('v-about'))
     })
+    loadAboutCanvas()
     rerender(<AssistPanelComponent {...dockProps()} />)
     await waitFor(() => expect(chatPosts()).toHaveLength(2))
     expect(chatPosts()[1][1]).toMatchObject({ question: 'Make the about page shorter' })
@@ -248,6 +285,49 @@ describe('a follow-up on a draft the build made (AGL-3616)', () => {
     expect(await screen.findByText('Here is a shorter version.')).toBeTruthy()
     rerender(<AssistPanelComponent {...dockProps()} />)
     expect(chatPosts()).toHaveLength(2)
+  })
+
+  it('waits for the draft’s document to reach the canvas, then asks with that canvas and the draft marked open (AGL-3833)', async () => {
+    render(<AssistPanelComponent {...dockProps(true)} />)
+    await confirmAndArrive()
+
+    // The race: the editor registers its version from the route as it mounts,
+    // before the document loads. Asked now, the request would carry no canvas
+    // and the chat would offer to open the draft again.
+    act(() => {
+      registerEditorSession(editor('v-about'))
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+    expect(chatPosts()).toHaveLength(1)
+    expect(sessionStorage.getItem('aglyn-assist-follow-up:org-1')).not.toBeNull()
+
+    // The document arrives and the editor announces it: asked once, now.
+    loadAboutCanvas()
+    await waitFor(() => expect(chatPosts()).toHaveLength(2))
+    const body = chatPosts()[1][1]
+    expect(body['question']).toBe('Make the about page shorter')
+    expect((body['canvas'] as { nodes: Array<{ id: string }> }).nodes.map((node) => node.id)).toEqual([ROOT, 'intro'])
+    expect(body['drafts']).toEqual([
+      { ref: 'd1', label: 'Home', noun: 'page' },
+      { ref: 'd2', label: 'About', noun: 'page', open: true },
+    ])
+    await screen.findByText('Here is a shorter version.')
+    loadAboutCanvas()
+    expect(chatPosts()).toHaveLength(2)
+  })
+
+  it('never shows a card that opens the draft already open (AGL-3833)', async () => {
+    route.pathname = ABOUT_HREF
+    registerEditorSession(editor('v-about'))
+    canvas.setNodes(ABOUT_PAGE as never)
+    render(<AssistPanelComponent {...dockProps(true)} />)
+    await ask('Make the about page shorter')
+    await screen.findByText('I can open the About draft for that.')
+    expect(chatPosts()[0][1]['drafts']).toContainEqual({ ref: 'd2', label: 'About', noun: 'page', open: true })
+    expect(screen.queryByText('Take me there')).toBeNull()
+    expect(sessionStorage.getItem('aglyn-assist-follow-up:org-1')).toBeNull()
   })
 
   it('drops a proposal naming a draft the panel does not hold', async () => {

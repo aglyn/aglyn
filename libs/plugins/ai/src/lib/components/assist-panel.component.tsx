@@ -29,6 +29,7 @@ import {
   subscribeEditorSessions,
 } from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   mdiChevronDown,
   mdiCreation,
@@ -82,8 +83,8 @@ import { AssistEditCard } from './assist-edit-card.component'
 import { AssistBuildCard } from './assist-build-card.component'
 import { isAssistBuildProposal, type AssistBuildProposal } from '../model/assist-build'
 import {
-  assistBesignerVersionOf,
   assistBuildDraftLinks,
+  isAssistFollowUpDue,
   isLiveAssistFollowUp,
   type AssistBuildDraft,
   type AssistBuildDraftLink,
@@ -717,7 +718,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
   // The open editor, re-read whenever one opens, closes or reports a change —
   // so a card raised on a live version offers Apply once its new version is
   // the one open.
-  useSyncExternalStore(
+  const editorRevision = useSyncExternalStore(
     subscribeEditorSessions,
     editorSessionsRevision,
     editorSessionsRevision,
@@ -854,8 +855,18 @@ export function AssistPanelComponent(props: AssistDockProps) {
           // A pick, when the reader made one; the server decides again.
           ...(modelChoice.model ? { model: modelChoice.model } : {}),
           ...(canvasOutline ? { canvas: canvasOutline } : {}),
+          // The draft open here is marked, with its canvas riding beside it,
+          // so the answer edits it rather than offering to open it again
+          // (AGL-3833).
           ...(draftLinks.length
-            ? { drafts: draftLinks.map(({ ref, label, noun }) => ({ ref, label, noun })) }
+            ? {
+                drafts: draftLinks.map(({ ref, label, noun, href }) => ({
+                  ref,
+                  label,
+                  noun,
+                  ...(canvasOutline && href === pathname ? { open: true } : {}),
+                })),
+              }
             : {}),
         }),
       })
@@ -930,8 +941,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
             // An open-draft proposal goes to that draft's own Besigner, from
             // this panel's record of its build, and asks the request again
             // there; one naming a draft this panel does not hold is dropped.
+            // Never the draft already open here (AGL-3833).
             const draftLink = resolved?.draft
-              ? draftLinks.find((link) => link.ref === resolved.draft?.ref)
+              ? draftLinks.find((link) => link.ref === resolved.draft?.ref && link.href !== pathname)
               : null
             const proposal: AssistProposal | null =
               resolved?.draft
@@ -1025,14 +1037,22 @@ export function AssistPanelComponent(props: AssistDockProps) {
       saveFollowUp(scopedOrgId, null)
       return
     }
-    // Asked once the draft's own canvas is open, so the edit rung reads it.
-    if (busy || !ai.use || pathname !== followUp.path) return
-    if (!followUpVersion || followUpVersion !== assistBesignerVersionOf(followUp.path)) return
+    // Asked once the draft's own canvas is open AND loaded, so the edit rung
+    // reads it (AGL-3833). The editor reports its version as it mounts, before
+    // the document reaches the canvas; it reports again once it has.
+    if (busy || !ai.use) return
+    const stand = {
+      path: pathname ?? '',
+      versionId: followUpVersion,
+      canvasLoaded: Boolean(canvas.getNode(CANVAS_ROOT_ELEMENT_ID)),
+    }
+    if (!isAssistFollowUpDue(followUp, stand)) return
     setFollowUp(null)
     saveFollowUp(scopedOrgId, null)
     setOpen(true)
     void send(followUp.question)
-  }, [ai.use, busy, followUp, followUpVersion, pathname, scopedOrgId, send])
+    // The revision is how a canvas that finished loading reaches this effect.
+  }, [ai.use, busy, followUp, followUpVersion, editorRevision, pathname, scopedOrgId, send])
 
   /** Keep a confirmed open-draft proposal's request for the draft's canvas. */
   const holdFollowUp = useCallback(

@@ -90,6 +90,7 @@ import {
 import { ASSIST_BUILD_TOOL_NAME, type AssistBuildProposal } from '../model/assist-build'
 import {
   assistBuildDraftsBlock,
+  assistDraftsForTurn,
   parseAssistBuildDrafts,
   type AssistBuildDraft,
 } from '../model/assist-follow-up'
@@ -1388,8 +1389,13 @@ async function handler(request: Request): Promise<Response> {
         ? buildViewBlock(body.context, org as Record<string, unknown>, { edit: Boolean(editRung) })
         : null
     // A follow-up on a draft this thread's build made (AGL-3616): offered on
-    // a site, where the navigation has a destination, and nowhere else.
-    const drafts = guide?.scope.hostId ? body.drafts : []
+    // a site, where the navigation has a destination, and nowhere else. The
+    // draft marked open is believed only when this turn reads its canvas
+    // (AGL-3833).
+    const drafts = assistDraftsForTurn(body.drafts, {
+      onSite: Boolean(guide?.scope.hostId),
+      canvasRead: Boolean(editRung),
+    })
     const draftsBlock = assistBuildDraftsBlock(drafts)
     const proposalView = guide ? withAssistOpenDraftAction(guide.view, drafts) : null
 
