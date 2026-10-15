@@ -143,6 +143,8 @@ export type FormFieldType =
   | 'radio'
   | 'checkbox'
   | 'rating'
+  | 'date'
+  | 'time'
 
 /**
  * What a declared field MEANS, where the meaning is one the platform reads.
@@ -940,6 +942,8 @@ const FORM_FIELD_TYPES = new Set<FormFieldType>([
   'radio',
   'checkbox',
   'rating',
+  'date',
+  'time',
 ])
 
 /**
@@ -962,7 +966,8 @@ function parseDeclaredOptions(options: unknown): string[] {
  * form-controls.tsx), restated by id because the foundation layer may not
  * import a plugin. A form built from these pieces — a Form Control holding a
  * Form Label and an Input, a Select of Select Options, a Radio Group of
- * Radios, a Checkbox in a Choice Label, a Rating — declares its fields from
+ * Radios, a Checkbox in a Choice Label, a Rating, a Date or Time Picker
+ * (posting `2026-10-15` and `14:30`) — declares its fields from
  * them exactly as it does from the all-in-one `formField`.
  *
  * Persisted ids; never rename.
@@ -975,6 +980,8 @@ export const FORM_INPUT_ELEMENT_IDS = {
   radio: 'muiRadio',
   checkbox: 'muiCheckbox',
   rating: 'muiRating',
+  datePicker: 'muiDatePicker',
+  timePicker: 'muiTimePicker',
   formControl: 'muiFormControl',
   formLabel: 'muiFormLabel',
   choiceLabel: 'muiFormControlLabel',
@@ -986,6 +993,8 @@ const ANSWER_ELEMENT_IDS = new Set<string>([
   FORM_INPUT_ELEMENT_IDS.radioGroup,
   FORM_INPUT_ELEMENT_IDS.checkbox,
   FORM_INPUT_ELEMENT_IDS.rating,
+  FORM_INPUT_ELEMENT_IDS.datePicker,
+  FORM_INPUT_ELEMENT_IDS.timePicker,
 ])
 
 /** Whether a node carries an answer the form submits. */
@@ -1021,6 +1030,10 @@ export function formInputType(node: AglynNodeSchema | undefined | null): FormFie
       return 'checkbox'
     case FORM_INPUT_ELEMENT_IDS.rating:
       return 'rating'
+    case FORM_INPUT_ELEMENT_IDS.datePicker:
+      return 'date'
+    case FORM_INPUT_ELEMENT_IDS.timePicker:
+      return 'time'
     default: {
       const raw = String(props['fieldType'] ?? 'text') as FormFieldType
       return FORM_FIELD_TYPES.has(raw) ? raw : 'text'
@@ -1729,7 +1742,7 @@ export function isMarketingConsentFieldName(name: unknown): boolean {
 export const MARKETING_CONSENT_FORM_FIELD: Readonly<{
   fieldName: string
   label: string
-  fieldType: FormFieldType
+  fieldType: 'checkbox'
   options: string
   required: boolean
 }> = {

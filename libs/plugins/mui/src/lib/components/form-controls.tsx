@@ -87,7 +87,7 @@ export const RATING_ID: Aglyn.ComponentId = 'muiRating'
  * The id a Form Control gives the input inside it, so the Form Label beside
  * that input names it (`for=`) without the author wiring anything.
  */
-const FieldIdContext = createContext<string | undefined>(undefined)
+export const FieldIdContext = createContext<string | undefined>(undefined)
 
 export interface AglynFormControlProps extends FormControlProps {
   children?: ReactNode
@@ -175,11 +175,11 @@ const outlinedBoxSx = (theme: Theme) => ({
  * Whether the site theme draws inputs filled: the Input style its Style
  * components card sets, which is MUI's own text field default.
  */
-const useFilledInputs = () =>
+export const useFilledInputs = () =>
   useTheme().components?.MuiTextField?.defaultProps?.variant === 'filled'
 
 /** A node's `sx`, as a list the outline can go in front of. */
-const nodeSxList = (sx: unknown): SxProps<Theme>[] =>
+export const nodeSxList = (sx: unknown): SxProps<Theme>[] =>
   sx === undefined || sx === null
     ? []
     : ((Array.isArray(sx) ? sx : [sx]) as SxProps<Theme>[])
@@ -385,7 +385,7 @@ AglynRating.displayName = 'AglynRating'
 
 // ── Attributes ──────────────────────────────────────────────────────────────
 
-const FIELD_NAME: Aglyn.AglynAttributeSchema = {
+export const FIELD_NAME: Aglyn.AglynAttributeSchema = {
   name: 'name',
   label: 'Field name',
   description:
@@ -399,7 +399,7 @@ const FIELD_NAME: Aglyn.AglynAttributeSchema = {
  * chosen on the Form around it. Stored by id, so renaming the dataset field
  * never breaks the mapping; left empty, the answer matches by name.
  */
-const FIELD_DATASET_FIELD: Aglyn.AglynAttributeSchema = {
+export const FIELD_DATASET_FIELD: Aglyn.AglynAttributeSchema = {
   name: 'datasetFieldId',
   label: 'Maps to schema field',
   description:
@@ -407,7 +407,7 @@ const FIELD_DATASET_FIELD: Aglyn.AglynAttributeSchema = {
     'empty, it matches a dataset field by its Field name.',
   component: Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
 }
-const FIELD_INPUT_SIZE: Aglyn.AglynAttributeSchema = {
+export const FIELD_INPUT_SIZE: Aglyn.AglynAttributeSchema = {
   name: 'size',
   label: 'Size',
   description: 'Normal is 56px tall; Small is 40px, to sit beside a button.',
@@ -417,13 +417,13 @@ const FIELD_INPUT_SIZE: Aglyn.AglynAttributeSchema = {
     { value: 'small', label: 'Small' },
   ],
 }
-const FIELD_REQUIRED: Aglyn.AglynAttributeSchema = {
+export const FIELD_REQUIRED: Aglyn.AglynAttributeSchema = {
   name: 'required',
   label: 'Required?',
   description: 'The form will not send until this is answered.',
   component: Aglyn.FieldComponentType.SWITCH,
 }
-const FIELD_ARIA_LABEL: Aglyn.AglynAttributeSchema = {
+export const FIELD_ARIA_LABEL: Aglyn.AglynAttributeSchema = {
   name: 'ariaLabel',
   label: 'Accessible label',
   description:
@@ -431,7 +431,7 @@ const FIELD_ARIA_LABEL: Aglyn.AglynAttributeSchema = {
     'it. Not shown on the page.',
   component: Aglyn.FieldComponentType.TEXT_FIELD,
 }
-const FIELD_FULL_WIDTH: Aglyn.AglynAttributeSchema = {
+export const FIELD_FULL_WIDTH: Aglyn.AglynAttributeSchema = {
   name: 'fullWidth',
   label: 'Full width?',
   description: 'Fills the width of whatever holds it.',
@@ -452,7 +452,7 @@ const FIELD_CHOICE_VALUE: Aglyn.AglynAttributeSchema = {
   component: Aglyn.FieldComponentType.TEXT_FIELD,
 }
 
-const category = Aglyn.ComponentCategory.FORMS
+export const category = Aglyn.ComponentCategory.FORMS
 
 export const formControlSchema: Aglyn.ComponentSchema<AglynFormControlProps> = {
   $id: FORM_CONTROL_ID,
@@ -661,7 +661,7 @@ export const ratingSchema: Aglyn.ComponentSchema<RatingProps> = {
 
 // ── Presets: ready-made arrangements of the pieces above ────────────────────
 
-const node = (
+export const node = (
   componentId: Aglyn.ComponentId,
   props?: Record<string, unknown>,
   nodes?: Aglyn.NodePresetData[],
@@ -686,7 +686,7 @@ export const textFieldPreset = (
     node(INPUT_ID, { fullWidth: true, ...input }),
   ])
 
-const preset = (
+export const preset = (
   $id: string,
   displayName: string,
   description: string,

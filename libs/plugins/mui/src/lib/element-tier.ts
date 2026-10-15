@@ -98,6 +98,9 @@ export const list = () => import('./components/list')
 export const listItem = () => import('./components/list-item')
 export const listItemText = () => import('./components/list-item-text')
 export const formControls = () => import('./components/form-controls')
+// The date and time pickers carry MUI X and a date library: their own chunk,
+// fetched only by a page that places one (AGL-3825).
+export const formPickers = () => import('./components/form-pickers')
 export const blocks = () => import('./components/blocks')
 export const dataTable = () => import('./components/data-table')
 // The collection family is one module per element (AGL-3401): a page placing

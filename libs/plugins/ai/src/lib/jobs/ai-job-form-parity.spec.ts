@@ -169,7 +169,7 @@ const tick = (id: string, label: string, props: Record<string, unknown>): Piece 
 const FORM_ELEMENTS = [...Object.values(FORM_INPUT_ELEMENT_IDS), 'muiFormHelperText']
 
 /** The elements whose `name` is the key an answer is submitted under. */
-const ANSWER_ELEMENTS = ['muiInput', 'muiSelect', 'muiRadioGroup', 'muiCheckbox', 'muiRating']
+const ANSWER_ELEMENTS = ['muiInput', 'muiSelect', 'muiRadioGroup', 'muiCheckbox', 'muiRating', 'muiDatePicker', 'muiTimePicker']
 
 describe('the field settings', () => {
   it('builds a generated form from MUI’s separate form elements and a Button, never the all-in-one Form Field', () => {
@@ -242,6 +242,8 @@ describe('the field settings', () => {
       },
       checkbox: { componentId: 'muiCheckbox', props: { name: 'answer', value: 'Yes' } },
       rating: { componentId: 'muiRating', props: { name: 'answer' } },
+      date: { componentId: 'muiDatePicker', props: { name: 'answer', disablePast: true } },
+      time: { componentId: 'muiTimePicker', props: { name: 'answer', minutesStep: '15' } },
     }
     expect(Object.keys(answers).sort()).toEqual([...declared].sort())
     for (const [fieldType, answer] of Object.entries(answers)) {
