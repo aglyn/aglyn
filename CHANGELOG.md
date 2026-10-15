@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **legal:** v16, Privacy discloses ad conversion reporting on merchant sites ([AGL-3799](https://linear.app/aglyn/issue/AGL-3799))
 - **native:** start from a template and save as a template ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **native:** an email block starts as a header or footer ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **native:** a site's theme shows what it changed, with a reset for each ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
