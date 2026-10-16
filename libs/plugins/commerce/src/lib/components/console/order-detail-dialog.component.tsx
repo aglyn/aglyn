@@ -599,40 +599,14 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
    */
   const handleRefund = useCallback(async (lineItemIds?: number[]) => {
     if (!order || !orderId) return
-    const lines = order.lineItems ?? []
     const scoped = (lineItemIds ?? []).length > 0
-    // The SERVER's figure, not a second derivation of it. This was
-    // the list value `unitAmountCents x quantity`, which on a discounted order
-    // is more than the buyer paid — so the dialog quoted one number and the
-    // route refunded another. One function answers both.
-    const scopedCents = CommerceModel.orderLineRefundCents(
-      order,
-      lineItemIds ?? [],
-    )
+    // The SERVER's figure, not a second derivation of it (`orderLineRefundCents`
+    // inside the prompt): the list value `unitAmountCents x quantity` is more
+    // than the buyer paid on a discounted order.
+    const prompt = CommerceModel.orderRefundPrompt(order, lineItemIds ?? [])
     const confirmed = await confirm({
-      title: scoped ? 'Refund this line?' : 'Refund this order?',
-      description:
-        (scoped
-          ? `Refunds ${usd(scopedCents)} for ${(lineItemIds ?? [])
-              .map((index) => lines[index]?.name ?? `line ${index}`)
-              .join(', ')} through Stripe, and withdraws that line's ` +
-            'downloads, license keys and gated content. A license key already ' +
-            'sent to the buyer is retired, not returned to your pool — they ' +
-            'still hold the string, so reissuing it would give two people one ' +
-            'working key.'
-          : `Refunds ${usd(
-              (order.totals?.totalCents ?? order.amountCents ?? 0) -
-                (order.refundedCents ?? 0),
-            )} to the buyer through Stripe.`) +
-        // An open INQUIRY keeps this button live on purpose (AGL-1820):
-        // Stripe names a full refund as the way to resolve one before it
-        // escalates to a chargeback. Said here so the admin reads the refund
-        // as the documented exit, not a risk taken against the badge.
-        (CommerceModel.orderHasOpenDispute(order) &&
-        !CommerceModel.orderDisputeBlocksRefund(order)
-          ? ' An inquiry is open on this charge — a full refund resolves it' +
-            ' before it can become a chargeback.'
-          : ''),
+      title: prompt.title,
+      description: prompt.text,
       confirmationText: 'Refund',
       confirmationButtonProps: { color: 'error' },
     })
@@ -1141,15 +1115,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           // (AGL-1809), while an open INQUIRY shows the badge but must keep
           // this button live — a full refund is how an inquiry is resolved.
           CommerceModel.orderDisputeBlocksRefund(order) ? (
-            <Tooltip
-              title={
-                'A chargeback is open on this order, and refunding would not' +
-                ' withdraw it — the bank has already taken the disputed' +
-                ' amount, so a refund on top would pay the shopper twice.' +
-                ' Respond to the dispute or accept it in the Stripe' +
-                ' dashboard; refund any remainder once it settles.'
-              }
-            >
+            <Tooltip title={CommerceModel.REFUND_BLOCKED_BY_DISPUTE}>
               {/* A disabled button fires no pointer events; the wrapper
                   carries the hover for the tooltip. */}
               <span>

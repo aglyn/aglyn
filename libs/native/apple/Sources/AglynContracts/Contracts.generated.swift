@@ -976,12 +976,12 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var shippingAddress: OrderAddress?
   public var status: OrderStatus?
   public var subscriptionId: String?
-  public var taxMode: HostOrderTaxMode?
+  public var taxMode: StorefrontTaxMode?
   public var timeline: [OrderTimelineEvent]?
   public var totals: OrderTotals?
   public var unresolvedLines: [OrderUnresolvedLine]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: HostOrderTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
+  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, invoiceId: String? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil) {
     self.amountCents = amountCents
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
@@ -1092,19 +1092,6 @@ public struct HostOrderReceiptRequest: Codable, Hashable, Sendable {
     self.atMs = atMs
     self.channel = channel
     self.to = to
-  }
-}
-
-/// A newer server value decodes as `.unknown`, so an older app never fails on it.
-public enum HostOrderTaxMode: String, Codable, CaseIterable, Hashable, Sendable {
-  case manual = "manual"
-  case none = "none"
-  case stripeAutomatic = "stripe-automatic"
-  case unknown = ""
-
-  public init(from decoder: Decoder) throws {
-    let raw = try decoder.singleValueContainer().decode(String.self)
-    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -3736,6 +3723,18 @@ public enum SeoSeverity: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct ShippingPresetChoice: Codable, Hashable, Sendable {
+  public var description: String?
+  public var id: String
+  public var label: String
+
+  public init(description: String? = nil, id: String, label: String) {
+    self.description = description
+    self.id = id
+    self.label = label
+  }
+}
+
 public struct SiteFilterOptions: Codable, Hashable, Sendable {
   public var hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]
 
@@ -3764,6 +3763,19 @@ public enum SiteJourneyStepType: String, Codable, CaseIterable, Hashable, Sendab
   case order = "order"
   case overlay = "overlay"
   case page = "page"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum StorefrontTaxMode: String, Codable, CaseIterable, Hashable, Sendable {
+  case manual = "manual"
+  case none = "none"
+  case stripeAutomatic = "stripe-automatic"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -3866,6 +3878,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let businessToneLabels: [String: String]
   public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
+  public let checkoutShippingCountryCodes: [String]
+  public let checkoutShippingCountryNames: [String: String]
   public let code128Patterns: [[Double]]
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
@@ -3914,6 +3928,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let formListQuery: ListQueryDeclaration
   public let formScopedSubmissionListQuery: ListQueryDeclaration
   public let formStatusOptions: [FormStatusOptionsItem]
+  public let fulfillmentCarrierChoices: [String]
+  public let fulfillmentOtherCarrier: String
   public let functionBuiltinNames: [String]
   public let functionMaxOperations: Int
   public let funnelEmailKeyLabels: [String: String]
@@ -3979,6 +3995,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeCrmTaskKinds: [String]
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
+  public let nothingMoved: String
   public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
@@ -3990,9 +4007,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let orderListSelectFields: [String]
   public let orderLocalDeliveryStatusLabels: [String: String]
   public let orderPickupStatusLabels: [String: String]
+  public let orderShippingPresetChoices: [ShippingPresetChoice]
   public let orderStatusColor: [String: OrderStatusColorValue]
   public let orderStatusLabels: [String: String]
   public let orderStatusOptions: [ListFilterOption]
+  public let ordersToShipFilterLabel: String
+  public let ordersToShipFilterValue: ContractJSON
   public let orgSubmissionListQuery: ListQueryDeclaration
   public let outreachDefaultAllowedCountries: [String]
   public let outreachDoNotContactDomainListQuery: ListQueryDeclaration
@@ -4035,6 +4055,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
+  public let refundBlockedByDispute: String
   public let reminderWindowEndHours: Int
   public let reminderWindowStartHours: Int
   public let replyBodyMax: Int
@@ -4050,6 +4071,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let seoFindingLabels: [String: String]
   public let seoKeywordLinesMaxChars: Int
   public let seoMaxKeywords: Int
+  public let shippingCostMaxCents: Int
   public let siteCardsPageSize: Int
   public let siteFilterHeaders: [String: String]
   public let siteFilterOptions: SiteFilterOptions
@@ -4096,6 +4118,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case businessToneLabels = "BUSINESS_TONE_LABELS"
     case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
+    case checkoutShippingCountryCodes = "CHECKOUT_SHIPPING_COUNTRY_CODES"
+    case checkoutShippingCountryNames = "CHECKOUT_SHIPPING_COUNTRY_NAMES"
     case code128Patterns = "CODE128_PATTERNS"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
@@ -4144,6 +4168,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case formListQuery = "FORM_LIST_QUERY"
     case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
     case formStatusOptions = "FORM_STATUS_OPTIONS"
+    case fulfillmentCarrierChoices = "FULFILLMENT_CARRIER_CHOICES"
+    case fulfillmentOtherCarrier = "FULFILLMENT_OTHER_CARRIER"
     case functionBuiltinNames = "FUNCTION_BUILTIN_NAMES"
     case functionMaxOperations = "FUNCTION_MAX_OPERATIONS"
     case funnelEmailKeyLabels = "FUNNEL_EMAIL_KEY_LABELS"
@@ -4209,6 +4235,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeCrmTaskKinds = "NATIVE_CRM_TASK_KINDS"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
+    case nothingMoved = "NOTHING_MOVED"
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
@@ -4220,9 +4247,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case orderListSelectFields = "ORDER_LIST_SELECT_FIELDS"
     case orderLocalDeliveryStatusLabels = "ORDER_LOCAL_DELIVERY_STATUS_LABELS"
     case orderPickupStatusLabels = "ORDER_PICKUP_STATUS_LABELS"
+    case orderShippingPresetChoices = "ORDER_SHIPPING_PRESET_CHOICES"
     case orderStatusColor = "ORDER_STATUS_COLOR"
     case orderStatusLabels = "ORDER_STATUS_LABELS"
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
+    case ordersToShipFilterLabel = "ORDERS_TO_SHIP_FILTER_LABEL"
+    case ordersToShipFilterValue = "ORDERS_TO_SHIP_FILTER_VALUE"
     case orgSubmissionListQuery = "ORG_SUBMISSION_LIST_QUERY"
     case outreachDefaultAllowedCountries = "OUTREACH_DEFAULT_ALLOWED_COUNTRIES"
     case outreachDoNotContactDomainListQuery = "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"
@@ -4265,6 +4295,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
+    case refundBlockedByDispute = "REFUND_BLOCKED_BY_DISPUTE"
     case reminderWindowEndHours = "REMINDER_WINDOW_END_HOURS"
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case replyBodyMax = "REPLY_BODY_MAX"
@@ -4280,6 +4311,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case seoFindingLabels = "SEO_FINDING_LABELS"
     case seoKeywordLinesMaxChars = "SEO_KEYWORD_LINES_MAX_CHARS"
     case seoMaxKeywords = "SEO_MAX_KEYWORDS"
+    case shippingCostMaxCents = "SHIPPING_COST_MAX_CENTS"
     case siteCardsPageSize = "SITE_CARDS_PAGE_SIZE"
     case siteFilterHeaders = "SITE_FILTER_HEADERS"
     case siteFilterOptions = "SITE_FILTER_OPTIONS"

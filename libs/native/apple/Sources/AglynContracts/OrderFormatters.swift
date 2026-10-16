@@ -162,6 +162,9 @@ private func currencyStyle(_ code: String) -> CurrencyStyle? {
   return CurrencyStyle(symbol: currencySymbols[code], digits: digits)
 }
 
+/// A well-formed currency code's minor digits (0, 2 or 3), or nil for one that is not a code.
+func currencyDigits(_ code: String) -> Int? { currencyStyle(code)?.digits }
+
 /// `1,234,567.89`: a non-negative amount in minor units, grouped, at exactly `digits` decimals.
 private func grouped(_ minorUnits: Int, digits: Int, separator: String = ",") -> String {
   var scale = 1

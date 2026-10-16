@@ -463,6 +463,14 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/products/stock', async (req, res) =>
     (await import('./server/products-write')).productStockHandler(req, res),
   )
+  // The products list's Duplicate and Delete for the native apps (AGL-3841):
+  // the console's own copy and soft delete, with the site-wide cache drop.
+  registerPluginApiRoute('commerce/products/duplicate', async (req, res) =>
+    (await import('./server/products-write')).productDuplicateHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/products/delete', async (req, res) =>
+    (await import('./server/products-write')).productDeleteHandler(req, res),
+  )
   // The order dialog's note and restock answer for the native apps
   // (AGL-3651, AGL-3652): the console's own timeline computation, in one
   // transaction on the stored order. Loaded on first call.

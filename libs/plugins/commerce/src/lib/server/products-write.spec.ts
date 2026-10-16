@@ -26,7 +26,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: (decoded: { impersonatedBy?: string }) => Boolean(decoded.impersonatedBy),
 }))
 
-import { createProductSaveHandler, createProductStockHandler, stockAttemptId, storedTimestamps } from './products-write'
+import {
+  createProductDeleteHandler,
+  createProductDuplicateHandler,
+  createProductSaveHandler,
+  createProductStockHandler,
+  stockAttemptId,
+  storedTimestamps,
+} from './products-write'
 
 const TOKENS: Record<string, Record<string, unknown> & { uid: string }> = {
   editor: { uid: 'u-editor', email_verified: true },
@@ -62,7 +69,14 @@ function setup(options: { org?: Record<string, unknown>; locked?: boolean } = {}
     dropCache,
     now: () => 9_000,
   }
-  return { memory, dropCache, save: createProductSaveHandler(deps), stock: createProductStockHandler(deps) }
+  return {
+    memory,
+    dropCache,
+    save: createProductSaveHandler(deps),
+    stock: createProductStockHandler(deps),
+    duplicate: createProductDuplicateHandler(deps),
+    remove: createProductDeleteHandler(deps),
+  }
 }
 
 function call(handler: any, token: string | null, body: Record<string, unknown>, headers: Record<string, string> = {}) {
@@ -162,4 +176,62 @@ describe('commerce/products/stock', () => {
 it('an edit keeps the stored timestamps the request cannot carry', () => {
   const createdAt = { toDate: () => new Date(0) }
   expect(storedTimestamps({ createdAt, name: 'Latte', publishedAt: createdAt }, { publishedAt: null, name: 'x' })).toEqual({ createdAt })
+})
+
+describe('commerce/products/duplicate', () => {
+  it('copies the product as a draft under the copy name, a free slug and its own keys, and a retry is the same copy', async () => {
+    const { memory, dropCache, duplicate } = setup()
+    memory.seed('hosts/h1/products/p1', {
+      name: 'Latte',
+      slug: 'latte',
+      type: 'physical',
+      status: 'active',
+      deletedAt: null,
+      skus: ['old-sku'],
+      variants: [{ id: 'small', priceUsd: 3.5, inventory: 4, sku: 'LAT-S' }],
+    })
+    const first = await call(duplicate, 'editor', { hostId: 'h1', productId: 'p1', newProductId: 'p2' })
+    expect(first.body).toEqual({ ok: true, id: 'p2', replayed: false, slug: 'latte-copy' })
+    const copy = memory.read('hosts/h1/products/p2')!
+    expect(copy).toMatchObject({ name: 'Latte (copy)', nameLower: 'latte (copy)', slug: 'latte-copy', status: 'draft', createdBy: 'u-editor', createdAtMs: 9_000, deletedAt: null })
+    expect(copy['skus']).toEqual(['lat-s'])
+    expect(copy['collectionIds']).toEqual(['c-coffee'])
+    expect(dropCache).toHaveBeenCalled()
+    const again = await call(duplicate, 'editor', { hostId: 'h1', productId: 'p1', newProductId: 'p2' })
+    expect(again.body).toEqual({ ok: true, id: 'p2', replayed: true })
+    // A second copy does not mint a second `-copy`.
+    const second = await call(duplicate, 'editor', { hostId: 'h1', productId: 'p1', newProductId: 'p3' })
+    expect(second.body.slug).toBe('latte-copy-2')
+  })
+
+  it('refuses a deleted source, a role that cannot write and a plan with no room', async () => {
+    const { memory, duplicate } = setup()
+    memory.seed('hosts/h1/products/gone', { name: 'Gone', deletedAt: { seconds: 1 }, variants: [] })
+    expect((await call(duplicate, 'editor', { hostId: 'h1', productId: 'gone', newProductId: 'p9' })).statusCode).toBe(404)
+    expect((await call(duplicate, 'viewer', { hostId: 'h1', productId: 'p1', newProductId: 'p9' })).statusCode).toBe(403)
+    const full = setup({ org: { plan: 'free' } })
+    const refused = await call(full.duplicate, 'editor', { hostId: 'h1', productId: 'p1', newProductId: 'p9' })
+    expect(refused.statusCode).toBeGreaterThanOrEqual(400)
+    expect(full.memory.read('hosts/h1/products/p9')).toBeFalsy()
+  })
+})
+
+describe('commerce/products/delete', () => {
+  it('marks the product deleted once and drops the cache', async () => {
+    const { memory, dropCache, remove } = setup()
+    const res = await call(remove, 'editor', { hostId: 'h1', productId: 'p1' })
+    expect(res.body).toEqual({ ok: true, already: false })
+    expect(memory.read('hosts/h1/products/p1')!['deletedAt']).toBeTruthy()
+    expect(dropCache).toHaveBeenCalledTimes(1)
+    const again = await call(remove, 'editor', { hostId: 'h1', productId: 'p1' })
+    expect(again.body).toEqual({ ok: true, already: true })
+    expect(dropCache).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a role that cannot write and an unknown product', async () => {
+    const { memory, remove } = setup()
+    expect((await call(remove, 'viewer', { hostId: 'h1', productId: 'p1' })).statusCode).toBe(403)
+    expect(memory.read('hosts/h1/products/p1')!['deletedAt']).toBeNull()
+    expect((await call(remove, 'editor', { hostId: 'h1', productId: 'nope' })).statusCode).toBe(404)
+  })
 })

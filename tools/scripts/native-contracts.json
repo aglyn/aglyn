@@ -756,6 +756,39 @@
         "LABEL_SIZES",
         "MAX_LABEL_COPIES"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/order-fulfillment.ts": {
+      "values": [
+        "FULFILLMENT_CARRIER_CHOICES",
+        "FULFILLMENT_OTHER_CARRIER",
+        "SHIPPING_COST_MAX_CENTS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-dispute.ts": {
+      "values": [
+        "REFUND_BLOCKED_BY_DISPUTE"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/payment-risk.ts": {
+      "values": [
+        "NOTHING_MOVED"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/transfer/shipping-presets.ts": {
+      "types": [
+        "ShippingPresetChoice"
+      ],
+      "values": [
+        "ORDER_SHIPPING_PRESET_CHOICES",
+        "ORDERS_TO_SHIP_FILTER_LABEL",
+        "ORDERS_TO_SHIP_FILTER_VALUE"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-shipping.ts": {
+      "values": [
+        "CHECKOUT_SHIPPING_COUNTRY_NAMES",
+        "CHECKOUT_SHIPPING_COUNTRY_CODES"
+      ]
     }
   },
   "ints": [
@@ -22802,6 +22835,1742 @@
         ],
         [
           "ÜBER café"
+        ]
+      ]
+    },
+    "carrierIdFor": {
+      "module": "libs/plugins/commerce/src/lib/model/tracking-url.ts",
+      "args": [
+        [
+          "UPS"
+        ],
+        [
+          "ups ground"
+        ],
+        [
+          "United States Postal Service"
+        ],
+        [
+          "USPS Priority Mail"
+        ],
+        [
+          "Fed Ex"
+        ],
+        [
+          "DHL eCommerce"
+        ],
+        [
+          "Canpost"
+        ],
+        [
+          "Parcelforce"
+        ],
+        [
+          "StarTrack"
+        ],
+        [
+          "Purolator"
+        ],
+        [
+          "  Purolator  "
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "U.P.S."
+        ],
+        [
+          "Royal Mail"
+        ]
+      ]
+    },
+    "carrierLabelFor": {
+      "module": "libs/plugins/commerce/src/lib/model/tracking-url.ts",
+      "args": [
+        [
+          "UPS"
+        ],
+        [
+          "ups ground"
+        ],
+        [
+          "United States Postal Service"
+        ],
+        [
+          "USPS Priority Mail"
+        ],
+        [
+          "Fed Ex"
+        ],
+        [
+          "DHL eCommerce"
+        ],
+        [
+          "Canpost"
+        ],
+        [
+          "Parcelforce"
+        ],
+        [
+          "StarTrack"
+        ],
+        [
+          "Purolator"
+        ],
+        [
+          "  Purolator  "
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "U.P.S."
+        ],
+        [
+          "Royal Mail"
+        ]
+      ]
+    },
+    "trackingUrlFor": {
+      "module": "libs/plugins/commerce/src/lib/model/tracking-url.ts",
+      "args": [
+        [
+          "UPS",
+          "1Z 999 AA1 01 2345 6784"
+        ],
+        [
+          "usps",
+          "9400 1000 0000 0000 0000 00"
+        ],
+        [
+          "FedEx",
+          "1234/56?x=y&z"
+        ],
+        [
+          "Purolator",
+          "123"
+        ],
+        [
+          "DHL",
+          ""
+        ],
+        [
+          "Royal Mail",
+          "AB123456789GB"
+        ],
+        [
+          "Australia Post",
+          "ü 12 ~*()'!"
+        ],
+        [
+          "Canada Post",
+          "7023 2101"
+        ],
+        [
+          null,
+          "1Z1"
+        ]
+      ]
+    },
+    "fulfillmentTrackingUrl": {
+      "module": "libs/plugins/commerce/src/lib/model/tracking-url.ts",
+      "args": [
+        [
+          {
+            "carrier": "UPS",
+            "trackingNumber": "1Z1",
+            "trackingUrl": "https://x.example/t?1"
+          }
+        ],
+        [
+          {
+            "carrier": "UPS",
+            "trackingNumber": "1Z1",
+            "trackingUrl": "http://insecure.example"
+          }
+        ],
+        [
+          {
+            "carrier": "Other",
+            "trackingNumber": "9",
+            "trackingUrl": " https://ok.example/9 "
+          }
+        ],
+        [
+          {
+            "carrier": "Other",
+            "trackingNumber": "9",
+            "trackingUrl": "https://bad example"
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "describeFulfillmentLines": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p3",
+                "name": "Tee",
+                "quantity": 3,
+                "unitAmountCents": 2000
+              }
+            ],
+            "fulfillments": [
+              {
+                "id": "f1",
+                "atMs": 1000,
+                "lineItemIds": [],
+                "lines": [
+                  {
+                    "lineItemId": 2,
+                    "quantity": 1
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "lineItemId": 0,
+              "quantity": 2
+            },
+            {
+              "lineItemId": 7,
+              "quantity": 1
+            }
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p3",
+                "name": "Tee",
+                "quantity": 3,
+                "unitAmountCents": 2000
+              }
+            ],
+            "fulfillments": [
+              {
+                "id": "f1",
+                "atMs": 1000,
+                "lineItemIds": [],
+                "lines": [
+                  {
+                    "lineItemId": 2,
+                    "quantity": 1
+                  }
+                ]
+              }
+            ]
+          },
+          []
+        ]
+      ]
+    },
+    "orderFulfillmentsEditable": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          {
+            "status": "pending"
+          }
+        ],
+        [
+          {
+            "status": "paid"
+          }
+        ],
+        [
+          {
+            "status": "partially_fulfilled"
+          }
+        ],
+        [
+          {
+            "status": "fulfilled"
+          }
+        ],
+        [
+          {
+            "status": "delivered"
+          }
+        ],
+        [
+          {
+            "status": "cancelled"
+          }
+        ],
+        [
+          {
+            "status": "refunded"
+          }
+        ]
+      ]
+    },
+    "trackingStatusLabel": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          "pre_transit"
+        ],
+        [
+          "in_transit"
+        ],
+        [
+          "out_for_delivery"
+        ],
+        [
+          "delivered"
+        ],
+        [
+          "exception"
+        ],
+        [
+          "returned"
+        ],
+        [
+          "unknown_state"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "currencyMinorDigits": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          "usd"
+        ],
+        [
+          "EUR"
+        ],
+        [
+          "jpy"
+        ],
+        [
+          "gbp"
+        ],
+        [
+          "krw"
+        ],
+        [
+          null
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "parseShippingCostInput": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          "12",
+          "usd"
+        ],
+        [
+          "12.5",
+          "USD"
+        ],
+        [
+          "$12.50",
+          "usd"
+        ],
+        [
+          "1,250.00",
+          "usd"
+        ],
+        [
+          "",
+          "usd"
+        ],
+        [
+          "  ",
+          "usd"
+        ],
+        [
+          "-3",
+          "usd"
+        ],
+        [
+          "12.345",
+          "usd"
+        ],
+        [
+          "abc",
+          "usd"
+        ],
+        [
+          "850",
+          "jpy"
+        ],
+        [
+          "8.5",
+          "jpy"
+        ],
+        [
+          ".",
+          "usd"
+        ],
+        [
+          "10000.01",
+          "usd"
+        ],
+        [
+          "10000",
+          "usd"
+        ],
+        [
+          "€9.99",
+          "eur"
+        ],
+        [
+          "0",
+          "usd"
+        ],
+        [
+          "7.",
+          "usd"
+        ],
+        [
+          ".5",
+          "usd"
+        ]
+      ]
+    },
+    "fulfillmentCarrierChoice": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          "ups"
+        ],
+        [
+          "Purolator"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "Royal Mail"
+        ],
+        [
+          "united states postal service"
+        ]
+      ]
+    },
+    "fulfillItemsStartQuantities": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p3",
+                "name": "Tee",
+                "quantity": 3,
+                "unitAmountCents": 2000
+              }
+            ],
+            "fulfillments": [
+              {
+                "id": "f1",
+                "atMs": 1000,
+                "lineItemIds": [],
+                "lines": [
+                  {
+                    "lineItemId": 2,
+                    "quantity": 1
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p4",
+                "name": "Class",
+                "quantity": 2,
+                "unitAmountCents": 500,
+                "productType": "service"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "lineItems": []
+          }
+        ]
+      ]
+    },
+    "fulfillItemsSelection": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1.7,
+            -1,
+            3
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "fulfillItemsIsEverything": {
+      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "args": [
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p3",
+                "name": "Tee",
+                "quantity": 3,
+                "unitAmountCents": 2000
+              }
+            ],
+            "fulfillments": [
+              {
+                "id": "f1",
+                "atMs": 1000,
+                "lineItemIds": [],
+                "lines": [
+                  {
+                    "lineItemId": 2,
+                    "quantity": 1
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "lineItemId": 0,
+              "quantity": 2
+            },
+            {
+              "lineItemId": 2,
+              "quantity": 2
+            }
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p3",
+                "name": "Tee",
+                "quantity": 3,
+                "unitAmountCents": 2000
+              }
+            ],
+            "fulfillments": [
+              {
+                "id": "f1",
+                "atMs": 1000,
+                "lineItemIds": [],
+                "lines": [
+                  {
+                    "lineItemId": 2,
+                    "quantity": 1
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "lineItemId": 0,
+              "quantity": 1
+            },
+            {
+              "lineItemId": 2,
+              "quantity": 2
+            }
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p3",
+                "name": "Tee",
+                "quantity": 3,
+                "unitAmountCents": 2000
+              }
+            ],
+            "fulfillments": [
+              {
+                "id": "f1",
+                "atMs": 1000,
+                "lineItemIds": [],
+                "lines": [
+                  {
+                    "lineItemId": 2,
+                    "quantity": 1
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "lineItemId": 0,
+              "quantity": 2
+            }
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p2",
+                "name": "E-book",
+                "quantity": 1,
+                "unitAmountCents": 900,
+                "productType": "digital"
+              },
+              {
+                "productId": "p4",
+                "name": "Class",
+                "quantity": 2,
+                "unitAmountCents": 500,
+                "productType": "service"
+              }
+            ]
+          },
+          [
+            {
+              "lineItemId": 0,
+              "quantity": 1
+            }
+          ]
+        ]
+      ]
+    },
+    "describeOrderDispute": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "args": [
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "reason": "product_not_received",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767484800000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "reason": "fraudulent",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767139200000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "under_review",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "refundedCents": 4200,
+            "dispute": {
+              "id": "dp1",
+              "status": "lost",
+              "outcome": "lost",
+              "reason": "fraudulent",
+              "amountCents": 4200,
+              "reversedCents": 3000,
+              "openedAtMs": 1766620800000,
+              "closedAtMs": 1767139200000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "refundedCents": 5000,
+            "dispute": {
+              "id": "dp1",
+              "status": "lost",
+              "outcome": "lost",
+              "amountCents": 4200,
+              "reversedCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "won",
+              "outcome": "won",
+              "reason": "duplicate",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "closedAtMs": 1767139200000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_closed",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767225600000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767229200000
+            }
+          },
+          1767225600000
+        ],
+        [
+          {},
+          1767225600000
+        ]
+      ]
+    },
+    "orderHasOpenDispute": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "args": [
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "reason": "product_not_received",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767484800000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "reason": "fraudulent",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767139200000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "under_review",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          }
+        ],
+        [
+          {
+            "refundedCents": 4200,
+            "dispute": {
+              "id": "dp1",
+              "status": "lost",
+              "outcome": "lost",
+              "reason": "fraudulent",
+              "amountCents": 4200,
+              "reversedCents": 3000,
+              "openedAtMs": 1766620800000,
+              "closedAtMs": 1767139200000
+            }
+          }
+        ],
+        [
+          {
+            "refundedCents": 5000,
+            "dispute": {
+              "id": "dp1",
+              "status": "lost",
+              "outcome": "lost",
+              "amountCents": 4200,
+              "reversedCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "won",
+              "outcome": "won",
+              "reason": "duplicate",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "closedAtMs": 1767139200000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_closed",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767225600000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767229200000
+            }
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "splitOrderReversal": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "args": [
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "reason": "product_not_received",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767484800000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "reason": "fraudulent",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767139200000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "under_review",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          }
+        ],
+        [
+          {
+            "refundedCents": 4200,
+            "dispute": {
+              "id": "dp1",
+              "status": "lost",
+              "outcome": "lost",
+              "reason": "fraudulent",
+              "amountCents": 4200,
+              "reversedCents": 3000,
+              "openedAtMs": 1766620800000,
+              "closedAtMs": 1767139200000
+            }
+          }
+        ],
+        [
+          {
+            "refundedCents": 5000,
+            "dispute": {
+              "id": "dp1",
+              "status": "lost",
+              "outcome": "lost",
+              "amountCents": 4200,
+              "reversedCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "won",
+              "outcome": "won",
+              "reason": "duplicate",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "closedAtMs": 1767139200000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_closed",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767225600000
+            }
+          }
+        ],
+        [
+          {
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767229200000
+            }
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "refundedCents": 1000
+          }
+        ]
+      ]
+    },
+    "summariseOpenDisputes": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "args": [
+        [
+          [
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "needs_response",
+                "reason": "product_not_received",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000,
+                "evidenceDueByMs": 1767484800000
+              }
+            },
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "needs_response",
+                "reason": "fraudulent",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000,
+                "evidenceDueByMs": 1767139200000
+              }
+            },
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "under_review",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000
+              }
+            },
+            {
+              "refundedCents": 4200,
+              "dispute": {
+                "id": "dp1",
+                "status": "lost",
+                "outcome": "lost",
+                "reason": "fraudulent",
+                "amountCents": 4200,
+                "reversedCents": 3000,
+                "openedAtMs": 1766620800000,
+                "closedAtMs": 1767139200000
+              }
+            },
+            {
+              "refundedCents": 5000,
+              "dispute": {
+                "id": "dp1",
+                "status": "lost",
+                "outcome": "lost",
+                "amountCents": 4200,
+                "reversedCents": 4200,
+                "openedAtMs": 1766620800000
+              }
+            },
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "won",
+                "outcome": "won",
+                "reason": "duplicate",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000,
+                "closedAtMs": 1767139200000
+              }
+            },
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "warning_closed",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000
+              }
+            },
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "warning_needs_response",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000,
+                "evidenceDueByMs": 1767225600000
+              }
+            },
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "needs_response",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000,
+                "evidenceDueByMs": 1767229200000
+              }
+            },
+            {}
+          ],
+          1767225600000
+        ],
+        [
+          [
+            {},
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "won",
+                "outcome": "won",
+                "reason": "duplicate",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000,
+                "closedAtMs": 1767139200000
+              }
+            }
+          ],
+          1767225600000
+        ],
+        [
+          [
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "needs_response",
+                "reason": "product_not_received",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000,
+                "evidenceDueByMs": 1767484800000
+              }
+            },
+            {
+              "dispute": {
+                "id": "dp1",
+                "status": "under_review",
+                "amountCents": 4200,
+                "openedAtMs": 1766620800000
+              }
+            }
+          ],
+          1767225600000
+        ]
+      ]
+    },
+    "orderRefundPrompt": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "args": [
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          }
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          [
+            0
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000,
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767225600000
+            }
+          }
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000,
+            "dispute": {
+              "id": "dp1",
+              "status": "warning_needs_response",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767225600000
+            }
+          },
+          [
+            1
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000,
+            "dispute": {
+              "id": "dp1",
+              "status": "needs_response",
+              "reason": "product_not_received",
+              "amountCents": 4200,
+              "openedAtMs": 1766620800000,
+              "evidenceDueByMs": 1767484800000
+            }
+          }
+        ],
+        [
+          {
+            "amountCents": 1200
+          }
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          [
+            5
+          ]
+        ]
+      ]
+    },
+    "orderLineRefundCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          [
+            0
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          [
+            1
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          [
+            9
+          ]
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Mug",
+                "quantity": 2,
+                "unitAmountCents": 1250
+              },
+              {
+                "productId": "p2",
+                "name": "Tee",
+                "quantity": 1,
+                "unitAmountCents": 2000
+              }
+            ],
+            "totals": {
+              "itemsCents": 4500,
+              "discountCents": 450,
+              "shippingCents": 500,
+              "taxCents": 0,
+              "totalCents": 4550,
+              "feeCents": 0
+            },
+            "refundedCents": 1000
+          },
+          []
+        ],
+        [
+          {
+            "lineItems": [
+              {
+                "productId": "p",
+                "name": "x",
+                "quantity": 0,
+                "unitAmountCents": 333
+              }
+            ]
+          },
+          [
+            0
+          ]
+        ]
+      ]
+    },
+    "orderLineRefunded": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
+      "args": [
+        [
+          {
+            "refundedLineItemIds": [
+              1
+            ]
+          },
+          1
+        ],
+        [
+          {
+            "refundedLineItemIds": [
+              1
+            ]
+          },
+          0
+        ],
+        [
+          {},
+          0
+        ]
+      ]
+    },
+    "describeOrderTaxMode": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-tax-decision.ts",
+      "args": [
+        [
+          "stripe-automatic"
+        ],
+        [
+          "manual"
+        ],
+        [
+          "none"
+        ],
+        [
+          null
+        ],
+        [
+          "other"
+        ]
+      ]
+    },
+    "describePaymentRisk": {
+      "module": "libs/aglyn/src/lib/app-utils/payment-risk.ts",
+      "args": [
+        [
+          {
+            "signals": [
+              {
+                "kind": "early-fraud-warning",
+                "stripeObjectId": "issfr_1",
+                "atMs": 1000,
+                "detail": "card_never_received"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "signals": [
+              {
+                "kind": "early-fraud-warning",
+                "stripeObjectId": "issfr_1",
+                "atMs": 1000
+              },
+              {
+                "kind": "radar-review",
+                "stripeObjectId": "prv_1",
+                "atMs": 2000,
+                "outcome": "approved"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "signals": [
+              {
+                "kind": "dispute",
+                "stripeObjectId": "dp_1",
+                "atMs": 3000,
+                "outcome": "needs_response"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "signals": []
+          }
+        ],
+        [
+          null
         ]
       ]
     }

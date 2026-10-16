@@ -165,6 +165,22 @@
       }
     ]
   },
+  "CHECKOUT_SHIPPING_COUNTRY_CODES": [
+    "US",
+    "CA",
+    "GB",
+    "AU",
+    "DE",
+    "FR"
+  ],
+  "CHECKOUT_SHIPPING_COUNTRY_NAMES": {
+    "AU": "Australia",
+    "CA": "Canada",
+    "DE": "Germany",
+    "FR": "France",
+    "GB": "United Kingdom",
+    "US": "United States"
+  },
   "CODE128_PATTERNS": [
     [
       2,
@@ -2675,6 +2691,16 @@
       "value": "true"
     }
   ],
+  "FULFILLMENT_CARRIER_CHOICES": [
+    "USPS",
+    "UPS",
+    "FedEx",
+    "DHL",
+    "Canada Post",
+    "Royal Mail",
+    "Australia Post"
+  ],
+  "FULFILLMENT_OTHER_CARRIER": "other",
   "FUNCTION_BUILTIN_NAMES": [
     "min",
     "max",
@@ -4345,6 +4371,7 @@
       }
     ]
   },
+  "NOTHING_MOVED": "Aglyn has not refunded or canceled anything.",
   "OPEN_DISPUTE_CLAUSE": {
     "field": "disputeKey",
     "op": "equals",
@@ -4590,6 +4617,28 @@
     "preparing": "Preparing",
     "ready": "Ready for pickup"
   },
+  "ORDER_SHIPPING_PRESET_CHOICES": [
+    {
+      "description": "Pirate Ship’s spreadsheet upload: one row per order to ship, weight in ounces.",
+      "id": "pirate-ship",
+      "label": "Pirate Ship"
+    },
+    {
+      "description": "Shippo’s order CSV: its column names, with the order weight in ounces.",
+      "id": "shippo",
+      "label": "Shippo"
+    },
+    {
+      "description": "EasyPost’s label CSV: the recipient and the parcel weight. Add your from address, carrier and service before uploading.",
+      "id": "easypost",
+      "label": "EasyPost"
+    },
+    {
+      "description": "Every shipping column under its own name, for any tool that maps columns on upload.",
+      "id": "shipping",
+      "label": "Shipping (any tool)"
+    }
+  ],
   "ORDER_STATUS_COLOR": {
     "cancelled": "default",
     "delivered": "info",
@@ -4638,6 +4687,28 @@
       "value": "refunded"
     }
   ],
+  "ORDERS_TO_SHIP_FILTER_LABEL": "orders still to ship",
+  "ORDERS_TO_SHIP_FILTER_VALUE": {
+    "filters": [
+      {
+        "op": "==",
+        "path": "requiresShipping",
+        "value": true
+      },
+      {
+        "op": "in",
+        "path": "status",
+        "value": [
+          "paid",
+          "partially_fulfilled"
+        ]
+      }
+    ],
+    "orderBy": {
+      "direction": "desc",
+      "path": "createdAtMs"
+    }
+  },
   "ORG_SUBMISSION_LIST_QUERY": {
     "fields": [
       {
@@ -5249,6 +5320,7 @@
     "status",
     "type"
   ],
+  "REFUND_BLOCKED_BY_DISPUTE": "A chargeback is open on this order, and refunding would not withdraw it — the bank has already taken the disputed amount, so a refund on top would pay the shopper twice. Respond to the dispute or accept it in the Stripe dashboard; refund any remainder once it settles.",
   "REMINDER_WINDOW_END_HOURS": 25,
   "REMINDER_WINDOW_START_HOURS": 23,
   "REPLY_BODY_MAX": 20000,
@@ -5309,6 +5381,7 @@
   },
   "SEO_KEYWORD_LINES_MAX_CHARS": 3000,
   "SEO_MAX_KEYWORDS": 5,
+  "SHIPPING_COST_MAX_CENTS": 1000000,
   "SITE_CARDS_PAGE_SIZE": 12,
   "SITE_FILTER_HEADERS": {
     "createdAt": "Created",

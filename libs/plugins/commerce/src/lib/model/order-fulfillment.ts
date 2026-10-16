@@ -34,6 +34,7 @@ import type {
   OrderLineItem,
   OrderStatus,
 } from './commerce-orders'
+import { carrierLabelFor } from './tracking-url'
 
 /** One line of a fulfillment: which order line, and how many of its units. */
 export interface OrderFulfillmentLine {
@@ -256,6 +257,60 @@ export const FULFILLMENT_CARRIER_CHOICES: readonly string[] = [
   'Royal Mail',
   'Australia Post',
 ]
+
+/** The carrier select's value for a carrier typed by hand. */
+export const FULFILLMENT_OTHER_CARRIER = 'other'
+
+/**
+ * The carrier select's value for a typed carrier: empty for none, the named
+ * carrier it spells (`ups` is UPS), or {@link FULFILLMENT_OTHER_CARRIER}.
+ */
+export function fulfillmentCarrierChoice(carrier: string | null | undefined): string {
+  if (!carrier) return ''
+  const label = carrierLabelFor(carrier)
+  return FULFILLMENT_CARRIER_CHOICES.includes(label) ? label : FULFILLMENT_OTHER_CARRIER
+}
+
+/**
+ * Fulfill items' starting count for each line, by index: what is left of each
+ * shippable line, so the common case (ship everything) is one click. Digital
+ * and service lines start at zero, as there is nothing to ship; when nothing
+ * physical is left they start full instead, so the panel still closes a
+ * digital-only order in one click.
+ */
+export function fulfillItemsStartQuantities(order: Pick<HostOrder, 'lineItems' | 'fulfillments'>): number[] {
+  const states = orderLineFulfillmentStates(order)
+  const physicalLeft = states.some((state) => state.requiresShipping && state.remainingQuantity > 0)
+  return states.map((state) =>
+    physicalLeft ? (state.requiresShipping ? state.remainingQuantity : 0) : state.remainingQuantity,
+  )
+}
+
+/** The units picked in Fulfill items, by line index: the lines with a count above zero. */
+export function fulfillItemsSelection(quantities: readonly number[]): OrderFulfillmentLine[] {
+  return quantities
+    .map((quantity, lineItemId) => ({ lineItemId, quantity: Math.max(0, Math.floor(Number(quantity) || 0)) }))
+    .filter((entry) => entry.quantity > 0)
+}
+
+/**
+ * Whether the picked units are exactly everything still to ship, in which
+ * case the request names no lines and the route ships what is left.
+ */
+export function fulfillItemsIsEverything(
+  order: Pick<HostOrder, 'lineItems' | 'fulfillments'>,
+  selection: readonly OrderFulfillmentLine[],
+): boolean {
+  const remaining = remainingFulfillmentLines(order)
+  return (
+    remaining.length > 0 &&
+    remaining.length === selection.length &&
+    remaining.every(
+      (entry, index) =>
+        selection[index]?.lineItemId === entry.lineItemId && selection[index]?.quantity === entry.quantity,
+    )
+  )
+}
 
 /** What a merchant reads for a carrier's tracking status (AGL-3612). */
 const TRACKING_STATUS_LABELS: Readonly<Record<string, string>> = {
