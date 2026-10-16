@@ -261,6 +261,8 @@ private fun ListingBody(
           ),
         )
       }
+      // The owner's actions on the listing itself: a plugin ships a new version from here, and any listing is edited here.
+      if (mine && context.orgRole in INSTALL_ROLES) OwnerActions(context, listing.id, plugin)
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
         StatusChip(priceLabel(listing.priceUsd), if (listing.paid) StatusTone.INFO else StatusTone.SUCCESS)
         if (listing.verified) StatusChip("Verified publisher", StatusTone.SUCCESS)
@@ -554,4 +556,26 @@ fun LicencesScreen(context: NativePluginContext) {
       }
     }
   }
+}
+
+/** Publish new version (a plugin's) and Edit listing, as the console's listing page offers its owner. */
+@Composable
+private fun OwnerActions(context: NativePluginContext, listingId: String, plugin: Boolean) {
+  val orgId = context.orgId ?: return
+  val scope = rememberCoroutineScope()
+  val runner = remember(listingId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
+  val doc by remember(listingId, context.firestore) { context.firestore.observeDoc("$LISTINGS/$listingId") }.collectAsState(Live.Loading)
+  var editing by remember(listingId) { mutableStateOf<SellerListing?>(null) }
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+    if (plugin) {
+      Button(onClick = { context.navigate("marketplace.publishPlugin", mapOf("listing" to listingId)) }, modifier = Modifier.testTag("listing-publish-version")) { Text("Publish new version") }
+    }
+    OutlinedButton(
+      onClick = { runner.clear(); editing = (doc as? Live.Ready)?.value?.let(SellerListing::from) },
+      enabled = doc is Live.Ready,
+      modifier = Modifier.testTag("listing-edit"),
+    ) { Text("Edit listing") }
+  }
+  editing?.let { listing -> EditListingDialog(context, listing, runner, api) { editing = null } }
 }

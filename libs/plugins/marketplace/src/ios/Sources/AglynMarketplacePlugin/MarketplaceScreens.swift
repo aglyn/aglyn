@@ -222,6 +222,14 @@ private struct ListingDetail: View {
   @State private var orgPin = ObservedDocument()
   @State private var runner = PluginActionRunner(roleHint: "an owner, admin or editor")
   @State private var sheet: ListingSheet?
+  @State private var editing: SellerListing?
+  @State private var editRunner = ActionRunner(roleHint: "an owner, admin or editor")
+
+  /// Listings are the workspace's (`profileId` is the org id), so the owner is a workspace comparison, as the console's is.
+  private var owned: SellerListing? {
+    guard let doc = listing.document, let orgID = context.orgID, doc.string("profileId") == orgID else { return nil }
+    return SellerListing(doc)
+  }
 
   var body: some View {
     Group {
@@ -238,6 +246,33 @@ private struct ListingDetail: View {
     .sheet(item: $sheet) { sheet in
       if let doc = listing.document.map(ListingRow.init) {
         ListingSheets(context: context, listing: doc, sheet: sheet, state: installState(doc), runner: runner) { self.sheet = nil }
+      }
+    }
+    .sheet(item: $editing) { listing in
+      if let orgID = context.orgID {
+        EditListingSheet(context: context, listing: listing, runner: editRunner, api: SellerAPI(api: context.api, orgID: orgID)) { editing = nil }
+      }
+    }
+    .toolbar {
+      // The owner's actions on the listing itself: a plugin ships a new version from here, and any listing is edited here.
+      if let owned, installRoles.contains(context.orgRole ?? "") {
+        ToolbarItemGroup(placement: .primaryAction) {
+          if owned.isPlugin {
+            Button {
+              context.navigate("marketplace.publishPlugin", ["listing": owned.id])
+            } label: {
+              Label("Publish new version", systemImage: "square.and.arrow.up")
+            }
+            .accessibilityIdentifier("listing-publish-version")
+          }
+          Button {
+            editRunner.clear()
+            editing = owned
+          } label: {
+            Label("Edit listing", systemImage: "pencil")
+          }
+          .accessibilityIdentifier("listing-edit")
+        }
       }
     }
     .task(id: "\(listingID)-\(context.hostID ?? "")-\(context.orgID ?? "")") {

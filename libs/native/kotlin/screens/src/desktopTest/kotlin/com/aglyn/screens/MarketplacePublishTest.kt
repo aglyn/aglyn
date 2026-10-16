@@ -192,6 +192,8 @@ class MarketplacePublishTest {
       val context = json("""{"org":{"id":"o1"},"site":{"id":"h1"},"params":{"id":"x1"},"form":{"name":"Hero","description":"A hero","category":"Hero","price":0}}""")
       val outcome = model.run(submit, context)
       assertEquals(ActionOutcome.Done("Published v2 to the marketplace", json("""{"ok":true,"version":2}""")), outcome, id)
+      // Refused for the agreement, it opens the agreement and sends the same publish once it is accepted.
+      assertEquals("marketplace.publisherAgreement", submit.gate.str("screen"), id)
       assertEquals(route, sent[0].url.encodedPath, id)
       assertEquals(JsonObject(json(identity).let { it as JsonObject } + mapOf("displayName" to JsonPrimitive("Hero"), "description" to JsonPrimitive("A hero"), "category" to JsonPrimitive("Hero"), "priceUsd" to JsonPrimitive(0))), body(sent, 0), id)
       // The form opens with the name and description the thing already has, handed over as the screen's parameters.
@@ -234,7 +236,7 @@ class MarketplacePublishTest {
     assertEquals("marketplace.publishEmailStarter", rows("Emails").single().second)
     // A dataset is named as the Data page names it.
     assertEquals(listOf("Menu items", "Staff"), rows("Dataset schemas").map { it.first })
-    assertEquals(listOf("marketplace.publishTemplate", "marketplace.publishTheme"), hub.blocks.first { it.type == "links" }.raw.arr("items").mapNotNull { it.str("screen") })
+    assertEquals(listOf("marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publishPlugin"), hub.blocks.first { it.type == "links" && it.whenCondition == null }.raw.arr("items").mapNotNull { it.str("screen") })
     // What it reads: this site's collections, and the workspace's datasets.
     val paths = (hub.raw.obj("load") as JsonObject).mapValues { (_, load) -> ((load as JsonObject).obj("query") as JsonObject).str("collection") }
     assertEquals(
@@ -270,5 +272,116 @@ class MarketplacePublishTest {
     val accepts = (block.raw.obj("items") as JsonArray).mapNotNull { ActionSpec.parse(it) }
     assertEquals(listOf("accept", "acceptCurrent"), accepts.map { it.id })
     assertTrue(accepts.all { it.resume && it.back })
+  }
+
+  @Test
+  fun aPluginPublishesItsBundleBytesManifestListingAndEveryStatementThroughThePublishRoute() = runTest {
+    val publish = spec("marketplace.publishPlugin")
+    assertEquals("org", publish.scope)
+    val form = publish.blocks.first { it.type == "form" }
+    val fields = (form.raw.obj("fields") as JsonArray).mapNotNull { FieldSpec.parse(it) }
+    fun field(key: String) = fields.first { it.key == key }
+    // The bundle travels as its bytes, base64, the way the console's `fileToBase64` sends it; the manifest is read as JSON.
+    val bytes = byteArrayOf(0x63, 0x6F, 0x6E, 0x73, 0x74, 0x00, 0xFF.toByte())
+    assertEquals("Y29uc3QA/w==", ScreenValues.base64(bytes))
+    assertEquals(JsonPrimitive("Y29uc3QA/w=="), fieldJson(field("bundle"), FieldValue.File("w.js", ScreenValues.base64(bytes))))
+    assertEquals(
+      json("""{"id":"acme-widget","name":"Widget","version":"1.0.0","entry":"index.js"}"""),
+      fieldJson(field("manifest"), FieldValue.File("m.json", """{"id":"acme-widget","name":"Widget","version":"1.0.0","entry":"index.js"}""")),
+    )
+    // Every statement must be confirmed; each says what it means under its label.
+    val first = field("attested")
+    assertTrue(first.unmet(JsonArray(first.options.dropLast(1).map { JsonPrimitive(it.first) }), JsonObject(emptyMap())))
+    assertFalse(first.unmet(JsonArray(first.options.map { JsonPrimitive(it.first) }), JsonObject(emptyMap())))
+    assertFalse(first.options.any { it.first == "changelog" }, "the changelog statement is an update's")
+    assertEquals("changelog", field("attestedUpdate").options.last().first)
+    assertTrue(first.detail("repository", JsonObject(emptyMap())) != null)
+
+    val attested = JsonArray(first.options.map { JsonPrimitive(it.first) })
+    val submit = ActionSpec.parse(form["submit"])!!
+    val sent = mutableListOf<HttpRequestData>()
+    val answer = """{"ok":true,"version":"1.0.0","listingId":"l9"}"""
+    val model = ScreenModel(publish, JsonObject(emptyMap()), client(200 to answer, 200 to answer, sent = sent))
+    val base = mapOf(
+      "bundle" to JsonPrimitive("Y29uc3QA/w=="), "manifest" to json("""{"id":"acme-widget","name":"Widget"}"""), "name" to JsonPrimitive(""),
+      "description" to JsonPrimitive("Counts down"), "category" to JsonPrimitive(""), "readme" to JsonPrimitive(""), "changelog" to JsonPrimitive("First"),
+      "repositoryUrl" to JsonPrimitive("https://github.com/acme/widget"), "license" to JsonPrimitive("MIT"), "visibility" to JsonPrimitive("public"),
+      "price" to JsonPrimitive(5), "attested" to attested,
+    )
+    fun scope(form: Map<String, JsonElement>) = JsonObject(mapOf("org" to json("""{"id":"o1"}"""), "params" to JsonObject(emptyMap()), "form" to JsonObject(form)))
+    assertEquals(ActionOutcome.Done("Published v1.0.0 — it is queued for review", json(answer)), model.run(submit, scope(base)))
+    assertEquals("/api/marketplace/publish-plugin", sent[0].url.encodedPath)
+    // The listing name falls back to the manifest's; an empty README and category are left out, as the console leaves them.
+    assertEquals(
+      json(
+        """{"orgId":"o1","bundle":"Y29uc3QA/w==","manifest":{"id":"acme-widget","name":"Widget"},"displayName":"Widget","description":"Counts down",
+        "changelog":"First","priceUsd":5,"visibility":"public","attestation":$attested,"license":"MIT","repositoryUrl":"https://github.com/acme/widget"}""",
+      ),
+      body(sent, 0),
+    )
+    // A private plugin is free whatever the price field held.
+    model.run(submit, scope(base + ("visibility" to JsonPrimitive("private"))))
+    assertEquals(0.0, (body(sent, 1)["priceUsd"] as JsonPrimitive).content.toDouble())
+    // Opens the listing it published.
+    assertEquals("marketplace.listing", submit.navigate?.screen)
+    assertEquals(mapOf("listing" to "{response.listingId}"), submit.navigate?.params)
+  }
+
+  @Test
+  fun aPluginRefusedByTheVerifierSaysWhatItFoundAndTheAgreementGatesItLikeEveryPublish() = runTest {
+    val publish = spec("marketplace.publishPlugin")
+    val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!
+    val refusal = """{"error":"Accept the Marketplace Publisher Agreement before publishing.","agreement":{"required":"2026-08-24.1","accepted":null,"state":"none","orgId":"o1"}}"""
+    val problems = """{"error":"Bundle rejected","problems":[{"level":"error","check":"network","message":"Calls an undeclared host"},{"level":"error","message":"Too large"}]}"""
+    val sent = mutableListOf<HttpRequestData>()
+    val model = ScreenModel(publish, JsonObject(emptyMap()), client(412 to refusal, 422 to problems, sent = sent))
+    val scope = json("""{"org":{"id":"o1"},"params":{},"form":{"bundle":"eA==","manifest":{"id":"w"},"name":"W"}}""")
+    assertEquals(ActionOutcome.Gated("marketplace.publisherAgreement", "Accept the Marketplace Publisher Agreement before publishing."), model.run(submit, scope))
+    assertEquals(ActionOutcome.Failed("Bundle rejected\nBundle failed verification\nnetwork: Calls an undeclared host\nToo large"), model.run(submit, scope))
+  }
+
+  @Test
+  fun aNewVersionStartsFromTheListingAndSaysWhatInstallsToday() {
+    val publish = spec("marketplace.publishPlugin")
+    val version = (publish.raw.obj("constants")!!.obj("agreement")!!.obj("version") as JsonPrimitive).content
+    fun notices(listing: String, revocation: String = "null"): List<String> {
+      var (context, _) = shown(publish, """{"handle":"studio","publisherAgreement":{"version":"$version"}}""")
+      context = ScreenContext.with(context, "params", json("""{"listing":"l1"}"""))
+      context = ScreenContext.with(context, "data", json("""{"listing":$listing,"revocation":$revocation}"""))
+      val flags = linkedMapOf<String, JsonElement>()
+      for (entry in publish.raw.obj("derive") as JsonArray) {
+        flags[entry.str("name")!!] = JsonPrimitive(ScreenValues.condition(entry.str("when"), ScreenContext.with(context, "is", JsonObject(flags.toMap()))))
+      }
+      context = ScreenContext.with(context, "is", JsonObject(flags))
+      return texts(publish.blocks.filter { ScreenValues.condition(it.whenCondition, context) }, context)
+    }
+    assertEquals(
+      listOf("v2 is what installs today. It keeps installing until a reviewer approves this one — nobody is upgraded onto unreviewed code, and nothing you publish here can change a version already installed."),
+      notices("""{"latestApprovedVersion":"2"}"""),
+    )
+    // A stopped version installs nowhere, and neither does a listing whose every version is stopped.
+    val enters = listOf("This version enters review. Nothing installs until a reviewer approves it.")
+    assertEquals(enters, notices("""{"latestApprovedVersion":"2"}""", """{"versions":["2"]}"""))
+    assertEquals(enters, notices("""{"latestApprovedVersion":"2"}""", """{"versions":"all"}"""))
+    assertEquals(enters, notices("""{"latestVersion":"1"}"""))
+    // Who can install it is the listing's, so a new version does not ask.
+    val fields = (publish.blocks.first { it.type == "form" }.raw.obj("fields") as JsonArray).mapNotNull { FieldSpec.parse(it) }
+    assertEquals("!params.listing", fields.first { it.key == "visibility" }.whenCondition)
+    assertEquals("{data.listing.displayName}", fields.first { it.key == "name" }.initial)
+  }
+
+  @Test
+  fun thePublishHubStatesWhatAglynKeepsOnThisPlan() {
+    val hub = spec("marketplace.publish")
+    assertEquals("marketplace", (hub.raw.obj("load")!!.obj("fee")!!.obj("takeRate") as JsonPrimitive).content)
+    fun shownFee(fee: String): List<String> {
+      val context = json("""{"site":{"id":"h1"},"org":{"id":"o1"},"data":{$fee}}""")
+      return texts(hub.blocks.filter { ScreenValues.condition(it.whenCondition, context) }, context).filter { "keeps" in it }
+    }
+    assertEquals(listOf("Aglyn keeps 30% of each sale on your current plan. On a paid plan it is 20%."), shownFee(""""fee":{"pct":30,"paid":20}"""))
+    assertEquals(listOf("Aglyn keeps 20% of each sale. Payment processing fees are charged separately by Stripe."), shownFee(""""fee":{"pct":20.0,"paid":20.0}"""))
+    assertEquals(listOf("Aglyn keeps 12% of each sale. Payment processing fees are charged separately by Stripe."), shownFee(""""fee":{"pct":12,"paid":20}"""))
+    // Nothing is said before the workspace has been read: the free rate would accuse a paying publisher of the higher cut.
+    assertEquals(emptyList(), shownFee(""))
   }
 }

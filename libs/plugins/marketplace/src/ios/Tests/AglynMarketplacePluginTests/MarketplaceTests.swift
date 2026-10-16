@@ -116,7 +116,7 @@ final class MarketplaceTests: XCTestCase {
     let specs = ScreenCatalog.load(from: .module)
     let ids = [
       "marketplace.publish", "marketplace.publishComponent", "marketplace.publishDatasetSchema", "marketplace.publishEmailStarter", "marketplace.publishEmailTemplate",
-      "marketplace.publishLayout", "marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publisherAgreement",
+      "marketplace.publishLayout", "marketplace.publishPlugin", "marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publisherAgreement",
     ]
     XCTAssertEqual(specs.map(\.id).sorted(), ids)
     XCTAssertEqual(specs.first { $0.id == "marketplace.publishTemplate" }?.zones, ["siteTemplate"])
@@ -316,6 +316,7 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell",
         "marketplace.publish", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent",
         "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter",
+        "marketplace.publishPlugin",
       ],
       widgets: ["marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
       deepLinks: ["marketplace.listing-page", "marketplace.page"])

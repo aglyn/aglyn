@@ -18,6 +18,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { LISTING_LOGO_HINT } from '../constants/listing-media'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { PLAN_ENTITLEMENTS, resolveMarketplaceFeePct } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { LISTING_CATEGORIES } from './marketplace-catalog'
+import { PUBLISHER_ATTESTATION, requiredAttestationIds } from './publisher-attestation'
 import {
   marketplaceMinPriceUsd,
   marketplacePriceFloorHint,
@@ -200,5 +204,65 @@ describe('native publishing to the marketplace', () => {
     expect(editor).toContain("'/api/marketplace/preview-image'")
     expect(editor).toContain("method: values.previewImageUrl ? 'POST' : 'DELETE'")
     expect(editor).toContain('screenshots,')
+  })
+
+  it('publishes a plugin through the route, fields, statements and price the console form uses', () => {
+    const form = read('libs/plugins/marketplace/src/lib/components/publish-plugin-form.component.tsx')
+    const source = flat(form)
+    const publish = screen('marketplace.publishPlugin') as Screen & {
+      constants?: { categories?: string[]; agreement?: Record<string, unknown> }
+      blocks: Array<Screen['blocks'][number] & { fields?: Array<{ key: string; label?: string; help?: string; options?: Array<{ value: string; label: string; detail?: string }> }> }>
+    }
+    expect(publish.scope).toBe('org')
+    expect(publish.constants?.agreement).toEqual(screen('marketplace.publishTemplate').constants?.agreement)
+    expect(publish.constants?.categories).toEqual([...LISTING_CATEGORIES])
+    const block = publish.blocks.find((one) => one.type === 'form')
+    expect(block?.submit?.url).toBe('/api/marketplace/publish-plugin')
+    expect(form).toContain("'/api/marketplace/publish-plugin'")
+    // The body the form serializes, key for key.
+    const keys = Object.keys(block?.submit?.body ?? {}).sort()
+    expect(keys).toEqual(
+      ['attestation', 'bundle', 'category', 'changelog', 'description', 'displayName', 'license', 'manifest', 'orgId', 'priceUsd', 'readme', 'repositoryUrl', 'visibility'],
+    )
+    for (const key of keys) expect(source).toMatch(new RegExp(`\\b${key}\\b`))
+    // Every statement, in the model's words; the changelog only on a new version.
+    const field = (key: string) => block?.fields?.find((one) => one.key === key)
+    const statement = ({ id, label, detail }: (typeof PUBLISHER_ATTESTATION)[number]) => ({ value: id, label, detail })
+    expect(field('attested')?.options).toEqual(PUBLISHER_ATTESTATION.filter((item) => !item.updateOnly).map(statement))
+    expect(field('attestedUpdate')?.options).toEqual(PUBLISHER_ATTESTATION.map(statement))
+    expect(requiredAttestationIds(false)).toEqual(field('attested')?.options?.map((option) => option.value))
+    expect(requiredAttestationIds(true)).toEqual(field('attestedUpdate')?.options?.map((option) => option.value))
+    expect(field('price')?.help).toBe(marketplacePriceFloorHint('Paid listings need payouts set up.'))
+    // The sentences the page shows are the form's own.
+    const sentences = [
+      ...publish.blocks.map((one) => one.text ?? ''),
+      ...(block?.fields ?? []).flatMap((one) => [one.label ?? '', one.help ?? '', ...(one.options ?? []).filter((option) => !option.detail).map((option) => option.label)]),
+    ].filter((text) => text && !text.includes('{') && text !== 'None')
+    const agreementTexts = new Set(screen('marketplace.publishTemplate').blocks.map((one) => one.text))
+    for (const text of sentences.filter((one) => !agreementTexts.has(one) && !one.startsWith('0 for free'))) {
+      expect([text, source.includes(text)]).toEqual([text, true])
+    }
+    const live = publish.blocks.find((one) => one.text?.includes('is what installs today'))?.text ?? ''
+    expect(source).toContain(live.replace('{data.listing.latestApprovedVersion}', '${liveVersion}').replace(/^v/, 'v'))
+  })
+
+  it('states the take rate the publish panel states, from the same resolver the checkout deducts with', () => {
+    const panel = flat(read('libs/plugins/marketplace/src/lib/components/org-publish-panel.component.tsx'))
+    const hub = screen('marketplace.publish') as Screen & { load?: Record<string, unknown> }
+    expect(hub.load?.['fee']).toEqual({ takeRate: 'marketplace', optional: true })
+    const said = hub.blocks.filter((one) => one.text?.includes('keeps')).map((one) => one.text)
+    expect(said).toEqual([
+      `${PLATFORM_BRAND_NAME} keeps {data.fee.pct}% of each sale on your current plan. On a paid plan it is {data.fee.paid}%.`,
+      `${PLATFORM_BRAND_NAME} keeps {data.fee.pct}% of each sale. Payment processing fees are charged separately by Stripe.`,
+    ])
+    expect(panel).toContain('keeps ${feePct}% of each sale on your current plan. On a paid plan it is ${paidFeePct}%.')
+    expect(panel).toContain('keeps ${feePct}% of each sale. Payment processing fees are charged separately by Stripe.')
+    expect(panel).toContain('const paidFeePct = PLAN_ENTITLEMENTS.starter.marketplaceFeePct')
+    // The rates the apps resolve are the console's own answers (replayed by PlanFeaturesTests on both platforms).
+    const derived = JSON.parse(read('libs/native/contracts/derived-values.generated.json')) as {
+      marketplaceFee: { paid: number; cases: Array<{ org: unknown; result: number }> }
+    }
+    expect(derived.marketplaceFee.paid).toBe(PLAN_ENTITLEMENTS.starter.marketplaceFeePct)
+    for (const { org, result } of derived.marketplaceFee.cases) expect(resolveMarketplaceFeePct(org as never)).toBe(result)
   })
 })
