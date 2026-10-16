@@ -2,7 +2,7 @@ package com.aglyn.webview
 
 import androidx.compose.runtime.Composable
 import com.aglyn.core.AuthSession
-import com.aglyn.pluginhost.BesignerPaths
+import com.aglyn.pluginhost.BesignerEntry
 
 /**
  * The Besigner at [path] (a whole console path, e.g.
@@ -27,19 +27,33 @@ expect fun BesignerWebView(
 
 /** Where a navigation inside the Besigner view goes. */
 sealed interface BesignerNavigation {
-  /** Another Besigner page: it loads in the view. */
+  /** Another Besigner page, or the entry page that signs the view in: it loads in the view. */
   data object Stay : BesignerNavigation
+
+  /** The editor's own way back (its back arrow): the view closes. */
+  data object Leave : BesignerNavigation
 
   /** A console page that is not the Besigner: the app opens it natively. */
   data class Native(val path: String) : BesignerNavigation
+
+  /** The sign-in wall: the session the view was opened with has ended. */
+  data object SessionEnded : BesignerNavigation
 
   /** Another site altogether: the person's browser. */
   data object External : BesignerNavigation
 }
 
-/** Decides a navigation to [url] from a Besigner view on [origin]. */
-fun besignerNavigation(url: String, origin: String): BesignerNavigation {
+/** Decides a navigation to [url] from a Besigner view on [origin] showing the editor at [current] (AGL-3850). */
+fun besignerNavigation(url: String, origin: String, current: String = ""): BesignerNavigation {
   if (originOf(url) != originOf(origin)) return BesignerNavigation.External
   val path = url.removePrefix(originOf(url) ?: "").ifEmpty { "/" }
-  return if (BesignerPaths.isBesignerPath(path)) BesignerNavigation.Stay else BesignerNavigation.Native(path)
+  return when (val exit = BesignerEntry.exit(current, path)) {
+    BesignerEntry.Exit.Stay -> BesignerNavigation.Stay
+    BesignerEntry.Exit.Leave -> BesignerNavigation.Leave
+    BesignerEntry.Exit.SessionEnded -> BesignerNavigation.SessionEnded
+    is BesignerEntry.Exit.Open -> BesignerNavigation.Native(exit.path)
+  }
 }
+
+/** The path a console [url] shows, for tracking which editor the view is on. */
+internal fun consolePathOf(url: String): String = url.removePrefix(originOf(url) ?: "").ifEmpty { "/" }

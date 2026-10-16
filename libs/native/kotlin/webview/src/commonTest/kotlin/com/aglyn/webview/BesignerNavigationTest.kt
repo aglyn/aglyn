@@ -20,6 +20,14 @@ class BesignerNavigationTest {
   }
 
   @Test
+  fun theEntryPageStaysAndTheEditorsBackArrowLeaves() {
+    val editor = "/acme/hosts/shop/screens/s1/versions/v2/besigner"
+    assertEquals(BesignerNavigation.Stay, besignerNavigation("$origin/auth/besigner?continue=%2Fx", origin, editor))
+    assertEquals(BesignerNavigation.Leave, besignerNavigation("$origin/acme/hosts/shop/screens/s1/versions/v2/view", origin, editor))
+    assertEquals(BesignerNavigation.SessionEnded, besignerNavigation("$origin/signin?continue=%2F", origin, editor))
+  }
+
+  @Test
   fun anotherSiteIsExternal() {
     assertEquals(BesignerNavigation.External, besignerNavigation("https://evil.example/acme/hosts/shop/theme", origin))
     assertEquals(BesignerNavigation.External, besignerNavigation("http://app.aglyn.com/acme/hosts/shop/theme", origin))

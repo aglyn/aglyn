@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aglyn.core.AuthSession
+import com.aglyn.pluginhost.BesignerEntry
 import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.core.defaultHttpClient
 import com.aglyn.ui.AglynIcons
@@ -56,6 +57,26 @@ actual fun BesignerWebView(
   var error by remember(path) { mutableStateOf<String?>(null) }
   var webView by remember { mutableStateOf<WebView?>(null) }
   var canGoBack by remember { mutableStateOf(false) }
+  // The editor the view shows, and whether it has handed the person back to the app (AGL-3850).
+  val current = remember(path) { arrayOf(path) }
+  val left = remember(path) { booleanArrayOf(false) }
+
+  /** Acts on a navigation the view does not show; true when it was not [BesignerNavigation.Stay]. */
+  fun handle(next: BesignerNavigation, url: String, open: (android.net.Uri) -> Unit): Boolean {
+    if (left[0]) return true
+    when (next) {
+      BesignerNavigation.Stay -> {
+        val shown = consolePathOf(url)
+        if (!shown.startsWith(BesignerEntry.PATH)) current[0] = shown
+        return false
+      }
+      BesignerNavigation.Leave -> { left[0] = true; onExit() }
+      is BesignerNavigation.Native -> { left[0] = true; onConsoleLink(next.path) }
+      BesignerNavigation.SessionEnded -> error = "Your session ended. Open the Besigner again to keep editing."
+      BesignerNavigation.External -> open(android.net.Uri.parse(url))
+    }
+    return true
+  }
 
   LaunchedEffect(origin, path) {
     val token = auth.idToken(false)
@@ -136,22 +157,25 @@ actual fun BesignerWebView(
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-              val url = request.url
-              return when (val next = besignerNavigation(url.toString(), origin)) {
-                // Besigner pages stay here.
-                BesignerNavigation.Stay -> false
-                // Any other console page is a native screen.
-                is BesignerNavigation.Native -> { onConsoleLink(next.path); true }
-                // Another site opens in the person's browser.
-                BesignerNavigation.External -> { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url)) }; true }
+              // Frames inside the page (the Besigner's canvas, Firebase's auth frame, reCAPTCHA) load where they are.
+              if (!request.isForMainFrame) return false
+              val url = request.url.toString()
+              // Besigner pages stay here; any other console page is a native screen; another site opens in the browser.
+              return handle(besignerNavigation(url, origin, current[0]), url) { uri ->
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
               }
             }
 
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
               canGoBack = view.canGoBack()
+              // The console's client-side router never reaches shouldOverrideUrlLoading; its history entries land here.
+              if (url != null && isTrustedUrl(url, listOf(origin))) handle(besignerNavigation(url, origin, current[0]), url) {}
             }
           }
-          loadUrl(origin.trimEnd('/') + path)
+          // The Besigner's canvas and Firebase's auth frame live on other origins and need their cookies.
+          CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+          // The entry page signs this view in from the cookie, then opens the editor (AGL-3850).
+          loadUrl(BesignerEntry.url(origin, path) ?: return@apply)
           webView = this
         }
       },
