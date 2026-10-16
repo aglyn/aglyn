@@ -318,13 +318,15 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter",
         "marketplace.publishPlugin",
       ],
-      widgets: ["marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
+      widgets: ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
       deepLinks: ["marketplace.listing-page", "marketplace.page"])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "marketplace", contributes: declared, register: registerMarketplaceNative)], into: registry)
     XCTAssertEqual(result.loaded, ["marketplace"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "orgPluginInstalls").map(\.id), ["marketplace.org-installs"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "pluginInstallation").map(\.id), ["marketplace.plugin-installation"])
+    // A site's component and layout pages offer Publish to marketplace because this slot is filled.
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostArtifactPublish").map(\.id), ["marketplace.artifact-publish"])
     XCTAssertEqual(registry.widgets(for: .aglyn).filter { $0.pluginID == "marketplace" }.map(\.id), [], "never on Home")
   }
 }

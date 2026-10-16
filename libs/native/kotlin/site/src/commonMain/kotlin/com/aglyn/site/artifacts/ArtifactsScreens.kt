@@ -71,6 +71,9 @@ import com.aglyn.ui.space
 /** Roles that may create and change a site's components, layouts and templates (`hostRoleCanWrite`). */
 private val WRITE_ROLES = setOf("admin", "editor", "author")
 
+/** The slot a plugin fills to publish a site's component or layout (the console's `hostArtifactPublish`). */
+const val ARTIFACT_PUBLISH_SLOT = "hostArtifactPublish"
+
 /** What a list's dialog is asking for. */
 private sealed interface ArtifactDialog {
   data object Create : ArtifactDialog
@@ -226,6 +229,18 @@ private fun ArtifactDetail(
                 add(MenuAction("details", "Edit details", "edit", enabled = canEdit) { open(ArtifactDialog.Details(row)) })
                 if (!row.isStarterBundle) add(MenuAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(ArtifactDialog.Duplicate(row)) })
                 if (kind != ArtifactKind.TEMPLATE) add(MenuAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(ArtifactDialog.SaveTemplate(row)) })
+                // Publishing is the marketplace's (the console's `hostArtifactPublish` zone): offered only where a plugin fills the
+                // zone, opening its form with what this is and what it is called.
+                if (kind != ArtifactKind.TEMPLATE && context.slotWidgets(ARTIFACT_PUBLISH_SLOT).isNotEmpty()) {
+                  add(
+                    MenuAction("publish", "Publish to marketplace", "storefront") {
+                      context.navigate(
+                        if (kind == ArtifactKind.COMPONENT) "marketplace.publishComponent" else "marketplace.publishLayout",
+                        mapOf("id" to row.id, "name" to row.name, "description" to row.description.orEmpty()),
+                      )
+                    },
+                  )
+                }
                 add(
                   MenuAction("delete", if (row.isStarterBundle) "Delete bundle" else "Delete", "delete", destructive = true, enabled = canEdit) {
                     open(if (row.isStarterBundle) ArtifactDialog.DeleteBundle(row, siblings.ifEmpty { listOf(row) }) else ArtifactDialog.Delete(row))
