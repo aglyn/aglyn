@@ -662,11 +662,15 @@ struct InstalledScreen: View {
 
 // MARK: Licenses
 
-/// The licenses the workspace holds: each live purchase, who bought it, and what was paid.
+/// The console's Licenses: what this workspace holds (who on the team bought each and what it cost before tax), and the
+/// signed-in person's own receipts across every workspace they belong to, with the workspace each license landed in.
 struct LicencesScreen: View {
   let context: NativePluginContext
-  @State private var purchases = LiveQuery()
-  @State private var names: [String: String] = [:]
+  @State private var held = LiveQuery()
+  @State private var mine = LiveQuery()
+  @State private var licensedTo: String?
+  @State private var listingNames: [String: String] = [:]
+  @State private var orgNames: [String: String] = [:]
 
   var body: some View {
     Group {
@@ -679,48 +683,105 @@ struct LicencesScreen: View {
     .navigationTitle("Licenses")
   }
 
+  private func name(_ licence: LicenceRow) -> String { listingNames[licence.listingID] ?? licence.listingID }
+
+  private func row(_ licence: LicenceRow, detail: String) -> some View {
+    Button { context.navigate(marketplaceListingScreen, ["listing": licence.listingID]) } label: {
+      AglynRow(
+        name(licence), subtitle: [detail, "Paid " + dollars(Double(licence.paidCents)), licence.createdAt.map { relativeTime($0) }].compactMap { $0 }
+          .joined(separator: " · "), systemImage: "doc.text")
+    }
+    .buttonStyle(.plain)
+  }
+
   @ViewBuilder
   private func content(_ orgID: String) -> some View {
-    let rows = purchases.state.value.map { $0.map(LicenceRow.init) }
+    let heldRows = held.state.value.map { $0.map(LicenceRow.init) }
+    let mineRows = mine.state.value.map { $0.map(LicenceRow.init) }
     VStack(spacing: 0) {
       SectionTabs(context: context, current: marketplaceLicencesScreen).padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
-      if case .failed = purchases.state {
-        AglynEmptyState("Could not load licenses", systemImage: "exclamationmark.triangle", message: "Check the connection and try again.")
-      } else if let rows {
-        if rows.isEmpty {
-          AglynEmptyState("No licenses yet", systemImage: "doc.text", message: "A paid listing bought for this workspace shows here.")
-        } else {
-          List {
-            ForEach(rows) { licence in
-              Button { context.navigate(marketplaceListingScreen, ["listing": licence.listingID]) } label: {
-                AglynRow(
-                  names[licence.listingID] ?? licence.listingID,
-                  subtitle: [
-                    "Paid " + priceLabel(Double(licence.paidCents) / 100), licence.buyerUID == context.uid ? "bought by you" : nil,
-                    licence.createdAt.map { relativeTime($0) },
-                  ].compactMap { $0 }.joined(separator: " · "), systemImage: "doc.text")
-              }
-              .buttonStyle(.plain)
-              .aglynListRow()
-            }
-          }
-          .aglynListBackground()
-          .accessibilityIdentifier("licences-list")
+      List {
+        Section {
+          AglynNotice(
+            "A marketplace purchase licenses one organization. Any member with install permission can install what this workspace owns — and a second workspace needs its own license.",
+            tone: .info)
         }
-      } else {
-        List { SkeletonRows(count: 4) }.aglynListBackground()
+        Section {
+          if case .failed = held.state {
+            Text("This workspace’s licenses could not be loaded. Check the connection and try again.").foregroundStyle(.secondary)
+          } else if let heldRows {
+            if heldRows.isEmpty {
+              VStack(alignment: .leading, spacing: AglynSpace.half) {
+                Text("This workspace holds no licenses").font(AglynFont.headline)
+                Text("Anything bought for this workspace shows up here, whoever on the team paid for it.").foregroundStyle(.secondary)
+              }
+            } else {
+              ForEach(heldRows) { licence in row(licence, detail: "Bought by " + boughtByLabel(licence, uid: context.uid)).aglynListRow() }
+            }
+          } else {
+            SkeletonRows(count: 3)
+          }
+        } header: {
+          Text("This workspace")
+        } footer: {
+          Text("Installable by any member with install permission, whoever on the team bought it")
+        }
+        .accessibilityIdentifier("licences-held")
+        Section {
+          if case .failed = mine.state {
+            Text("Your purchases could not be loaded. Check the connection and try again.").foregroundStyle(.secondary)
+          } else if let mineRows {
+            if mineRows.isEmpty && licensedTo == nil {
+              VStack(alignment: .leading, spacing: AglynSpace.half) {
+                Text("You have not bought anything yet").font(AglynFont.headline)
+                Text("Your own marketplace receipts appear here, across every workspace you belong to.").foregroundStyle(.secondary)
+              }
+            } else {
+              Picker("Licensed to", selection: $licensedTo) {
+                Text("Any workspace").tag(String?.none)
+                Text("This workspace").tag(Optional(orgID))
+                ForEach(orgNames.filter { $0.key != orgID }.sorted { $0.value.lowercased() < $1.value.lowercased() }, id: \.key) { entry in
+                  Text(entry.value).tag(Optional(entry.key))
+                }
+                Text("Every workspace you belong to").tag(Optional(everyWorkspace))
+              }
+              .accessibilityIdentifier("licences-licensed-to")
+              if mineRows.isEmpty { Text("None of your purchases is licensed there.").foregroundStyle(.secondary) }
+              ForEach(mineRows) { licence in
+                row(licence, detail: "Licensed to " + licensedToLabel(licence, orgID: orgID, names: orgNames)).aglynListRow()
+              }
+            }
+          } else {
+            SkeletonRows(count: 3)
+          }
+        } header: {
+          Text("Bought by you")
+        } footer: {
+          Text("Your own receipts, and which workspace each license landed in")
+        }
+        .accessibilityIdentifier("licences-mine")
       }
+      .aglynListBackground()
+      .accessibilityIdentifier("licences-list")
     }
     .background(AglynColor.page)
-    .task(id: orgID) { purchases.start(context.firestore, licencesQuery(orgID: orgID)) }
-    .task(id: rows?.map(\.listingID)) {
-      let ids = Array(Set((rows ?? []).map(\.listingID).filter { !$0.isEmpty })).sorted()
-      var found: [String: String] = [:]
-      for id in ids {
-        if let doc = try? await context.firestore.readOnce([listingsCollection, id]) { found[id] = doc.string("displayName") ?? id }
+    .task(id: orgID) { held.start(context.firestore, licencesQuery(orgID: orgID)) }
+    .task(id: licensedTo ?? "") { mine.start(context.firestore, boughtByYouQuery(uid: context.uid, licensedTo: licensedTo)) }
+    .task(id: ((heldRows ?? []) + (mineRows ?? [])).map(\.listingID)) {
+      let ids = Set(((heldRows ?? []) + (mineRows ?? [])).map(\.listingID).filter { !$0.isEmpty }).subtracting(listingNames.keys)
+      for id in ids.sorted() {
+        if let doc = try? await context.firestore.readOnce([listingsCollection, id]) { listingNames[id] = doc.string("displayName") ?? id }
       }
-      names = found
     }
-    .onDisappear { purchases.stop() }
+    .task(id: (mineRows ?? []).compactMap(\.buyerOrgID)) {
+      // The workspace names the person already sees in the switcher; a workspace they have left stays its id.
+      for id in Set((mineRows ?? []).compactMap(\.buyerOrgID)).subtracting(orgNames.keys).sorted() {
+        if let doc = try? await context.firestore.readOnce(["orgs", id]), let name = doc.string("name") { orgNames[id] = name }
+      }
+    }
+    .onDisappear {
+      held.stop()
+      mine.stop()
+    }
   }
 }
