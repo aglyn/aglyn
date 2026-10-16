@@ -479,6 +479,10 @@ public final class ScreenModel {
       guard let reader else { return (load.key, .null, nil) }
       return (load.key, try await FirestoreLoads.entitlement(reader, feature: feature, orgID: ScreenValues.render("{org.id}", in: context)), nil)
     }
+    if load.takeRate == "marketplace" {
+      guard let reader else { return (load.key, .null, nil) }
+      return (load.key, try await FirestoreLoads.marketplaceTakeRate(reader, orgID: ScreenValues.render("{org.id}", in: context)), nil)
+    }
     if let scope = load.switchboard {
       guard let reader else { return (load.key, .null, nil) }
       let org = try await FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", in: context))

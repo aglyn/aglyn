@@ -46,4 +46,23 @@ class MarketplaceTest {
     assertTrue(FirestoreFilter("buyerOrgId", FilterOp.EQ, "org1") in query.filters)
     assertTrue(FirestoreFilter("refundedAt", FilterOp.EQ, null) in query.filters)
   }
+
+  @Test
+  fun boughtByYouIsYourOwnLivePurchasesNarrowedToTheWorkspaceEachLandedIn() {
+    val all = boughtByYouQuery("u1", null)
+    assertEquals("marketplacePurchases", all.collectionPath)
+    assertTrue(FirestoreFilter("buyerUid", FilterOp.EQ, "u1") in all.filters)
+    assertTrue(FirestoreFilter("refundedAt", FilterOp.EQ, null) in all.filters)
+    assertTrue(all.filters.none { it.field == "buyerOrgId" })
+    assertTrue(FirestoreFilter("buyerOrgId", FilterOp.EQ, "o2") in boughtByYouQuery("u1", "o2").filters)
+    // "Every workspace you belong to" is a purchase that names none.
+    assertTrue(boughtByYouQuery("u1", EVERY_WORKSPACE).filters.any { it.field == "buyerOrgId" && it.value !is String })
+
+    val mine = LicenceRow.from(FirestoreDoc("p1", "marketplacePurchases/p1", mapOf("listingId" to "l1", "buyerUid" to "u1", "buyerOrgId" to "o1", "amountCents" to 1081L, "taxCents" to 81L)))
+    val theirs = LicenceRow.from(FirestoreDoc("p2", "marketplacePurchases/p2", mapOf("listingId" to "l1", "buyerUid" to "u2", "buyerOrgId" to "o2")))
+    val legacy = LicenceRow.from(FirestoreDoc("p3", "marketplacePurchases/p3", mapOf("listingId" to "l1", "buyerUid" to "u1", "buyerOrgId" to null)))
+    assertEquals(1000L, mine.paidCents, "what the license cost before tax")
+    assertEquals(listOf("You", "A colleague"), listOf(boughtByLabel(mine, "u1"), boughtByLabel(theirs, "u1")))
+    assertEquals(listOf("This workspace", "Studio", "Every workspace you belong to"), listOf(mine, theirs, legacy).map { licensedToLabel(it, "o1", mapOf("o2" to "Studio")) })
+  }
 }

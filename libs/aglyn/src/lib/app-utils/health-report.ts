@@ -3591,16 +3591,27 @@ export const APP_CHECK_MIN_REQUESTS = 20
 /**
  * The floor the allow rate must clear.
  *
- * 0.90, against a measured 0.997. The gap is deliberate: a handful of genuine
- * denials is ordinary — a stale tab, a bot, a browser that failed its
+ * 0.75, against real traffic that never read below 0.976 in any six-hour
+ * window over the 30 days to 2026-10-16. The gap is deliberate: a handful of
+ * genuine denials is ordinary — a stale tab, a bot, a browser that failed its
  * reCAPTCHA — and a floor set near the observed rate would page on those.
+ *
+ * ⛔ Our own native test runs are the largest source of denials, and they
+ * cannot be made to attest. A Simulator or emulator build has no App Attest
+ * or Play Integrity, and debug tokens are banned outright (AGL-2402), so every
+ * sign-in such a build tries is an INVALID denial on this service, often in
+ * retry bursts. One evening of native sign-in testing put 60 of them into a
+ * quiet window and read 0.891, which paged as an outage under the old 0.90
+ * floor while every real visitor was attesting. 0.75 needs roughly three
+ * times that before it reds.
  *
  * What this is built to catch is not a drift of a few percent; it is the
  * documented failure mode of `recaptcha-allowlist.ts`, where an origin that is
  * attached and routed but not allowlisted renders a console that can never
- * sign anyone in. That reads as ~0%, not 85%.
+ * sign anyone in. That reads as ~0%, and a breakage confined to one browser
+ * family still lands well under 0.75.
  */
-export const APP_CHECK_MIN_ALLOW_RATE = 0.9
+export const APP_CHECK_MIN_ALLOW_RATE = 0.75
 
 /**
  * Grade attestation for real visitors.

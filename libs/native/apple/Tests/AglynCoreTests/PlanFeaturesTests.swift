@@ -40,4 +40,19 @@ final class PlanFeaturesTests: XCTestCase {
       XCTAssertEqual(got, item["result"] as? Bool, "case \(index)")
     }
   }
+
+  func testTheMarketplaceTakeRateIsTheConsoles() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("contracts/derived-values.generated.json")
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    let fee = try XCTUnwrap(root["marketplaceFee"] as? [String: Any])
+    let cases = try XCTUnwrap(fee["cases"] as? [[String: Any]])
+    XCTAssertFalse(cases.isEmpty)
+    for (index, item) in cases.enumerated() {
+      let org = item["org"] as? [String: Any]
+      XCTAssertEqual(marketplaceFeePct(org), (item["result"] as? NSNumber)?.doubleValue, "case \(index): \(org ?? [:])")
+    }
+    XCTAssertEqual(MarketplaceFeeDefaults.paid, (fee["paid"] as? NSNumber)?.doubleValue)
+  }
 }

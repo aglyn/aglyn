@@ -30,3 +30,16 @@ fun planFeatureCarried(org: Map<String, Any?>?, feature: String): Boolean {
   val override = ((org?.get("entitlements") as? Map<String, Any?>)?.get("features") as? Map<String, Any?>)?.get(feature) as? Boolean
   return override ?: (PlanFeatureDefaults.byPlan[effectivePlan(org)]?.get(feature) ?: false)
 }
+
+/**
+ * The marketplace's take rate on a workspace's sales, as the console's `resolveMarketplaceFeePct` answers it: a per-org
+ * override when it is a number, else the effective plan's rate; a rate that is not a usable percentage is priced at the
+ * Free plan's (the conservative direction). A comp lifts caps, never a price.
+ */
+@Suppress("UNCHECKED_CAST")
+fun marketplaceFeePct(org: Map<String, Any?>?): Double {
+  fun usable(value: Double?): Double? = value?.takeIf { it.isFinite() && it >= 0 && it <= 100 }
+  val override = ((org?.get("entitlements") as? Map<String, Any?>)?.get("marketplaceFeePct") as? Number)?.toDouble()
+  val rate = if (override != null) usable(override) else usable(MarketplaceFeeDefaults.byPlan[effectivePlan(org)])
+  return rate ?: MarketplaceFeeDefaults.byPlan["free"] ?: 30.0
+}
