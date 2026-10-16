@@ -159,6 +159,8 @@ struct PagesScreen: View {
         .disabled(!canEdit)
         .keyboardShortcut("n", modifiers: .command)
         .accessibilityIdentifier("add-page")
+        // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
+        SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header)
       }
     }
     .safeAreaInset(edge: .bottom) { banner }
@@ -196,6 +198,7 @@ struct PagesScreen: View {
         "No pages yet", systemImage: SiteSymbols.page, message: "Add a page, then design it in the Besigner."
       ) {
         if canEdit { Button("New page") { open(.newPage) }.buttonStyle(.borderedProminent) }
+        SlotWidgets(context: context, slot: ListCreateZone.pages)
       }
     case .ready(let rows):
       Group {

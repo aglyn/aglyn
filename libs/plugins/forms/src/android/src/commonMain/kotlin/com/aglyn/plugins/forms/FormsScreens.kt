@@ -43,7 +43,10 @@ import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.ConsoleScope
+import com.aglyn.pluginhost.ListCreateZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SlotPlacement
+import com.aglyn.pluginhost.SlotWidgets
 import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -114,6 +117,8 @@ fun FormsScreen(context: NativePluginContext, initialFormId: String? = null) {
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("New form", Modifier.padding(start = space(1f)))
           }
+          // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
+          SlotWidgets(context, ListCreateZone.FORMS, SlotPlacement.HEADER)
         }
         Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           if (dialog == null) {
@@ -126,10 +131,16 @@ fun FormsScreen(context: NativePluginContext, initialFormId: String? = null) {
         RefreshableBox(model.refreshing, model::refresh) {
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load forms") { rows ->
             if (rows.isEmpty()) {
+              val unfiltered = model.search.isBlank() && model.status == FormStatusFilter.IN_USE
               EmptyState(
-                if (model.search.isBlank() && model.status == FormStatusFilter.IN_USE) "No forms yet" else "No forms match",
+                if (unfiltered) "No forms yet" else "No forms match",
                 body = if (model.search.isBlank()) "Add a form, then place it on a page in the Besigner." else "Try another search.",
                 icon = AglynIcons.named("dynamic_form"),
+                action = if (unfiltered && context.slotWidgets(ListCreateZone.FORMS).isNotEmpty()) {
+                  { SlotWidgets(context, ListCreateZone.FORMS) }
+                } else {
+                  null
+                },
               )
             } else {
               val now = remember(rows) { nowMillis() }

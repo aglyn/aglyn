@@ -44,6 +44,8 @@ import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SlotPlacement
+import com.aglyn.pluginhost.SlotWidgets
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -119,6 +121,8 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("New ${kind.singular}", Modifier.padding(start = space(1f)))
           }
+          // Create with AI and anything else a plugin puts beside New (the console's zone for this list).
+          SlotWidgets(context, kind.createZone, SlotPlacement.HEADER)
         }
         Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           SearchField(model.search, model::type, placeholder = "Search ${kind.title.lowercase()}")
@@ -133,10 +137,16 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
         RefreshableBox(model.refreshing, model::refresh) {
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load ${kind.title.lowercase()}") { rows ->
             if (rows.isEmpty()) {
+              val unfiltered = model.search.isBlank() && model.kindFilter == null
               EmptyState(
-                if (model.search.isBlank() && model.kindFilter == null) "No ${kind.title.lowercase()} yet" else "No ${kind.title.lowercase()} match",
+                if (unfiltered) "No ${kind.title.lowercase()} yet" else "No ${kind.title.lowercase()} match",
                 body = if (model.search.isBlank()) emptyBody(kind) else "Try another search.",
                 icon = AglynIcons.named(kind.icon),
+                action = if (unfiltered && context.slotWidgets(kind.createZone).isNotEmpty()) {
+                  { SlotWidgets(context, kind.createZone) }
+                } else {
+                  null
+                },
               )
             } else {
               LazyColumn(Modifier.fillMaxSize().testTag("${kind.collection}-list"), state = listState) {

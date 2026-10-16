@@ -14,10 +14,13 @@ final class AIPluginTests: XCTestCase {
     let registry = NativePluginRegistry()
     let declared = NativeContributionDeclaration(
       screens: [
-        "ai.allotment", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request",
-        "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser",
+        "ai.allotment", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.job", "ai.jobs", "ai.member",
+        "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser",
       ],
-      widgets: ["ai.seo-audit", "ai.seo-start", "ai.site-memory"],
+      widgets: [
+        "ai.seo-audit", "ai.seo-start", "ai.site-memory", "ai.create-page", "ai.create-template", "ai.create-layout",
+        "ai.create-form", "ai.create-component",
+      ],
       quickActions: ["ai.open"],
       deepLinks: ["ai.job.link", "ai.jobs.link", "ai.signals.link"])
     let result = NativePluginLoader.load(
@@ -27,6 +30,13 @@ final class AIPluginTests: XCTestCase {
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostSeo").map(\.id), ["ai.seo-audit", "ai.seo-start"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostBusinessProfile").map(\.id), ["ai.site-memory"])
     XCTAssertEqual(registry.widgets(for: .aglyn).map(\.id), [])
+    // Create with AI is in each list's create zone, under the console's zone names.
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostScreens").map(\.id), ["ai.create-page"])
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostTemplates").map(\.id), ["ai.create-template"])
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostLayouts").map(\.id), ["ai.create-layout"])
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostForms").map(\.id), ["ai.create-form"])
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostComponents").map(\.id), ["ai.create-component"])
+    XCTAssertNotNil(registry.screen("ai.create"))
     if case .screen(let screen, let params)? = registry.resolve("/acme/hosts/shop/ai-jobs/j1") {
       XCTAssertEqual(screen, "ai.job")
       XCTAssertEqual(params["jobId"], "j1")
@@ -165,4 +175,97 @@ final class AIPluginTests: XCTestCase {
     XCTAssertEqual(aiJobByID(jobs, "b")?["id"]?.stringValue, "b")
     XCTAssertNil(aiJobByID(jobs, "c"))
   }
+
+  // MARK: Create with AI
+
+  private func door(_ json: String) throws -> AiCreateDoor {
+    try JSONDecoder().decode(AiCreateDoor.self, from: Data(json.utf8))
+  }
+
+  private let pageDoor = """
+    {"kind":"page","door":"create","label":"Create with AI","briefMaxChars":4000,
+     "copy":{"title":"Describe a page","briefLabel":"What is the page for?","placeholder":"A landing page","next":"A plan comes first.",
+             "submit":"Plan the page","started":"The page is being planned.","failed":"The page could not be started. Try again."},
+     "choices":[{"key":"pageType","label":"Page type (optional)","required":false,
+                 "options":[{"id":"landing","label":"Landing"},{"id":"about","label":"About"}]}],
+     "collections":null,"credits":{"text":"6,500 of 7,500 AI credits left this month.","exhausted":false},
+     "building":null,"upsell":null}
+    """
+
+  private let templateDoor = """
+    {"kind":"template","door":"create","label":"Create with AI","briefMaxChars":4000,
+     "copy":{"title":"Describe a page template","briefLabel":"What should each page show?","placeholder":"x","next":"y",
+             "submit":"Plan the template","started":"z","failed":"w"},
+     "choices":[{"key":"subject","label":"One page for each (required)","required":true,
+                 "options":[{"id":"entry","label":"Collection entry"},{"id":"product","label":"Product"}]}],
+     "collections":{"when":"entry","label":"Collection","options":[{"id":"c1","name":"Team"}],
+                    "helper":"Each page shows one entry of this collection."},
+     "credits":null,"building":null,"upsell":null}
+    """
+
+  /// The door's answer reads as the console's dialog draws it, and the brief sends what the dialog sends.
+  func testTheBriefSendsWhatTheConsoleDialogSends() throws {
+    let page = try door(pageDoor)
+    XCTAssertTrue(page.drawn)
+    XCTAssertEqual(page.copy?.submit, "Plan the page")
+    // An optional page type: none sends no inputs, a pick sends it, and a value the door did not offer is not sent.
+    XCTAssertEqual(aiCreateInputs(page, picks: [:], collectionID: nil), [:])
+    XCTAssertEqual(aiCreateInputs(page, picks: ["pageType": "about"], collectionID: nil), ["pageType": .string("about")])
+    XCTAssertEqual(aiCreateInputs(page, picks: ["pageType": "nope"], collectionID: nil), [:])
+    XCTAssertEqual(
+      aiCreateJobBody(orgID: "o1", hostID: "h1", kind: .page, brief: "  A spring offer  ", inputs: ["pageType": .string("about")]),
+      .object([
+        "orgId": .string("o1"), "hostId": .string("h1"), "kind": .string("page"), "brief": .string("A spring offer"),
+        "inputs": .object(["pageType": .string("about")]),
+      ]))
+    // A template needs its subject, and a collection entry's page its collection.
+    let template = try door(templateDoor)
+    XCTAssertNil(aiCreateInputs(template, picks: [:], collectionID: nil))
+    XCTAssertEqual(aiCreateInputs(template, picks: ["subject": "product"], collectionID: nil), ["subject": .string("product")])
+    XCTAssertNil(aiCreateInputs(template, picks: ["subject": "entry"], collectionID: nil))
+    XCTAssertNil(aiCreateInputs(template, picks: ["subject": "entry"], collectionID: "gone"))
+    XCTAssertEqual(
+      aiCreateInputs(template, picks: ["subject": "entry"], collectionID: "c1"),
+      ["subject": .string("entry"), "collectionId": .string("c1")])
+    XCTAssertEqual(aiCreateClamped(String(repeating: "a", count: 4_010), max: 4_000).count, 4_000)
+  }
+
+  func testAHiddenDoorDrawsNoEntryAndAnUpsellDoes() throws {
+    let hidden = try door("""
+      {"kind":"form","door":"hidden","label":"Create with AI","briefMaxChars":4000,"copy":null,"choices":[],
+       "collections":null,"credits":null,"building":null,"upsell":null}
+      """)
+    XCTAssertFalse(hidden.drawn)
+    let upsell = try door("""
+      {"kind":"form","door":"upsell","label":"Create with AI","briefMaxChars":4000,"copy":null,"choices":[],
+       "collections":null,"credits":null,"building":null,
+       "upsell":{"title":"Create a form with AI","does":"d","offer":"o","canManageBilling":false,"action":null,"dismiss":"Close"}}
+      """)
+    XCTAssertTrue(upsell.drawn)
+    XCTAssertNil(upsell.upsell?.action)
+  }
+
+  func testOutOfCreditsIsTheLadderQuotaRefusal() {
+    XCTAssertTrue(aiCreateOutOfCredits(ConsoleAPIError(status: 429, message: "used", body: .object(["reason": .string("quota")]))))
+    XCTAssertTrue(aiCreateOutOfCredits(ConsoleAPIError(status: 402, message: "stop", body: nil)))
+    XCTAssertFalse(aiCreateOutOfCredits(ConsoleAPIError(status: 429, message: "slow", body: .object(["reason": .string("rate")]))))
+    XCTAssertFalse(aiCreateOutOfCredits(ConsoleAPIError(status: 403, message: "no", body: nil)))
+  }
+
+  func testTheFollowViewReadsAndOpensUnderTheWorkspace() throws {
+    let view = try JSONDecoder().decode(
+      AiFollowAnswer.self,
+      from: Data("""
+        {"job":{"id":"j1"},"view":{"id":"j1","kind":"layout","status":"done","hostId":"h1","phase":"done","phaseLabel":"Done",
+         "line":{"tone":"success","text":"Done. Your drafts are ready to open."},"moving":false,"settled":true,"steps":null,
+         "plan":null,"findings":[],"detail":null,"estimate":null,"retryRefusal":null,"confirm":null,"building":null,
+         "problem":null,"spent":"Used 12 credits.",
+         "open":{"label":"Open Site frame","detail":"/hosts/roofs/layouts/l1","besigner":"/hosts/roofs/layouts/l1/versions/v1/besigner"}}}
+        """.utf8)
+    ).view
+    XCTAssertEqual(view.tone, .success)
+    XCTAssertEqual(aiCreateLink(view.open?.detail ?? "", orgSlug: "acme"), "/acme/hosts/roofs/layouts/l1")
+    XCTAssertEqual(aiCreateLink("/hosts/roofs/screens", orgSlug: nil), "/hosts/roofs/screens")
+  }
 }
+

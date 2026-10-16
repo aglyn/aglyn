@@ -44,7 +44,10 @@ import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.pluginhost.ConsoleScope
+import com.aglyn.pluginhost.ListCreateZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SlotPlacement
+import com.aglyn.pluginhost.SlotWidgets
 import com.aglyn.site.artifacts.ArtifactRow
 import com.aglyn.site.artifacts.SaveAsTemplateDialog
 import com.aglyn.site.artifacts.TemplateGalleryDialog
@@ -135,6 +138,8 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("New page", Modifier.padding(start = space(1f)))
           }
+          // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
+          SlotWidgets(context, ListCreateZone.PAGES, SlotPlacement.HEADER)
         }
         if (dialog == null) {
           runner.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(horizontal = space(2f))) }
@@ -146,7 +151,16 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
           Live.Loading -> SkeletonList(rows = 6)
           is Live.Failed -> EmptyState("Could not load this site's pages", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
           is Live.Ready -> if (rows.value.isEmpty()) {
-            EmptyState("No pages yet", body = "Add a page, then design it in the Besigner.", icon = AglynIcons.named("description"))
+            EmptyState(
+              "No pages yet",
+              body = "Add a page, then design it in the Besigner.",
+              icon = AglynIcons.named("description"),
+              action = if (context.slotWidgets(ListCreateZone.PAGES).isNotEmpty()) {
+                { SlotWidgets(context, ListCreateZone.PAGES) }
+              } else {
+                null
+              },
+            )
           } else {
             LazyColumn(Modifier.fillMaxSize().testTag("pages-list")) {
               if (live.truncated) {

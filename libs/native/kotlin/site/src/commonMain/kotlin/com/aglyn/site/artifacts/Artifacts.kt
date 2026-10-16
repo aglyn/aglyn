@@ -83,6 +83,14 @@ enum class ArtifactKind(
   TEMPLATE("site.templates", "templates", "Templates", "template", "dashboard_customize", "template", "template", null),
   ;
 
+  /** The zone this list hosts beside its create action (the console's `hostComponents`, `hostLayouts`, `hostTemplates`). */
+  val createZone: String
+    get() = when (this) {
+      COMPONENT -> com.aglyn.pluginhost.ListCreateZone.COMPONENTS
+      LAYOUT -> com.aglyn.pluginhost.ListCreateZone.LAYOUTS
+      TEMPLATE -> com.aglyn.pluginhost.ListCreateZone.TEMPLATES
+    }
+
   val declaration: ListQueryDeclaration
     get() = when (this) {
       COMPONENT -> Contracts.componentListQuery

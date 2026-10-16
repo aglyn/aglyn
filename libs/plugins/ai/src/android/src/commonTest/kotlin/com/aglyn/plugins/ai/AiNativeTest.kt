@@ -10,8 +10,11 @@ import kotlin.test.assertIs
 
 class AiNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("ai.jobs", "ai.job", "ai.credits", "ai.member", "ai.staffOrg", "ai.staffUser", "ai.signals", "ai.staffRequests", "ai.requests", "ai.request", "ai.orgsSpendColumn", "ai.hostMember", "ai.allotment", "ai.import.productCopy"),
-    "widgets" to listOf("ai.seo-audit", "ai.seo-start", "ai.site-memory"),
+    "screens" to listOf("ai.jobs", "ai.job", "ai.credits", "ai.member", "ai.staffOrg", "ai.staffUser", "ai.signals", "ai.staffRequests", "ai.requests", "ai.request", "ai.orgsSpendColumn", "ai.hostMember", "ai.allotment", "ai.import.productCopy", "ai.create"),
+    "widgets" to listOf(
+      "ai.seo-audit", "ai.seo-start", "ai.site-memory",
+      "ai.create-page", "ai.create-template", "ai.create-layout", "ai.create-form", "ai.create-component",
+    ),
     "quickActions" to listOf("ai.open"),
     "deepLinks" to listOf("ai.jobs.link", "ai.job.link", "ai.signals.link"),
   )
@@ -25,6 +28,13 @@ class AiNativeTest {
     assertEquals(listOf("ai.seo-audit", "ai.seo-start"), registry.widgets(slot = "hostSeo").map { it.id })
     assertEquals(listOf("ai.site-memory"), registry.widgets(slot = "hostBusinessProfile").map { it.id })
     assertEquals(emptyList(), registry.widgets().map { it.id })
+    // Create with AI is in each list's create zone, under the console's zone names.
+    assertEquals(listOf("ai.create-page"), registry.widgets(slot = "hostScreens").map { it.id })
+    assertEquals(listOf("ai.create-template"), registry.widgets(slot = "hostTemplates").map { it.id })
+    assertEquals(listOf("ai.create-layout"), registry.widgets(slot = "hostLayouts").map { it.id })
+    assertEquals(listOf("ai.create-form"), registry.widgets(slot = "hostForms").map { it.id })
+    assertEquals(listOf("ai.create-component"), registry.widgets(slot = "hostComponents").map { it.id })
+    assertEquals("Create with AI", registry.screen("ai.create")?.title)
     val target = DeepLinks.resolve("/acme/hosts/shop/ai-jobs/j1", registry.deepLinks())
     assertIs<NativeLinkTarget.Screen>(target)
     assertEquals("ai.job", target.screen)
@@ -165,4 +175,93 @@ class AiNativeTest {
     assertEquals("b", (aiJobById(jobs, "b")?.get("id") as? kotlinx.serialization.json.JsonPrimitive)?.content)
     assertEquals(null, aiJobById(jobs, "c"))
   }
+
+  // ── Create with AI ──
+
+  private fun json(text: String) = kotlinx.serialization.json.Json.parseToJsonElement(text)
+
+  private val pageDoor = json(
+    """{"kind":"page","door":"create","label":"Create with AI","briefMaxChars":4000,
+     "copy":{"title":"Describe a page","briefLabel":"What is the page for?","placeholder":"A landing page","next":"A plan comes first.",
+             "submit":"Plan the page","started":"The page is being planned.","failed":"The page could not be started. Try again."},
+     "choices":[{"key":"pageType","label":"Page type (optional)","required":false,
+                 "options":[{"id":"landing","label":"Landing"},{"id":"about","label":"About"}]}],
+     "collections":null,"credits":{"text":"6,500 of 7,500 AI credits left this month.","exhausted":false},
+     "building":null,"upsell":null}""",
+  )
+
+  private val templateDoor = json(
+    """{"kind":"template","door":"create","label":"Create with AI","briefMaxChars":4000,
+     "copy":{"title":"Describe a page template","briefLabel":"q","placeholder":"x","next":"y","submit":"Plan the template","started":"z","failed":"w"},
+     "choices":[{"key":"subject","label":"One page for each (required)","required":true,
+                 "options":[{"id":"entry","label":"Collection entry"},{"id":"product","label":"Product"}]}],
+     "collections":{"when":"entry","label":"Collection","options":[{"id":"c1","name":"Team"}],"helper":"h"},
+     "credits":null,"building":null,"upsell":null}""",
+  )
+
+  @Test
+  fun theBriefSendsWhatTheConsoleDialogSends() {
+    val page = aiCreateDoorOf(pageDoor)!!
+    assertEquals(true, page.drawn)
+    assertEquals("Plan the page", page.copy?.submit)
+    assertEquals("6,500 of 7,500 AI credits left this month.", page.credits?.text)
+    // An optional page type: none sends no inputs, a pick sends it, and a value the door did not offer is not sent.
+    assertEquals(emptyMap(), aiCreateInputs(page, emptyMap(), null))
+    assertEquals(mapOf("pageType" to "about"), aiCreateInputs(page, mapOf("pageType" to "about"), null))
+    assertEquals(emptyMap(), aiCreateInputs(page, mapOf("pageType" to "nope"), null))
+    assertEquals(
+      json("""{"orgId":"o1","hostId":"h1","kind":"page","brief":"A spring offer","inputs":{"pageType":"about"}}"""),
+      aiCreateJobBody("o1", "h1", AiCreateKind.PAGE, "  A spring offer  ", mapOf("pageType" to "about")),
+    )
+    // A template needs its subject, and a collection entry's page its collection.
+    val template = aiCreateDoorOf(templateDoor)!!
+    assertEquals(null, aiCreateInputs(template, emptyMap(), null))
+    assertEquals(mapOf("subject" to "product"), aiCreateInputs(template, mapOf("subject" to "product"), null))
+    assertEquals(null, aiCreateInputs(template, mapOf("subject" to "entry"), null))
+    assertEquals(null, aiCreateInputs(template, mapOf("subject" to "entry"), "gone"))
+    assertEquals(mapOf("subject" to "entry", "collectionId" to "c1"), aiCreateInputs(template, mapOf("subject" to "entry"), "c1"))
+    assertEquals(4000, aiCreateClamped("a".repeat(4010), 4000).length)
+  }
+
+  @Test
+  fun aHiddenDoorDrawsNoEntryAndAnUpsellDoes() {
+    val hidden = aiCreateDoorOf(json("""{"kind":"form","door":"hidden","label":"Create with AI","briefMaxChars":4000,"copy":null,"choices":[],"collections":null,"credits":null,"building":null,"upsell":null}"""))!!
+    assertEquals(false, hidden.drawn)
+    val upsell = aiCreateDoorOf(
+      json("""{"kind":"form","door":"upsell","label":"Create with AI","briefMaxChars":4000,"copy":null,"choices":[],"collections":null,"credits":null,"building":null,
+        "upsell":{"title":"Create a form with AI","does":"d","offer":"o","canManageBilling":false,"action":null,"dismiss":"Close"}}"""),
+    )!!
+    assertEquals(true, upsell.drawn)
+    assertEquals(null, upsell.upsell?.action)
+    assertEquals(null, aiCreateDoorOf(json("""{"nope":true}""")))
+  }
+
+  @Test
+  fun outOfCreditsIsTheLadderQuotaRefusal() {
+    assertEquals(true, aiCreateOutOfCredits(com.aglyn.core.ConsoleApiError("used", 429, json("""{"reason":"quota"}"""))))
+    assertEquals(true, aiCreateOutOfCredits(com.aglyn.core.ConsoleApiError("stop", 402, null)))
+    assertEquals(false, aiCreateOutOfCredits(com.aglyn.core.ConsoleApiError("slow", 429, json("""{"reason":"rate"}"""))))
+    assertEquals(false, aiCreateOutOfCredits(com.aglyn.core.ConsoleApiError("no", 403, null)))
+    assertEquals(false, aiCreateOutOfCredits(IllegalStateException("x")))
+  }
+
+  @Test
+  fun theFollowViewReadsAndOpensUnderTheWorkspace() {
+    val view = aiFollowViewOf(
+      json(
+        """{"job":{"id":"j1"},"view":{"id":"j1","kind":"page","status":"needs_review","hostId":"h1","phase":"plan-ready","phaseLabel":"Plan ready",
+         "line":{"tone":"warning","text":"Your plan is ready."},"moving":false,"settled":false,"steps":"1 of 2 steps",
+         "plan":{"heading":"Proposed plan","lines":["Builds the page Spring offer at /spring"]},"findings":[],"detail":null,
+         "estimate":"Estimated cost: About 30 credits (up to 60).","retryRefusal":null,"confirm":{"label":"Confirm plan","enabled":true},
+         "building":null,"problem":null,"spent":"Used 4 credits so far.","open":null}}""",
+      ),
+    )!!
+    assertEquals(com.aglyn.ui.StatusTone.WARNING, view.tone)
+    assertEquals(listOf("Builds the page Spring offer at /spring"), view.planLines)
+    assertEquals("Confirm plan", view.confirmLabel)
+    assertEquals(true, view.confirmEnabled)
+    assertEquals("/acme/hosts/roofs/layouts/l1", aiCreateLink("/hosts/roofs/layouts/l1", "acme"))
+    assertEquals("/hosts/roofs/screens", aiCreateLink("/hosts/roofs/screens", null))
+  }
 }
+

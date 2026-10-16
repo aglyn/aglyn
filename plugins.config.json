@@ -2774,7 +2774,7 @@
     {
       "id": "ai",
       "mobile": {
-        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json. AGL-3668: the site's listing from the guided start, in Setup → SEO's zone, and what Aglyn AI learned, in Setup → Business profile's.",
+        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json. AGL-3668: the site's listing from the guided start, in Setup → SEO's zone, and what Aglyn AI learned, in Setup → Business profile's. AGL-3854: Create with AI beside the create action of Pages, Templates, Layouts, Forms and Components (each list's zone), the brief, and the job it starts followed live to its draft.",
         "ios": {
           "module": "AglynAiPlugin",
           "register": "registerAINative"
@@ -2798,12 +2798,18 @@
             "ai.orgsSpendColumn",
             "ai.hostMember",
             "ai.allotment",
-            "ai.import.productCopy"
+            "ai.import.productCopy",
+            "ai.create"
           ],
           "widgets": [
             "ai.seo-audit",
             "ai.seo-start",
-            "ai.site-memory"
+            "ai.site-memory",
+            "ai.create-page",
+            "ai.create-template",
+            "ai.create-layout",
+            "ai.create-form",
+            "ai.create-component"
           ],
           "quickActions": [
             "ai.open"
