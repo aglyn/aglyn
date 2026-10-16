@@ -79,6 +79,8 @@ data class ProductRow(
   val inventory: Double?,
   val lowStock: Boolean,
   val variantCount: Int,
+  /** A variant still has no price (`productPriceMissing`): listed, it shows "Price coming soon" and sells nowhere. */
+  val priceMissing: Boolean = false,
 )
 
 fun productRow(doc: FirestoreDoc): ProductRow {
@@ -92,6 +94,7 @@ fun productRow(doc: FirestoreDoc): ProductRow {
     inventory = productInventory(product),
     lowStock = isLowStock(product),
     variantCount = product.variants.orEmpty().size,
+    priceMissing = productPriceMissing(doc.data),
   )
 }
 

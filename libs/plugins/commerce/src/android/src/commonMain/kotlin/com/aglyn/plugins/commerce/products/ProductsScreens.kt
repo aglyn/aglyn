@@ -126,6 +126,21 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
     }
   }
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
+  // The cap, standing rather than only on refusal (AGL-2113): the site's products against the plan's productsPerHost.
+  var used by remember { mutableStateOf(0L) }
+  var limit by remember { mutableStateOf<Double?>(null) }
+  var planReady by remember { mutableStateOf(false) }
+  LaunchedEffect(context.hostId, editor.done) {
+    val hostId = context.hostId ?: return@LaunchedEffect
+    try {
+      used = context.firestore.count(com.aglyn.core.FirestoreQuery(productsPath(hostId))) ?: used
+      limit = productsPerHostLimit(context.api, hostId)
+      planReady = true
+    } catch (error: Throwable) {
+      if (error is kotlinx.coroutines.CancellationException) throw error
+    }
+  }
+  val hasRoom = !planReady || limit?.let { used < it } ?: true
   Column(Modifier.fillMaxSize()) {
     Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -141,7 +156,7 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           onSelect = { model.pick(ProductFilter.valueOf(it)) },
           modifier = Modifier.weight(1f),
         )
-        Button(onClick = editor::create, Modifier.padding(start = space(1f)).testTag("new-product")) {
+        Button(onClick = editor::create, Modifier.padding(start = space(1f)).testTag("new-product"), enabled = hasRoom) {
           Icon(AglynIcons.named("add"), contentDescription = null)
           Text("New product", Modifier.padding(start = space(1f)))
         }
@@ -153,6 +168,10 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           ) { Text("Import") }
         }
       }
+      // Products listed before they have a price (AGL-3676): the one step left before the store sells them.
+      comingSoonNotice((model.rows as? Load.Ready)?.value.orEmpty().filter { it.status == ProductStatus.ACTIVE && it.priceMissing }.map { it.name })
+        ?.let { NoticeBanner(it, StatusTone.INFO) }
+      Text(productQuotaReadout(used, limit, planReady), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("products-quota"))
       if (editor.draft == null && editor.stock == null) {
         editor.done?.let { message ->
           NoticeBanner(message, StatusTone.SUCCESS, action = { androidx.compose.material3.TextButton(onClick = { editor.done = null }) { Text("Dismiss") } })
@@ -204,6 +223,11 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
   val flow = remember(hostId, productId, context.firestore) { context.firestore.observeDoc("${productsPath(hostId)}/$productId") }
   val live by flow.collectAsState(Live.Loading)
   var labels by remember(productId) { mutableStateOf<List<ProductLabelRow>?>(null) }
+  var keys by remember(productId) { mutableStateOf(false) }
+  var deleting by remember(productId) { mutableStateOf(false) }
+  var working by remember(productId) { mutableStateOf(false) }
+  var notice by remember(productId) { mutableStateOf<Pair<String, StatusTone>?>(null) }
+  val scope = rememberCoroutineScope()
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
@@ -218,10 +242,39 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
       labels?.let { rows ->
         ProductLabelsDialog(product.name ?: "Product", rows, context.peripherals.systemPrinter) { labels = null }
       }
+      if (keys) ProductKeysDialog(context, productId, product.name ?: "Product") { keys = false }
+      if (deleting) {
+        ActionDialog(
+          title = "Delete this product?",
+          body = "\"${product.name ?: "This product"}\" stops being purchasable; blocks referencing it show a checkout error until repointed.",
+          icon = "delete",
+          confirmLabel = "Delete",
+          destructive = true,
+          busy = working,
+          error = null,
+          onDismiss = { deleting = false },
+          onConfirm = {
+            working = true
+            scope.launch {
+              notice = try {
+                deleteProduct(context.api, hostId, productId)
+                "Product deleted" to StatusTone.SUCCESS
+              } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                productWriteMessage(error, "Could not delete product") to StatusTone.ERROR
+              } finally {
+                working = false
+                deleting = false
+              }
+            }
+          },
+        )
+      }
       Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("product-detail"),
         verticalArrangement = Arrangement.spacedBy(space(2f)),
       ) {
+        notice?.let { (text, tone) -> NoticeBanner(text, tone, action = { androidx.compose.material3.TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
         SectionCard(null) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Text(product.name ?: "Product", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
@@ -248,6 +301,50 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
             OutlinedButton(onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) }, Modifier.testTag("product-media-link")) {
               Text("Images and files")
             }
+            OutlinedButton(
+              onClick = {
+                working = true
+                scope.launch {
+                  notice = try {
+                    val id = duplicateProduct(context.api, hostId, productId, com.aglyn.core.createResourceUid(20))
+                    context.navigate(COMMERCE_PRODUCT_SCREEN, mapOf("product" to id))
+                    "Product duplicated as draft" to StatusTone.SUCCESS
+                  } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    productWriteMessage(error, "Could not duplicate product") to StatusTone.WARNING
+                  } finally {
+                    working = false
+                  }
+                }
+              },
+              enabled = !working,
+              modifier = Modifier.testTag("product-duplicate"),
+            ) { Text("Duplicate") }
+            val archived = status == ProductStatus.ARCHIVED
+            OutlinedButton(
+              onClick = {
+                working = true
+                val next = if (archived) "active" else "archived"
+                scope.launch {
+                  notice = try {
+                    ConsoleProductWriteApi(context.api, hostId).save(productId, false, productStatusSaveJson(doc.data, next), com.aglyn.plugins.commerce.pos.newAttemptKey("status"))
+                    // A product with a variant nobody has priced may go live (AGL-3676): the owner is told, not stopped.
+                    if (next == "active" && productPriceMissing(doc.data)) activatingUnpricedNotice(product.name ?: "This product") to StatusTone.INFO else null
+                  } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    productWriteMessage(error, "The product could not be saved") to StatusTone.ERROR
+                  } finally {
+                    working = false
+                  }
+                }
+              },
+              enabled = !working,
+              modifier = Modifier.testTag("product-archive"),
+            ) { Text(if (archived) "Activate" else "Archive") }
+            if (product.type == ProductType.DIGITAL) {
+              OutlinedButton(onClick = { keys = true }, Modifier.testTag("product-keys")) { Text("Keys") }
+            }
+            OutlinedButton(onClick = { deleting = true }, enabled = !working, modifier = Modifier.testTag("product-delete")) { Text("Delete") }
             // Shelf labels with a barcode the register scans back (the console's Labels).
             if (product.type == ProductType.PHYSICAL) {
               OutlinedButton(onClick = { labels = productLabelRows(doc.data) }, Modifier.testTag("product-labels")) {
@@ -470,3 +567,12 @@ fun productsImportParams(hostId: String?): Map<String, String> =
  * the transfer route takes it from.
  */
 fun canImportProducts(context: NativePluginContext): Boolean = context.hostId != null && (context.orgRole == "owner" || context.orgRole == "admin")
+
+/** What a product write's failure says: the route's own words for a refusal, else that it is not known whether it landed. */
+fun productWriteMessage(error: Throwable, fallback: String): String {
+  val refused = error as? com.aglyn.core.ConsoleApiError
+  return when {
+    refused != null && refused.status in 1..499 -> refused.message.ifEmpty { fallback }
+    else -> "It is not known whether that went through. Trying again is safe; it will not happen twice."
+  }
+}

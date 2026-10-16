@@ -41,6 +41,21 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.ShippingCostInput
+import com.aglyn.contracts.canTransitionOrder
+import com.aglyn.contracts.describeOrderDispute
+import com.aglyn.contracts.describeOrderTaxMode
+import com.aglyn.contracts.describePaymentRisk
+import com.aglyn.contracts.fulfillItemsIsEverything
+import com.aglyn.contracts.fulfillItemsSelection
+import com.aglyn.contracts.fulfillItemsStartQuantities
+import com.aglyn.contracts.fulfillmentCarrierChoice
+import com.aglyn.contracts.orderDisputeBlocksRefund
+import com.aglyn.contracts.orderLineRefunded
+import com.aglyn.contracts.orderRefundPrompt
+import com.aglyn.contracts.parseShippingCostInput
+import com.aglyn.contracts.splitOrderReversal
+import com.aglyn.contracts.trackingUrlFor
 import com.aglyn.contracts.OrderAddress
 import com.aglyn.contracts.OrderRefundState
 import com.aglyn.contracts.OrderRestockCheck
@@ -138,6 +153,16 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
   var confirming by remember { mutableStateOf(false) }
   var running by remember { mutableStateOf(false) }
   var outcome by remember { mutableStateOf<BulkFulfillResult?>(null) }
+  var drafting by remember { mutableStateOf(false) }
+  var exportPreset by remember { mutableStateOf<String?>(null) }
+  var presetMenu by remember { mutableStateOf(false) }
+  var said by remember { mutableStateOf<String?>(null) }
+  val hostId = context.hostId
+  // Charges a shopper's bank is disputing, on their own query whatever the list is filtered to (the console's banner).
+  val disputeFlow = remember(hostId, context.firestore) { hostId?.let { context.firestore.observe(openDisputesQuery(it)) } }
+  val disputeDocs = disputeFlow?.collectAsState(Live.Loading)?.value
+  val disputeRows = (disputeDocs as? Live.Ready)?.value.orEmpty()
+  val disputes = com.aglyn.contracts.summariseOpenDisputes(disputeRows.take(OPEN_DISPUTE_CEILING).map(::hostOrderFrom), nowMillis().toDouble())
   val loaded = (model.rows as? Load.Ready)?.value.orEmpty()
   val nearEnd by remember {
     derivedStateOf {
@@ -164,6 +189,70 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
         onSelect = { key -> model.pick(OrderFilter.valueOf(key)) },
       )
       model.notice?.let { NoticeBanner(it, StatusTone.WARNING) }
+      said?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { said = null }) { Text("Dismiss") } }) }
+      if (disputes.count > 0) {
+        NoticeBanner(
+          "${openDisputesTitle(disputes, disputeRows.size > OPEN_DISPUTE_CEILING)}. ${openDisputesDetail(disputes)}",
+          if (disputes.overdue) StatusTone.ERROR else StatusTone.WARNING,
+          modifier = Modifier.testTag("orders-disputes"),
+          action = if (model.filter == OrderFilter.DISPUTES) null else ({ TextButton(onClick = { model.pick(OrderFilter.DISPUTES) }) { Text("Show them") } }),
+        )
+      }
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        // Selling to someone directly: their order as a payment link (the console's Draft order).
+        OutlinedButton(onClick = { drafting = true }, modifier = Modifier.testTag("orders-draft")) { Text("Draft order") }
+        Box {
+          OutlinedButton(onClick = { presetMenu = true }, modifier = Modifier.testTag("orders-export-shipping")) { Text("Export for shipping") }
+          androidx.compose.material3.DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
+            Contracts.orderShippingPresetChoices.forEach { preset ->
+              androidx.compose.material3.DropdownMenuItem(
+                text = {
+                  Column {
+                    Text(preset.label)
+                    preset.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                  }
+                },
+                onClick = {
+                  presetMenu = false
+                  val id = hostId ?: return@DropdownMenuItem
+                  scope.launch {
+                    prepareOrdersForShipping(context.api, id)
+                    exportPreset = preset.id
+                  }
+                },
+              )
+            }
+          }
+        }
+        if (com.aglyn.plugins.commerce.products.canImportProducts(context)) {
+          OutlinedButton(
+            onClick = { context.navigate(com.aglyn.plugins.commerce.products.CORE_DATA_IMPORT_SCREEN, trackingImportParams(hostId)) },
+            modifier = Modifier.testTag("orders-import-tracking"),
+          ) { Text("Import tracking") }
+        }
+      }
+    }
+    if (drafting) {
+      DraftOrderDialog(context, onDismiss = { drafting = false }) { message ->
+        drafting = false
+        said = message
+        model.reload()
+      }
+    }
+    exportPreset?.let { preset ->
+      com.aglyn.pluginhost.TransferExportDialog(
+        context = context,
+        resource = "commerce.orders",
+        title = "Export orders for shipping",
+        hostId = hostId,
+        scope = shippingExportScope(),
+        fileStem = "orders-to-ship",
+        filterLabel = Contracts.ordersToShipFilterLabel,
+        preset = preset,
+      ) { message ->
+        exportPreset = null
+        if (message != null) said = message
+      }
     }
     when (val rows = model.rows) {
       Load.Loading -> SkeletonList(rows = 6)
@@ -268,7 +357,7 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
   val flow = remember(hostId, orderId, context.firestore) { context.firestore.observeDoc("${ordersPath(hostId)}/$orderId") }
   val live by flow.collectAsState(Live.Loading)
   val scope = rememberCoroutineScope()
-  val actions = remember(hostId, orderId) { OrderActionsModel(ConsoleOrderActionsApi(context.api, hostId), scope) }
+  val actions = remember(hostId, orderId) { OrderActionsModel(ConsoleOrderActionsApi(context.api, hostId, context.firestore), scope) }
   LaunchedEffect(actions.done) { if (actions.done != null) onChanged() }
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
@@ -304,7 +393,17 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
             }
           }
         }
-        OrderDetailContent(detail, actions, printing, onPrint, onPrintLabel) {
+        val registerReceipt: (@Composable () -> Unit)? = if (detail.order.channel == com.aglyn.contracts.OrderChannel.POS) {
+          {
+            OrderReceiptActions(context, orderId, doc.data, detail.label) { said, failure ->
+              actions.done = said
+              printing.problem = failure
+            }
+          }
+        } else {
+          null
+        }
+        OrderDetailContent(detail, actions, printing, onPrint, onPrintLabel, registerReceipt) {
           context.navigate(COMMERCE_ORDER_SERVICES_SCREEN, mapOf("orderId" to orderId))
         }
         OrderDialogs(detail, actions)
@@ -326,6 +425,7 @@ private fun OrderDetailContent(
   printing: OrderPrintState,
   onPrint: (OrderPrintKind) -> Unit,
   onPrintLabel: (Shipment) -> Unit,
+  registerReceipt: (@Composable () -> Unit)?,
   openServices: () -> Unit,
 ) {
   val order = detail.order
@@ -352,22 +452,49 @@ private fun OrderDetailContent(
       order.createdAtMs?.let {
         Text(formatReceiptTime(it.toLong()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
+      describeOrderDispute(order, nowMillis().toDouble())?.let { dispute ->
+        NoticeBanner(
+          "${dispute.label}. ${dispute.detail}",
+          if (dispute.tone == "open" || dispute.tone == "lost") StatusTone.ERROR else StatusTone.INFO,
+          modifier = Modifier.testTag("order-dispute"),
+        )
+      }
+      describePaymentRisk(order.paymentRisk)?.let { risk ->
+        NoticeBanner("${risk.label}. ${risk.detail}", StatusTone.WARNING, modifier = Modifier.testTag("order-payment-risk"))
+      }
+      if (canTransitionOrder(detail.status, OrderStatus.REFUNDED) && orderDisputeBlocksRefund(order)) {
+        NoticeBanner(Contracts.refundBlockedByDispute, StatusTone.INFO)
+      }
       OrderActionButtons(detail.actions, actions)
     }
 
     SectionCard("Items") {
       if (detail.lines.isEmpty()) Text("No items on this order.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      val canRefundLines = canTransitionOrder(detail.status, OrderStatus.REFUNDED) && !orderDisputeBlocksRefund(order)
       order.lineItems.orEmpty().forEachIndexed { index, line ->
         val state = detail.lines.getOrNull(index)
+        // What this line is still entitled to (AGL-2454): a line refunded by itself is struck through.
+        val withdrawn = orderLineRefunded(order, index)
         Column(Modifier.fillMaxWidth().testTag("order-line-$index")) {
-          AmountRow("${line.quantity.toLong()} × ${line.name}", money(line.unitAmountCents * line.quantity))
+          AmountRow("${line.quantity.toLong()} × ${line.name}", money(line.unitAmountCents * line.quantity), muted = withdrawn)
           val notes = listOfNotNull(
             line.variantLabel,
             line.sku?.let { "SKU $it" },
             line.modifiers?.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.name },
-            state?.takeIf { it.requiresShipping && it.quantity > 0 }?.let { "Shipped ${it.fulfilledQuantity} of ${it.quantity}" },
           )
           if (notes.isNotEmpty()) Text(notes.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+            state?.takeIf { it.fulfilledQuantity > 0 }?.let { StatusChip("${it.fulfilledQuantity} of ${it.quantity} fulfilled") }
+            if (withdrawn) {
+              StatusChip("Refunded", StatusTone.ERROR)
+            } else if (canRefundLines) {
+              TextButton(
+                onClick = { actions.open(OrderDialog.REFUND_LINE, index.toString()) },
+                enabled = !actions.busy,
+                modifier = Modifier.testTag("order-refund-line-$index"),
+              ) { Text("Refund line") }
+            }
+          }
         }
       }
     }
@@ -377,11 +504,17 @@ private fun OrderDetailContent(
       totals?.discountCents?.takeIf { it > 0 }?.let { AmountRow("Discount", "−" + money(it), muted = true) }
       totals?.shippingCents?.takeIf { it > 0 }?.let { AmountRow("Shipping", money(it), muted = true) }
       totals?.taxCents?.takeIf { it > 0 }?.let { AmountRow("Tax", money(it), muted = true) }
+      // Optional lines the buyer took at checkout (AGL-3635), by name.
+      order.extras.orEmpty().forEach { extra -> AmountRow(extra.label, money(extra.amountCents), muted = true) }
       HorizontalDivider()
       AmountRow("Total", money(totals?.totalCents ?: order.amountCents ?: 0.0), emphasized = true)
       if (detail.refundState != OrderRefundState.NONE) {
         Text(orderRefundSummary(order), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
+      // A merchant's refund and a lost chargeback are different doors (AGL-1787), said apart.
+      splitOrderReversal(order).chargedBackCents.takeIf { it > 0 }?.let { AmountRow("Charged back", money(it.toDouble()), muted = true) }
+      // How the tax was computed (AGL-2451); absent means not recorded, never "no tax".
+      Text(describeOrderTaxMode(order.taxMode?.raw), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     SectionCard("Customer") {
@@ -398,30 +531,65 @@ private fun OrderDetailContent(
     if (detail.shipments.isNotEmpty()) {
       SectionCard("Shipments") {
         detail.shipments.forEach { shipment ->
-          AglynListItem(
-            title = listOf(shipment.carrier.uppercase(), shipment.trackingNumber).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Shipped" },
-            supporting = listOf(shipment.summary, formatReceiptTime(shipment.atMs)).filter { it.isNotBlank() }.joinToString(" · "),
-            icon = AglynIcons.named("local_shipping"),
-            trailing = if (shipment.trackingUrl == null && shipment.labelUrl == null) null else {
-              {
-                Row {
-                  shipment.trackingUrl?.let { url -> TextButton(onClick = { uriHandler.openUri(url) }) { Text("Track") } }
-                  if (shipment.labelUrl != null) {
-                    TextButton(
-                      onClick = { onPrintLabel(shipment) },
-                      enabled = printing.busy == null,
-                      modifier = Modifier.testTag("order-print-label-${shipment.id}"),
-                    ) { Text("Print label") }
-                  }
+          Column(Modifier.fillMaxWidth().testTag("order-shipment-${shipment.id}")) {
+            AglynListItem(
+              title = shipment.summary,
+              supporting = listOf(
+                formatReceiptTime(shipment.atMs),
+                shipment.trackingNumber.takeIf { it.isNotBlank() }?.let { "${shipment.carrier.ifBlank { "Tracking" }} $it" }.orEmpty(),
+                shipment.trackingStatus,
+              ).filter { it.isNotBlank() }.joinToString(" · "),
+              icon = AglynIcons.named("local_shipping"),
+              trailing = if (shipment.active) null else ({ StatusChip("Canceled") }),
+            )
+            if (shipment.active) {
+              FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+                shipment.trackingUrl?.let { url -> TextButton(onClick = { uriHandler.openUri(url) }) { Text("Track") } }
+                if (shipment.labelUrl != null) {
+                  TextButton(
+                    onClick = { onPrintLabel(shipment) },
+                    enabled = printing.busy == null,
+                    modifier = Modifier.testTag("order-print-label-${shipment.id}"),
+                  ) { Text("Print label") }
+                }
+                if (shipment.editable) {
+                  TextButton(
+                    onClick = { actions.open(OrderDialog.EDIT_TRACKING, shipment.id) },
+                    enabled = !actions.busy,
+                    modifier = Modifier.testTag("order-edit-tracking-${shipment.id}"),
+                  ) { Text("Edit tracking") }
+                  TextButton(
+                    onClick = { actions.open(OrderDialog.CANCEL_SHIPMENT, shipment.id) },
+                    enabled = !actions.busy,
+                    modifier = Modifier.testTag("order-cancel-shipment-${shipment.id}"),
+                  ) { Text("Cancel shipment") }
                 }
               }
+            }
+          }
+        }
+      }
+    }
+
+    if (detail.status == OrderStatus.PENDING) {
+      order.paymentLinkUrl?.takeIf { it.isNotBlank() }?.let { link ->
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        SectionCard(null) {
+          OutlinedButton(
+            onClick = {
+              clipboard.setText(androidx.compose.ui.text.AnnotatedString(link))
+              actions.done = "Payment link copied"
             },
-          )
+            modifier = Modifier.testTag("order-copy-payment-link"),
+          ) { Text("Copy payment link") }
+          Text("The buyer pays this draft order through the link.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }
 
     order.note?.takeIf { it.isNotBlank() }?.let { note -> SectionCard("Note") { Text(note) } }
+
+    registerReceipt?.invoke()
 
     // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
     SectionCard("Print") {
@@ -499,7 +667,7 @@ private fun RestockCard(detail: OrderDetail, check: OrderRestockCheck, actions: 
 @Composable
 private fun OrderActionButtons(offer: OrderActions, actions: OrderActionsModel) {
   val buttons = listOfNotNull(
-    if (offer.fulfill) Triple("Ship items", "local_shipping", OrderDialog.FULFILL) else null,
+    if (offer.fulfill) Triple("Fulfill…", "local_shipping", OrderDialog.FULFILL) else null,
     if (offer.markDelivered) Triple("Mark delivered", "done_all", OrderDialog.DELIVERED) else null,
     if (offer.resendReceipt) Triple("Send receipt", "mail", OrderDialog.RECEIPT) else null,
     if (offer.refund) Triple("Refund", "undo", OrderDialog.REFUND) else null,
@@ -524,26 +692,53 @@ private fun OrderDialogs(detail: OrderDetail, actions: OrderActionsModel) {
   val orderId = detail.id
   when (actions.dialog) {
     null -> Unit
-    OrderDialog.FULFILL -> {
-      var carrier by rememberSaveable(actions.attemptKey) { mutableStateOf("") }
-      var tracking by rememberSaveable(actions.attemptKey) { mutableStateOf("") }
-      var notify by rememberSaveable(actions.attemptKey) { mutableStateOf(true) }
-      val left = detail.lines.filter { it.requiresShipping && it.remainingQuantity > 0 }
-      val names = detail.order.lineItems.orEmpty()
+    OrderDialog.FULFILL -> FulfillItemsDialog(detail, actions)
+    OrderDialog.EDIT_TRACKING -> {
+      val shipment = detail.shipments.firstOrNull { it.id == actions.target }
+      if (shipment == null) {
+        LaunchedEffect(Unit) { actions.close() }
+      } else {
+        var carrier by rememberSaveable(shipment.id) { mutableStateOf(shipment.rawCarrier) }
+        var number by rememberSaveable(shipment.id) { mutableStateOf(shipment.trackingNumber) }
+        var link by rememberSaveable(shipment.id) { mutableStateOf(shipment.rawTrackingUrl) }
+        ActionDialog(
+          title = "Edit tracking",
+          icon = "local_shipping",
+          confirmLabel = "Save tracking",
+          busy = actions.busy,
+          error = actions.error,
+          onDismiss = actions::close,
+          onConfirm = { actions.runFor { updateTracking(orderId, shipment.id, carrier, number, link) } },
+        ) {
+          CarrierFields(carrier, number, link, { carrier = it }, { number = it }, { link = it })
+        }
+      }
+    }
+    OrderDialog.CANCEL_SHIPMENT -> ActionDialog(
+      title = "Cancel this shipment?",
+      body = "Its items go back to unfulfilled and can be shipped again. The buyer is not told.",
+      icon = "cancel",
+      confirmLabel = "Cancel shipment",
+      destructive = true,
+      busy = actions.busy,
+      error = actions.error,
+      onDismiss = actions::close,
+      onConfirm = { actions.target?.let { id -> actions.runFor { cancelShipment(orderId, id) } } },
+    )
+    OrderDialog.REFUND_LINE -> {
+      val index = actions.target?.toIntOrNull() ?: 0
+      val prompt = orderRefundPrompt(detail.order, listOf(index))
       ActionDialog(
-        title = "Ship ${detail.label}",
-        body = "Ships everything still to ship: " + left.joinToString(", ") { "${it.remainingQuantity}× ${names.getOrNull(it.lineItemId)?.name ?: "Item"}" } + ".",
-        icon = "local_shipping",
-        confirmLabel = "Mark as shipped",
+        title = prompt.title,
+        body = prompt.text,
+        icon = "undo",
+        confirmLabel = "Refund",
+        destructive = true,
         busy = actions.busy,
         error = actions.error,
         onDismiss = actions::close,
-        onConfirm = { actions.run("${detail.label} is marked as shipped.") { key -> fulfill(orderId, carrier, tracking, notify, key) } },
-      ) {
-        OutlinedTextField(carrier, { carrier = it }, label = { Text("Carrier (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking number (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        SwitchRow("Notify customer", notify, { notify = it })
-      }
+        onConfirm = { actions.runFor { key -> refundLines(orderId, listOf(index), key); "Refund issued" } },
+      )
     }
     OrderDialog.DELIVERED -> ActionDialog(
       title = "Mark ${detail.label} delivered?",
@@ -685,4 +880,119 @@ fun OrdersToShipWidget(context: NativePluginContext) {
     error = if (live is Live.Failed) "Could not load orders." else null,
     onClick = { context.navigate(COMMERCE_ORDERS_SCREEN) },
   )
+}
+
+/** Carrier, tracking number and, for a carrier without a known tracker, the link (the console's `CarrierFields`). */
+@Composable
+private fun CarrierFields(
+  carrier: String,
+  number: String,
+  link: String,
+  onCarrier: (String) -> Unit,
+  onNumber: (String) -> Unit,
+  onLink: (String) -> Unit,
+) {
+  val values = Contracts
+  var other by remember { mutableStateOf(fulfillmentCarrierChoice(carrier) == values.fulfillmentOtherCarrier) }
+  val choice = if (other) values.fulfillmentOtherCarrier else fulfillmentCarrierChoice(carrier)
+  com.aglyn.ui.SelectField(
+    label = "Carrier",
+    options = values.fulfillmentCarrierChoices.map { com.aglyn.ui.SelectOption(it, it) } +
+      com.aglyn.ui.SelectOption(values.fulfillmentOtherCarrier, "Other"),
+    selected = choice.ifEmpty { null },
+    onSelect = { picked ->
+      other = picked == values.fulfillmentOtherCarrier
+      onCarrier(if (other || picked == null) "" else picked)
+    },
+    noneLabel = "None",
+    modifier = Modifier.fillMaxWidth().testTag("fulfill-carrier"),
+  )
+  if (other) {
+    OutlinedTextField(carrier, onCarrier, label = { Text("Carrier name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("fulfill-carrier-name"))
+  }
+  OutlinedTextField(number, onNumber, label = { Text("Tracking number") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("fulfill-tracking"))
+  if (number.isNotEmpty() && trackingUrlFor(carrier, number) == null) {
+    OutlinedTextField(
+      link,
+      onLink,
+      label = { Text("Tracking link") },
+      placeholder = { Text("https://") },
+      supportingText = { Text("Optional. USPS, UPS, FedEx, DHL, Canada Post, Royal Mail and Australia Post get a link on their own.") },
+      singleLine = true,
+      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+      modifier = Modifier.fillMaxWidth().testTag("fulfill-tracking-link"),
+    )
+  }
+}
+
+/** Fulfill items: one count per line, starting at what is left of each shippable line, so shipping everything is one tap. */
+@Composable
+private fun FulfillItemsDialog(detail: OrderDetail, actions: OrderActionsModel) {
+  val order = detail.order
+  var quantities by remember(detail.id) { mutableStateOf(fulfillItemsStartQuantities(order)) }
+  var carrier by rememberSaveable(detail.id) { mutableStateOf("") }
+  var number by rememberSaveable(detail.id) { mutableStateOf("") }
+  var link by rememberSaveable(detail.id) { mutableStateOf("") }
+  var cost by rememberSaveable(detail.id) { mutableStateOf("") }
+  var notify by rememberSaveable(detail.id) { mutableStateOf(true) }
+  var currency by remember { mutableStateOf("USD") }
+  LaunchedEffect(detail.id) { currency = actions.storeCurrency() }
+  val selection = fulfillItemsSelection(quantities.map { it.toDouble() })
+  val parsed = parseShippingCostInput(cost, currency)
+  val costError = (parsed as? ShippingCostInput.Error)?.message
+  val names = order.lineItems.orEmpty()
+  ActionDialog(
+    title = "Fulfill items",
+    icon = "local_shipping",
+    confirmLabel = "Fulfill",
+    confirmEnabled = selection.isNotEmpty() && costError == null,
+    busy = actions.busy,
+    error = actions.error,
+    onDismiss = actions::close,
+    onConfirm = {
+      val request = FulfillItemsRequest(
+        lineItems = if (fulfillItemsIsEverything(order, selection)) null else selection,
+        carrier = carrier,
+        trackingNumber = number,
+        trackingUrl = link,
+        shippingCostCents = (parsed as? ShippingCostInput.Cents)?.cents,
+        notify = notify,
+      )
+      actions.runFor { attempt -> fulfill(detail.id, request, attempt) }
+    },
+    modifier = Modifier.testTag("fulfill-dialog"),
+  ) {
+    detail.lines.filter { it.remainingQuantity > 0 }.forEach { state ->
+      val line = names.getOrNull(state.lineItemId)
+      val picked = quantities.getOrElse(state.lineItemId) { 0L }
+      fun set(next: Long) {
+        quantities = quantities.mapIndexed { index, value -> if (index == state.lineItemId) next.coerceIn(0L, state.remainingQuantity) else value }
+      }
+      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().testTag("fulfill-line-${state.lineItemId}")) {
+        Column(Modifier.weight(1f)) {
+          Text((line?.name ?: "Item") + (line?.variantLabel?.let { " — $it" } ?: ""), maxLines = 2, overflow = TextOverflow.Ellipsis)
+          Text(
+            "$picked of ${state.remainingQuantity}" + if (state.requiresShipping) "" else " · no shipping needed",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        TextButton(onClick = { set(picked - 1) }, enabled = !actions.busy && picked > 0) { Text("−") }
+        TextButton(onClick = { set(picked + 1) }, enabled = !actions.busy && picked < state.remainingQuantity) { Text("+") }
+      }
+    }
+    CarrierFields(carrier, number, link, { carrier = it }, { number = it }, { link = it })
+    OutlinedTextField(
+      cost,
+      { cost = it },
+      label = { Text("Shipping cost") },
+      prefix = { Text(currency) },
+      isError = costError != null,
+      supportingText = { Text(costError ?: "Optional. What sending this shipment cost you, in $currency.") },
+      singleLine = true,
+      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+      modifier = Modifier.fillMaxWidth().testTag("fulfill-cost"),
+    )
+    SwitchRow("Notify customer", notify, { notify = it })
+  }
 }

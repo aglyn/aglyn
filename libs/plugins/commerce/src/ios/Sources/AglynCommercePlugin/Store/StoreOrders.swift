@@ -185,6 +185,8 @@ final class OrdersModel {
 @Observable
 final class OrderModel {
   private(set) var row: OrderRow?
+  /// The order as stored, for what reads it field by field (a register sale's receipt).
+  @ObservationIgnored private(set) var raw: [String: Any] = [:]
   private(set) var ready = false
   private(set) var missing = false
   private(set) var failed = false
@@ -202,6 +204,7 @@ final class OrderModel {
       guard let self else { return }
       switch result {
       case .success(let doc?):
+        self.raw = doc.data
         self.row = OrderRow(id: doc.id, order: decodeOrder(doc))
         self.missing = false
       case .success(nil): self.missing = true
@@ -224,7 +227,7 @@ enum OrderAction: String, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .fulfill: "Mark fulfilled"
+    case .fulfill: "Fulfill…"
     case .deliver: "Mark delivered"
     case .cancel: "Cancel order"
     }

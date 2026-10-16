@@ -23,12 +23,15 @@ struct ProductRow: Identifiable, Hashable {
   let status: String
   let type: String?
   let description: String?
+  /// A variant still has no price (`productPriceMissing`): listed, it shows "Price coming soon" and sells nowhere.
+  let priceMissing: Bool
 
   init(_ doc: FirestoreDocument) {
     id = doc.id
     item = posItem(doc)
     status = doc.string("status") ?? "draft"
     type = doc.string("type")
+    priceMissing = productPriceMissing(doc.data)
     let text = doc.string("description")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     description = text.isEmpty ? nil : text
   }

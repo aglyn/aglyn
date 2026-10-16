@@ -7,6 +7,12 @@ import AglynPluginHost
 import AglynUI
 import SwiftUI
 
+#if canImport(UIKit)
+  import UIKit
+#elseif canImport(AppKit)
+  import AppKit
+#endif
+
 /// One order: its lines and totals, the customer and where it ships, the
 /// payments and its history, and the next steps the transition rules allow.
 struct OrderDetailView: View {
@@ -23,6 +29,12 @@ struct OrderDetailView: View {
   @State private var refundKey: String?
   @State private var receiptSheet = false
   @State private var printing: String?
+  @State private var fulfilling = false
+  @State private var editingShipment: OrderFulfillment?
+  @State private var cancelingShipment: OrderFulfillment?
+  @State private var refundingLine: Int?
+  @State private var lineRefundKey: String?
+  @State private var working = false
   @Environment(\.openURL) private var openURL
 
   var body: some View {
@@ -60,6 +72,16 @@ struct OrderDetailView: View {
           Spacer()
           StatusChip(row.statusLabel, tone: orderStatusTone(row.status).tone)
         }
+        if let dispute = describeOrderDispute(order) {
+          AglynNotice("\(dispute.label). \(dispute.detail)", tone: dispute.tone == "open" || dispute.tone == "lost" ? .error : .info)
+            .accessibilityIdentifier("order-dispute")
+        }
+        if let risk = describePaymentRisk(order.paymentRisk) {
+          AglynNotice("\(risk.label). \(risk.detail)", tone: .warning).accessibilityIdentifier("order-payment-risk")
+        }
+        if canTransitionOrder(from: row.status, to: .refunded), orderDisputeBlocksRefund(order) {
+          AglynNotice(ContractValues.shared.refundBlockedByDispute, tone: .info)
+        }
         if let problem { AglynNotice(problem, tone: .error) { self.problem = nil } }
         if let done { AglynNotice(done, tone: .success) { self.done = nil } }
         let actions = OrderAction.available(for: row.status)
@@ -77,7 +99,11 @@ struct OrderDetailView: View {
             }
             ForEach(actions) { action in
               Button(role: action == .cancel ? .destructive : nil) {
-                if action == .cancel { confirming = action } else { Task { await run(action) } }
+                switch action {
+                case .cancel: confirming = action
+                case .fulfill: fulfilling = true
+                default: Task { await run(action) }
+                }
               } label: {
                 if busy == action { ProgressView() } else { Label(action.title, systemImage: action.systemImage) }
               }
@@ -97,22 +123,42 @@ struct OrderDetailView: View {
 
       Section("Items") {
         let lines = order.lineItems ?? []
+        let states = orderLineFulfillmentStates(order)
+        let canRefundLines = canTransitionOrder(from: row.status, to: .refunded) && !orderDisputeBlocksRefund(order)
         if lines.isEmpty {
           Text("No items").foregroundStyle(.secondary)
         }
-        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+        ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
           let quantity = max(0, Int(line.quantity))
-          AglynRow(
-            line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(formatOrderMoney(Int(line.unitAmountCents)))"]
-              .compactMap { $0 }.joined(separator: " · "),
-            systemImage: "shippingbox"
-          ) {
-            Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).monospacedDigit()
+          // What this line is still entitled to (AGL-2454): a line refunded by itself is struck through.
+          let withdrawn = orderLineRefunded(order, index)
+          let fulfilled = states.indices.contains(index) ? states[index].fulfilledQuantity : 0
+          VStack(alignment: .leading, spacing: AglynSpace.one) {
+            AglynRow(
+              line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(formatOrderMoney(Int(line.unitAmountCents)))"]
+                .compactMap { $0 }.joined(separator: " · "),
+              systemImage: "shippingbox"
+            ) {
+              Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).monospacedDigit()
+                .strikethrough(withdrawn)
+                .foregroundStyle(withdrawn ? .secondary : .primary)
+            }
+            HStack {
+              if fulfilled > 0 { StatusChip("\(fulfilled) of \(quantity) fulfilled") }
+              if withdrawn {
+                StatusChip("Refunded", tone: .warning)
+              } else if canRefundLines {
+                Button("Refund line", role: .destructive) { refundingLine = index }
+                  .buttonStyle(.borderless)
+                  .disabled(busy != nil || working)
+                  .accessibilityIdentifier("order-refund-line-\(index)")
+              }
+            }
           }
         }
       }
 
-      Section("Totals") {
+      Section {
         let totals = order.totals
         if let items = totals?.itemsCents { AglynAmountRow("Items", amount: formatOrderMoney(Int(items))) }
         if let discount = totals?.discountCents, discount != 0 {
@@ -122,11 +168,25 @@ struct OrderDetailView: View {
           AglynAmountRow("Shipping", amount: formatOrderMoney(Int(shipping)))
         }
         if let tax = totals?.taxCents, tax != 0 { AglynAmountRow("Tax", amount: formatOrderMoney(Int(tax))) }
+        // Optional lines the buyer took at checkout (AGL-3635), by name.
+        ForEach(order.extras ?? [], id: \.id) { extra in
+          AglynAmountRow(extra.label, amount: formatOrderMoney(Int(extra.amountCents)))
+        }
         if let tip = totals?.tipCents, tip != 0 { AglynAmountRow("Tip", amount: formatOrderMoney(Int(tip))) }
         AglynAmountRow("Total", amount: row.total, emphasized: true)
         if orderRefundState(order) != .none {
           AglynAmountRow("Refunded", amount: orderRefundSummary(order), tone: .warning)
         }
+        // A merchant's refund and a lost chargeback are different doors (AGL-1787), said apart.
+        let reversal = splitOrderReversal(order)
+        if reversal.chargedBackCents > 0 {
+          AglynAmountRow("Charged back", amount: formatOrderMoney(reversal.chargedBackCents), tone: .warning)
+        }
+      } header: {
+        Text("Totals")
+      } footer: {
+        // How the tax on this order was computed (AGL-2451); absent means not recorded, never "no tax".
+        Text(describeOrderTaxMode(order.taxMode?.rawValue))
       }
 
       Section("Customer") {
@@ -173,10 +233,34 @@ struct OrderDetailView: View {
         Text("Print")
       }
 
-      let shipments = (order.fulfillments ?? []).sorted { $0.atMs > $1.atMs }
+      let shipments = order.fulfillments ?? []
       if !shipments.isEmpty {
         Section("Shipments") {
-          ForEach(shipments, id: \.id) { shipment in shipmentRow(shipment, number: row.number) }
+          ForEach(shipments, id: \.id) { shipment in shipmentRow(shipment, order: order, number: row.number) }
+        }
+      }
+
+      if order.channel == .pos {
+        OrderReceiptActionsSection(context: context, orderID: orderID, raw: model.raw, number: row.number) { message, failure in
+          done = message
+          problem = failure
+        }
+      }
+
+      if row.status == .pending, let link = order.paymentLinkUrl, !link.isEmpty {
+        Section {
+          Button {
+            copyToClipboard(link)
+            done = "Payment link copied"
+          } label: {
+            Label("Copy payment link", systemImage: "link")
+          }
+          .accessibilityIdentifier("order-copy-payment-link")
+          if let url = URL(string: link) {
+            ShareLink(item: url) { Label("Share payment link", systemImage: "square.and.arrow.up") }
+          }
+        } footer: {
+          Text("The buyer pays this draft order through the link.")
         }
       }
 
@@ -226,6 +310,29 @@ struct OrderDetailView: View {
         try await refund(amountCents: amount)
       }
     }
+    .sheet(isPresented: $fulfilling) {
+      FulfillItemsSheet(context: context, order: order, orderID: orderID) { done = $0 }
+    }
+    .sheet(item: $editingShipment) { shipment in
+      EditTrackingSheet(context: context, orderID: orderID, fulfillment: shipment) { done = $0 }
+    }
+    .confirmationDialog(
+      "Cancel this shipment?", isPresented: Binding(get: { cancelingShipment != nil }, set: { if !$0 { cancelingShipment = nil } }),
+      titleVisibility: .visible, presenting: cancelingShipment
+    ) { shipment in
+      Button("Cancel shipment", role: .destructive) { Task { await cancel(shipment) } }
+    } message: { _ in
+      Text("Its items go back to unfulfilled and can be shipped again. The buyer is not told.")
+    }
+    .confirmationDialog(
+      refundingLine.map { orderRefundPrompt(order, lineItemIDs: [$0]).title } ?? "Refund this line?",
+      isPresented: Binding(get: { refundingLine != nil }, set: { if !$0 { refundingLine = nil } }),
+      titleVisibility: .visible, presenting: refundingLine
+    ) { index in
+      Button("Refund", role: .destructive) { Task { await refundLine(index) } }
+    } message: { index in
+      Text(orderRefundPrompt(order, lineItemIDs: [index]).text)
+    }
     .sheet(isPresented: $receiptSheet) {
       ReceiptSheet(context: context, order: order, orderID: orderID, number: row.number) { done = "The receipt is on its way." }
     }
@@ -268,34 +375,88 @@ struct OrderDetailView: View {
   }
 
   @ViewBuilder
-  private func shipmentRow(_ shipment: OrderFulfillment, number: String) -> some View {
-    let canceled = shipment.cancelledAtMs != nil || shipment.status == .cancelled
+  private func shipmentRow(_ shipment: OrderFulfillment, order: HostOrder, number: String) -> some View {
+    let active = fulfillmentIsActive(shipment)
+    let editable = active && orderFulfillmentsEditable(order.status)
+    let carrier = shipment.carrier.map { carrierLabelFor($0) } ?? ""
+    let link = fulfillmentTrackingUrl(carrier: shipment.carrier, trackingNumber: shipment.trackingNumber, trackingUrl: shipment.trackingUrl)
+    let described = describeFulfillmentLines(order, fulfillmentLines(order, shipment))
+    let status = trackingStatusLabel(shipment.trackingStatus)
     VStack(alignment: .leading, spacing: AglynSpace.one) {
-      let title = [shipment.carrier, shipment.trackingNumber].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
       AglynRow(
-        title.isEmpty ? "Shipped" : title,
-        subtitle: formatReceiptTime(Int64(shipment.atMs)),
+        described.isEmpty ? "Fulfilled" : described,
+        subtitle: [
+          formatReceiptTime(Int64(shipment.atMs)),
+          shipment.trackingNumber.map { "\(carrier.isEmpty ? "Tracking" : carrier) \($0)" },
+          status.isEmpty ? nil : status,
+        ].compactMap { $0 }.joined(separator: " · "),
         systemImage: "shippingbox"
       ) {
-        if canceled { StatusChip("Canceled") }
+        if !active { StatusChip("Canceled") }
       }
-      if !canceled {
-        HStack {
-          if let link = shipment.trackingUrl, let url = URL(string: link) {
-            Button("Track") { openURL(url) }.buttonStyle(.bordered)
+      .strikethrough(!active)
+      HStack {
+        if active, let link, let url = URL(string: link) {
+          Button("Track") { openURL(url) }.buttonStyle(.bordered)
+        }
+        if active, let label = shipment.labelUrl, !label.isEmpty {
+          Button {
+            Task { await printLabel(label, shipmentID: shipment.id, number: number) }
+          } label: {
+            if printing == shipment.id { ProgressView() } else { Label("Print label", systemImage: "printer") }
           }
-          if let label = shipment.labelUrl, !label.isEmpty {
-            Button {
-              Task { await printLabel(label, shipmentID: shipment.id, number: number) }
-            } label: {
-              if printing == shipment.id { ProgressView() } else { Label("Print label", systemImage: "printer") }
-            }
+          .buttonStyle(.bordered)
+          .disabled(printing != nil)
+          .accessibilityIdentifier("order-print-label-\(shipment.id)")
+        }
+        if editable {
+          Button("Edit tracking") { editingShipment = shipment }
             .buttonStyle(.bordered)
-            .disabled(printing != nil)
-            .accessibilityIdentifier("order-print-label-\(shipment.id)")
-          }
+            .disabled(busy != nil || working)
+            .accessibilityIdentifier("order-edit-tracking-\(shipment.id)")
+          Button("Cancel shipment", role: .destructive) { cancelingShipment = shipment }
+            .buttonStyle(.bordered)
+            .disabled(busy != nil || working)
+            .accessibilityIdentifier("order-cancel-shipment-\(shipment.id)")
         }
       }
+      .lineLimit(1)
+    }
+  }
+
+  private func cancel(_ shipment: OrderFulfillment) async {
+    guard let hostID = context.hostID else { return }
+    working = true
+    problem = nil
+    defer { working = false }
+    do {
+      done = try await cancelShipment(api: context.api, hostID: hostID, orderID: orderID, fulfillmentID: shipment.id)
+    } catch let error as ConsoleAPIError where error.status > 0 && error.status < 500 {
+      problem = error.message
+    } catch {
+      problem = "It is not known whether the shipment was canceled. Retrying is safe; the server writes it once."
+    }
+  }
+
+  /// Refunds one line, as the console's Refund line: the route works the amount out from the line.
+  private func refundLine(_ index: Int) async {
+    guard let hostID = context.hostID else { return }
+    let key = lineRefundKey ?? UUID().uuidString
+    lineRefundKey = key
+    working = true
+    problem = nil
+    defer { working = false }
+    do {
+      try await refundOrderLines(api: context.api, hostID: hostID, orderID: orderID, lineItemIDs: [index], attemptKey: key)
+      lineRefundKey = nil
+      done = "Refund issued"
+    } catch let error as ConsoleAPIError where error.status > 0 && error.status < 500 {
+      // A definitive refusal: the next press is a new refund.
+      lineRefundKey = nil
+      problem = error.message.isEmpty ? "Refund failed" : error.message
+    } catch {
+      // Not known whether it went through: the same key dedupes the next press.
+      problem = "It is not known whether the refund went through. Trying again is safe; it will not refund twice."
     }
   }
 
@@ -441,3 +602,16 @@ struct ReceiptSheet: View {
     }
   }
 }
+
+/// Puts `text` on the device's clipboard.
+@MainActor
+func copyToClipboard(_ text: String) {
+  #if canImport(UIKit)
+    UIPasteboard.general.string = text
+  #elseif canImport(AppKit)
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+  #endif
+}
+
+extension OrderFulfillment: @retroactive Identifiable {}

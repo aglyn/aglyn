@@ -103,7 +103,7 @@ class OrdersListModel(
 }
 
 /** The dialogs an order's screen opens, one at a time. */
-enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT, NOTE }
+enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT, NOTE, EDIT_TRACKING, CANCEL_SHIPMENT, REFUND_LINE }
 
 /**
  * One order's actions: which dialog is open, whether its call is running,
@@ -130,12 +130,20 @@ class OrderActionsModel(
   var receiptChannels by mutableStateOf(setOf(ReceiptChannel.EMAIL))
     private set
 
-  fun open(next: OrderDialog) {
+  /** What the open dialog is about: a shipment's id, or a line's index. */
+  var target by mutableStateOf<String?>(null)
+    private set
+
+  fun open(next: OrderDialog, about: String? = null) {
     dialog = next
+    target = about
     error = null
     attemptKey = mintKey()
     if (next == OrderDialog.RECEIPT) scope.launch { receiptChannels = api.receiptChannels().ifEmpty { setOf(ReceiptChannel.EMAIL) } }
   }
+
+  /** The store's currency, which a typed shipping cost is in. */
+  suspend fun storeCurrency(): String = api.storeCurrency()
 
   fun close() {
     if (!busy) dialog = null
@@ -161,6 +169,36 @@ class OrderActionsModel(
         if (failure is CancellationException) throw failure
         error = (failure as? ConsoleApiError)?.message ?: "That did not go through. Check the connection and try again."
         done = null
+      } finally {
+        busy = false
+      }
+    }
+  }
+
+  /**
+   * Runs [call], which answers what to say; on success closes the dialog and says it, else keeps it open with the
+   * reason. A definitive refusal retires the attempt key (the next press is a new attempt); a lost answer keeps it, so
+   * the next press is the same attempt to the route.
+   */
+  fun runFor(call: suspend OrderActionsApi.(attemptKey: String) -> String) {
+    if (busy) return
+    busy = true
+    error = null
+    val key = attemptKey
+    scope.launch {
+      try {
+        val said = api.call(key)
+        dialog = null
+        done = said
+      } catch (failure: Throwable) {
+        if (failure is CancellationException) throw failure
+        val refused = failure as? ConsoleApiError
+        if (refused != null && refused.status in 1..499) {
+          attemptKey = mintKey()
+          error = refused.message
+        } else {
+          error = "The request did not complete, so it is not known whether it landed. Retrying is safe; the server writes it once."
+        }
       } finally {
         busy = false
       }
