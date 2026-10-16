@@ -93,7 +93,8 @@ In the **Ask about your numbers** dialog, turn on **Send me weekly insights for 
 every Monday**. Each Monday, Aglyn AI writes a few insights for up to five of your busiest sites
 you can reach: the change in traffic, the most viewed page, the form that turned the most views
 into submissions, a campaign that did better than the rest, and any day that stood out — only
-those the figures support.
+those the figures support. They cover the week before, Monday to Sunday, the same week as the
+free Weekly summary, so both emails quote the same figures.
 
 Without turning anything on, every workspace owner and admin already gets the free
 [Weekly summary](../../getting-started/console-tour.md#daily-digests) email each Monday with the
