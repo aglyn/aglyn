@@ -202,7 +202,7 @@ export function composeWeeklySummaryEmailText(input: WeeklySummaryEmailInput): s
   ]
   for (const { site, lines: siteLines } of sections) {
     lines.push('', site.name, ...siteLines.map((line) => `- ${line}`))
-    if (site.url) lines.push(`Open ${site.name} in ${input.productName}: ${site.url}`)
+    if (site.url) lines.push(`Open this site in ${input.productName}: ${site.url}`)
   }
   if (workspaceLines.length) {
     lines.push('', `Across ${input.workspaceName}`, ...workspaceLines.map((line) => `- ${line}`))

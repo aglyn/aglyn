@@ -297,7 +297,11 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
       async (db, request) => {
         const days = await readTrafficDays(db, request.hostId, dayIds(request.now, request.days).current)
         const all = days.reduce((sum, day) => sum + day.total, 0)
-        const referrers = ranked(sumMaps(days, (day) => day.referrers))
+        // The collector stores a referring host with its dots as `_`, because a
+        // Firestore field path cannot hold one; a host is read back as written.
+        const referrers = ranked(sumMaps(days, (day) => day.referrers)).map(
+          ([host, views]): [string, number] => [host.replace(/_/g, '.'), views],
+        )
         const sources = ranked(sumMaps(days, (day) => day.utm['source'] ?? {}))
         const campaigns = ranked(sumMaps(days, (day) => day.utm['campaign'] ?? {}))
         const rowsOf = (entries: Array<[string, number]>, limit: number, type: string) =>

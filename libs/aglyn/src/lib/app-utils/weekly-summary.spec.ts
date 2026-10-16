@@ -141,7 +141,7 @@ describe('the weekly summary email', () => {
   it('lists each site with something to say, with its link, and leaves the rest out', () => {
     const text = composeWeeklySummaryEmailText({ ...input, sites: [site('Shop', 1_204, ['Top pages: / 10']), site('Quiet', 0)] }) ?? ''
     expect(text).toContain('Here is how Acme did last week, Oct 5 – Oct 11.')
-    expect(text).toContain('Shop\n- Visitors: 1,204\n- Top pages: / 10\nOpen Shop in Aglyn: https://app.example.com/acme/hosts/shop')
+    expect(text).toContain('Shop\n- Visitors: 1,204\n- Top pages: / 10\nOpen this site in Aglyn: https://app.example.com/acme/hosts/shop')
     expect(text).not.toContain('Quiet')
     expect(text).toContain('Turn it off in Notifications: https://app.example.com/manage/notifications/settings')
     expect(
