@@ -137,9 +137,13 @@ AI plugin's SEO fixes, the cover-video poster frame, the image editor and
 Setup's Integrations section (the cards of the plugins running on the site)
 (#1586); and the Disabled notice on a file staff took down. What is left:
 
-- Components, layouts, templates: the per-plan count beside Create (the
-  limit the Billing and usage meter already reads) and Publish to marketplace
-  on a component or layout.
+- Components, layouts, templates: Publish to marketplace on a component or
+  layout, which the Plugin marketplace lane builds with the other publish
+  actions; the row is ticked with it. The lists sort by every column the
+  console's tables sort by (a menu of the declaration's orders, with the
+  console's notice when a search or filter changes the order) and print the
+  per-plan count beside Create (`3/10 layouts on your plan`, the entitlements
+  quota against the server's count).
 - Site setup, deliberately not built: the theme's Advanced overrides, a raw
   JSON editor. Everything else in the row is native, including the AI plugin's
   widgets in the Business profile and SEO areas.
