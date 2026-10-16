@@ -35,6 +35,7 @@ import { render, screen } from '@testing-library/react'
 const profile: { data: unknown; status: string } = { data: {}, status: 'success' }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useFirestore: () => ({}),
   useOrgPlan: () => ({
     org: { plan: 'business', ownerUid: 'uid-owner' },

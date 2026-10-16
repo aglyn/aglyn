@@ -86,6 +86,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
 const ORG_PLAN = { org: { plan: 'starter' }, ready: true }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
   useFirestore: () => ({}),
   /*
    * The card asks for its windows through the shared builders. Both carry the

@@ -101,7 +101,12 @@ jest.mock('firebase/firestore', () => ({
 /** Settled, unentitled — the tiles stay off and the table still renders. */
 const ORG_PLAN = { org: { plan: 'starter' }, ready: true }
 
+/** Swapped per case: what the store's Stripe account can do. */
+const PAYMENTS_READY = { state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }
+let mockPayments: Record<string, unknown> = PAYMENTS_READY
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => mockPayments,
   useFirestore: () => ({}),
   /*
    * The card asks for its windows through the shared builders. Both carry the
@@ -142,6 +147,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 import { HostOrdersCard } from './host-orders-card.component'
 
 beforeEach(() => {
+  mockPayments = PAYMENTS_READY
   payloads = []
   responses = []
   snackbars.length = 0
@@ -269,5 +275,25 @@ describe('draft order “Ships to” (AGL-1792)', () => {
     // And the rest of the order is unchanged — the merchant answered a
     // question, they did not re-compose the draft.
     expect(payloads[1].quantity).toBe(payloads[0].quantity)
+  })
+})
+
+describe('draft order without Stripe (AGL-3853)', () => {
+  it('says to connect Stripe and holds Create before anything is sent', async () => {
+    mockPayments = {
+      state: 'not-connected',
+      settled: true,
+      ready: false,
+      blocked: true,
+      reason: 'Connect Stripe to take card payments.',
+      href: '/acme/hosts/shop/products/payments',
+    }
+    const dialog = await openDraftDialog()
+    expect(within(dialog).getByText(/Connect Stripe to take card payments\. The buyer pays a draft order/)).toBeTruthy()
+    expect(within(dialog).getByText('Open Payments').closest('a')?.getAttribute('href')).toBe(
+      '/acme/hosts/shop/products/payments',
+    )
+    expect((createButton(dialog) as HTMLButtonElement).disabled).toBe(true)
+    expect(payloads).toHaveLength(0)
   })
 })
