@@ -61,6 +61,20 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
     { id: 'page-careers', name: 'Careers', slug: 'careers', parentId: 'page-about', order: 1, created: 6, description: 'Not published yet' },
     { id: 'page-launch', name: 'Spring launch', order: 4, created: 2, description: 'A draft with no address yet' },
   ]
+  // A heading and a paragraph on the canvas, so the Besigner opened from the
+  // app has text to edit, save and publish (AGL-3850). `_@_` is the canvas
+  // root (CANVAS_ROOT_ELEMENT_ID); the shape is the one seed-e2e.mjs writes.
+  const pageCanvas = (name) => ({
+    '_@_': { $id: '_@_', componentId: 'root', nodes: ['wrap'] },
+    wrap: { $id: 'wrap', componentId: 'muiContainer', parentId: '_@_', nodes: ['heading', 'intro'], props: { maxWidth: 'md' } },
+    heading: { $id: 'heading', componentId: 'muiTypography', parentId: 'wrap', props: { children: name, variant: 'h2' } },
+    intro: {
+      $id: 'intro',
+      componentId: 'muiTypography',
+      parentId: 'wrap',
+      props: { children: `Fresh bread every morning at Juniper Street Bakery.`, variant: 'body1' },
+    },
+  })
   const routes = {}
   for (const page of pages) {
     const versionId = page.kind === 'group' ? null : `${page.id}-v1`
@@ -84,6 +98,7 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
         await put(`hosts/${hostId}/screens/${page.id}/versions/${page.id}-v${index + 1}`, {
           screenId: page.id,
           displayName: label,
+          nodes: pageCanvas(page.name),
           createdAt: ago(page.created - index),
           updatedAt: ago(page.created - index),
         })
