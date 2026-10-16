@@ -196,6 +196,13 @@ final class KeyedCardTenderTests: XCTestCase {
     XCTAssertTrue(form.dismissed)
   }
 
+  func testATestModeSmartReaderCanBeTappedWhileTheCustomerStepIsOpen() async {
+    let api = ScriptedSaleAPI()
+    api.answers = [.success(keyedAnswer(due: 1080, keyedPayment("pending")))]
+    await checkout(api).simulateTapOnReader("pay1")
+    XCTAssertEqual(api.steps.first?.0, .simulate(paymentID: "pay1"))
+  }
+
   func testTheCardStepReadsAsTypingNotTapping() {
     let keyed = service(FakeCardForm([]))
     XCTAssertEqual(keyed.label, "Enter card manually")

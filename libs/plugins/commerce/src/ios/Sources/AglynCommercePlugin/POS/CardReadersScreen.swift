@@ -153,7 +153,7 @@ struct CardReadersScreen: View {
         Section("This device") {
           AglynRow(
             "Smart readers and QR payments",
-            subtitle: "This device has no card reader of its own. Take cards on a smart reader below, by Card (QR), or by Enter card manually on an iPhone or iPad.",
+            subtitle: "This device has no card reader of its own. Take cards on a smart reader below, with Enter card manually, or by Card (QR).",
             systemImage: "wave.3.right")
         }
       }
@@ -470,7 +470,7 @@ struct PairReaderSheet: View {
               .textInputAutocapitalization(.never)
             #endif
             .accessibilityIdentifier("reader-code")
-          TextField("Name, like Front counter", text: $label)
+          TextField("Name, like Front counter", text: $label).accessibilityIdentifier("reader-name")
           if !registers.isEmpty {
             Picker("Register", selection: $registerID) {
               Text("Any register").tag("")
@@ -482,11 +482,11 @@ struct PairReaderSheet: View {
         }
         if needsAddress {
           Section {
-            TextField("Street", text: $address.line1)
-            TextField("City", text: $address.city)
-            TextField("State", text: $address.state)
-            TextField("Postal code", text: $address.postalCode)
-            TextField("Country", text: $address.country)
+            TextField("Street", text: $address.line1).accessibilityIdentifier("reader-street")
+            TextField("City", text: $address.city).accessibilityIdentifier("reader-city")
+            TextField("State", text: $address.state).accessibilityIdentifier("reader-state")
+            TextField("Postal code", text: $address.postalCode).accessibilityIdentifier("reader-postal")
+            TextField("Country", text: $address.country).accessibilityIdentifier("reader-country")
           } header: {
             Text("Where the reader is used")
           } footer: {
@@ -501,6 +501,7 @@ struct PairReaderSheet: View {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
           Button("Pair") { Task { await pair() } }
+            .accessibilityIdentifier("reader-pair-confirm")
             .disabled(checkReaderPairing(code: code, address: needsAddress ? address : nil) != nil || busy)
         }
       }

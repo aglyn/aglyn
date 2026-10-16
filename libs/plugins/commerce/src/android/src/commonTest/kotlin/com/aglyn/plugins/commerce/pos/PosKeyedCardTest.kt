@@ -258,6 +258,13 @@ class KeyedCardTenderTest {
   }
 
   @Test
+  fun aTestModeSmartReaderCanBeTappedWhileTheCustomerStepIsOpen() = runTest {
+    val api = ScriptedSaleApi(mapOf("simulate" to listOf(sale(listOf(keyed("pending"))))))
+    checkout(api).simulateTapOnReader("pay1")
+    assertEquals(listOf("simulate"), api.actions)
+  }
+
+  @Test
   fun theCardStepReadsAsTypingNotTapping() {
     val keyed = service(FakeCardForm(KeyedCardOutcome.Canceled(INTENT)))
     assertEquals("Enter card manually", keyed.label)
