@@ -54,6 +54,7 @@ import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { POST as createAiSiteBatch } from './server/ai-jobs-batch'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
+import { GET as aiCreateDoor, GET_FOLLOW as aiCreateFollow } from './server/ai-create-route'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as aiGenerateComponent } from './server/ai-generate-component'
 import { POST as createAiMediaImages } from './server/ai-media-image'
@@ -227,6 +228,14 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/crm/:jobId', {
     web: (request, context) =>
       aiCrmAnswer(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
+  })
+  // Create with AI in the apps (AGL-3854): whether a list draws the entry and
+  // every word its brief says, and the job it started as the dialog's follow
+  // card reads it. Both read; the jobs doors above start, confirm and cancel.
+  registerPluginApiRoute('ai/create', { web: aiCreateDoor })
+  registerPluginApiRoute('ai/create/:jobId', {
+    web: (request, context) =>
+      aiCreateFollow(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
   registerPluginApiRoute('ai/jobs/:jobId/events', {
     web: (request, context) =>

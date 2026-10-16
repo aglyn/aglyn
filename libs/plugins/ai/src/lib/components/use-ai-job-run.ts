@@ -23,11 +23,8 @@ import {
   type MaybeTokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  AI_JOB_TERMINAL_STATUSES,
-  type AiJobKind,
-  type AiJobSummary,
-} from '../model/ai-jobs.types'
+import type { AiJobKind, AiJobSummary } from '../model/ai-jobs.types'
+import { aiJobProblem, aiJobSettled } from '../model/ai-job-activity'
 import { followAiJobEvents } from './ai-job-events'
 import { publishAiJob } from './ai-jobs-store'
 
@@ -49,26 +46,9 @@ export interface AiJobRequest {
   inputs: Record<string, string>
 }
 
-/** Whether a job has stopped moving: finished, or waiting on something only a person can change. */
-export function aiJobSettled(job: AiJobSummary | null): boolean {
-  if (!job) return false
-  return (
-    AI_JOB_TERMINAL_STATUSES.includes(job.status) ||
-    job.status === 'needs_input' ||
-    job.status === 'needs_review'
-  )
-}
-
-/**
- * Why a settled job has no result to show, in words a person can act on, or
- * `null` for a job that finished.
- */
-export function aiJobProblem(job: AiJobSummary | null, failed: string): string | null {
-  if (!job || !aiJobSettled(job) || job.status === 'done') return null
-  if (job.status === 'canceled') return 'The job was canceled.'
-  if (job.status === 'needs_review') return job.review?.message || job.error || failed
-  return job.error || failed
-}
+// Whether a job settled, and why it has nothing to show, are the model's
+// (AGL-3854), which the native apps' follow view reads too.
+export { aiJobProblem, aiJobSettled }
 
 export interface AiJobRun {
   /** The job as it last arrived; `null` before one is started. */
