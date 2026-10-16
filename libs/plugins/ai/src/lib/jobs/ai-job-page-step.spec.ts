@@ -650,7 +650,22 @@ describe('the passes', () => {
       detail: expect.stringContaining('Rule 12'),
       findings: [expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [rowId] })],
       outline: [
-        { id: rowId, depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: cells.map(() => 'muiGrid') },
+        // The last pass gave the row of cards the site's stagger before it was checked (AGL-3838).
+        {
+          id: rowId,
+          depth: 0,
+          componentId: 'muiGrid',
+          props: [
+            'ariaLabel',
+            'aglynAnimation',
+            'aglynAnimationTrigger',
+            'aglynAnimationDuration',
+            'aglynAnimationEase',
+            'aglynAnimationStagger',
+            'aglynAnimationStaggerStep',
+          ],
+          children: cells.map(() => 'muiGrid'),
+        },
         ...cells.flatMap((cell) => [
           expect.objectContaining({ id: cell, depth: 1, componentId: 'muiGrid', grid: { size: 'xs:12 md:4' } }),
           expect.objectContaining({ id: nodes[cell].nodes?.[0], depth: 2, componentId: 'reusableInstance' }),

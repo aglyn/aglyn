@@ -54,6 +54,9 @@ is. The **Designing your look** step then picks one look from that range for you
   of your workspace's other sites is drawn again.
 - **Readable.** The colors are checked for contrast, so text stays readable on its
   background. A palette that fails the check falls back to the starter colors.
+- **Moving.** Every page gets [animations](../building-sites/besigner/animations.md#pages-that-already-move)
+  that suit the style: calm styles fade in gently, bold ones arrive with more
+  energy, and portfolios zoom their pictures in. Choosing them costs no credits.
 - **Cheap.** The look is one short step, a few credits of the start's total.
 
 ## Your theme afterwards {#your-theme-afterwards}

@@ -2008,9 +2008,15 @@ server canvas refuses exactly what the validator refuses. Inputs: `target`
   unit's is its item's id), so a pass run again finds it and spends nothing.
 - **What it cannot do server-side** — save a reusable component, or write a
   published page's search listing — is left out and named on the output.
+- **Animation (AGL-3838).** `updateProps` also sets an element's entrance
+  animation, in Assist's card and in this kind alike: the eight
+  `aglynAnimation*` settings, each held to the vocabulary's own values and
+  caps (`assistEditMotionPatch`). A value outside them refuses the change with
+  its reason; `none` takes an animation off. The protocol's one Animation line
+  is in the cached prefix.
 - **Routing.** `job.edit`, balanced tier, adaptive thinking, 6,144 tokens:
   the edit rung's tool-call ceiling with half as much again to think in. Its
-  cached prefix is 5,970 tokens for a page and 5,958 for a layout. Evals:
+  cached prefix is 6,169 tokens for a page and 6,157 for a layout. Evals:
   `tools/ai-eval/cases/edit`.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
@@ -2546,6 +2552,52 @@ Assist panel.
   told what a page job may create, re-asks a plan that creates anything else,
   and asks the same admission of the plan before it is kept, so such a plan is
   refused before a member is shown a Confirm (AGL-3030).
+
+### Motion on an AI-built page (AGL-3838)
+
+Every page an AI job builds moves, and the model decides none of it: no prompt
+names a preset, no answer carries one, and no credit is spent on it. The motion
+is the element animation props an author sets in the Besigner's Animation
+section (`aglynAnimation*`, `libs/aglyn/src/lib/app-utils/element-animation.ts`),
+written by code.
+
+- **The pass.** `applyElementMotion` (`libs/aglyn/src/lib/app-utils/element-motion.ts`)
+  plays the first section's secondary content — eyebrow, lede, buttons, a
+  small picture — on `load` as a short ladder (each block a step after the one
+  before, at most six steps). That section's main heading (the h1, else its
+  first heading) and its largest picture never move, nor does anything holding
+  them: they are the page's Largest Contentful Paint candidates (AGL-3581), so
+  they paint where they stand from the first frame. It slides every later section's
+  content in on `scroll`, and staggers a group of like items — a grid of cards,
+  a list, an FAQ, a dataset repeat — rather than moving it as one block. A
+  section's band, and a cover photo's backdrop, never move; nothing nests
+  inside a block that already moves. Forms and their fields, the header,
+  footer and navigation, anything pinned or laid over its band, anything
+  hidden, and anything already carrying an animation prop (`none` included)
+  are left alone, and a block that holds one is opened up so its other
+  children move instead. A page it already moved comes back as the same
+  object, so no write is made for it.
+- **The site's character.** `aiSiteMotion` (`src/lib/layout-language/ai-layout-motion.ts`)
+  maps the site's kind to a mood and turns it by the site's design seed, so
+  every page of one site moves alike and two sites of one kind differ: calm
+  (law and finance, health, yoga, beauty, blog) fades on a gentle curve,
+  650–800 ms; bold (studio, fitness, music, events) rises with overshoot and
+  zooms pictures in, 450–600 ms; gallery (portfolio, photography) zooms
+  pictures in one after another; standard (every other kind) rises smoothly,
+  500–700 ms. Items stagger 60–120 ms apart.
+- **Where it is written.** A layout-language page's check, once the page has
+  passed (`aiLayoutPageCheck`, so the one write carries it); the page step's
+  last pass, which settles a page built a section at a time the same way; and
+  the template step, before its draft is written. The header and footer (the
+  frame) and a reusable component are never given motion: a component's
+  instances sit inside a group that already staggers them.
+- **The starters.** The same pass runs on a new site's home
+  (`buildDefaultHomeScreen`) and on every starter page as it is seeded
+  (`buildStarterTemplateDocs`), in the default character. The starters
+  themselves carry none, because they are also the page examples a model is
+  shown.
+- **Afterwards.** It is the author's: the Besigner's Animation section shows
+  and edits every value, and Assist (below) sets, changes or removes one.
 
 ### Pictures on a layout-language page
 
