@@ -209,6 +209,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
   },
+  connectSmileIoOrYotpo: {
+    path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
+    title: 'Connect Smile.io or Yotpo Loyalty',
+  },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',
     title: 'Guide: console extensions & site surfaces',
@@ -383,7 +387,7 @@ export const DOCS_HELP_TOPICS = {
   },
   fulfillmentNetworks: {
     path: '/commerce-and-bookings/commerce/fulfillment-networks',
-    title: 'Fulfillment networks (ShipBob, ShipMonk and Amazon MCF)',
+    title: 'Fulfillment networks (ShipBob, ShipMonk, Flexport and Amazon MCF)',
   },
   funnels: {
     path: '/marketing-and-automation/analytics/funnels',
@@ -632,6 +636,10 @@ export const DOCS_HELP_TOPICS = {
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
+  },
+  printOnDemand: {
+    path: '/commerce-and-bookings/commerce/print-on-demand',
+    title: 'Print on demand (Printful and Printify)',
   },
   productsWithAi: {
     path: '/ai/products-with-ai',
@@ -969,6 +977,7 @@ export const DOCS_HELP_ANCHORS = {
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
   connectAttentive: ['#before-you-start', '#connect', '#what-is-sent', '#who-is-sent', '#unsubscribes-stay-in-attentive', '#settings', '#sync-log', '#troubleshooting', '#disconnect'],
   connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
+  connectSmileIoOrYotpo: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#searching-from-the-organization', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#choose-a-workspace', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#alerts-on-this-device'],
@@ -1073,6 +1082,7 @@ export const DOCS_HELP_ANCHORS = {
   pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#self-service-kiosk', '#reservations', '#related'],
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#before-you-go-offline', '#related'],
+  printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   productsWithAi: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#public-profile', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#bundle-and-manifest', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#edit-listing', '#your-listings', '#listing-links', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#listing-changelog', '#version-history', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#install-card', '#installed-from-the-marketplace', '#licenses', '#workspace-licenses', '#licenses-you-bought', '#getting-paid', '#set-up-payouts', '#purchases-and-fees', '#refund-reversals', '#low-prices-and-processing'],

@@ -1,13 +1,14 @@
 ---
 sidebar_position: 4.6
-title: Fulfillment networks (ShipBob, ShipMonk and Amazon MCF)
-description: Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.
+title: Fulfillment networks (ShipBob, ShipMonk, Flexport and Amazon MCF)
+description: Send paid orders to ShipBob, ShipMonk, Flexport or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.
 ---
 
-# Fulfillment networks: ShipBob, ShipMonk and Amazon Multi-Channel Fulfillment
+# Fulfillment networks: ShipBob, ShipMonk, Flexport and Amazon Multi-Channel Fulfillment
 
-If your stock sits in a **ShipMonk** warehouse, connect that account to your
-store and Aglyn hands each paid order to it. **ShipMonk is available now.**
+If your stock sits with **ShipMonk** or **Flexport**, connect that account to
+your store and Aglyn hands each paid order to it. **ShipMonk and Flexport are
+available now.**
 **ShipBob** and **Amazon Multi-Channel Fulfillment** (FBA inventory) work the
 same way and appear on the card as each is set up for aglyn.com; until then the
 card offers only the networks you can connect. Aglyn then:
@@ -59,12 +60,6 @@ every 15 minutes. **New webhook secret** makes a new secret and ends the old
 one at once.
 
 ### Flexport: connect with your API token
-
-:::note Rolling out
-Flexport appears on the **Fulfillment networks** card only once it is
-available on the platform you use. Until then, the card has no **Flexport**
-section, and the other networks work as usual.
-:::
 
 Flexport connects with an **API token** from your own Flexport account. You
 need a Flexport account with billing set up, since Flexport ships orders only

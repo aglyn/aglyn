@@ -84,7 +84,7 @@ final class ScreenSpecTests: XCTestCase {
       specs += parsed
     }
     // Every screen a spec opens or navigates to exists: a spec, or one a plugin draws by hand.
-    let handWritten: Set<String> = ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.sales"]
+    let handWritten: Set<String> = ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing"]
     for spec in specs {
       for target in Self.targets(spec.raw) {
         XCTAssertTrue(ids.contains(target) || handWritten.contains(target), "\(spec.id) opens \(target), which no spec declares")

@@ -2684,6 +2684,7 @@ internal data class ContractValuesPart3(
     @SerialName("MEDIA_TAG_MAX_COUNT") val mediaTagMaxCount: Long,
     @SerialName("MEDIA_TAG_MAX_LENGTH") val mediaTagMaxLength: Long,
     @SerialName("MEDIA_TYPE_OPTIONS") val mediaTypeOptions: List<ListFilterOption>,
+    @SerialName("MINE_LICENCE_QUERY") val mineLicenceQuery: ListQueryDeclaration,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
     @SerialName("NATIVE_CAMPAIGN_SEND_STATUSES") val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem>,
@@ -2699,11 +2700,11 @@ internal data class ContractValuesPart3(
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
     @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
     @SerialName("NOTHING_MOVED") val nothingMoved: String,
-    @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
     @SerialName("ORDER_COURIER_STATE_LABELS") val orderCourierStateLabels: Map<String, String>,
@@ -2751,11 +2752,11 @@ internal data class ContractValuesPart4(
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
-    @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
     @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
@@ -2944,6 +2945,7 @@ class ContractValues internal constructor(
     val mediaTagMaxCount: Long get() = part3.mediaTagMaxCount
     val mediaTagMaxLength: Long get() = part3.mediaTagMaxLength
     val mediaTypeOptions: List<ListFilterOption> get() = part3.mediaTypeOptions
+    val mineLicenceQuery: ListQueryDeclaration get() = part3.mineLicenceQuery
     val nameTokenLimit: Long get() = part3.nameTokenLimit
     val nameTokenMaxPrefix: Long get() = part3.nameTokenMaxPrefix
     val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem> get() = part3.nativeCampaignSendStatuses
@@ -2959,7 +2961,7 @@ class ContractValues internal constructor(
     val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part3.nativeSiteCampaignsQuery
     val nativeSiteEmailsQuery: ListQueryDeclaration get() = part3.nativeSiteEmailsQuery
     val nothingMoved: String get() = part3.nothingMoved
-    val openDisputeClause: ListFilterClause get() = part3.openDisputeClause
+    val openDisputeClause: ListFilterClause get() = part4.openDisputeClause
     val orderChannelLabels: Map<String, String> get() = part4.orderChannelLabels
     val orderChannelOptions: List<ListFilterOption> get() = part4.orderChannelOptions
     val orderCourierStateLabels: Map<String, String> get() = part4.orderCourierStateLabels
@@ -3007,7 +3009,7 @@ class ContractValues internal constructor(
     val posOfflineDisabledTenders: Map<String, String> get() = part4.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part4.posOfflineFlagLabels
     val posOfflineLateSyncMs: Double get() = part4.posOfflineLateSyncMs
-    val posOfflineMaxAgeMs: Double get() = part4.posOfflineMaxAgeMs
+    val posOfflineMaxAgeMs: Double get() = part5.posOfflineMaxAgeMs
     val posOfflineSaleMaxLines: Long get() = part5.posOfflineSaleMaxLines
     val posOfflineSyncBatchMax: Long get() = part5.posOfflineSyncBatchMax
     val posOfflineSyncRoute: String get() = part5.posOfflineSyncRoute

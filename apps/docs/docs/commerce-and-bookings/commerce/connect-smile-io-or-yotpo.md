@@ -1,17 +1,10 @@
 ---
 sidebar_position: 4.81
 title: Connect Smile.io or Yotpo Loyalty
-description: Keep your members' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register. Rolling out.
-unlisted: true
+description: Keep your members' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register.
 ---
 
 # Connect Smile.io or Yotpo Loyalty
-
-:::caution Rolling out
-Connecting a rewards account is **not yet available** on aglyn.com-hosted workspaces.
-Until it is, no **Rewards account** card appears under your store's Promotions, and
-your store runs the built-in [Rewards](rewards-and-referrals.md) program.
-:::
 
 If you already run a loyalty program in **Smile.io** or **Yotpo Loyalty & Referrals**,
 connect that account and your members' points stay there. Aglyn's checkout and register

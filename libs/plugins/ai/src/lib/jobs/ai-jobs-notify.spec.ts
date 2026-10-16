@@ -37,6 +37,7 @@ jest.mock('./ai-jobs', () => ({
 }))
 
 import type { AiJob } from '../model/ai-jobs.types'
+import { AI_BUILD_PARTLY_FAILED } from '../operator-alerts'
 import { aiJobFailureAlerter, aiJobTransitionNotifier } from './ai-jobs-notify'
 
 const job = (patch: Partial<AiJob> = {}) =>
@@ -151,6 +152,10 @@ describe('aiJobFailureAlerter', () => {
 })
 
 describe('aiJobFailureAlerter on a build that finished (AGL-3683)', () => {
+  it('names a build job once in the alert title', () => {
+    expect(AI_BUILD_PARTLY_FAILED.title.replace('{{kind}}', 'build')).toMatch(/^An AI build job finished/)
+  })
+
   const row = (slot: string, label: string, patch: Record<string, unknown> = {}) => ({
     slot, op: 'page', label, status: 'succeeded', ...patch,
   })

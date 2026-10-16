@@ -3981,6 +3981,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let mediaTagMaxCount: Int
   public let mediaTagMaxLength: Int
   public let mediaTypeOptions: [ListFilterOption]
+  public let mineLicenceQuery: ListQueryDeclaration
   public let nameTokenLimit: Int
   public let nameTokenMaxPrefix: Int
   public let nativeCampaignSendStatuses: [NativeCampaignSendStatusesItem]
@@ -4221,6 +4222,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case mediaTagMaxCount = "MEDIA_TAG_MAX_COUNT"
     case mediaTagMaxLength = "MEDIA_TAG_MAX_LENGTH"
     case mediaTypeOptions = "MEDIA_TYPE_OPTIONS"
+    case mineLicenceQuery = "MINE_LICENCE_QUERY"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"
     case nameTokenMaxPrefix = "NAME_TOKEN_MAX_PREFIX"
     case nativeCampaignSendStatuses = "NATIVE_CAMPAIGN_SEND_STATUSES"

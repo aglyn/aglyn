@@ -3969,6 +3969,26 @@
       "value": "document"
     }
   ],
+  "MINE_LICENCE_QUERY": {
+    "fields": [
+      {
+        "column": "buyerOrgId",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isEmpty"
+        ],
+        "path": "buyerOrgId",
+        "presence": "nullable"
+      }
+    ],
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      }
+    ]
+  },
   "NAME_TOKEN_LIMIT": 120,
   "NAME_TOKEN_MAX_PREFIX": 12,
   "NATIVE_CAMPAIGN_SEND_STATUSES": [

@@ -104,7 +104,54 @@ const CASES = [
   },
 ]
 
-function editJob(entry: (typeof CASES)[number]): AiJob {
+/**
+ * Two motion requests (AGL-3838): the edit protocol's Animation line, held
+ * to the vocabulary by `assistEditMotionPatch`. Each must set a preset the
+ * renderer knows on the section asked about and leave the rest of the page
+ * still.
+ */
+/** Every element's animation settings in a written version, for the run's table. */
+const motionOf = (nodes: Record<string, any>) =>
+  Object.fromEntries(
+    Object.entries(nodes)
+      .map(([id, node]) => [id, Object.fromEntries(Object.entries(node?.props ?? {}).filter(([name]) => name.startsWith('aglynAnimation')))])
+      .filter(([, props]) => Object.keys(props as object).length > 0),
+  )
+const SLIDES = new Set(['slide-up', 'slide-down', 'slide-left', 'slide-right'])
+const MOTION_CASES = [
+  {
+    id: 'page-hero-fade',
+    brief: 'Make the hero section fade in gently when the home page loads.',
+    inputs: { target: 'home', targetKind: 'screen' },
+    written: `${HOST}/screens/home/versions/job-live-page-hero-fade`,
+    holds: (nodes: Record<string, any>) => {
+      const moved = ['hero', 'heroStack', 'heroTitle'].map((id) => nodes[id]?.props ?? {})
+      return (
+        moved.some((props) => props.aglynAnimation === 'fade' && [undefined, 'load'].includes(props.aglynAnimationTrigger)) &&
+        nodes['services']?.props?.aglynAnimation === undefined
+      )
+    },
+  },
+  {
+    id: 'page-services-slide',
+    brief: "Make the 'What we fix' section slide up slowly, over about a second, as visitors scroll to it.",
+    inputs: { target: 'home', targetKind: 'screen' },
+    written: `${HOST}/screens/home/versions/job-live-page-services-slide`,
+    holds: (nodes: Record<string, any>) => {
+      const props = nodes['services']?.props ?? nodes['servicesTitle']?.props ?? {}
+      const ms = Number(props.aglynAnimationDuration ?? 0)
+      return (
+        SLIDES.has(props.aglynAnimation) &&
+        [undefined, 'scroll'].includes(props.aglynAnimationTrigger) &&
+        ms >= 700 &&
+        ms <= 3000 &&
+        nodes['hero']?.props?.aglynAnimation === undefined
+      )
+    },
+  },
+]
+
+function editJob(entry: (typeof CASES)[number] | (typeof MOTION_CASES)[number]): AiJob {
   return {
     $id: `job-live-${entry.id}`,
     orgId: 'org-live',
@@ -131,11 +178,11 @@ const describeLive = LIVE ? describe : describe.skip
 describeLive("an edit job's change from the real model", () => {
   jest.setTimeout(aiLiveTimeoutMs(15 * 60_000))
 
-  it('lands each change in a new version beside the live one, doing what was asked', async () => {
+  async function runCases(cases: ReadonlyArray<(typeof CASES)[number] | (typeof MOTION_CASES)[number]>) {
     const { firestore, docs } = aiEvalMemoryFirestore(SEED)
     const step = createAiJobEditStep()
     const results = await Promise.all(
-      CASES.map(async (entry) => {
+      cases.map(async (entry) => {
         const outcome = (await step({
           job: editJob(entry),
           stepIndex: 0,
@@ -152,6 +199,7 @@ describeLive("an edit job's change from the real model", () => {
           refused: outcome['refused'] === true,
           written: Boolean(nodes),
           holds: nodes ? entry.holds(nodes) : false,
+          motion: nodes ? motionOf(nodes) : {},
           note: (outcome['outputs'] as Array<{ note?: string }> | undefined)?.[0]?.note ?? null,
           estCostUsd: Number(outcome['estCostUsd'] ?? 0),
         }
@@ -162,6 +210,14 @@ describeLive("an edit job's change from the real model", () => {
     expect(docs.get(`${HOST}/screens/home`)?.['versionId']).toBe('v-live')
     expect(docs.get(`${HOST}/layouts/frame`)?.['versionId']).toBe('lv-live')
     expect(results.filter((result) => !result.written || !result.holds || result.refused)).toEqual([])
+  }
+
+  it('lands each change in a new version beside the live one, doing what was asked', async () => {
+    await runCases(CASES)
+  })
+
+  it('sets the entrance motion asked for, from the vocabulary (AGL-3838)', async () => {
+    await runCases(MOTION_CASES)
   })
 })
 

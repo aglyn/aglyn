@@ -22,10 +22,9 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import { fbClientAppOptions, useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { Button, CircularProgress, Stack, Typography } from '@mui/material'
-import { signOut } from 'firebase/auth'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AuthFormComponent from '../../../components/auth-form.component'
-import { markInteractiveSignOut } from '../../../utils/interactive-signin'
+import { endConsoleSession } from '../../../utils/end-console-session'
 import { nativeHandoffAuthOrigin } from '../../../utils/native-handoff-origin'
 
 /**
@@ -146,9 +145,14 @@ function NativeHandoff() {
     }
   }, [auth, params])
 
+  // A full sign-out, the same as the console's own (AGL-3842): the shared
+  // session ends BEFORE Firebase signs out. Signed out, the effect above sends
+  // a `start` visitor straight to that sign-in page, and a navigation that
+  // raced the session's retirement came back signed in as the same account.
   const switchAccount = useCallback(async () => {
-    markInteractiveSignOut()
-    await signOut(auth).catch(() => undefined)
+    setPhase('working')
+    setError(null)
+    await endConsoleSession(auth).catch(() => undefined)
     setPhase('ready')
   }, [auth])
 
