@@ -71,7 +71,7 @@ struct SchemaScreen: View {
       }
     }
     .navigationTitle("Schema")
-    .aglynTask(id: "\(context.orgID ?? "")-\(datasetID)") {
+    .task(id: "\(context.orgID ?? "")-\(datasetID)") {
       if let orgID = context.orgID { await live.bind(context.firestore, datasetsPath(orgID) + [datasetID]) }
     }
     .task(id: context.orgID) {

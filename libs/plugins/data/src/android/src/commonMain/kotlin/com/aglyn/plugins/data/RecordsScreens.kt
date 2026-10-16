@@ -160,7 +160,14 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
       Column(Modifier.fillMaxSize()) {
         ListHeader(dataset.plural.ifBlank { dataset.name }) {
-          OverflowMenu(listOf(MenuAction("export", "Export records", "download") { dialog = RecordDialog.Export }))
+          OverflowMenu(
+            buildList {
+              if (canImportDatasetRecords(context.orgRole)) {
+                add(MenuAction("import", "Import records", "upload") { context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) })
+              }
+              add(MenuAction("export", "Export records", "download") { dialog = RecordDialog.Export })
+            },
+          )
           Button(
             onClick = { dialog = RecordDialog.Edit(null, newRecordInputs(dataset.model)) },
             enabled = canWrite,

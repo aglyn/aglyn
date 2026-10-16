@@ -46,7 +46,8 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useMerchantPayments } from '@aglyn/tenant-feature-instance'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import {
   useFirestoreCollection,
   usePagedCollection,
@@ -83,6 +84,9 @@ const day = (dayMs: number | undefined) =>
  */
 export function ReservationsCard(props: ReservationsCardProps) {
   const { hostId } = props
+  // Every reservation is paid when it is booked, so a store that cannot
+  // charge turns each guest away; the card says so up front.
+  const payments = useMerchantPayments(hostId)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -336,6 +340,11 @@ export function ReservationsCard(props: ReservationsCardProps) {
       contentGutterY
     >
       <Stack spacing={1}>
+        {payments.blocked ? (
+          <PrerequisiteNotice severity="warning" href={payments.href ?? undefined} actionLabel="Open Payments">
+            {`${payments.reason ?? ''} Guests pay when they reserve, so they can't reserve until it is set up.`}
+          </PrerequisiteNotice>
+        ) : null}
         <Typography variant="subtitle2">{'Resources'}</Typography>
         {(resourceDocs ?? []).map((resource: any) => (
           <Stack

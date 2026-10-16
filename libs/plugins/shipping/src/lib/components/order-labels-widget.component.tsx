@@ -41,6 +41,12 @@ import type { ShippingHostSettings } from '../model/shipping-settings'
 import { TRACKING_STATUS_LABELS } from '../model/tracking-status'
 import type { PluginTrackingStatus } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { formatCents, newAttemptKey, useShippingAvailability, useShippingFetch } from './shipping-api'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
+import { useStoreSettingsHref } from '@aglyn/tenant-feature-instance'
+
+/** Every quote is priced from where the parcel leaves, so a label needs one first. */
+const NO_SHIP_FROM = 'Add the address you ship from in Shipping settings to buy labels.'
 
 /**
  * The props the commerce plugin's `orderDetail` zone hands a widget, restated
@@ -159,19 +165,26 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [labels, setLabels] = useState<PublicLabel[]>([])
   const [addressCheck, setAddressCheck] = useState<PublicAddressCheck | null>(null)
+  // `false` only once the server has said no ship-from address is set; an
+  // unanswered read never blocks the buttons.
+  const [shipFrom, setShipFrom] = useState<boolean | null>(null)
+  const shippingSettingsHref = useStoreSettingsHref(hostId, 'shipping')
   const [dialog, setDialog] = useState<null | 'outbound' | 'return'>(null)
 
   const loadLabels = useCallback(async () => {
     try {
-      const answer = await request<{ labels: PublicLabel[]; addressCheck?: PublicAddressCheck | null }>(
-        SHIPPING_API_ROUTES.labels,
-        { query: { hostId, recordId: order.id } },
-      )
+      const answer = await request<{
+        labels: PublicLabel[]
+        addressCheck?: PublicAddressCheck | null
+        shipFrom?: boolean
+      }>(SHIPPING_API_ROUTES.labels, { query: { hostId, recordId: order.id } })
       setLabels(answer.labels)
       setAddressCheck(answer.addressCheck ?? null)
+      setShipFrom(typeof answer.shipFrom === 'boolean' ? answer.shipFrom : null)
     } catch {
       setLabels([])
       setAddressCheck(null)
+      setShipFrom(null)
     }
   }, [hostId, order.id, request])
 
@@ -193,6 +206,7 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
   }
 
   if (!availability.available) return null
+  const noShipFrom = shipFrom === false
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -200,11 +214,22 @@ export function OrderLabelsWidget(props: OrderLabelsWidgetProps) {
         <Typography variant="subtitle2" sx={{ flex: 1 }}>
           {'Shipping labels'}
         </Typography>
-        {returnable ? <Button onClick={() => setDialog('return')}>{'Return label'}</Button> : null}
-        <Button variant="contained" disabled={!shippable || !order.shippingAddress} onClick={() => setDialog('outbound')}>
-          {'Buy label'}
-        </Button>
+        {returnable ? (
+          <BlockedControl blocked={noShipFrom} reason={NO_SHIP_FROM}>
+            <Button onClick={() => setDialog('return')}>{'Return label'}</Button>
+          </BlockedControl>
+        ) : null}
+        <BlockedControl blocked={noShipFrom} reason={NO_SHIP_FROM}>
+          <Button variant="contained" disabled={!shippable || !order.shippingAddress} onClick={() => setDialog('outbound')}>
+            {'Buy label'}
+          </Button>
+        </BlockedControl>
       </Stack>
+      {noShipFrom && (shippable || returnable) ? (
+        <PrerequisiteNotice href={shippingSettingsHref ?? undefined} actionLabel="Open Shipping" sx={{ mt: 1 }}>
+          {NO_SHIP_FROM}
+        </PrerequisiteNotice>
+      ) : null}
       {addressCheck?.verdict === 'invalid' && shippable ? (
         <Alert severity="error" sx={{ mt: 1 }}>
           {`The carrier cannot deliver to this order’s address. ${addressCheck.messages.join(' ')}`.trim()}

@@ -330,4 +330,17 @@ final class DataTests: XCTestCase {
     XCTAssertEqual(definition.type, .bool)
     XCTAssertNil(definition.customType)
   }
+
+  func testImportOpensTheWorkspacesWizardOnThisDataset() {
+    // The console's `openImport` call: the dataset's transfer resource, titled for it, offered to an owner or an admin.
+    XCTAssertEqual(dataImportScreen, "core.settings.data.import")
+    XCTAssertEqual(
+      datasetImportParams(id: "ds1", name: "Menu items"),
+      ["resource": "data.dataset:ds1", "title": "Import into Menu items"])
+    XCTAssertEqual(datasetImportParams(id: "ds1", name: "")["title"], "Import records")
+    XCTAssertTrue(canImportDatasetRecords(orgRole: "owner"))
+    XCTAssertTrue(canImportDatasetRecords(orgRole: "admin"))
+    XCTAssertFalse(canImportDatasetRecords(orgRole: "editor"))
+    XCTAssertFalse(canImportDatasetRecords(orgRole: nil))
+  }
 }

@@ -33,6 +33,12 @@ export interface BlockedControlProps {
    * IconButton, Switch, TextField and friends all do.
    */
   children: ReactElement<{ disabled?: boolean }>
+  /**
+   * Let the wrapper take the full width, for a control that is `fullWidth`
+   * or stretched by its stack. The wrapping span is otherwise as wide as its
+   * content, which shrinks such a control the moment it is blocked.
+   */
+  fullWidth?: boolean
 }
 
 /**
@@ -63,7 +69,7 @@ export interface BlockedControlProps {
  * of what rendered. It exists so a console stops promising what the server
  * will refuse.
  */
-export function BlockedControl({ blocked, reason, children }: BlockedControlProps) {
+export function BlockedControl({ blocked, reason, children, fullWidth }: BlockedControlProps) {
   if (!blocked || !isValidElement(children)) return children
   return (
     <Tooltip title={reason}>
@@ -71,7 +77,7 @@ export function BlockedControl({ blocked, reason, children }: BlockedControlProp
         component="span"
         aria-label={reason}
         title={reason}
-        sx={{ display: 'inline-flex' }}
+        sx={fullWidth ? { display: 'flex', width: '100%', '& > *': { flex: 1 } } : { display: 'inline-flex' }}
       >
         {cloneElement(children, { disabled: true })}
       </Box>

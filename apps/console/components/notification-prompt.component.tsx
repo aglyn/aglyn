@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
+import { isNativeAppWebView } from '../utils/besigner-entry'
 import {
   desktopNotificationPermission,
   requestDesktopNotifications,
@@ -83,7 +84,9 @@ function readDismissed(): 'never' | 'snoozed' | null {
  * - the user chose "Don't ask me again",
  * - the snooze from a previous "Not now" has not expired,
  * - notifications are unsupported,
- * - nobody is signed in.
+ * - nobody is signed in,
+ * - the page is the Besigner inside the native apps, which send their own
+ *   push notifications (AGL-3850).
  */
 export function NotificationPrompt() {
   const { data: user } = useUser()
@@ -92,6 +95,7 @@ export function NotificationPrompt() {
 
   useEffect(() => {
     if (!user) return
+    if (isNativeAppWebView()) return
     if (desktopNotificationPermission() !== 'default') return
     if (readDismissed() != null) return
     // Deferred so it reads as an offer once you're settled, rather than a

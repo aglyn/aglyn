@@ -52,7 +52,11 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 /** The quota-enforcing create path, so a NEW service is distinguishable. */
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'svc-new' })
 
+const PAYMENTS_READY = { state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }
+let mockPayments: Record<string, unknown> = PAYMENTS_READY
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => mockPayments,
   useFirestore: () => ({}),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
@@ -109,6 +113,7 @@ const ORG = { plan: 'business' } as never
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockPayments = PAYMENTS_READY
   listener.fromCache = false
   listener.status = 'success'
 })
@@ -169,5 +174,34 @@ describe('a draft service on the Bookings page (AGL-3616)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save service' }))
     await waitFor(() => expect(mockCreateResource).toHaveBeenCalledTimes(1))
     expect(mockCreateResource.mock.calls[0][0].data).not.toHaveProperty('status')
+  })
+})
+
+describe('a paid service without Stripe (AGL-3853)', () => {
+  const NOT_CONNECTED = {
+    state: 'not-connected',
+    settled: true,
+    ready: false,
+    blocked: true,
+    reason: 'Connect Stripe to take card payments.',
+    href: '/acme/hosts/shop/products/payments',
+  }
+
+  it('warns once the service has a price, and links to Payments', () => {
+    mockPayments = NOT_CONNECTED
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }))
+    expect(screen.queryByText(/Visitors can't book a paid service/)).toBeNull()
+    fireEvent.change(screen.getByLabelText('Price (USD, 0 = free)'), { target: { value: '40' } })
+    expect(screen.getByText(/Connect Stripe to take card payments\. Visitors can't book a paid service/)).toBeTruthy()
+    expect(screen.getByText('Open Payments').closest('a')?.getAttribute('href')).toBe('/acme/hosts/shop/products/payments')
+  })
+
+  it('says nothing about a free service', () => {
+    mockPayments = NOT_CONNECTED
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }))
+    fireEvent.change(screen.getByLabelText('Price (USD, 0 = free)'), { target: { value: '0' } })
+    expect(screen.queryByText(/Visitors can't book a paid service/)).toBeNull()
   })
 })

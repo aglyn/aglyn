@@ -49,6 +49,7 @@ struct ArtifactsScreen: View {
   let kind: ArtifactKind
   var initialID: String?
   @State private var model = ArtifactListModel()
+  @State private var quota = ArtifactQuotaModel()
   @State private var runner = ActionRunner()
   @State private var dialog: ArtifactDialog?
   @State private var selection: String?
@@ -89,6 +90,8 @@ struct ArtifactsScreen: View {
           }
         }
         .task(id: hostID) { model.start(context.firestore, kind: kind, hostID: hostID) }
+        .task(id: hostID) { await quota.loadPlan(api: context.api, kind: kind, hostID: hostID) }
+        .task(id: rowsSignature) { await quota.recount(context.firestore, kind: kind, hostID: hostID) }
         .sheet(item: $dialog) { dialog in
           ArtifactDialogSheet(
             context: context, hostID: hostID, kind: kind, dialog: dialog, api: api, runner: runner,
@@ -144,8 +147,60 @@ struct ArtifactsScreen: View {
     .onDisappear { model.stop() }
   }
 
+  /// What the count is re-asked on: the rows the window holds, which a create or a delete changes.
+  private var rowsSignature: String {
+    (model.rows.value ?? []).map(\.id).joined(separator: ",")
+  }
+
+  /// The plan's count for this list and the header sort, above the rows (the console prints both above its table).
+  private func listHeader() -> some View {
+    HStack(spacing: AglynSpace.one) {
+      AglynQuotaReadout(
+        ready: quota.ready, used: quota.count ?? model.rows.value?.count ?? 0, limit: quota.limit, noun: kind.singular
+      )
+      .accessibilityIdentifier("\(kind.singular)-quota")
+      Spacer()
+      sortMenu
+    }
+    .padding(.horizontal, AglynSpace.two)
+    .padding(.vertical, AglynSpace.one)
+  }
+
+  private var sortMenu: some View {
+    Menu {
+      Button {
+        model.sort = nil
+      } label: {
+        if model.sort == nil { Label("Default order", systemImage: "checkmark") } else { Text("Default order") }
+      }
+      ForEach(artifactSortChoices(kind), id: \.self) { choice in
+        Button {
+          model.sort = choice
+        } label: {
+          if model.sort == choice {
+            Label(artifactSortLabel(choice), systemImage: "checkmark")
+          } else {
+            Text(artifactSortLabel(choice))
+          }
+        }
+      }
+    } label: {
+      Label("Sort", systemImage: "arrow.up.arrow.down").foregroundStyle(model.sort == nil ? Color.secondary : AglynColor.tint)
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Sort")
+    .accessibilityIdentifier("sort-\(kind.collection)")
+  }
+
   private func list(selectable: Bool, hostID: String) -> some View {
     VStack(spacing: 0) {
+      listHeader()
+      ForEach(model.notices, id: \.self) { notice in
+        Text(notice).font(AglynFont.caption).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, AglynSpace.two)
+      }
       if !kind.kindChoices.isEmpty {
         AglynChipRow(kind.kindChoices.map { AglynChipOption($0.value ?? "all", $0.label) }, selected: model.kindFilter ?? "all") {
           model.kindFilter = $0 == "all" ? nil : $0

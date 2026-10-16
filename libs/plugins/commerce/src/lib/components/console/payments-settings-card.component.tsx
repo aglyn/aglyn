@@ -28,6 +28,8 @@ import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
+import { useCommerceEntitlement } from './entitlement-gate.component'
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -53,13 +55,21 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const { org, ready: planReady } = useOrgPlan(hostId)
   /** Bumped by Retry to re-subscribe the profile listen (AGL-1380). */
   const [retryNonce, setRetryNonce] = useState(0)
-  const uid = (user as any)?.uid as string | undefined
+  const { upgradeHref } = useCommerceEntitlement(hostId, 'commerce')
+  /**
+   * The OWNER's profile: the Stripe account every money route charges
+   * against is the one on the workspace owner's profile. Reading the
+   * signed-in member's instead told an admin who is not the owner that a
+   * connected store was not set up.
+   */
+  const ownerUid =
+    typeof org?.ownerUid === 'string' && org.ownerUid ? org.ownerUid : undefined
   const { data: profile, status: profileStatus } = useFirestoreDoc<any>(
     // Held at null rather than addressed as `profiles/-pending-` — that
     // sentinel issued a guaranteed-denied read on every pre-auth mount, and
     // a denial lands in `status: 'error'`, which now means something.
-    () => (uid ? doc(firestore, 'profiles', uid) : null),
-    [firestore, uid, retryNonce],
+    () => (ownerUid ? doc(firestore, 'profiles', ownerUid) : null),
+    [firestore, ownerUid, retryNonce],
   )
   const isOwner = Boolean(
     org?.ownerUid && (user as any)?.uid === org.ownerUid,
@@ -74,7 +84,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
    * already taking money into Stripe onboarding.
    */
   const stripeState: 'pending' | 'error' | 'loaded' =
-    !uid || profileStatus === 'loading'
+    !planReady || (ownerUid && profileStatus === 'loading')
       ? 'pending'
       : profileStatus === 'error'
         ? 'error'
@@ -253,9 +263,9 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
         ) : (
           <>
             {!commerceEnabled ? (
-              <Alert severity="info">
-                {'Selling requires a paid plan — upgrade on the billing page.'}
-              </Alert>
+              <PrerequisiteNotice href={upgradeHref} actionLabel="See plans">
+                {'Selling needs a paid plan. Choose one on Billing, then connect Stripe here.'}
+              </PrerequisiteNotice>
             ) : null}
             {/*
                 THE LEGAL NAME, not the org's resolved `productName`
