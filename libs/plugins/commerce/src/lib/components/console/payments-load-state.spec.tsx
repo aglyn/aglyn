@@ -53,6 +53,7 @@ const orgPlan = {
 }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useFirestore: () => ({}),
   useOrgPlan: () => orgPlan,
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
