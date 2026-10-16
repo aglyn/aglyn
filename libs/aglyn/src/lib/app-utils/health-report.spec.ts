@@ -2226,6 +2226,19 @@ describe('appCheckAttestationHealth (AGL-2715)', () => {
     expect(check.deniedBy).toEqual({ INVALID: 400 })
   })
 
+  it('stays green through a native test run in a quiet window', () => {
+    // Measured 2026-10-16 03:33Z: Simulator and emulator builds cannot attest,
+    // so an evening of native sign-in testing put 60 INVALID denials beside
+    // 490 real ALLOWs. Nobody real was refused; it must not page.
+    const check = appCheckAttestationHealth(
+      [sample('ALLOW', 490), sample('DENY', 60, IDP, 'INVALID')],
+      2,
+    )
+    expect(check.allowRate).toBeCloseTo(0.8909, 3)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+  })
+
   it('an unreadable metric is degraded, never calm', () => {
     // "We did not look" reported as "it is fine" is the failure this whole
     // area exists to stop.
@@ -2268,14 +2281,14 @@ describe('appCheckAttestationHealth (AGL-2715)', () => {
 
   it('reds at exactly the floor, not merely past it', () => {
     const atFloor = appCheckAttestationHealth(
-      [sample('ALLOW', 90), sample('DENY', 10, IDP, 'INVALID')],
+      [sample('ALLOW', 75), sample('DENY', 25, IDP, 'INVALID')],
       2,
     )
-    expect(atFloor.allowRate).toBeCloseTo(0.9, 6)
+    expect(atFloor.allowRate).toBeCloseTo(0.75, 6)
     expect(atFloor.ok).toBe(true)
 
     const under = appCheckAttestationHealth(
-      [sample('ALLOW', 89), sample('DENY', 11, IDP, 'INVALID')],
+      [sample('ALLOW', 74), sample('DENY', 26, IDP, 'INVALID')],
       2,
     )
     expect(under.ok).toBe(false)
@@ -2299,7 +2312,7 @@ describe('appCheckAttestationHealth (AGL-2715)', () => {
      * any value at all — including a floor of 0, which grades nothing, or a
      * minimum of 100,000 requests, which never grades anything.
      */
-    expect(APP_CHECK_MIN_ALLOW_RATE).toBe(0.9)
+    expect(APP_CHECK_MIN_ALLOW_RATE).toBe(0.75)
     expect(APP_CHECK_MIN_REQUESTS).toBe(20)
     expect(APP_CHECK_GRADED_SERVICE).toBe('identitytoolkit.googleapis.com')
   })

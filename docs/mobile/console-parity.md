@@ -24,7 +24,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Forms and submissions | `forms` | AGL-3668 | [x] | [x] |
 | Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [x] | [x] |
 | Fonts, theme presets, logic | `fonts`, `theme-presets`, `logic` | AGL-3668 | [x] | [x] |
-| Plugin marketplace | `marketplace` (browse, listings, install, my installs and licenses native) | AGL-3668 | [ ] | [ ] |
+| Plugin marketplace | `marketplace` (browse, listings, install, my installs and licenses native) | AGL-3668 | [x] | [x] |
 | CRM | `crm` | AGL-3669 | [x] | [x] |
 | Inbox | `inbox` | AGL-3669 | [x] | [x] |
 | Emails, campaigns, funnels, texts | `email`, `marketing`, `funnels`, `sms` (email design = Besigner) | AGL-3669 | [x] | [x] |
@@ -138,15 +138,20 @@ Setup's Integrations section (the cards of the plugins running on the site)
 (#1586); and the Disabled notice on a file staff took down. What is left:
 
 - Components, layouts, templates: the per-plan count beside Create (the
-  limit the Billing and usage meter already reads) and Publish to marketplace
-  on a component or layout.
+  limit the Billing and usage meter already reads). Publish to marketplace on
+  a component or layout is native: the detail menu offers it wherever the
+  marketplace fills the `hostArtifactPublish` slot, as the console's does.
 - Site setup, deliberately not built: the theme's Advanced overrides, a raw
   JSON editor. Everything else in the row is native, including the AI plugin's
   widgets in the Business profile and SEO areas.
-- Plugin marketplace: publishing (a plugin, component, layout, site template,
-  theme, dataset schema or email starter), the publisher agreement, the seller
-  panel and reports. Browsing, listing detail, install, uninstall and licenses
-  are native.
+- Plugin marketplace: ticked again (AGL-3668). Publishing a plugin (its
+  bundle and manifest, the listing and every publisher statement), a
+  component, layout, site template, theme, dataset schema, email template or
+  email starter; the publisher agreement asked for and resumed by every
+  publish; the publish hub's take-rate notice for the workspace's plan; the
+  seller panel (profile, listings with their preview image, screenshots and
+  logo from the media library, payouts, sales); a listing's owner actions; and
+  both Licenses tables are native. Reporting a listing was already native.
 - Datasets: Import is on the dataset's page and on its records list (an owner
   or an admin, the transfer routes' own rule), and opens the Imports and
   exports hub's import wizard on `data.dataset:<id>`, as the console's

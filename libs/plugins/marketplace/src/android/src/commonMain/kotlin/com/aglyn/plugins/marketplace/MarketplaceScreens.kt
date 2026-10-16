@@ -62,6 +62,8 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectOption
+import com.aglyn.ui.SelectField
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
@@ -73,6 +75,9 @@ const val MARKETPLACE_LISTING_SCREEN = "marketplace.listing"
 const val MARKETPLACE_INSTALLED_SCREEN = "marketplace.installed"
 const val MARKETPLACE_LICENCES_SCREEN = "marketplace.licenses"
 const val MARKETPLACE_PLUGIN_SETTINGS_SCREEN = "marketplace.plugin-settings"
+
+/** Publishing to the marketplace is a spec screen (marketplace.screens.json): what this site and the workspace can publish. */
+const val MARKETPLACE_PUBLISH_SCREEN = "marketplace.publish"
 
 /** Workspace roles with `plugins.install` (`installPlugins`): the admin tier and editors. */
 internal val INSTALL_ROLES = setOf("owner", "admin", "editor")
@@ -87,6 +92,8 @@ private sealed interface ListingDialog {
   data class Uninstall(val scope: InstallTarget) : ListingDialog
   data object Review : ListingDialog
   data object Report : ListingDialog
+  /** Reporting someone else's review: its reviewer's uid and name. */
+  data class ReportReview(val uid: String, val name: String) : ListingDialog
 }
 
 /** The marketplace's sections, as the console's hub tabs them. */
@@ -97,6 +104,8 @@ private fun SectionTabs(context: NativePluginContext, current: String) {
       ChipOption(MARKETPLACE_BROWSE_SCREEN, "Browse all", "storefront"),
       ChipOption(MARKETPLACE_INSTALLED_SCREEN, "Installed", "extension"),
       ChipOption(MARKETPLACE_LICENCES_SCREEN, "Licenses", "receipt"),
+      ChipOption(MARKETPLACE_PUBLISH_SCREEN, "Publish", "upload"),
+      ChipOption(MARKETPLACE_SELL_SCREEN, "Selling", "storefront"),
     ),
     current,
     { if (it != current) context.navigate(it) },
@@ -256,6 +265,8 @@ private fun ListingBody(
           ),
         )
       }
+      // The owner's actions on the listing itself: a plugin ships a new version from here, and any listing is edited here.
+      if (mine && context.orgRole in INSTALL_ROLES) OwnerActions(context, listing.id, plugin)
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
         StatusChip(priceLabel(listing.priceUsd), if (listing.paid) StatusTone.INFO else StatusTone.SUCCESS)
         if (listing.verified) StatusChip("Verified publisher", StatusTone.SUCCESS)
@@ -339,7 +350,10 @@ private fun ListingBody(
               icon = AglynIcons.named("person"),
               trailing = if (review.uid == context.uid) ({
                 TextButton(onClick = { runner.run("Your review was removed.") { api.deleteReview(listing.id) } }) { Text("Delete") }
-              }) else null,
+              }) else ({
+                // Not on your own review: the queue is for what someone else wrote.
+                TextButton(onClick = { open(ListingDialog.ReportReview(review.uid, review.name)) }, modifier = Modifier.testTag("review-report-${review.uid}")) { Text("Report") }
+              }),
             )
           }
         }
@@ -424,22 +438,8 @@ private fun ListingDialogs(
         OutlinedTextField(comment, { comment = it.take(2000) }, label = { Text("Comment") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("review-comment"))
       }
     }
-    ListingDialog.Report -> {
-      var reason by remember { mutableStateOf("") }
-      ActionDialog(
-        title = "Report ${listing.name}",
-        body = "Tell the marketplace team what is wrong with it.",
-        icon = "warning",
-        confirmLabel = "Report",
-        confirmEnabled = reason.isNotBlank(),
-        busy = runner.busy,
-        error = runner.error,
-        onDismiss = { runner.error = null; close() },
-        onConfirm = { runner.run("Reported. The marketplace team will look at it.", onDone = close) { api.report(listing.id, reason) } },
-      ) {
-        OutlinedTextField(reason, { reason = it.take(1000) }, label = { Text("What is wrong") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("report-reason"))
-      }
-    }
+    ListingDialog.Report -> ReportDialog(listing.name, "listing", null, listing.id, api, runner, close)
+    is ListingDialog.ReportReview -> ReportDialog("this review by ${dialog.name}", "review", dialog.uid, listing.id, api, runner, close)
   }
 }
 
@@ -516,37 +516,112 @@ fun InstalledScreen(context: NativePluginContext) {
 @Composable
 fun LicencesScreen(context: NativePluginContext) {
   val orgId = context.orgId ?: return EmptyState("Pick a workspace to see its licenses", icon = AglynIcons.named("receipt"))
-  val purchases by remember(orgId, context.firestore) {
-    context.firestore.observe(licencesQuery(orgId))
-  }.collectAsState(Live.Loading)
-  val rows = (purchases as? Live.Ready)?.value?.map(LicenceRow::from)
-  var names by remember(rows?.map { it.listingId }) { mutableStateOf<Map<String, String>>(emptyMap()) }
-  LaunchedEffect(rows?.map { it.listingId }) {
-    val ids = rows.orEmpty().map { it.listingId }.filter { it.isNotEmpty() }.distinct()
-    names = ids.mapNotNull { id -> runCatching { context.firestore.get("$LISTINGS/$id") }.getOrNull()?.let { id to (it.string("displayName") ?: id) } }.toMap()
+  var licensedTo by remember(orgId) { mutableStateOf<String?>(null) }
+  val heldLive by remember(orgId, context.firestore) { context.firestore.observe(licencesQuery(orgId)) }.collectAsState(Live.Loading)
+  val mineLive by remember(licensedTo, context.uid, context.firestore) { context.firestore.observe(boughtByYouQuery(context.uid, licensedTo)) }.collectAsState(Live.Loading)
+  val held = (heldLive as? Live.Ready)?.value?.map(LicenceRow::from)
+  val mine = (mineLive as? Live.Ready)?.value?.map(LicenceRow::from)
+  var listingNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+  var orgNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+  val listingIds = (held.orEmpty() + mine.orEmpty()).map { it.listingId }.filter { it.isNotEmpty() }.distinct()
+  LaunchedEffect(listingIds) {
+    for (id in listingIds.filter { it !in listingNames }) {
+      runCatching { context.firestore.get("$LISTINGS/$id") }.getOrNull()?.let { listingNames = listingNames + (id to (it.string("displayName") ?: id)) }
+    }
   }
-  val now = remember(rows?.size) { nowMillis() }
-  Column(Modifier.fillMaxSize()) {
+  val licensedIds = mine.orEmpty().mapNotNull { it.buyerOrgId }.distinct()
+  LaunchedEffect(licensedIds) {
+    // The workspace names the person already sees in the switcher; a workspace they have left stays its id.
+    for (id in licensedIds.filter { it !in orgNames }) {
+      runCatching { context.firestore.get("orgs/$id") }.getOrNull()?.string("name")?.let { orgNames = orgNames + (id to it) }
+    }
+  }
+  val now = remember(held?.size, mine?.size) { nowMillis() }
+  @Composable
+  fun row(licence: LicenceRow, detail: String) = AglynListItem(
+    title = listingNames[licence.listingId] ?: licence.listingId,
+    supporting = listOfNotNull(detail, "Paid " + dollars(licence.paidCents.toDouble()), licence.createdAt?.let { relativeTime(it.epochMillis, now) }).joinToString(" · "),
+    icon = AglynIcons.named("receipt"),
+    onClick = { context.navigate(MARKETPLACE_LISTING_SCREEN, mapOf("listing" to licence.listingId)) },
+  )
+  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("licences-list")) {
     ListHeader("Licenses")
-    Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { SectionTabs(context, MARKETPLACE_LICENCES_SCREEN) }
-    when {
-      purchases is Live.Failed -> EmptyState("Could not load licenses", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
-      rows == null -> SkeletonList(rows = 4, modifier = Modifier.padding(space(2f)))
-      rows.isEmpty() -> EmptyState("No licenses yet", body = "A paid listing bought for this workspace shows here.", icon = AglynIcons.named("receipt"))
-      else -> LazyColumn(Modifier.fillMaxSize().testTag("licences-list")) {
-        items(rows, key = { it.id }) { licence ->
-          AglynListItem(
-            title = names[licence.listingId] ?: licence.listingId,
-            supporting = listOfNotNull(
-              "Paid " + priceLabel(licence.paidCents / 100.0),
-              if (licence.buyerUid == context.uid) "bought by you" else null,
-              licence.createdAt?.let { relativeTime(it.epochMillis, now) },
-            ).joinToString(" · "),
-            icon = AglynIcons.named("receipt"),
-            onClick = { context.navigate(MARKETPLACE_LISTING_SCREEN, mapOf("listing" to licence.listingId)) },
+    Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(2f))) {
+      SectionTabs(context, MARKETPLACE_LICENCES_SCREEN)
+      NoticeBanner(
+        "A marketplace purchase licenses one organization. Any member with install permission can install what this workspace owns — and a second workspace needs its own license.",
+        StatusTone.INFO,
+      )
+      when {
+        heldLive is Live.Failed -> EmptyState("Could not load licenses", body = "This workspace’s licenses could not be loaded. Check the connection and try again.", icon = AglynIcons.named("error"))
+        held == null -> SkeletonList(rows = 3)
+        held.isEmpty() -> EmptyState("This workspace holds no licenses", body = "Anything bought for this workspace shows up here, whoever on the team paid for it.", icon = AglynIcons.named("receipt"))
+        else -> SectionCard("This workspace", modifier = Modifier.testTag("licences-held")) {
+          Text("Installable by any member with install permission, whoever on the team bought it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          held.forEach { licence -> row(licence, "Bought by " + boughtByLabel(licence, context.uid)) }
+        }
+      }
+      when {
+        mineLive is Live.Failed -> EmptyState("Could not load your purchases", body = "Your purchases could not be loaded. Check the connection and try again.", icon = AglynIcons.named("error"))
+        mine == null -> SkeletonList(rows = 3)
+        mine.isEmpty() && licensedTo == null -> EmptyState("You have not bought anything yet", body = "Your own marketplace receipts appear here, across every workspace you belong to.", icon = AglynIcons.named("receipt"))
+        else -> SectionCard("Bought by you", modifier = Modifier.testTag("licences-mine")) {
+          Text("Your own receipts, and which workspace each license landed in", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          SelectField(
+            "Licensed to",
+            listOf(SelectOption(orgId, "This workspace")) +
+              orgNames.filterKeys { it != orgId }.entries.sortedBy { it.value.lowercase() }.map { SelectOption(it.key, it.value) } +
+              SelectOption(EVERY_WORKSPACE, "Every workspace you belong to"),
+            licensedTo,
+            { licensedTo = it },
+            Modifier.testTag("licences-licensed-to"),
+            noneLabel = "Any workspace",
           )
+          if (mine.isEmpty()) Text("None of your purchases is licensed there.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+          mine.forEach { licence -> row(licence, "Licensed to " + licensedToLabel(licence, orgId, orgNames)) }
         }
       }
     }
+  }
+}
+
+/** Publish new version (a plugin's) and Edit listing, as the console's listing page offers its owner. */
+@Composable
+private fun OwnerActions(context: NativePluginContext, listingId: String, plugin: Boolean) {
+  val orgId = context.orgId ?: return
+  val scope = rememberCoroutineScope()
+  val runner = remember(listingId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
+  val api = remember(context.api, orgId) { SellerApi(context.api, orgId) }
+  val doc by remember(listingId, context.firestore) { context.firestore.observeDoc("$LISTINGS/$listingId") }.collectAsState(Live.Loading)
+  var editing by remember(listingId) { mutableStateOf<SellerListing?>(null) }
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+    if (plugin) {
+      Button(onClick = { context.navigate("marketplace.publishPlugin", mapOf("listing" to listingId)) }, modifier = Modifier.testTag("listing-publish-version")) { Text("Publish new version") }
+    }
+    OutlinedButton(
+      onClick = { runner.clear(); editing = (doc as? Live.Ready)?.value?.let(SellerListing::from) },
+      enabled = doc is Live.Ready,
+      modifier = Modifier.testTag("listing-edit"),
+    ) { Text("Edit listing") }
+  }
+  editing?.let { listing -> EditListingDialog(context, listing, runner, api) { editing = null } }
+}
+
+/** The console's report dialog, for a listing or a review. */
+@Composable
+private fun ReportDialog(label: String, noun: String, reviewUid: String?, listingId: String, api: MarketplaceApi, runner: ActionRunner, close: () -> Unit) {
+  var reason by remember(reviewUid) { mutableStateOf("") }
+  ActionDialog(
+    title = "Report $label",
+    body = "Tell us what is wrong with this $noun. A staff member reads every report. Reporting again updates your report rather than adding another one.",
+    icon = "warning",
+    confirmLabel = "Send report",
+    confirmEnabled = reason.isNotBlank(),
+    busy = runner.busy,
+    error = runner.error,
+    onDismiss = { runner.error = null; close() },
+    onConfirm = { runner.run("Thanks — staff will review this report", onDone = close) { api.report(listingId, reason, reviewUid) } },
+  ) {
+    OutlinedTextField(reason, { reason = it.take(MAX_REPORT_REASON_LENGTH) }, label = { Text("Reason") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("report-reason"))
   }
 }

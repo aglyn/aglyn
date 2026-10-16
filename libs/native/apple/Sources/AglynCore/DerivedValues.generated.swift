@@ -23,6 +23,12 @@ public enum ExperimentGoalEvents {
   public static let all: [String] = ["formSubmission", "pageView", "memberSignUp", "memberSignIn", "memberSignOut", "lead", "booking", "taskCompleted", "contactCreated", "contactStageChanged", "dealStageChanged", "dealWon", "dealLost", "orderPaid", "orderFulfilled", "orderDelivered", "orderRefunded", "orderCancelled", "returnRequested", "returnApproved", "returnDeclined", "returnReceived", "returnRefunded", "funnelLeft", "scrollDepth", "scrollToElement", "elementClick", "elementVisible", "elementHoverEnter", "elementHoverLeave", "exitIntent", "timeOnPage", "pageVisit"]
 }
 
+/// The marketplace's take rate on each plan (`marketplaceFeePct`), and the paid plans' rate.
+public enum MarketplaceFeeDefaults {
+  public static let byPlan: [String: Double] = ["free": 30, "starter": 20, "pro": 20, "business": 20, "scale": 20, "advanced": 20, "agency": 20, "enterprise": 20]
+  public static let paid: Double = 20
+}
+
 /// Each release flag as the Remote Config template publishes it.
 public enum ReleaseFlagDefaults {
   public static let byKey: [String: ReleaseFlagValue] = [

@@ -24,6 +24,12 @@ object ExperimentGoalEvents {
   val all: List<String> = listOf("formSubmission", "pageView", "memberSignUp", "memberSignIn", "memberSignOut", "lead", "booking", "taskCompleted", "contactCreated", "contactStageChanged", "dealStageChanged", "dealWon", "dealLost", "orderPaid", "orderFulfilled", "orderDelivered", "orderRefunded", "orderCancelled", "returnRequested", "returnApproved", "returnDeclined", "returnReceived", "returnRefunded", "funnelLeft", "scrollDepth", "scrollToElement", "elementClick", "elementVisible", "elementHoverEnter", "elementHoverLeave", "exitIntent", "timeOnPage", "pageVisit")
 }
 
+/** The marketplace's take rate on each plan (`marketplaceFeePct`), and the paid plans' rate. */
+object MarketplaceFeeDefaults {
+  val byPlan: Map<String, Double> = mapOf("free" to 30.0, "starter" to 20.0, "pro" to 20.0, "business" to 20.0, "scale" to 20.0, "advanced" to 20.0, "agency" to 20.0, "enterprise" to 20.0)
+  const val paid: Double = 20.0
+}
+
 /** Each release flag as the Remote Config template publishes it. */
 object ReleaseFlagDefaults {
   val byKey: Map<String, ReleaseFlagValue> = mapOf(

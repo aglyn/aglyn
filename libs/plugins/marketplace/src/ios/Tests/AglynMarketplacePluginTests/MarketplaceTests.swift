@@ -109,15 +109,41 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertTrue(query.filters.contains { $0.path == "refundedAt" && $0.value is NSNull })
   }
 
+  func testBoughtByYouIsYourOwnLivePurchasesNarrowedToTheWorkspaceEachLandedIn() {
+    let all = boughtByYouQuery(uid: "u1", licensedTo: nil)
+    XCTAssertEqual(all.collection, ["marketplacePurchases"])
+    XCTAssertTrue(all.filters.contains { $0.path == "buyerUid" && ($0.value as? String) == "u1" })
+    XCTAssertTrue(all.filters.contains { $0.path == "refundedAt" && $0.value is NSNull })
+    XCTAssertFalse(all.filters.contains { $0.path == "buyerOrgId" })
+    let one = boughtByYouQuery(uid: "u1", licensedTo: "o2")
+    XCTAssertTrue(one.filters.contains { $0.path == "buyerOrgId" && ($0.value as? String) == "o2" })
+    // "Every workspace you belong to" is a purchase that names none.
+    let every = boughtByYouQuery(uid: "u1", licensedTo: everyWorkspace)
+    XCTAssertTrue(every.filters.contains { $0.path == "buyerOrgId" && !($0.value is String) })
+
+    let mine = LicenceRow(FirestoreDocument(id: "p1", data: ["listingId": "l1", "buyerUid": "u1", "buyerOrgId": "o1", "amountCents": 1081, "taxCents": 81]))
+    let theirs = LicenceRow(FirestoreDocument(id: "p2", data: ["listingId": "l1", "buyerUid": "u2", "buyerOrgId": "o2"]))
+    let legacy = LicenceRow(FirestoreDocument(id: "p3", data: ["listingId": "l1", "buyerUid": "u1", "buyerOrgId": NSNull()]))
+    XCTAssertEqual(mine.paidCents, 1000, "what the license cost before tax")
+    XCTAssertEqual([boughtByLabel(mine, uid: "u1"), boughtByLabel(theirs, uid: "u1")], ["You", "A colleague"])
+    XCTAssertEqual(
+      [mine, theirs, legacy].map { licensedToLabel($0, orgID: "o1", names: ["o2": "Studio"]) },
+      ["This workspace", "Studio", "Every workspace you belong to"])
+  }
+
   /// Publishing the site as a template is the spec screens its Kotlin module reads too: bundled here, they are the ones the
   /// manifest declares, and the template one fills the `siteTemplate` zone of Backup & restore.
   @MainActor
   func testThePublishScreensAreBundledAndFillTheSiteTemplateZone() throws {
     let specs = ScreenCatalog.load(from: .module)
-    XCTAssertEqual(specs.map(\.id).sorted(), ["marketplace.publishTemplate", "marketplace.publisherAgreement"])
+    let ids = [
+      "marketplace.publish", "marketplace.publishComponent", "marketplace.publishDatasetSchema", "marketplace.publishEmailStarter", "marketplace.publishEmailTemplate",
+      "marketplace.publishLayout", "marketplace.publishPlugin", "marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publisherAgreement",
+    ]
+    XCTAssertEqual(specs.map(\.id).sorted(), ids)
     XCTAssertEqual(specs.first { $0.id == "marketplace.publishTemplate" }?.zones, ["siteTemplate"])
     let declared = SpecScreens.declaration(specs).screens
-    XCTAssertEqual(declared, ["marketplace.publishTemplate", "marketplace.publisherAgreement"])
+    XCTAssertEqual(declared.sorted(), ids)
   }
 
   // MARK: What a plugin's page says about its installs (marketplace-catalog.ts, replayed)
@@ -309,16 +335,20 @@ final class MarketplaceTests: XCTestCase {
     let registry = NativePluginRegistry()
     let declared = NativeContributionDeclaration(
       screens: [
-        "marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.publishTemplate",
-        "marketplace.publisherAgreement",
+        "marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell",
+        "marketplace.publish", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent",
+        "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter",
+        "marketplace.publishPlugin",
       ],
-      widgets: ["marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
+      widgets: ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
       deepLinks: ["marketplace.listing-page", "marketplace.page"])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "marketplace", contributes: declared, register: registerMarketplaceNative)], into: registry)
     XCTAssertEqual(result.loaded, ["marketplace"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "orgPluginInstalls").map(\.id), ["marketplace.org-installs"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "pluginInstallation").map(\.id), ["marketplace.plugin-installation"])
+    // A site's component and layout pages offer Publish to marketplace because this slot is filled.
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostArtifactPublish").map(\.id), ["marketplace.artifact-publish"])
     XCTAssertEqual(registry.widgets(for: .aglyn).filter { $0.pluginID == "marketplace" }.map(\.id), [], "never on Home")
   }
 }

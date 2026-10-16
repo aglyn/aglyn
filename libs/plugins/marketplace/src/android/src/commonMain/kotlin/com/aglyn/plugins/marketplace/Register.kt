@@ -23,6 +23,7 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   }
   r.screen(MARKETPLACE_INSTALLED_SCREEN, title = "Installed", requiresSite = true, icon = "extension") { context, _ -> InstalledScreen(context) }
   r.screen(MARKETPLACE_LICENCES_SCREEN, title = "Licenses", icon = "receipt") { context, _ -> LicencesScreen(context) }
+  r.screen(MARKETPLACE_SELL_SCREEN, title = "Selling", icon = "storefront") { context, params -> SellScreen(context, params["section"]) }
   // A marketplace plugin's own settings, from its manifest, opened from its page in the workspace's plugins.
   r.screen(MARKETPLACE_PLUGIN_SETTINGS_SCREEN, title = "Plugin settings", icon = "settings") { context, params ->
     PluginSettingsScreen(context, params["listing"].orEmpty())
@@ -35,6 +36,9 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   r.widget("marketplace.plugin-installation", title = "Installation", order = 10, slot = "pluginInstallation") { context ->
     PluginInstallationCard(context)
   }
+  // A site's component and layout pages offer Publish to marketplace only where a plugin fills this slot (the console's
+  // `hostArtifactPublish` zone); the publish itself is this plugin's spec screens, so the widget draws nothing of its own.
+  r.widget("marketplace.artifact-publish", title = "Publish to marketplace", order = 10, slot = "hostArtifactPublish") { _ -> }
   r.quickAction("marketplace.open", title = "Marketplace", icon = "storefront", order = 60, screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.page", path = "/marketplace", screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.listing-page", path = "/marketplace/:listingId", screen = MARKETPLACE_LISTING_SCREEN)

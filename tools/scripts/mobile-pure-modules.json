@@ -594,6 +594,14 @@
       "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/payout-readiness.ts",
+      "why": "Whether a publisher's Stripe account can take charges and release payouts, as the seller panel says it (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/seller-ledger-totals.ts",
+      "why": "What a publisher was actually paid: the sums over the seller ledger, net of what was pulled back (AGL-3668). No imports."
+    },
+    {
       "path": "libs/plugins/outreach/src/lib/engine/click-tracking.ts",
       "why": "Reached by outreach.types and sequence-validation: the body's links."
     },
