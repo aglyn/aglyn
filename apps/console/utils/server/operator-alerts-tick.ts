@@ -16,12 +16,14 @@
  */
 
 import {
+  escalateStillDegradedHealth,
   firebaseAdmin,
   healthStateOfBody,
   HEALTH_SERVICE_LABELS,
   raiseOperatorAlert,
   recordHealthState,
   sendOperatorAlertDigest,
+  type HealthEscalation,
   type OperatorDigestResult,
 } from '@aglyn/tenant-data-admin'
 import { evaluateEmailHealth } from './email-health'
@@ -36,6 +38,10 @@ import { evaluateEmailHealth } from './email-health'
  *    verdict (`recordHealthResponse`) and a degraded check raises
  *    `system.healthDegraded` whether or not anybody else is watching. The
  *    provider credential and shared-pool probe runs here too.
+ *    Then the reminder the edge never sends (AGL-3860): a check still
+ *    degraded after 1 h raises `system.healthStillDegraded`, again every
+ *    2 h, Must know from 2 h on, so a red check keeps paging until it is
+ *    green instead of going quiet after its first notice.
  * 2. **The support SLA sweep.** A ticket's `responseDueAt` was written and
  *    never read; an open ticket past it with no staff reply raises
  *    `support.slaBreached`.
@@ -261,6 +267,8 @@ export async function runSupportSlaSweep(options: {
 
 export interface OperatorAlertsTickReport {
   health: { rows: HealthSweepRow[]; tenant: 'probed' | 'unconfigured' } | { error: string }
+  /** The still-degraded reminders this tick told (or would, on a dry run). */
+  escalations: HealthEscalation[] | { error: string }
   sla: { breached: number; raised: number } | { error: string }
   digest: OperatorDigestResult | { error: string }
 }
@@ -281,11 +289,18 @@ export async function runOperatorAlertsTick(options: {
   const health = options.dryRun
     ? { rows: [], tenant: trimOrigin(process.env['OPERATOR_HEALTH_TENANT_ORIGIN']) ? 'probed' as const : 'unconfigured' as const }
     : await stage('health sweep', () => runHealthSweep({ requestOrigin: options.requestOrigin }))
+  // After the sweep, so a check it just found healthy again is not reminded.
+  const escalations = await stage('health escalation', () =>
+    escalateStillDegradedHealth({
+      dryRun: options.dryRun,
+      ...(options.now ? { now: options.now } : {}),
+    }),
+  )
   const sla = await stage('support SLA sweep', () =>
     runSupportSlaSweep({ dryRun: options.dryRun, ...(options.now ? { now: options.now } : {}) }),
   )
   const digest = await stage('digest', () =>
     sendOperatorAlertDigest({ dryRun: options.dryRun, ...(options.now ? { now: options.now } : {}) }),
   )
-  return { health, sla, digest }
+  return { health, escalations, sla, digest }
 }

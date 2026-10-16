@@ -87,6 +87,19 @@ describe('operator alert levels (AGL-3437)', () => {
   })
 
   /*
+   * The still-degraded reminder (AGL-3860) names no level of its own, so
+   * the tier it is raised at decides: amber at 1 h, red once escalated to
+   * Must know from 2 h.
+   */
+  it('draws a still-degraded reminder by the tier it was raised at', () => {
+    const definition = CORE_OPERATOR_ALERTS.find((alert) => alert.type === 'system.healthStillDegraded')
+    expect(definition).toMatchObject({ tier: 'should', category: 'ops' })
+    expect(definition?.level).toBeUndefined()
+    expect(operatorAlertLevel({ tier: 'should', level: definition?.level })).toBe('warning')
+    expect(operatorAlertLevel({ tier: 'must', level: definition?.level })).toBe('critical')
+  })
+
+  /*
    * An alert raised under a notification type of its own writes the
    * registry's level; a notification of that type written before `level`
    * existed reads the type's default. The two must agree, or the same alert

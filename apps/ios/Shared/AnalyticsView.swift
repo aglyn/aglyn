@@ -93,10 +93,14 @@ final class AnalyticsModel {
 
   func start(reader: FirestoreReader, api: ConsoleAPIClient?, hostID: String, range: Int) {
     stopTraffic()
-    // The newest `2 × range` day documents by id hold every day of both windows.
+    // Both windows' day documents, by id from the oldest day on: ascending, which the Firestore emulator
+    // can answer too (it refuses a descending scan of ids, so the card never loaded on the local stack).
+    let first = recentDayIDs(now: .now, days: range * 2).last ?? ""
     listeners.append(
       reader.listen(
-        FirestoreQuery(["hosts", hostID, "analytics"], order: [.init("__name__", descending: true)], limit: range * 2)
+        FirestoreQuery(
+          ["hosts", hostID, "analytics"], filters: [ListQueryConstraint(path: "__name__", op: .greaterThanOrEqual, value: first)],
+          order: [.init("__name__")], limit: range * 2)
       ) { [weak self] result in
         switch result {
         case .success(let docs):

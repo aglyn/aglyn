@@ -429,6 +429,26 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    // The reminder the edge alert never sends (AGL-3860): raised by the
+    // operator alerts tick at 1 h and every 2 h after while a check stays
+    // degraded. The tick raises it as Must know from 2 h, so its level
+    // follows the tier it was raised at rather than one coded here.
+    type: 'system.healthStillDegraded',
+    label: 'Health check still degraded',
+    description:
+      'A health check has stayed degraded for an hour or more. Told at 1 h and again every 2 h until it recovers; Should know for the first reminder, Must know from 2 h on. Open the failing endpoint, read the failing check’s code and fix the cause, or the check when the check is what is wrong.',
+    tier: 'should',
+    category: 'ops',
+    title: '{{check}} is still degraded after {{duration}}',
+    body: '{{check}} is still degraded after {{duration}}. {{detail}}',
+    link: '/admin/health',
+    delivery: 'immediate',
+    // The tick dedupes each reminder per check per step on the check's own
+    // state; the window only stops a retried tick from telling one twice.
+    dedupeWindowMinutes: 60,
+    defaultEnabled: true,
+  },
+  {
     // The post-deploy production canary (AGL-3567), raised from GitHub
     // Actions through `/api/admin/operator-alerts/canary`. Red because a
     // deploy that stops rendering pages is every published site down.

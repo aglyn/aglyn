@@ -25,6 +25,7 @@ import { join, relative } from 'node:path'
 const mockRecorded: Array<{ id: string; status: string; detail: string; label?: string }> = []
 const mockRaised: Array<{ type: string; options: Record<string, any> }> = []
 let mockTickets: Array<{ id: string; data: Record<string, unknown> }> = []
+const mockEscalations: Array<Record<string, unknown>> = []
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const actual = jest.requireActual('../../../libs/tenant/data/admin/src/lib/server/operator-health')
@@ -42,6 +43,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       return { outcome: 'delivered', type }
     },
     sendOperatorAlertDigest: async () => ({ sent: false, reason: 'not-due', count: 0 }),
+    escalateStillDegradedHealth: async (options: Record<string, unknown>) => {
+      mockEscalations.push(options)
+      return options['dryRun']
+        ? [{ checkId: 'console-journeys', step: 1, tier: 'should', outcome: 'dry-run' }]
+        : []
+    },
     firebaseAdmin: {
       firestore: { Timestamp: { fromMillis: ts } },
       app: () => ({
@@ -91,6 +98,7 @@ jest.mock('../utils/server/email-health', () => ({
 import {
   CONSOLE_HEALTH_PATHS,
   runHealthSweep,
+  runOperatorAlertsTick,
   runSupportSlaSweep,
   TENANT_HEALTH_PATHS,
 } from '../utils/server/operator-alerts-tick'
@@ -129,6 +137,7 @@ beforeEach(() => {
   mockRecorded.length = 0
   mockRaised.length = 0
   mockTickets = []
+  mockEscalations.length = 0
   for (const key of ENV) {
     saved[key] = process.env[key]
     delete process.env[key]
@@ -220,6 +229,15 @@ describe('the operator alerts tick (AGL-3377)', () => {
           orgId: 'o1',
         },
       },
+    ])
+  })
+
+  it('reminds of a check still degraded on every tick, and reports it (AGL-3860)', async () => {
+    const now = Date.UTC(2026, 9, 16, 4, 30)
+    const report = await runOperatorAlertsTick({ dryRun: true, now })
+    expect(mockEscalations).toEqual([{ dryRun: true, now }])
+    expect(report.escalations).toEqual([
+      { checkId: 'console-journeys', step: 1, tier: 'should', outcome: 'dry-run' },
     ])
   })
 

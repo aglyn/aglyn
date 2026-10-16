@@ -111,7 +111,10 @@ struct FunnelsScreen: View {
       "Delete this funnel?", isPresented: Binding(get: { editor?.deleting != nil }, set: { if !$0 { editor?.close() } }),
       titleVisibility: .visible
     ) {
-      Button("Delete", role: .destructive) { Task { await editor?.confirmDelete() } }
+      Button("Delete", role: .destructive) {
+        let row = editor?.deleting
+        Task { await editor?.confirmDelete(row) }
+      }
     } message: {
       Text("\(editor?.deleting?.name ?? "This funnel") and its results are removed. Recorded visits are kept until they expire.")
     }

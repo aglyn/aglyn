@@ -54,7 +54,7 @@ async function handler(request: Request): Promise<Response> {
     dryRun,
     requestOrigin: new URL(request.url).origin,
   })
-  const failed = [report.health, report.sla, report.digest].some(
+  const failed = [report.health, report.escalations, report.sla, report.digest].some(
     (stage) => 'error' in stage,
   )
   return Response.json({ dryRun, ...report }, { status: failed ? 207 : 200 })
