@@ -22,6 +22,8 @@ struct OrderDetailView: View {
   @State private var refundingSheet = false
   @State private var refundKey: String?
   @State private var receiptSheet = false
+  @State private var printing: String?
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
     Group {
@@ -152,6 +154,32 @@ struct OrderDetailView: View {
         }
       }
 
+      // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
+      Section {
+        ForEach(OrderPrintKind.allCases) { kind in
+          Button {
+            Task { await printPage(kind) }
+          } label: {
+            HStack {
+              Label(kind.title, systemImage: kind.systemImage)
+              Spacer()
+              if printing == kind.rawValue { ProgressView() }
+            }
+          }
+          .disabled(printing != nil)
+          .accessibilityIdentifier("order-print-\(kind.rawValue)")
+        }
+      } header: {
+        Text("Print")
+      }
+
+      let shipments = (order.fulfillments ?? []).sorted { $0.atMs > $1.atMs }
+      if !shipments.isEmpty {
+        Section("Shipments") {
+          ForEach(shipments, id: \.id) { shipment in shipmentRow(shipment, number: row.number) }
+        }
+      }
+
       if let payments = order.payments, !payments.isEmpty {
         Section("Payments") {
           ForEach(payments, id: \.id) { payment in
@@ -236,6 +264,57 @@ struct OrderDetailView: View {
     } catch {
       // Not known whether it went through: the same key dedupes the next press.
       throw SheetFailure(message: "It is not known whether the refund went through. Trying again is safe; it will not refund twice.")
+    }
+  }
+
+  @ViewBuilder
+  private func shipmentRow(_ shipment: OrderFulfillment, number: String) -> some View {
+    let canceled = shipment.cancelledAtMs != nil || shipment.status == .cancelled
+    VStack(alignment: .leading, spacing: AglynSpace.one) {
+      let title = [shipment.carrier, shipment.trackingNumber].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+      AglynRow(
+        title.isEmpty ? "Shipped" : title,
+        subtitle: formatReceiptTime(Int64(shipment.atMs)),
+        systemImage: "shippingbox"
+      ) {
+        if canceled { StatusChip("Canceled") }
+      }
+      if !canceled {
+        HStack {
+          if let link = shipment.trackingUrl, let url = URL(string: link) {
+            Button("Track") { openURL(url) }.buttonStyle(.bordered)
+          }
+          if let label = shipment.labelUrl, !label.isEmpty {
+            Button {
+              Task { await printLabel(label, shipmentID: shipment.id, number: number) }
+            } label: {
+              if printing == shipment.id { ProgressView() } else { Label("Print label", systemImage: "printer") }
+            }
+            .buttonStyle(.bordered)
+            .disabled(printing != nil)
+            .accessibilityIdentifier("order-print-label-\(shipment.id)")
+          }
+        }
+      }
+    }
+  }
+
+  private func printPage(_ kind: OrderPrintKind) async {
+    guard let hostID = context.hostID else { return }
+    printing = kind.rawValue
+    problem = nil
+    defer { printing = nil }
+    if let message = await printOrderPage(api: context.api, hostID: hostID, orderID: orderID, kind: kind) { problem = message }
+  }
+
+  private func printLabel(_ link: String, shipmentID: String, number: String) async {
+    printing = shipmentID
+    problem = nil
+    defer { printing = nil }
+    switch await printShippingLabel(link, number: number) {
+    case .done: break
+    case .openInstead: if let url = URL(string: link) { openURL(url) }
+    case .failed(let message): problem = message
     }
   }
 

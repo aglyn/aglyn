@@ -279,15 +279,55 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
         EmptyState("This order is gone", body = "It may have been removed in the console.", icon = AglynIcons.named("receipt"))
       } else {
         val detail = orderDetail(doc)
-        OrderDetailContent(detail, actions) { context.navigate(COMMERCE_ORDER_SERVICES_SCREEN, mapOf("orderId" to orderId)) }
+        val printing = remember(orderId) { OrderPrintState() }
+        val uriHandler = LocalUriHandler.current
+        val printer = context.peripherals.systemPrinter
+        val onPrint: (OrderPrintKind) -> Unit = { kind ->
+          scope.launch {
+            printing.busy = kind.raw
+            printing.problem = printOrderPage(context.api, printer, hostId, orderId, kind)
+            printing.busy = null
+          }
+        }
+        val onPrintLabel: (Shipment) -> Unit = { shipment ->
+          val link = shipment.labelUrl
+          if (link != null) {
+            scope.launch {
+              printing.busy = shipment.id
+              printing.problem = null
+              when (val outcome = printShippingLabel(context.api, printer, link, detail.label)) {
+                LabelPrintOutcome.Done -> Unit
+                LabelPrintOutcome.OpenInstead -> uriHandler.openUri(link)
+                is LabelPrintOutcome.Failed -> printing.problem = outcome.message
+              }
+              printing.busy = null
+            }
+          }
+        }
+        OrderDetailContent(detail, actions, printing, onPrint, onPrintLabel) {
+          context.navigate(COMMERCE_ORDER_SERVICES_SCREEN, mapOf("orderId" to orderId))
+        }
         OrderDialogs(detail, actions)
       }
     }
   }
 }
 
+/** What the order screen's Print buttons are doing: the page or label printing, and why one did not. */
+class OrderPrintState {
+  var busy by mutableStateOf<String?>(null)
+  var problem by mutableStateOf<String?>(null)
+}
+
 @Composable
-private fun OrderDetailContent(detail: OrderDetail, actions: OrderActionsModel, openServices: () -> Unit) {
+private fun OrderDetailContent(
+  detail: OrderDetail,
+  actions: OrderActionsModel,
+  printing: OrderPrintState,
+  onPrint: (OrderPrintKind) -> Unit,
+  onPrintLabel: (Shipment) -> Unit,
+  openServices: () -> Unit,
+) {
   val order = detail.order
   val totals = order.totals
   val uriHandler = LocalUriHandler.current
@@ -362,13 +402,39 @@ private fun OrderDetailContent(detail: OrderDetail, actions: OrderActionsModel, 
             title = listOf(shipment.carrier.uppercase(), shipment.trackingNumber).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Shipped" },
             supporting = listOf(shipment.summary, formatReceiptTime(shipment.atMs)).filter { it.isNotBlank() }.joinToString(" · "),
             icon = AglynIcons.named("local_shipping"),
-            trailing = shipment.trackingUrl?.let { url -> { TextButton(onClick = { uriHandler.openUri(url) }) { Text("Track") } } },
+            trailing = if (shipment.trackingUrl == null && shipment.labelUrl == null) null else {
+              {
+                Row {
+                  shipment.trackingUrl?.let { url -> TextButton(onClick = { uriHandler.openUri(url) }) { Text("Track") } }
+                  if (shipment.labelUrl != null) {
+                    TextButton(
+                      onClick = { onPrintLabel(shipment) },
+                      enabled = printing.busy == null,
+                      modifier = Modifier.testTag("order-print-label-${shipment.id}"),
+                    ) { Text("Print label") }
+                  }
+                }
+              }
+            },
           )
         }
       }
     }
 
     order.note?.takeIf { it.isNotBlank() }?.let { note -> SectionCard("Note") { Text(note) } }
+
+    // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
+    SectionCard("Print") {
+      printing.problem?.let { NoticeBanner(it, StatusTone.ERROR) }
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        OrderPrintKind.entries.forEach { kind ->
+          OutlinedButton(onClick = { onPrint(kind) }, enabled = printing.busy == null, modifier = Modifier.testTag("order-print-${kind.raw}")) {
+            Icon(AglynIcons.named(kind.icon), contentDescription = null)
+            Text(if (printing.busy == kind.raw) "Printing…" else kind.title, Modifier.padding(start = space(1f)))
+          }
+        }
+      }
+    }
 
     // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
     SectionCard(null) {

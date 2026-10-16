@@ -33,9 +33,13 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   LABEL_SIZES,
   MAX_LABEL_COPIES,
+  labelCopiesFromInput,
+  labelCopiesTotal,
+  labelsZplFileName,
+  printableLabelRows,
+  productLabelRows,
   productLabelsHtml,
   productLabelsZpl,
-  type ProductLabel,
 } from '../../printing/product-labels'
 
 /**
@@ -46,23 +50,7 @@ import {
 
 const COPIES_INPUT = { htmlInput: { inputMode: 'numeric', min: 0, max: MAX_LABEL_COPIES } } as const
 
-/** The labels a product prints: one row per variant that has a barcode or SKU. */
-export function productLabelRows(product: CommerceModel.HostProduct): Array<ProductLabel & { variantId: string }> {
-  return product.variants.map((variant) => {
-    const options = Object.values(variant.options ?? {}).filter(Boolean)
-    return {
-      variantId: variant.id,
-      name: product.name,
-      ...(options.length ? { detail: options.join(' / ') } : {}),
-      ...(Number.isFinite(Number(variant.priceUsd))
-        ? { priceCents: Math.round(Number(variant.priceUsd) * 100) }
-        : {}),
-      currency: 'usd',
-      code: String(variant.barcode || variant.sku || '').trim(),
-      copies: 1,
-    }
-  })
-}
+export { productLabelRows }
 
 export function ProductLabelsDialog(props: {
   product: (CommerceModel.HostProduct & { $id: string }) | null
@@ -74,14 +62,14 @@ export function ProductLabelsDialog(props: {
   const [rows, setRows] = useState(initial)
   const [sizeId, setSizeId] = useState(LABEL_SIZES[0].id)
   useEffect(() => setRows(initial), [initial])
-  const printable = rows.filter((row) => row.code && row.copies > 0)
-  const total = printable.reduce((sum, row) => sum + row.copies, 0)
+  const printable = printableLabelRows(rows)
+  const total = labelCopiesTotal(rows)
 
   const setCopies = (variantId: string, value: string) =>
     setRows((current) =>
       current.map((row) =>
         row.variantId === variantId
-          ? { ...row, copies: Math.max(0, Math.min(MAX_LABEL_COPIES, Math.floor(Number(value) || 0))) }
+          ? { ...row, copies: labelCopiesFromInput(value) }
           : row,
       ),
     )
@@ -106,7 +94,7 @@ export function ProductLabelsDialog(props: {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `labels-${(product?.name ?? 'product').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase()}.zpl`
+    link.download = labelsZplFileName(product?.name)
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }

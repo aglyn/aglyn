@@ -60,6 +60,18 @@ struct ProductsScreen: View {
         }
         .help("Find a product by its barcode or SKU")
       }
+      if canImportProducts(context) {
+        ToolbarItem(placement: .secondaryAction) {
+          // The console's Import beside Add product: the data transfer hub's import, for this site's products.
+          Button {
+            context.navigate(coreDataImportScreen, productsImportParams(hostID: context.hostID))
+          } label: {
+            Label("Import", systemImage: "square.and.arrow.down")
+          }
+          .accessibilityIdentifier("import-products")
+          .help("Import products from a CSV or spreadsheet file")
+        }
+      }
     }
     .task(id: context.hostID) { model.start(context.firestore, hostID: context.hostID) }
     .onAppear { if startNew, creating == nil, created == nil { creating = .creating() } }
@@ -184,6 +196,7 @@ struct ProductDetailView: View {
   @State private var model = ProductModel()
   @State private var editing: ProductEditorModel?
   @State private var adjusting = false
+  @State private var labels: [ProductLabelRow]?
 
   var body: some View {
     Group {
@@ -235,9 +248,23 @@ struct ProductDetailView: View {
           .disabled(row.item.variants.isEmpty)
           .accessibilityIdentifier("adjust-stock")
         }
+        if row.type == "physical" {
+          ToolbarItem(placement: .secondaryAction) {
+            // Shelf labels with a barcode the register scans back (the console's Labels).
+            Button {
+              labels = productLabelRows(JSONValue.from(doc.data))
+            } label: {
+              Label("Labels", systemImage: "barcode")
+            }
+            .accessibilityIdentifier("product-labels")
+          }
+        }
       }
     }
     .sheet(item: $editing) { editor in ProductEditorSheet(context: context, model: editor) }
+    .sheet(isPresented: Binding(get: { labels != nil }, set: { if !$0 { labels = nil } })) {
+      ProductLabelsSheet(productName: model.row?.name ?? "Product", rows: labels ?? [])
+    }
     .sheet(isPresented: $adjusting) {
       if let row = model.row { StockAdjustSheet(context: context, row: row) }
     }
@@ -295,4 +322,20 @@ struct ProductDetailView: View {
     .formStyle(.grouped)
     .aglynListBackground()
   }
+}
+
+/// The data transfer hub's import screen (core), which the products list's Import opens.
+let coreDataImportScreen = "core.settings.data.import"
+
+/// The import screen's parameters for this site's products, as the console's Import names its target.
+func productsImportParams(hostID: String?) -> NativeParams {
+  var params: NativeParams = ["resource": "commerce.products", "title": "Import products"]
+  if let hostID { params["hostId"] = hostID }
+  return params
+}
+
+/// Who may import: the import screen's own gate (a workspace owner or admin, or staff), as the console offers Import
+/// only to whom the transfer route takes it from.
+func canImportProducts(_ context: NativePluginContext) -> Bool {
+  context.hostID != nil && (context.orgRole == "owner" || context.orgRole == "admin" || context.staff != nil)
 }

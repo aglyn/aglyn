@@ -477,6 +477,32 @@ public enum DropOffAction: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct EncodedBarcode: Codable, Hashable, Sendable {
+  public var format: EncodedFormat
+  public var modules: String
+  public var text: String
+
+  public init(format: EncodedFormat, modules: String, text: String) {
+    self.format = format
+    self.modules = modules
+    self.text = text
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum EncodedFormat: String, Codable, CaseIterable, Hashable, Sendable {
+  case code128 = "code_128"
+  case ean13 = "ean_13"
+  case ean8 = "ean_8"
+  case upcA = "upc_a"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
   public var label: String
   public var value: String
@@ -1279,6 +1305,20 @@ public enum InstallTarget: String, Codable, CaseIterable, Hashable, Sendable {
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct LabelSize: Codable, Hashable, Sendable {
+  public var heightIn: Double
+  public var id: String
+  public var label: String
+  public var widthIn: Double
+
+  public init(heightIn: Double, id: String, label: String, widthIn: Double) {
+    self.heightIn = heightIn
+    self.id = id
+    self.label = label
+    self.widthIn = widthIn
   }
 }
 
@@ -3358,6 +3398,24 @@ public enum ProductChannelFactsCondition: String, Codable, CaseIterable, Hashabl
   }
 }
 
+public struct ProductLabel: Codable, Hashable, Sendable {
+  public var code: String
+  public var copies: Int
+  public var currency: String?
+  public var detail: String?
+  public var name: String
+  public var priceCents: Int?
+
+  public init(code: String, copies: Int, currency: String? = nil, detail: String? = nil, name: String, priceCents: Int? = nil) {
+    self.code = code
+    self.copies = copies
+    self.currency = currency
+    self.detail = detail
+    self.name = name
+    self.priceCents = priceCents
+  }
+}
+
 public struct ProductModifierGroup: Codable, Hashable, Sendable {
   public var id: String
   public var max: Double
@@ -3808,6 +3866,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let businessToneLabels: [String: String]
   public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
+  public let code128Patterns: [[Double]]
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
   public let componentPropTokenPrefix: String
@@ -3873,6 +3932,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let imageEditJpegQuality: Double
   public let imageEditPreviewMax: Int
   public let installTargets: [String: [InstallTarget]]
+  public let labelCodeMaxLength: Int
+  public let labelSizes: [LabelSize]
   public let layoutListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
   public let leadListQuery: ListQueryDeclaration
@@ -3887,6 +3948,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let localFulfillmentQueueLimit: Int
   public let localFulfillmentQueueTabs: [LocalFulfillmentQueueTab]
   public let marketplaceBrowseQuery: ListQueryDeclaration
+  public let maxLabelCopies: Int
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
   public let mediaDisjunctionLimit: Int
@@ -4034,6 +4096,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case businessToneLabels = "BUSINESS_TONE_LABELS"
     case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
+    case code128Patterns = "CODE128_PATTERNS"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
     case componentPropTokenPrefix = "COMPONENT_PROP_TOKEN_PREFIX"
@@ -4099,6 +4162,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case imageEditJpegQuality = "IMAGE_EDIT_JPEG_QUALITY"
     case imageEditPreviewMax = "IMAGE_EDIT_PREVIEW_MAX"
     case installTargets = "INSTALL_TARGETS"
+    case labelCodeMaxLength = "LABEL_CODE_MAX_LENGTH"
+    case labelSizes = "LABEL_SIZES"
     case layoutListQuery = "LAYOUT_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
     case leadListQuery = "LEAD_LIST_QUERY"
@@ -4113,6 +4178,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case localFulfillmentQueueLimit = "LOCAL_FULFILLMENT_QUEUE_LIMIT"
     case localFulfillmentQueueTabs = "LOCAL_FULFILLMENT_QUEUE_TABS"
     case marketplaceBrowseQuery = "MARKETPLACE_BROWSE_QUERY"
+    case maxLabelCopies = "MAX_LABEL_COPIES"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
     case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"

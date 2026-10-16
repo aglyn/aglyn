@@ -154,6 +154,8 @@ data class Shipment(
   val trackingUrl: String?,
   val atMs: Long,
   val summary: String,
+  /** The carrier's label, which prints on the device's print sheet. */
+  val labelUrl: String? = null,
 )
 
 /** One order, with what its screen may offer. */
@@ -189,6 +191,7 @@ fun orderDetail(doc: FirestoreDoc): OrderDetail {
         trackingUrl = f.trackingUrl?.takeIf { it.startsWith("https://") },
         atMs = f.atMs.toLong(),
         summary = lines.joinToString(", ") { (index, quantity) -> "$quantity× ${names.getOrNull(index)?.name ?: "Item"}" },
+        labelUrl = f.labelUrl?.takeIf { it.startsWith("https://") || it.startsWith("http://") },
       )
     }
     .sortedByDescending { it.atMs }

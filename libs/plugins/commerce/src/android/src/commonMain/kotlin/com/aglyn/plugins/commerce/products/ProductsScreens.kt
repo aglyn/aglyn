@@ -145,6 +145,13 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           Icon(AglynIcons.named("add"), contentDescription = null)
           Text("New product", Modifier.padding(start = space(1f)))
         }
+        if (canImportProducts(context)) {
+          // The console's Import beside Add product: the data transfer hub's import, for this site's products.
+          OutlinedButton(
+            onClick = { context.navigate(CORE_DATA_IMPORT_SCREEN, productsImportParams(context.hostId)) },
+            modifier = Modifier.padding(start = space(1f)).testTag("import-products"),
+          ) { Text("Import") }
+        }
       }
       if (editor.draft == null && editor.stock == null) {
         editor.done?.let { message ->
@@ -196,6 +203,7 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
   val hostId = context.hostId ?: return
   val flow = remember(hostId, productId, context.firestore) { context.firestore.observeDoc("${productsPath(hostId)}/$productId") }
   val live by flow.collectAsState(Live.Loading)
+  var labels by remember(productId) { mutableStateOf<List<ProductLabelRow>?>(null) }
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
@@ -207,6 +215,9 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
       }
       val product = hostProductFrom(doc)
       val status = product.status ?: ProductStatus.ACTIVE
+      labels?.let { rows ->
+        ProductLabelsDialog(product.name ?: "Product", rows, context.peripherals.systemPrinter) { labels = null }
+      }
       Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("product-detail"),
         verticalArrangement = Arrangement.spacedBy(space(2f)),
@@ -236,6 +247,12 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
             // The pictures, and a digital product's downloads and members videos.
             OutlinedButton(onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) }, Modifier.testTag("product-media-link")) {
               Text("Images and files")
+            }
+            // Shelf labels with a barcode the register scans back (the console's Labels).
+            if (product.type == ProductType.PHYSICAL) {
+              OutlinedButton(onClick = { labels = productLabelRows(doc.data) }, Modifier.testTag("product-labels")) {
+                Text("Labels")
+              }
             }
           }
         }
@@ -436,3 +453,20 @@ private fun ProductDialogs(editor: ProductEditorModel) {
     }
   }
 }
+
+/** The data transfer hub's import screen (core), which the products list's Import opens. */
+const val CORE_DATA_IMPORT_SCREEN = "core.settings.data.import"
+
+/** The import screen's parameters for this site's products, as the console's Import names its target. */
+fun productsImportParams(hostId: String?): Map<String, String> =
+  buildMap {
+    put("resource", "commerce.products")
+    put("title", "Import products")
+    if (hostId != null) put("hostId", hostId)
+  }
+
+/**
+ * Who may import: the import screen's own gate (a workspace owner or admin), as the console offers Import only to whom
+ * the transfer route takes it from.
+ */
+fun canImportProducts(context: NativePluginContext): Boolean = context.hostId != null && (context.orgRole == "owner" || context.orgRole == "admin")

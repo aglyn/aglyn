@@ -19,10 +19,33 @@ sealed interface SystemPrintResult {
   data class Failed(val message: String) : SystemPrintResult
 }
 
+/** What the print sheet prints besides a receipt's text. */
+sealed interface PrintableDocument {
+  /**
+   * A page of markup the console prints from a popup: the packing slip and the invoice. Tables, headings and text, no
+   * script and no style sheet, which every platform's own HTML printing lays out.
+   */
+  data class Html(val html: String) : PrintableDocument
+
+  /** A PDF made elsewhere: a carrier's shipping label. */
+  class Pdf(val bytes: ByteArray) : PrintableDocument
+
+  /** Product labels, one label to a page sized to the label. */
+  data class Labels(val sheet: LabelSheet) : PrintableDocument
+}
+
 interface SystemPrinter {
   /** Sends [text], monospaced, to the system's print sheet and waits for the person's answer. */
   suspend fun printText(text: String, jobName: String): SystemPrintResult
+
+  /** Sends [document] to the system's print sheet: the console's `window.print()` of the same page. */
+  suspend fun printDocument(document: PrintableDocument, jobName: String): SystemPrintResult =
+    SystemPrintResult.Failed("This device cannot print that.")
 }
+
+/** Whether [bytes] are a PDF (`%PDF`). */
+fun isPdf(bytes: ByteArray): Boolean =
+  bytes.size >= 4 && bytes[0] == '%'.code.toByte() && bytes[1] == 'P'.code.toByte() && bytes[2] == 'D'.code.toByte() && bytes[3] == 'F'.code.toByte()
 
 /** The receipt's lines cut into pages that each hold [linesPerPage], at least one page. */
 fun printPages(text: String, linesPerPage: Int): List<List<String>> {

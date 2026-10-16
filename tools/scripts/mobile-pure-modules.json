@@ -326,6 +326,14 @@
       "why": "The service shape, slot walk and the 24-hour reminder band the console's Bookings card counts (AGL-3670)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/barcode/barcode-decode.ts",
+      "why": "The barcode symbologies' tables and check digits (EAN, UPC, Code 128), no imports: the apps' label sheet encodes with the same Code 128 table (AGL-3841)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/barcode/barcode-encode.ts",
+      "why": "Product label barcodes as bar modules, over barcode-decode's tables: the apps draw the label sheet's bars from the same encoding, and replay its cases (AGL-3841)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
       "why": "The pickup and delivery queue's tabs and its one Firestore query per tab (AGL-3624), which the native Aglyn app runs too; a type-only import."
     },
@@ -426,8 +434,16 @@
       "why": "The receipt print layout as plain ops, which the app renders to a printable page (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "why": "The product label sheet: sizes, copy limits, a product's label rows, the price line and the ZPL; imports barcode-encode, escape-html, commerce-receipt, print-document and a type from model/commerce. The apps print the same labels (AGL-3841)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/printing/render-text.ts",
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/utils/escape-html.ts",
+      "why": "Re-exports the shared escapeHtml, reached by product-labels (AGL-3841)."
     },
     {
       "path": "libs/plugins/crm/src/lib/constants/company-filters.ts",
@@ -684,6 +700,10 @@
     {
       "path": "libs/shared/util/timestamp/src/lib/zoned-time.ts",
       "why": "Reached by bookings: a moment on a zone's wall clock, through Intl; no imports."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/escape-html.ts",
+      "why": "HTML escaping, no imports; reached by commerce's escape-html (AGL-3841)."
     },
     {
       "path": "libs/shared/util/tools/src/lib/linear-regex.ts",

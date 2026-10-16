@@ -17,7 +17,7 @@
 'use client'
 
 import * as CommerceModel from '../../model'
-import { escapeHtml } from '../../utils/escape-html'
+import { buildPackingSlipHtml } from '../../utils/order-packing-slip'
 // The CRM's address from the SHARED builder, not the plugin (AGL-2622): the
 // CRM already reaches marketing, and marketing reaches commerce, so an
 // import of the CRM from here would close a cycle between the three
@@ -782,34 +782,10 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!order) return
     const win = window.open('', '_blank', 'width=600,height=800')
     if (!win) return
-    // ESCAPED (AGL-2283). This is `document.write` into an `about:blank`
-    // popup, which INHERITS the console's origin — and `order.shippingAddress`
-    // is copied verbatim from Stripe's `shipping_details`, i.e. typed by the
-    // SHOPPER. A name of `<img src=x onerror=…>` ran script against the
-    // merchant's own authenticated session. React guards nothing here because
-    // none of this is React. Line names and SKUs are merchant-authored and
-    // lower severity, but they are the same construction and get the same
-    // treatment rather than a case-by-case argument.
-    const rows = (order.lineItems ?? [])
-      .map(
-        (line) =>
-          `<tr><td>${escapeHtml(line.quantity)}×</td><td>${escapeHtml(
-            line.name,
-          )}${
-            line.variantLabel ? ` — ${escapeHtml(line.variantLabel)}` : ''
-          }</td><td>${escapeHtml(line.sku ?? '')}</td></tr>`,
-      )
-      .join('')
-    const address = order.shippingAddress
-    win.document.write(
-      `<h2>Packing slip ${escapeHtml(
-        CommerceModel.formatOrderNumber(order, orderId),
-      )}</h2>` +
-        (address
-          ? `<p>${[address.name, address.line1, address.line2, `${address.city ?? ''} ${address.state ?? ''} ${address.postalCode ?? ''}`, address.country].filter(Boolean).map((part) => escapeHtml(part)).join('<br/>')}</p>`
-          : '') +
-        `<table border="0" cellpadding="6">${rows}</table>`,
-    )
+    // Every value is escaped by the builder (AGL-2283): this is
+    // `document.write` into an `about:blank` popup, which inherits the
+    // console's origin, and the address is typed by the shopper.
+    win.document.write(buildPackingSlipHtml(order, orderId))
     win.document.close()
     // Print from the opener, not from an injected inline script (AGL-523) —
     // the popup inherits this document's CSP, where an un-nonced inline

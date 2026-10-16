@@ -733,29 +733,58 @@
       "values": [
         "EMAIL_BLOCK_STARTER_TREES_JSON"
       ]
+    },
+    "libs/plugins/commerce/src/lib/barcode/barcode-decode.ts": {
+      "values": [
+        "CODE128_PATTERNS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/barcode/barcode-encode.ts": {
+      "types": [
+        "EncodedBarcode"
+      ],
+      "values": [
+        "LABEL_CODE_MAX_LENGTH"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/printing/product-labels.ts": {
+      "types": [
+        "LabelSize",
+        "ProductLabel"
+      ],
+      "values": [
+        "LABEL_SIZES",
+        "MAX_LABEL_COPIES"
+      ]
     }
   },
   "ints": [
-    "WhereUsedResult.total",
-    "WhereUsedResult.legacyCount",
     "BookingActions.refundCents",
-    "BookingWindow.start",
-    "BookingWindow.end",
+    "BookingInPersonPayment.amountCents",
+    "BookingInPersonPayment.feeCents",
+    "BookingInPersonPayment.paidAtMs",
+    "BookingInPersonPayment.serviceCents",
+    "BookingInPersonPayment.startedAtMs",
+    "BookingInPersonPayment.taxCents",
     "BookingServiceFields.durationMinutes",
     "BookingServiceFields.priceUsd",
-    "BookingInPersonPayment.amountCents",
-    "BookingInPersonPayment.serviceCents",
-    "BookingInPersonPayment.taxCents",
-    "BookingInPersonPayment.feeCents",
-    "BookingInPersonPayment.startedAtMs",
-    "BookingInPersonPayment.paidAtMs",
-    "EventWriteInput.startsAtMs",
-    "EventWriteInput.endsAtMs",
-    "EventStoredFields.startsAtMs",
-    "EventStoredFields.endsAtMs",
+    "BookingWindow.end",
+    "BookingWindow.start",
     "DeviceSplitEntry.count",
     "DeviceSplitEntry.percent",
-    "ScreenTrafficRow.total",
+    "EventStoredFields.endsAtMs",
+    "EventStoredFields.startsAtMs",
+    "EventWriteInput.endsAtMs",
+    "EventWriteInput.startsAtMs",
+    "FunnelResult.completed",
+    "FunnelResult.computedAt",
+    "FunnelResult.entered",
+    "FunnelResult.journeysRead",
+    "FunnelSourceResult.completed",
+    "FunnelSourceResult.entered",
+    "FunnelStepResult.dropOff",
+    "FunnelStepResult.index",
+    "FunnelStepResult.visitors",
     "PosKioskContext.idleSeconds",
     "PosKioskLine.quantity",
     "PosKioskSale.discountCents",
@@ -769,17 +798,13 @@
     "PosKioskSaleLine.amountCents",
     "PosKioskSaleLine.quantity",
     "PosKioskVariant.priceCents",
-    "FunnelStepResult.index",
-    "FunnelStepResult.visitors",
-    "FunnelStepResult.dropOff",
-    "FunnelSourceResult.entered",
-    "FunnelSourceResult.completed",
-    "FunnelResult.entered",
-    "FunnelResult.completed",
-    "FunnelResult.journeysRead",
-    "FunnelResult.computedAt",
+    "ProductLabel.copies",
+    "ProductLabel.priceCents",
+    "ScreenTrafficRow.total",
     "SeoAuditReport.skipped",
-    "SeoPageReport.score"
+    "SeoPageReport.score",
+    "WhereUsedResult.legacyCount",
+    "WhereUsedResult.total"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -22399,6 +22424,384 @@
             "checked": "failed",
             "kind": "download"
           }
+        ]
+      ]
+    },
+    "encodeBarcode": {
+      "module": "libs/plugins/commerce/src/lib/barcode/barcode-encode.ts",
+      "args": [
+        [
+          "4006381333931"
+        ],
+        [
+          "036000291452"
+        ],
+        [
+          "96385074"
+        ],
+        [
+          "4006381333932"
+        ],
+        [
+          "03600029145"
+        ],
+        [
+          "SKU-1042"
+        ],
+        [
+          "1234"
+        ],
+        [
+          "123"
+        ],
+        [
+          "12345678901234567890"
+        ],
+        [
+          "Mug & Co ünïcode"
+        ],
+        [
+          "  padded  "
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "€€€"
+        ],
+        [
+          "abcdefghijklmnopqrstuvwxyz0123456789"
+        ],
+        [
+          1042
+        ],
+        [
+          "00012345"
+        ]
+      ]
+    },
+    "productLabelRows": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "args": [
+        [
+          {
+            "name": "Latte mug",
+            "variants": [
+              {
+                "id": "small",
+                "options": {
+                  "Color": "Blue",
+                  "Size": "Small"
+                },
+                "priceUsd": 12.5,
+                "barcode": "4006381333931",
+                "sku": "MUG-S"
+              },
+              {
+                "id": "large",
+                "options": {
+                  "Size": "Large"
+                },
+                "priceUsd": "14",
+                "sku": " MUG-L "
+              },
+              {
+                "id": "bare",
+                "options": {},
+                "priceUsd": null
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Tee",
+            "variants": [
+              {
+                "id": "v",
+                "priceUsd": 20.005,
+                "sku": ""
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Gift",
+            "variants": []
+          }
+        ]
+      ]
+    },
+    "productLabelsZpl": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "args": [
+        [
+          [
+            {
+              "name": "Latte mug",
+              "detail": "Small / Blue",
+              "priceCents": 1250,
+              "currency": "usd",
+              "code": "4006381333931",
+              "copies": 2
+            },
+            {
+              "name": "Mug ^~_ Co",
+              "priceCents": 1400,
+              "currency": "eur",
+              "code": "MUG-L",
+              "copies": 1
+            },
+            {
+              "name": "Card",
+              "code": "036000291452",
+              "copies": 1
+            },
+            {
+              "name": "Short",
+              "code": "96385074",
+              "copies": 1
+            },
+            {
+              "name": "Skipped",
+              "code": "X1",
+              "copies": 0
+            },
+            {
+              "name": "Nothing",
+              "code": "",
+              "copies": 3
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "Latte mug",
+              "detail": "Small / Blue",
+              "priceCents": 1250,
+              "currency": "usd",
+              "code": "4006381333931",
+              "copies": 2
+            },
+            {
+              "name": "Mug ^~_ Co",
+              "priceCents": 1400,
+              "currency": "eur",
+              "code": "MUG-L",
+              "copies": 1
+            },
+            {
+              "name": "Card",
+              "code": "036000291452",
+              "copies": 1
+            },
+            {
+              "name": "Short",
+              "code": "96385074",
+              "copies": 1
+            },
+            {
+              "name": "Skipped",
+              "code": "X1",
+              "copies": 0
+            },
+            {
+              "name": "Nothing",
+              "code": "",
+              "copies": 3
+            }
+          ],
+          "2x1"
+        ],
+        [
+          [
+            {
+              "name": "Latte mug",
+              "detail": "Small / Blue",
+              "priceCents": 1250,
+              "currency": "usd",
+              "code": "4006381333931",
+              "copies": 2
+            },
+            {
+              "name": "Mug ^~_ Co",
+              "priceCents": 1400,
+              "currency": "eur",
+              "code": "MUG-L",
+              "copies": 1
+            },
+            {
+              "name": "Card",
+              "code": "036000291452",
+              "copies": 1
+            },
+            {
+              "name": "Short",
+              "code": "96385074",
+              "copies": 1
+            },
+            {
+              "name": "Skipped",
+              "code": "X1",
+              "copies": 0
+            },
+            {
+              "name": "Nothing",
+              "code": "",
+              "copies": 3
+            }
+          ],
+          "2.25x1.25",
+          300
+        ],
+        [
+          [],
+          "2x1"
+        ]
+      ]
+    },
+    "labelSize": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "args": [
+        [
+          "2x1"
+        ],
+        [
+          "2.25x1.25"
+        ],
+        [
+          "4x6"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "labelPriceText": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "args": [
+        [
+          {
+            "priceCents": 1250,
+            "currency": "usd"
+          }
+        ],
+        [
+          {
+            "priceCents": 99.6
+          }
+        ],
+        [
+          {
+            "priceCents": -300,
+            "currency": "eur"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "priceCents": null
+          }
+        ]
+      ]
+    },
+    "labelCopiesFromInput": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "args": [
+        [
+          "3"
+        ],
+        [
+          2.9
+        ],
+        [
+          -4
+        ],
+        [
+          "abc"
+        ],
+        [
+          null
+        ],
+        [
+          9999
+        ],
+        [
+          "500"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "labelCopiesTotal": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "args": [
+        [
+          [
+            {
+              "name": "Latte mug",
+              "detail": "Small / Blue",
+              "priceCents": 1250,
+              "currency": "usd",
+              "code": "4006381333931",
+              "copies": 2
+            },
+            {
+              "name": "Mug ^~_ Co",
+              "priceCents": 1400,
+              "currency": "eur",
+              "code": "MUG-L",
+              "copies": 1
+            },
+            {
+              "name": "Card",
+              "code": "036000291452",
+              "copies": 1
+            },
+            {
+              "name": "Short",
+              "code": "96385074",
+              "copies": 1
+            },
+            {
+              "name": "Skipped",
+              "code": "X1",
+              "copies": 0
+            },
+            {
+              "name": "Nothing",
+              "code": "",
+              "copies": 3
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "labelsZplFileName": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "args": [
+        [
+          "Latte mug"
+        ],
+        [
+          "  Mug & Co.  "
+        ],
+        [
+          null
+        ],
+        [
+          "ÜBER café"
         ]
       ]
     }

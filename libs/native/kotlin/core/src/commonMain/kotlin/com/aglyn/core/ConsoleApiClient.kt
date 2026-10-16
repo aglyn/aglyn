@@ -174,6 +174,25 @@ class ConsoleApiClient(
   }
 
   /**
+   * Fetches a public file at an absolute [url] another service hands out (a carrier's shipping label): a plain `GET`
+   * that never carries the member's token off the console. Throws on a refusal.
+   */
+  suspend fun fetchPublic(url: String): DownloadedFile {
+    require(url.startsWith("https://") || url.startsWith("http://")) { "A public file URL is absolute: $url" }
+    val response = try {
+      http.request(url) { this.method = HttpMethod.Get }
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      throw ConsoleApiError("The file could not be downloaded. Check the connection and try again.", 0, null)
+    }
+    if (response.status.value !in 200..299) {
+      throw ConsoleApiError("The file was not handed over (${response.status.value}).", response.status.value, null)
+    }
+    return DownloadedFile(null, response.headers["Content-Type"] ?: "application/octet-stream", response.readRawBytes(), response.headers)
+  }
+
+  /**
    * Sends [bytes] to a signed upload URL a route handed out (the media
    * library's large-file path): a plain `PUT` with the minted content type,
    * no bearer, since the signature is the authority. Throws on a refusal.

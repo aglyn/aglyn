@@ -6579,6 +6579,169 @@
         }
       ]
     },
+    "encodeBarcode": {
+      "module": "libs/plugins/commerce/src/lib/barcode/barcode-encode.ts",
+      "cases": [
+        {
+          "args": [
+            "4006381333931"
+          ],
+          "result": {
+            "format": "ean_13",
+            "modules": "10100011010100111010111101111010001001011001101010100001010000101000010111010010000101100110101",
+            "text": "4006381333931"
+          }
+        },
+        {
+          "args": [
+            "036000291452"
+          ],
+          "result": {
+            "format": "upc_a",
+            "modules": "10100011010111101010111100011010001101000110101010110110011101001100110101110010011101101100101",
+            "text": "036000291452"
+          }
+        },
+        {
+          "args": [
+            "96385074"
+          ],
+          "result": {
+            "format": "ean_8",
+            "modules": "1010001011010111101111010110111010101001110111001010001001011100101",
+            "text": "96385074"
+          }
+        },
+        {
+          "args": [
+            "4006381333932"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "1101001000011001001110100111011001001110110011001110100110010111001110100110010011100110110010111001100101110011001011100111001011001100101110011001110010101110001101100011101011",
+            "text": "4006381333932"
+          }
+        },
+        {
+          "args": [
+            "03600029145"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "110100100001001110110011001011100110011101001001110110010011101100100111011001100111001011100101100100111001101100100111011011100100100010001101100011101011",
+            "text": "03600029145"
+          }
+        },
+        {
+          "args": [
+            "SKU-1042"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "110100100001101110100010110001110110111011101001101110010011100110100111011001100100111011001110010101000111101100011101011",
+            "text": "SKU-1042"
+          }
+        },
+        {
+          "args": [
+            "1234"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "110100111001011001110010001011000100100111101100011101011",
+            "text": "1234"
+          }
+        },
+        {
+          "args": [
+            "123"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "11010010000100111001101100111001011001011100100011001001100011101011",
+            "text": "123"
+          }
+        },
+        {
+          "args": [
+            "12345678901234567890"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "1101001110010110011100100010110001110001011011000010100110111101101011001110010001011000111000101101100001010011011110110110010100001100011101011",
+            "text": "12345678901234567890"
+          }
+        },
+        {
+          "args": [
+            "Mug & Co ünïcode"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "110100100001011101100010011110010100110100001101100110010011001000110110011001000100011010001111010110110011001100001010010000101100100011110101000010011010110010000110110111101100011101011",
+            "text": "Mug & Co ncode"
+          }
+        },
+        {
+          "args": [
+            "  padded  "
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "11010010000101001111001001011000010000100110100001001101011001000010000100110111010111101100011101011",
+            "text": "padded"
+          }
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "€€€"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "abcdefghijklmnopqrstuvwxyz0123456789"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "11010010000100101100001001000011010000101100100001001101011001000010110000100100110100001001100001010000110100100001100101100001001011001010000111101110101100001010010001111010101001111001001011110010010011110101111001001001111010010011110010111101001001111001010011110010010111101011101100011101011",
+            "text": "abcdefghijklmnopqrstuvwx"
+          }
+        },
+        {
+          "args": [
+            1042
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "110100111001100100010010110111000101111000101100011101011",
+            "text": "1042"
+          }
+        },
+        {
+          "args": [
+            "00012345"
+          ],
+          "result": {
+            "format": "code_128",
+            "modules": "1101001110011011001100110011011001110110111010111011000100011101101100011101011",
+            "text": "00012345"
+          }
+        }
+      ]
+    },
     "evaluateExpression": {
       "module": "libs/aglyn/src/lib/app-utils/functions.ts",
       "cases": [
@@ -13720,6 +13883,206 @@
         }
       ]
     },
+    "labelCopiesFromInput": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "cases": [
+        {
+          "args": [
+            "3"
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            2.9
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            -4
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            "abc"
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            9999
+          ],
+          "result": 500
+        },
+        {
+          "args": [
+            "500"
+          ],
+          "result": 500
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": 0
+        }
+      ]
+    },
+    "labelCopiesTotal": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "name": "Latte mug",
+                "detail": "Small / Blue",
+                "priceCents": 1250,
+                "currency": "usd",
+                "code": "4006381333931",
+                "copies": 2
+              },
+              {
+                "name": "Mug ^~_ Co",
+                "priceCents": 1400,
+                "currency": "eur",
+                "code": "MUG-L",
+                "copies": 1
+              },
+              {
+                "name": "Card",
+                "code": "036000291452",
+                "copies": 1
+              },
+              {
+                "name": "Short",
+                "code": "96385074",
+                "copies": 1
+              },
+              {
+                "name": "Skipped",
+                "code": "X1",
+                "copies": 0
+              },
+              {
+                "name": "Nothing",
+                "code": "",
+                "copies": 3
+              }
+            ]
+          ],
+          "result": 5
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": 0
+        }
+      ]
+    },
+    "labelPriceText": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "priceCents": 1250,
+              "currency": "usd"
+            }
+          ],
+          "result": "$12.50"
+        },
+        {
+          "args": [
+            {
+              "priceCents": 99.6
+            }
+          ],
+          "result": "$1.00"
+        },
+        {
+          "args": [
+            {
+              "priceCents": -300,
+              "currency": "eur"
+            }
+          ],
+          "result": "-€3.00"
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            {
+              "priceCents": null
+            }
+          ],
+          "result": ""
+        }
+      ]
+    },
+    "labelSize": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "cases": [
+        {
+          "args": [
+            "2x1"
+          ],
+          "result": {
+            "heightIn": 1,
+            "id": "2x1",
+            "label": "2 x 1 in (51 x 25 mm)",
+            "widthIn": 2
+          }
+        },
+        {
+          "args": [
+            "2.25x1.25"
+          ],
+          "result": {
+            "heightIn": 1.25,
+            "id": "2.25x1.25",
+            "label": "2.25 x 1.25 in (57 x 32 mm)",
+            "widthIn": 2.25
+          }
+        },
+        {
+          "args": [
+            "4x6"
+          ],
+          "result": {
+            "heightIn": 1.25,
+            "id": "2.25x1.25",
+            "label": "2.25 x 1.25 in (57 x 32 mm)",
+            "widthIn": 2.25
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "heightIn": 1.25,
+            "id": "2.25x1.25",
+            "label": "2.25 x 1.25 in (57 x 32 mm)",
+            "widthIn": 2.25
+          }
+        }
+      ]
+    },
     "labelStepFromInventory": {
       "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
       "cases": [
@@ -13918,6 +14281,35 @@
             "match": "exact",
             "type": "page"
           }
+        }
+      ]
+    },
+    "labelsZplFileName": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "cases": [
+        {
+          "args": [
+            "Latte mug"
+          ],
+          "result": "labels-latte-mug.zpl"
+        },
+        {
+          "args": [
+            "  Mug & Co.  "
+          ],
+          "result": "labels--mug-co-.zpl"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "labels-product.zpl"
+        },
+        {
+          "args": [
+            "ÜBER café"
+          ],
+          "result": "labels--ber-caf-.zpl"
         }
       ]
     },
@@ -25721,6 +26113,245 @@
             }
           ],
           "result": 0
+        }
+      ]
+    },
+    "productLabelRows": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "Latte mug",
+              "variants": [
+                {
+                  "id": "small",
+                  "options": {
+                    "Color": "Blue",
+                    "Size": "Small"
+                  },
+                  "priceUsd": 12.5,
+                  "barcode": "4006381333931",
+                  "sku": "MUG-S"
+                },
+                {
+                  "id": "large",
+                  "options": {
+                    "Size": "Large"
+                  },
+                  "priceUsd": "14",
+                  "sku": " MUG-L "
+                },
+                {
+                  "id": "bare",
+                  "options": {},
+                  "priceUsd": null
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "code": "4006381333931",
+              "copies": 1,
+              "currency": "usd",
+              "detail": "Blue / Small",
+              "name": "Latte mug",
+              "priceCents": 1250,
+              "variantId": "small"
+            },
+            {
+              "code": "MUG-L",
+              "copies": 1,
+              "currency": "usd",
+              "detail": "Large",
+              "name": "Latte mug",
+              "priceCents": 1400,
+              "variantId": "large"
+            },
+            {
+              "code": "",
+              "copies": 1,
+              "currency": "usd",
+              "name": "Latte mug",
+              "priceCents": 0,
+              "variantId": "bare"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Tee",
+              "variants": [
+                {
+                  "id": "v",
+                  "priceUsd": 20.005,
+                  "sku": ""
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "code": "",
+              "copies": 1,
+              "currency": "usd",
+              "name": "Tee",
+              "priceCents": 2001,
+              "variantId": "v"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "name": "Gift",
+              "variants": []
+            }
+          ],
+          "result": []
+        }
+      ]
+    },
+    "productLabelsZpl": {
+      "module": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "name": "Latte mug",
+                "detail": "Small / Blue",
+                "priceCents": 1250,
+                "currency": "usd",
+                "code": "4006381333931",
+                "copies": 2
+              },
+              {
+                "name": "Mug ^~_ Co",
+                "priceCents": 1400,
+                "currency": "eur",
+                "code": "MUG-L",
+                "copies": 1
+              },
+              {
+                "name": "Card",
+                "code": "036000291452",
+                "copies": 1
+              },
+              {
+                "name": "Short",
+                "code": "96385074",
+                "copies": 1
+              },
+              {
+                "name": "Skipped",
+                "code": "X1",
+                "copies": 0
+              },
+              {
+                "name": "Nothing",
+                "code": "",
+                "copies": 3
+              }
+            ]
+          ],
+          "result": "^XA^CI0^PW457^LL254^LH0,0^FO16,16^A0N,23,23^FB425,2,0,L^FH^FDLatte mug^FS^FO16,64^A0N,17,17^FB425,1,0,L^FH^FDSmall / Blue^FS^FO16,83^A0N,23,23^FH^FD$12.50^FS^FO16,110^BY2^BEN,107,Y,N^FD400638133393^FS^PQ2,0,1,Y^XZ\n^XA^CI0^PW457^LL254^LH0,0^FO16,16^A0N,23,23^FB425,2,0,L^FH^FDMug _5E_7E_5F Co^FS^FO16,64^A0N,23,23^FH^FDEUR14.00^FS^FO16,91^BY2^BCN,126,Y,N,N,A^FH^FDMUG-L^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW457^LL254^LH0,0^FO16,16^A0N,23,23^FB425,2,0,L^FH^FDCard^FS^FO16,64^BY2^BUN,153,Y,N,Y^FD03600029145^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW457^LL254^LH0,0^FO16,16^A0N,23,23^FB425,2,0,L^FH^FDShort^FS^FO16,64^BY2^B8N,153,Y,N^FD9638507^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW457^LL254^LH0,0^FO16,16^A0N,23,23^FB425,2,0,L^FH^FDNothing^FS^PQ3,0,1,Y^XZ"
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Latte mug",
+                "detail": "Small / Blue",
+                "priceCents": 1250,
+                "currency": "usd",
+                "code": "4006381333931",
+                "copies": 2
+              },
+              {
+                "name": "Mug ^~_ Co",
+                "priceCents": 1400,
+                "currency": "eur",
+                "code": "MUG-L",
+                "copies": 1
+              },
+              {
+                "name": "Card",
+                "code": "036000291452",
+                "copies": 1
+              },
+              {
+                "name": "Short",
+                "code": "96385074",
+                "copies": 1
+              },
+              {
+                "name": "Skipped",
+                "code": "X1",
+                "copies": 0
+              },
+              {
+                "name": "Nothing",
+                "code": "",
+                "copies": 3
+              }
+            ],
+            "2x1"
+          ],
+          "result": "^XA^CI0^PW406^LL203^LH0,0^FO16,16^A0N,23,23^FB374,2,0,L^FH^FDLatte mug^FS^FO16,64^A0N,17,17^FB374,1,0,L^FH^FDSmall / Blue^FS^FO16,83^A0N,23,23^FH^FD$12.50^FS^FO16,110^BY2^BEN,56,Y,N^FD400638133393^FS^PQ2,0,1,Y^XZ\n^XA^CI0^PW406^LL203^LH0,0^FO16,16^A0N,23,23^FB374,2,0,L^FH^FDMug _5E_7E_5F Co^FS^FO16,64^A0N,23,23^FH^FDEUR14.00^FS^FO16,91^BY2^BCN,75,Y,N,N,A^FH^FDMUG-L^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW406^LL203^LH0,0^FO16,16^A0N,23,23^FB374,2,0,L^FH^FDCard^FS^FO16,64^BY2^BUN,102,Y,N,Y^FD03600029145^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW406^LL203^LH0,0^FO16,16^A0N,23,23^FB374,2,0,L^FH^FDShort^FS^FO16,64^BY2^B8N,102,Y,N^FD9638507^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW406^LL203^LH0,0^FO16,16^A0N,23,23^FB374,2,0,L^FH^FDNothing^FS^PQ3,0,1,Y^XZ"
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Latte mug",
+                "detail": "Small / Blue",
+                "priceCents": 1250,
+                "currency": "usd",
+                "code": "4006381333931",
+                "copies": 2
+              },
+              {
+                "name": "Mug ^~_ Co",
+                "priceCents": 1400,
+                "currency": "eur",
+                "code": "MUG-L",
+                "copies": 1
+              },
+              {
+                "name": "Card",
+                "code": "036000291452",
+                "copies": 1
+              },
+              {
+                "name": "Short",
+                "code": "96385074",
+                "copies": 1
+              },
+              {
+                "name": "Skipped",
+                "code": "X1",
+                "copies": 0
+              },
+              {
+                "name": "Nothing",
+                "code": "",
+                "copies": 3
+              }
+            ],
+            "2.25x1.25",
+            300
+          ],
+          "result": "^XA^CI0^PW675^LL375^LH0,0^FO24,24^A0N,33,33^FB627,2,0,L^FH^FDLatte mug^FS^FO24,92^A0N,25,25^FB627,1,0,L^FH^FDSmall / Blue^FS^FO24,119^A0N,33,33^FH^FD$12.50^FS^FO24,156^BY3^BEN,166,Y,N^FD400638133393^FS^PQ2,0,1,Y^XZ\n^XA^CI0^PW675^LL375^LH0,0^FO24,24^A0N,33,33^FB627,2,0,L^FH^FDMug _5E_7E_5F Co^FS^FO24,92^A0N,33,33^FH^FDEUR14.00^FS^FO24,129^BY3^BCN,193,Y,N,N,A^FH^FDMUG-L^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW675^LL375^LH0,0^FO24,24^A0N,33,33^FB627,2,0,L^FH^FDCard^FS^FO24,92^BY3^BUN,230,Y,N,Y^FD03600029145^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW675^LL375^LH0,0^FO24,24^A0N,33,33^FB627,2,0,L^FH^FDShort^FS^FO24,92^BY3^B8N,230,Y,N^FD9638507^FS^PQ1,0,1,Y^XZ\n^XA^CI0^PW675^LL375^LH0,0^FO24,24^A0N,33,33^FB627,2,0,L^FH^FDNothing^FS^PQ3,0,1,Y^XZ"
+        },
+        {
+          "args": [
+            [],
+            "2x1"
+          ],
+          "result": ""
         }
       ]
     },
