@@ -526,7 +526,6 @@ struct FieldInput: View {
           Text(field.label).font(AglynFont.subheadline)
           ForEach(field.choices(in: context), id: \.value) { choice in
             Toggle(
-              choice.label,
               isOn: Binding(
                 get: { chosen.contains(choice.value) },
                 set: { on in
@@ -534,10 +533,21 @@ struct FieldInput: View {
                   // Keep ids the list no longer offers rather than silently dropping them.
                   next += chosen.filter { id in !field.choices(in: context).contains { $0.value == id } }
                   text.wrappedValue = next.joined(separator: "\n")
-                }))
+                })
+            ) {
+              // A choice may say what agreeing to it means (a publisher's attestation), under its label.
+              VStack(alignment: .leading, spacing: 2) {
+                Text(choice.label)
+                if let detail = field.detail(for: choice.value, in: context) {
+                  Text(detail).font(AglynFont.caption).foregroundStyle(.secondary)
+                }
+              }
+            }
           }
         }
       case "file":
+        // The field says what file it wants (a bundle, a manifest), as the Kotlin renderer's title does.
+        Text(label).font(AglynFont.subheadline)
         HStack {
           Button(text.wrappedValue.isEmpty ? "Choose a file" : "Choose a different file") { picking = .files }
           if !text.wrappedValue.isEmpty {
@@ -546,7 +556,8 @@ struct FieldInput: View {
         }
         .aglynMediaPicker($picking, multiple: false) { files in
           guard let file = files.first else { return }
-          value = .file(name: file.name, text: ScreenValues.decodeFileText(file.data))
+          // `base64` keeps the file's bytes as they are (a plugin bundle sent whole); otherwise it is read as text.
+          value = .file(name: file.name, text: field.parse == "base64" ? file.data.base64EncodedString() : ScreenValues.decodeFileText(file.data))
         }
       case "upload":
         UploadFieldView(field: field, context: context, value: $value)

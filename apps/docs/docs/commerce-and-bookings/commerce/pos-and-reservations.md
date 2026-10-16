@@ -131,6 +131,12 @@ zero, and only then is the stock taken and the order completed.
 | **Gift card** | Type or scan the code. **Check balance** shows what the card can spend; **Apply card** takes the smaller of that balance and what is due, so a card worth less than the sale leaves the rest open. |
 | **Room** | Charges a checked-in stay's folio. Shown only when a guest is checked in. |
 
+**Card reader**, **Type card** and **Card (QR)** charge through your store's
+Stripe account. Until Stripe is connected and able to take charges, they show
+grayed out with a note above them that links to **Products → Settings →
+Payments**, where you connect it. Cash, gift cards, store credit and room
+charges work without Stripe.
+
 Card payments that are still waiting can be **canceled**, which frees that
 amount for another tender. If the card reader declines a card, **Retry**
 sends the same charge back to the reader, so the customer can try again
@@ -389,7 +395,9 @@ For stays (cabins, rooms, rentals):
    window.
 2. Drop the **Reservation widget** on any page in the besigner and point
    it at the resource id. Guests pick dates, see a live quote, and pay the
-   deposit (or full amount) at checkout.
+   deposit (or full amount) at checkout. Every reservation is paid this
+   way, so it needs Stripe connected; until it is, the **Reservations** card
+   warns that guests can't reserve and links to **Payments**.
 3. Manage stays from the **Reservations** card: check in, check out
    (with a folio summary if the guest charged store purchases to the
    room), walk-ins, no-shows, and cancellations.

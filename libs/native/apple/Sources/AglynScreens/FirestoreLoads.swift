@@ -82,6 +82,13 @@ enum FirestoreLoads {
     ])
   }
 
+  /// The take rate on the workspace's marketplace sales, as the console's publish panel states it: `pct` from the
+  /// workspace's own document (`resolveMarketplaceFeePct`), and `paid`, the rate on a paid plan.
+  static func marketplaceTakeRate(_ reader: FirestoreReader, orgID: String) async throws -> JSONValue {
+    let org = try await rawDocument(reader, "orgs/\(orgID)")
+    return .object(["pct": .number(marketplaceFeePct(org?.data)), "paid": .number(MarketplaceFeeDefaults.paid)])
+  }
+
   /// One order as an order widget is handed it (the console's `consoleOrderZoneOrder`): the stored order, and for each line
   /// its units, how many shipped and how many are left, whether it ships at all, whether the order has anything left to
   /// ship or anything shipped to bring back, and its number and test mode, all worked out by the ported figures.

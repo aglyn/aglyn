@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import AglynUI
 import XCTest
 
 @testable import AglynSite
@@ -83,6 +84,60 @@ final class ArtifactTests: XCTestCase {
     XCTAssertEqual(Set(canvas.keys), ["_@_", "slot1"])
     XCTAssertEqual((canvas["slot1"] as? [String: Any])?["componentId"] as? String, "layoutSlot")
     XCTAssertEqual((canvas["_@_"] as? [String: Any])?["nodes"] as? [String], ["slot1"])
+  }
+
+  func testOffersTheConsolesHeaderSortsAndPlansThem() throws {
+    // Every declared column order but the default walk; labels read like the console's headers.
+    let components = artifactSortChoices(.component).map(artifactSortLabel)
+    XCTAssertTrue(components.contains("Display name \u{2191}"))
+    XCTAssertTrue(components.contains("Display name \u{2193}"))
+    XCTAssertTrue(components.contains("Used in \u{2191}"))
+    XCTAssertTrue(components.contains("Updated \u{2193}"))
+    XCTAssertTrue(components.contains("ID \u{2193}"))
+    XCTAssertFalse(components.contains("ID \u{2191}"))
+    XCTAssertFalse(artifactSortChoices(.layout).isEmpty)
+    XCTAssertFalse(artifactSortChoices(.template).isEmpty)
+
+    // A header sort orders the query by the column's stored value; with nothing else on, it is served as asked.
+    let byName = try XCTUnwrap(artifactSortChoices(.layout).first { $0.column == "displayName" && $0.direction == .desc })
+    let sorted = artifactQuery(.layout, hostID: "h", search: "", kindFilter: nil, sort: byName, limit: 26)
+    XCTAssertEqual(sorted.order.first?.field, "nameLower")
+    XCTAssertEqual(sorted.order.first?.descending, true)
+    XCTAssertTrue(artifactPlan(.layout, search: "", kindFilter: nil, sort: byName).notices.isEmpty)
+
+    // A column that sorts only with nothing else on falls back to the default header order, and says so.
+    let plan = artifactPlan(.layout, search: "hero", kindFilter: nil, sort: byName)
+    XCTAssertEqual(plan.notices.count, 1)
+    XCTAssertTrue(plan.notices[0].hasPrefix("Sorted by"))
+    XCTAssertNotEqual(plan.orderBy.path, "nameLower")
+  }
+
+  func testReadsThePlansCapAndCountsAsTheCreateRouteDoes() {
+    let body: JSONValue = ["quotas": ["componentsPerHost": 1, "sharedLayoutsPerHost": nil, "templatesPerHost": 50]]
+    XCTAssertEqual(artifactQuotaLimit(body, kind: .component), 1)
+    XCTAssertNil(artifactQuotaLimit(body, kind: .layout))
+    XCTAssertEqual(artifactQuotaLimit(body, kind: .template), 50)
+    XCTAssertNil(artifactQuotaLimit(nil, kind: .component))
+    XCTAssertEqual(ArtifactKind.component.quotaKey, "componentsPerHost")
+    XCTAssertEqual(ArtifactKind.layout.quotaKey, "sharedLayoutsPerHost")
+    XCTAssertEqual(ArtifactKind.template.quotaKey, "templatesPerHost")
+    XCTAssertEqual(AglynQuotaReadout.text(ready: true, used: 3, limit: 10, noun: "layout"), "3/10 layouts on your plan")
+    XCTAssertEqual(AglynQuotaReadout.text(ready: true, used: 3, limit: nil, noun: "component"), "3/\u{221E} components on your plan")
+    XCTAssertEqual(AglynQuotaReadout.text(ready: false, used: 1, limit: nil, noun: "template"), "1 template \u{00B7} checking your plan\u{2026}")
+
+    // Components and layouts: everything less the tombstones. Templates: everything that is not a starter's page.
+    let layouts = artifactCountQueries(.layout, hostID: "h")
+    XCTAssertEqual(layouts.total.path, "hosts/h/layouts")
+    XCTAssertTrue(layouts.total.allFilters.isEmpty)
+    XCTAssertEqual(layouts.subtract?.allFilters.first?.path, "deletedAt")
+    XCTAssertEqual(layouts.subtract?.allFilters.first?.op, .greaterThan)
+    let templates = artifactCountQueries(.template, hostID: "h")
+    XCTAssertEqual(templates.total.allFilters.first?.path, "source.type")
+    XCTAssertEqual(templates.total.allFilters.first?.op, .notEqual)
+    XCTAssertNil(templates.subtract)
+    XCTAssertEqual(artifactLiveCount(total: 7, subtract: 2), 5)
+    XCTAssertEqual(artifactLiveCount(total: 1, subtract: 2), 0)
+    XCTAssertEqual(artifactLiveCount(total: 4, subtract: nil), 4)
   }
 
   func testOpensTheArtifactListsNatively() {

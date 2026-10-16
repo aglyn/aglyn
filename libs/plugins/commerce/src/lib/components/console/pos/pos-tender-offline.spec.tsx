@@ -27,6 +27,9 @@ import { PosTenderPanel } from './pos-tender-panel.component'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({ useConfirmationContext: () => ({ confirm: jest.fn() }) }))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({ authorizedFetch: jest.fn() }))
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
+}))
 
 const SALE = {
   orderId: 'o1',

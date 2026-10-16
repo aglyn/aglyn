@@ -22,6 +22,18 @@ enum DataSymbols {
 /// The transfer resource a dataset's records export as (`datasetTransferResourceKey`).
 public func datasetTransferResource(_ datasetID: String) -> String { "data.dataset:\(datasetID)" }
 
+/// The import wizard every workspace import opens (the console's `/api/transfer/*` records import), the screen the Imports
+/// and exports hub's Dataset records list opens for a dataset.
+public let dataImportScreen = "core.settings.data.import"
+
+/// Who may import records: the transfer routes' own rule for a workspace resource, an owner or an admin.
+public func canImportDatasetRecords(orgRole: String?) -> Bool { orgRole == "owner" || orgRole == "admin" }
+
+/// The wizard's parameters for one dataset, the console's `openImport` call: the resource and the title.
+public func datasetImportParams(id: String, name: String) -> NativeParams {
+  ["resource": datasetTransferResource(id), "title": name.isEmpty ? "Import records" : "Import into \(name)"]
+}
+
 /// A field's type as the Schema dialog names it.
 func typeLabel(_ field: DatasetFieldDefinition) -> String {
   field.type.flatMap { ContractValues.shared.datasetFieldTypeLabels[$0.rawValue] ?? $0.rawValue } ?? "Text"
@@ -519,6 +531,12 @@ struct DatasetDetailView: View {
               Label("Edit schema", systemImage: "tablecells")
             }
             .disabled(!canWrite)
+            if canImportDatasetRecords(orgRole: context.orgRole) {
+              Button { context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name)) } label: {
+                Label("Import records", systemImage: "square.and.arrow.up")
+              }
+              .accessibilityIdentifier("import-dataset-records")
+            }
             Button { onExport(dataset) } label: { Label("Export records", systemImage: "square.and.arrow.down") }
               .disabled((records ?? 1) == 0)
             Divider()

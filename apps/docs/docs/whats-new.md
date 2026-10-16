@@ -10,31 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-<!--
-  AGL-3677 — Smile.io and Yotpo Loyalty connections are built and hidden until a
-  deployment sets LOYALTY_CONNECTORS_TOKEN_KEY on the console (the key merchants'
-  API keys are sealed under; no developer app of Aglyn's is needed). This entry is
-  held unpublished, like the guide it links (`unlisted: true`): once the key is set
-  on aglyn.com, remove this comment's markers, move "(newest)" here from the heading
-  below, and delete `unlisted: true` and the "Rolling out" note from
-  commerce-and-bookings/commerce/connect-smile-io-or-yotpo.md.
+## October 2026 — the console says what to set up first (newest)
 
-## October 2026 — your own Smile.io or Yotpo Loyalty account
-
-- **[Smile.io and Yotpo Loyalty](commerce-and-bookings/commerce/connect-smile-io-or-yotpo.md)** —
-  already run a loyalty program? Connect your own account and every Aglyn order earns
-  points there, refunds take them back, and customers spend that balance at checkout
-  and at the register. One program at a time, so nobody is rewarded twice; anything
-  the account could not take waits on the card with a Send again button.
--->
-
-<!--
-  AGL-3824 — Help desks are built and hidden until a deployment sets
-  HELP_DESKS_TOKEN_KEY on the console (the key merchants' help desk credentials
-  are sealed under; no developer app of Aglyn's is needed). The guide is listed
-  with a "Rolling out" note. Once the key is set on aglyn.com, remove this
-  comment's markers, move "(newest)" here from the heading below, and delete the
-  "Rolling out" note from commerce-and-bookings/commerce/help-desks.md.
+- **[Taking payment](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  when your store's Stripe account isn't connected yet, the register's card
+  buttons stay on screen grayed out, with a note linking to **Payments**,
+  instead of disappearing. Draft orders, reservations and paid booking
+  services say the same before you rely on them.
+- **[Shipping labels](commerce-and-bookings/commerce/shipping-labels-and-live-rates.md#ship-from)** —
+  **Buy label** says to add the address you ship from, with a link to
+  **Shipping & delivery**, rather than refusing after you press it.
 
 ## October 2026 — your help desk sees every buyer's orders
 
@@ -43,9 +28,41 @@ for the how-to.
   ordered from your site arrives there with their recent orders and a link to each
   one, so agents answer with the order in front of them. Turn on one switch and
   contact form messages open as new tickets too.
--->
 
-## October 2026 — store settings, a page each (newest)
+## October 2026 — your stock system and your store, in step
+
+- **[Inventory and ERP sync](commerce-and-bookings/commerce/inventory-and-erp-sync.md)** —
+  connect your own Cin7 Core, inFlow Inventory or Ordoro account, with Brightpearl
+  joining as it is set up. Stock counts follow whichever side you say is right,
+  products come into your store from it (or go the other way), and paid orders arrive
+  there as sales orders, each once, with anything it could not take listed for you to
+  send again.
+
+## October 2026 — Flexport fulfills your orders
+
+- **[Fulfillment networks](commerce-and-bookings/commerce/fulfillment-networks.md#flexport-connect-with-your-api-token)** —
+  connect your own Flexport account with an API token, and paid orders go to its
+  warehouses to pick, pack and ship. Each parcel comes back to the order with its
+  tracking, and canceling an order cancels it at Flexport too.
+
+## October 2026 — print on demand with Printful and Printify
+
+- **[Printful and Printify](commerce-and-bookings/commerce/print-on-demand.md)** —
+  connect your own Printful store or Printify shop, import its products with their
+  variants, prices and photos, and every paid order for them is sent to be made and
+  shipped. Tracking lands on the order as the service ships, each order shows what
+  the service charged against what your buyer paid, test orders stay drafts, and a
+  canceled or fully refunded order is canceled at the service too.
+
+## October 2026 — your own Smile.io or Yotpo Loyalty account
+
+- **[Smile.io and Yotpo Loyalty](commerce-and-bookings/commerce/connect-smile-io-or-yotpo.md)** —
+  already run a loyalty program? Connect your own account and every Aglyn order earns
+  points there, refunds take them back, and customers spend that balance at checkout
+  and at the register. One program at a time, so nobody is rewarded twice; anything
+  the account could not take waits on the card with a Send again button.
+
+## October 2026 — store settings, a page each
 
 - **[Store settings](commerce-and-bookings/commerce/overview.md#products-hub)** — the
   store's settings are no longer one long page. Under **Settings** in the Products
@@ -251,40 +268,6 @@ for the how-to.
 -->
 
 <!--
-  AGL-3641 — Print on demand is built and hidden until a deployment sets
-  PRINT_ON_DEMAND_TOKEN_KEY (the key merchants' Printful and Printify tokens are
-  sealed under; no developer app or partnership of Aglyn's is needed). This
-  entry is held unpublished, like the guide it links (`unlisted: true`): once
-  the key is set on aglyn.com, remove this comment's markers, move "(newest)"
-  here from the top heading, and delete `unlisted: true` and the "Rolling out"
-  note from commerce-and-bookings/commerce/print-on-demand.md.
-
-## October 2026 — print on demand with Printful and Printify
-
-- **[Printful and Printify](commerce-and-bookings/commerce/print-on-demand.md)** —
-  connect your own Printful store or Printify shop, import its products with their
-  variants, prices and photos, and every paid order for them is sent to be made and
-  shipped. Tracking lands on the order as the service ships, each order shows what
-  the service charged against what your buyer paid, test orders stay drafts, and a
-  canceled or fully refunded order is canceled at the service too.
--->
-
-<!--
-  AGL-3642 — Inventory sync is built and hidden until a deployment sets
-  INVENTORY_SYNC_TOKEN_KEY on the console (Brightpearl also needs
-  BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF). This entry is held unpublished,
-  like the guide it links (`unlisted: true`): once it is configured on
-  aglyn.com, remove this comment's markers, move "(newest)" here from the top
-  heading, and delete `unlisted: true` and the "Rolling out" note from
-  commerce-and-bookings/commerce/inventory-and-erp-sync.md.
-
-## October 2026 — your stock system and your store, in step
-
-- **[Inventory and ERP sync](commerce-and-bookings/commerce/inventory-and-erp-sync.md)** —
-  connect your own Cin7 Core, inFlow Inventory or Brightpearl account. Stock counts
-  follow whichever side you say is right, products come into your store from it (or go
-  the other way), and paid orders arrive there as sales orders, each once, with
-  anything it could not take listed for you to send again.
   AGL-3644 — Delivery apps are built and hidden until a deployment holds a partner
   account with DoorDash, Uber Eats or Grubhub and sets its DELIVERY_APPS_* variables
   on the console. This entry is held unpublished, like the guide it links

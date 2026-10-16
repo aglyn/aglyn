@@ -433,6 +433,41 @@ anonymous curl  /api/commerce/shippingeasy/<hostId>  (POST, no signature)  401 f
 anonymous curl  /signin                                                    429 the page challenge still stands
 ```
 
+### Plugin webhooks (AGL-3846)
+
+Shipping, fulfillment, print-on-demand, courier and delivery services post
+their webhooks to `/api/<plugin>/webhooks/<provider>` from their own servers.
+They run no JavaScript and send no header we choose, so a challenge drops the
+call: until this rule went in, ShipMonk's shipment notices were answered
+`429` and only the 15-minute read-back noticed the parcel.
+
+`Plugin webhook bypass` is declared in `tools/scripts/lib/firewall-posture.mjs`
+and has been live in the console project's config since 2026-10-16. It is one
+path regex, anchored at both ends, that names each webhook route exactly:
+
+| Plugin | Routes |
+| --- | --- |
+| Fulfillment networks | `webhooks/shipbob`, `webhooks/shipmonk`, `webhooks/flexport` |
+| Print on demand | `webhooks/printful`, `webhooks/printify` |
+| Shipping | `webhooks/shippo`, `webhooks/easypost`, `webhooks/easyship`, `webhooks/sendcloud` |
+| Couriers | `webhooks/doordash` |
+| Delivery apps | `webhooks/doordash`, `webhooks/uber-eats`, `webhooks/grubhub` |
+
+Each route proves its caller before it reads anything (an HMAC signature, a
+token in its address, or a header it was registered with) and answers an
+unproven caller 401, so the rule lifts the bot challenge and nothing else. A
+plugin's other routes, and a look-alike such as `webhooks/shipmonkX`, stay
+challenged. **A new webhook route is challenged until it is added to the regex
+here and in the live rule.**
+
+Both directions were checked when it went in:
+
+```text
+anonymous curl  /api/fulfillment-networks/webhooks/shipmonk   (POST, no signature)  401 from the route
+anonymous curl  /api/fulfillment-networks/webhooks/shipmonkX  (POST)                429 still challenged
+anonymous curl  /api/fulfillment-networks/order               (POST)                429 still challenged
+```
+
 ### The remaining gap: `aglyn-plugins` — reviewed, and deliberately open
 
 `GET /v1/security/firewall/config/active` still answers **404** for it, and a

@@ -209,18 +209,38 @@ public func versionToOpen(_ row: ArtifactRow, versions: [ArtifactVersion], asked
   asked ?? row.versionID ?? sortedVersions(versions).first?.id
 }
 
-/// One list view's request: the kind clause and the quick search, on the declaration's base.
-public func artifactRequest(_ kind: ArtifactKind, search: String, kindFilter: String?) -> ListQueryRequest {
+/// One list view's request: the kind clause, the quick search and the header sort, on the declaration's base.
+public func artifactRequest(_ kind: ArtifactKind, search: String, kindFilter: String?, sort: ListQuerySort? = nil) -> ListQueryRequest {
   let typed = search.trimmingCharacters(in: .whitespacesAndNewlines)
   return ListQueryRequest(
     base: kind == .template ? ContractValues.shared.templateListBase : nil,
     clauses: kindFilter.map { [ListFilterRequest(field: "kind", op: "equals", value: $0)] } ?? [],
-    search: typed.isEmpty ? nil : [typed])
+    search: typed.isEmpty ? nil : [typed],
+    sort: sort)
 }
 
-public func artifactQuery(_ kind: ArtifactKind, hostID: String, search: String, kindFilter: String?, limit: Int) -> FirestoreQuery {
-  planListQuery(kind.declaration, artifactRequest(kind, search: search, kindFilter: kindFilter))
+/// The plan behind a list view: its filters, the order it settled on and the notices that say why a sort or filter was changed.
+public func artifactPlan(_ kind: ArtifactKind, search: String, kindFilter: String?, sort: ListQuerySort? = nil) -> ListQueryPlan {
+  planListQuery(kind.declaration, artifactRequest(kind, search: search, kindFilter: kindFilter, sort: sort))
+}
+
+public func artifactQuery(
+  _ kind: ArtifactKind, hostID: String, search: String, kindFilter: String?, sort: ListQuerySort? = nil, limit: Int
+) -> FirestoreQuery {
+  artifactPlan(kind, search: search, kindFilter: kindFilter, sort: sort)
     .firestoreQuery(["hosts", hostID, kind.collection], limit: limit)
+}
+
+/// The header sorts a list offers (AGL-3680): every order its declaration gives a column, but the default walk (ID
+/// ascending), which "Default order" is.
+public func artifactSortChoices(_ kind: ArtifactKind) -> [ListQuerySort] {
+  let idPath = ContractValues.shared.listQueryIdPath
+  return kind.declaration.sorts.filter { $0.column != nil && !($0.path == idPath && $0.direction == .asc) }
+}
+
+/// A sort as the menu words it: the column and an arrow for its direction.
+public func artifactSortLabel(_ sort: ListQuerySort) -> String {
+  "\(sort.label ?? sort.column ?? sort.path) \(sort.direction == .desc ? "\u{2193}" : "\u{2191}")"
 }
 
 /// The layouts a layout may render inside (`canNestLayout`): never itself,
@@ -250,6 +270,10 @@ public final class ArtifactListModel {
   public private(set) var hasMore = false
   public var search = "" { didSet { if oldValue != search { restart() } } }
   public var kindFilter: String? { didSet { if oldValue != kindFilter { restart() } } }
+  /// The header sort asked for; nil is the default walk.
+  public var sort: ListQuerySort? { didSet { if oldValue != sort { restart() } } }
+  /// What the plan says about the order or filters it could not serve as asked.
+  public private(set) var notices: [String] = []
 
   @ObservationIgnored private var kind = ArtifactKind.component
   @ObservationIgnored private var reader: FirestoreReader?
@@ -289,7 +313,9 @@ public final class ArtifactListModel {
     if !keep { rows = .loading }
     guard let reader, !hostID.isEmpty else { return }
     let window = limit
-    let query = artifactQuery(kind, hostID: hostID, search: search, kindFilter: kindFilter, limit: window + 1)
+    let plan = artifactPlan(kind, search: search, kindFilter: kindFilter, sort: sort)
+    notices = plan.notices
+    let query = plan.firestoreQuery(["hosts", hostID, kind.collection], limit: window + 1)
     let title = kind.title
     listener = reader.listen(query) { [weak self] result in
       guard let self else { return }

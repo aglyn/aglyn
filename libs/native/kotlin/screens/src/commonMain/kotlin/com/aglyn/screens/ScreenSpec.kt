@@ -52,7 +52,7 @@ class ScreenSpec private constructor(val raw: JsonElement) {
    */
   val cardSlot: String? = raw.str("cardSlot")
   val loads: List<LoadSpec> = raw.entries("load").map { (key, value) -> LoadSpec(key, value) }
-  val blocks: List<BlockSpec> = raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } }
+  val blocks: List<BlockSpec> = BlockSpec.distinct(raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } })
   val actions: List<ActionSpec> = raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
   /** The `actions` entry the screen runs as it opens, once its data has loaded and the action's `when` holds (`start: { "action": "reviewLinked" }`): a link that carries a query (`?notice=`) opens the dialog it names. */
   val startAction: String? = raw.obj("start").str("action")
@@ -94,6 +94,8 @@ class LoadSpec(val key: String, json: JsonElement) {
   val switchboard: String? = json.str("switchboard")
   /** A plan feature whose gate the screen reads: `{ carried, label }`, where `label` names the plan that includes it. */
   val entitlement: String? = json.str("entitlement")
+  /** `marketplace`: the take rate on the workspace's marketplace sales, `{ pct, paid }` (`paid` is what a paid plan pays), as the console's `resolveMarketplaceFeePct` prices it from the workspace's own document. */
+  val takeRate: String? = json.str("takeRate")
   /** An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship. */
   val orderZone: String? = json.str("orderZone")
   /** Runs once the other loads have answered, with their answers under `data`: a read keyed by something another read found. */
@@ -125,11 +127,27 @@ class LoadSpec(val key: String, json: JsonElement) {
   val from: String? = json.str("from")
 }
 
-class BlockSpec(val type: String, val raw: JsonElement) {
+class BlockSpec(val type: String, val raw: JsonElement, idOverride: String? = null) {
   val title: String? = raw.str("title")
   val footer: String? = raw.str("footer")
   val whenCondition: String? = raw.str("when")
-  val id: String = raw.str("id") ?: "$type:${title.orEmpty()}"
+  /**
+   * The block's `id`, else `type:title`; a repeat of an earlier block's gets `#2`, `#3` in spec order, so two untitled
+   * notices shown at once are two items (a lazy list refuses a key used twice), not one.
+   */
+  val id: String = idOverride ?: raw.str("id") ?: "$type:${title.orEmpty()}"
+
+  companion object {
+    /** The blocks with every id unique: a repeated one is numbered after its first. */
+    fun distinct(blocks: List<BlockSpec>): List<BlockSpec> {
+      val seen = mutableMapOf<String, Int>()
+      return blocks.map { block ->
+        val count = (seen[block.id] ?: 0) + 1
+        seen[block.id] = count
+        if (count > 1) BlockSpec(block.type, block.raw, "${block.id}#$count") else block
+      }
+    }
+  }
   operator fun get(key: String): JsonElement? = raw.obj(key)
   fun string(key: String): String? = raw.str(key)
   fun flag(key: String): Boolean = raw.isTrue(key)
@@ -420,7 +438,7 @@ class FieldSpec private constructor(
   val mustMatchAs: String? = null,
   /** What to say under the field while something is typed that does not match. */
   val mismatch: String? = null,
-  /** For a `file` field: `json` parses the chosen file and sends the value, else its text is sent. */
+  /** For a `file` field: `json` parses the chosen file and sends the value, `base64` sends its bytes base64-encoded (a plugin bundle), else its text is sent. */
   val parse: String? = null,
   /** For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an import must have acknowledged, each one). */
   val coversAll: Boolean = false,
@@ -451,6 +469,10 @@ class FieldSpec private constructor(
       )
     }
   }
+
+  /** What a static option says under its label (`{ value, label, detail }`), a template over the screen. */
+  fun detail(value: String, context: JsonElement): String? =
+    config.arr("options").firstOrNull { ScreenValues.text(it.obj("value")) == value }?.str("detail")?.takeIf { it.isNotEmpty() }?.let { ScreenValues.render(it, context) }
 
   /** A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name the console's own constants); null for a field that does not. */
   fun generatedValue(context: JsonElement): String? {

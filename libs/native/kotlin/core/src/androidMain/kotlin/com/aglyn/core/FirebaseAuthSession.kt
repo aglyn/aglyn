@@ -53,7 +53,17 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
       if (token == null) endImpersonation()
       return token
     }
-    return auth.currentUser?.getIdToken(forceRefresh)?.await()?.token
+    val user = auth.currentUser ?: return null
+    return try {
+      user.getIdToken(forceRefresh).await()?.token
+    } catch (failure: com.google.firebase.FirebaseException) {
+      // A token can only fail here. The session the server no longer honours (a refresh token from another project's
+      // emulator, a deleted or disabled account) is signed out, so the app asks for a sign-in instead of ending; any other
+      // failure (no connection) answers no token, which a caller reads as "sign in to continue" and the next call retries.
+      // Neither may escape: an uncaught one ends the app from whichever screen asked.
+      if (isDeadSessionError((failure as? FirebaseAuthException)?.errorCode, failure.message)) auth.signOut()
+      null
+    }
   }
 
   override suspend fun signInWithEmail(email: String, password: String) {
@@ -140,9 +150,10 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
   }
 
   /**
-   * The console hand-off's custom token, in the pool it was minted in. The Android SDK can aim its instance at a tenant but
-   * never back at the project pool (`setTenantId` takes no null), so after a single sign-on this process signs in to that
-   * tenant only; the other doors say so rather than creating or finding the account in the wrong pool (AGL-1993).
+   * The console hand-off's custom token, in the pool it was minted in. The Android SDK can aim its instance at a tenant but has
+   * no public way back to the project pool (`setTenantId` takes no null), so signing out (or a door finding nobody signed in)
+   * puts it back with [returnToProjectPool] (AGL-3844). The other doors refuse rather than create or find the account in the
+   * wrong pool (AGL-1993) only when that could not be done.
    */
   override suspend fun signInWithCustomToken(token: String, tenantId: String?) {
     if (!tenantId.isNullOrEmpty()) {
@@ -154,7 +165,10 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
   }
 
   private fun requireProjectPool() {
-    if (auth.tenantId != null) throw AuthError(TENANT_STUCK_MESSAGE)
+    if (auth.tenantId == null) return
+    // Nobody is signed in to the tenant (a sign-out, or an SSO hand-off that failed after aiming at it): go back (AGL-3844).
+    if (auth.currentUser == null && auth.returnToProjectPool()) return
+    throw AuthError(TENANT_STUCK_MESSAGE)
   }
 
   override suspend fun changePassword(current: String, new: String) {
@@ -204,6 +218,8 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
     // Leaving the app from a support session ends it, and then signs the staff member out as well.
     endImpersonation()
     auth.signOut()
+    // An SSO account's tenant outlives `signOut`; the next sign-in, of whatever kind, starts on the project pool (AGL-3844).
+    auth.returnToProjectPool()
   }
 }
 

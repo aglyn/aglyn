@@ -208,7 +208,7 @@ behavior, and keep its specs' cases.
 | API client | `api-client.ts` | `ConsoleAPIClient` (`URLSession`, async/await): bearer ID token, one forced refresh on 401, GET/idempotent retries on network/502/503/504 with 400·2ⁿ ms backoff, `Idempotency-Key`, `ConsoleAPIError(status, message)` with `consoleErrorMessage` wording | the same, on Ktor client (`OkHttp` engine on Android, `Java` engine on desktop) + kotlinx.serialization |
 | Firestore reads | `live-doc.ts`, `list-query.ts` | Firebase iOS SDK snapshot listeners; `ListQuery` runs the generated list declarations (§5) as SDK constraints, a page at a time plus one probe row | Android: Firebase Android SDK listeners. Desktop: **Firestore REST + gRPC `Listen`** (§4) |
 | workspace + site | `workspace.tsx`, `org-access.ts` | `WorkspaceStore` (`@Observable`): `users/{uid}/orgs`, `users/{uid}/hostMemberships where orgId ==`, persisted pick | `WorkspaceStore` (`StateFlow`), same queries |
-| Besigner web view | `libs/mobile/webview` | Besigner paths only. `WKWebView` (iOS, iPadOS, macOS) signed in by POSTing the ID token to `/api/auth/session` (the console's own route; HttpOnly `__session` cookie into `WKHTTPCookieStore`); origin-checked bridge with the same method allowlist as `bridge-protocol.ts`; native back | Android `WebView` + `CookieManager`. Windows: WebView2 (Evergreen runtime), approved 2026-10-07: `BesignerWebView` hosts it in a heavyweight AWT canvas inside a Compose `SwingPanel`, driving `CreateCoreWebView2EnvironmentWithOptions` and `ICoreWebView2Controller` over COM through JNA on one STA thread with its own message loop; the `/api/auth/session` cookies go into `CoreWebView2CookieManager`; `NavigationStarting` keeps it on Besigner paths; the bridge rides `WebMessageReceived`; the profile is `%LOCALAPPDATA%\Aglyn\WebView2`. Only `WebView2Loader.dll` ships (no bundled Chromium). A Windows without the runtime gets a native screen with Microsoft's Evergreen bootstrapper. Never the system browser. |
+| Besigner web view | `libs/mobile/webview` | Besigner paths only. `WKWebView` (iOS, iPadOS, macOS) signed in by POSTing the ID token to `/api/auth/session` (the console's own route; HttpOnly `__session` cookie into `WKHTTPCookieStore`), then opened through `/auth/besigner`, which signs the web view in before the editor loads; origin-checked bridge with the same method allowlist as `bridge-protocol.ts`; native back | Android `WebView` + `CookieManager`. Windows: WebView2 (Evergreen runtime), approved 2026-10-07: `BesignerWebView` hosts it in a heavyweight AWT canvas inside a Compose `SwingPanel`, driving `CreateCoreWebView2EnvironmentWithOptions` and `ICoreWebView2Controller` over COM through JNA on one STA thread with its own message loop; the `/api/auth/session` cookies go into `CoreWebView2CookieManager`; `NavigationStarting` keeps it on Besigner paths; the bridge rides `WebMessageReceived`; the profile is `%LOCALAPPDATA%\Aglyn\WebView2`. Only `WebView2Loader.dll` ships (no bundled Chromium). A Windows without the runtime gets a native screen with Microsoft's Evergreen bootstrapper. Never the system browser. |
 | deep links | `plugin-host/src/lib/deep-links.ts` | the same grammar: strip `/{org}/hosts/{host}`, match registered patterns. A Besigner path opens the Besigner web view; any other unmatched path opens the nearest native screen, never a web page. Universal links on the console origin, plus the `aglyn://` scheme | App Links + `aglyn://`; desktop: `aglyn://` URL handler (macOS via the app, Windows via MSIX protocol registration) |
 | theme | `libs/mobile/ui` + `tokens.generated.json` | `Tokens.generated.swift` (§7), applied through SwiftUI `tint`, semantic colors and `ShapeStyle`s; system fonts and Dynamic Type | `Tokens.generated.kt`, giving a Material 3 `ColorScheme` (light/dark) for `MaterialTheme`. Dynamic color stays off, so the brand palette holds |
 | layout | `useLayout()`, `SplitView` | `NavigationSplitView` on iPad/Mac, `TabView` + `NavigationStack` on iPhone; Mac adds `commands` (menus + shortcuts) and `WindowGroup`s for an order/product in its own window | `NavigationSuiteScaffold` (bar → rail → drawer by window size class) + `ListDetailPaneScaffold`; desktop adds a `MenuBar` with shortcuts and extra windows |
@@ -277,6 +277,22 @@ A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
   a link no plugin answers resolves to `.besigner` or `.unavailable`, never
   to a console web page. The web view itself refuses a main-frame navigation
   off the Besigner and hands the path back to the app's own resolver.
+
+  The web view never loads the Besigner page directly (AGL-3850). It opens
+  the console's `/auth/besigner?continue=<path>`, which turns the session
+  cookie the app minted into the web view's own Firebase sign-in and only
+  then moves on to the editor. Loaded straight from the cookie, the editor
+  met a signed-out web view and sent it to the web sign-in page first.
+  Leaving works the other way. The console moves between pages with its
+  client-side router, so each platform also watches the page's address:
+  `WKWebView.url`, Android `doUpdateVisitedHistory` and WebView2
+  `SourceChanged`. The editor's back arrow (its page's `/view`) returns to
+  the app's screen. Another console page returns to the app and opens that
+  page's native screen when one exists. Reaching the sign-in wall means the
+  session ended, and the web view says so. `BesignerEntry` in AglynCore and
+  in the Kotlin `plugin-host` holds these rules. On Android, the web view
+  accepts third-party cookies for the canvas and the auth frames, and only a
+  main-frame navigation is ever routed out of the view.
 
 ### Generated native manifest
 
@@ -1050,7 +1066,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `siteTemplate` (Backup & restore: a plugin that can publish the site as a template), `transferStep` (the import wizard's review: a step a plugin adds for its resource), `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
 | `cardSlot` | (plugins) a core page's widget slot (`hostSettings`) the screen also puts a one-row card in, named `<screen id>.card` and declared under `widgets`; the card opens the screen with `pluginId` set, so a `requires` of `params.pluginId == <plugin>` holds from either door |
-| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503; `filters`: `{ field, op, value }` clauses for a staff list route, each kept when its value template is not empty), or `{ doc }` / `{ query: { collection, where, orderBy, limit, aggregate }, more }` for a Firestore read (below: `aggregate: { count: true }` answers `{ count }`, the server's tally, as the console's `getCountFromServer` does), `late: true` on any load to run it after the others, with their answers under `data` (a read keyed by something another read found), `each: <rows>` to run it once per row of an earlier load, `{ compute, args }` for a pure function over what has loaded, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate; each lands at `data.<key>` |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503; `filters`: `{ field, op, value }` clauses for a staff list route, each kept when its value template is not empty), or `{ doc }` / `{ query: { collection, where, orderBy, limit, aggregate }, more }` for a Firestore read (below: `aggregate: { count: true }` answers `{ count }`, the server's tally, as the console's `getCountFromServer` does), `late: true` on any load to run it after the others, with their answers under `data` (a read keyed by something another read found), `each: <rows>` to run it once per row of an earlier load, `{ compute, args }` for a pure function over what has loaded, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate, or `{ takeRate: marketplace }` for the take rate on the workspace's marketplace sales (`{ pct, paid }`, as `resolveMarketplaceFeePct` prices it, `paid` the paid plans' rate); each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
@@ -1268,7 +1284,7 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   the value at that path of the answer, indented, and `download` is then a
   template over `response` that names it (a workspace package's export answers
   `{ fileName, package }`).
-- A `file` field reads the chosen file; `parse: "json"` sends it parsed.
+- A `file` field reads the chosen file; `parse: "json"` sends it parsed, and `parse: "base64"` sends its bytes base64-encoded (a plugin bundle). A static option may carry a `detail`, which a `multiselect` shows under the choice's label (a publisher's attestation).
   `multiselect` holds a list of ids; `coversAll: true` leaves it unfinished
   until every choice is chosen (the warnings an import must have acknowledged).
 - `stash: { key: template }` on an action keeps values as `stash.<key>` for the

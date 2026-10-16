@@ -1,6 +1,7 @@
 package com.aglyn.site.artifacts
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,8 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import com.aglyn.contracts.ListQuerySort
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreOrder
@@ -53,6 +58,7 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.ListHeader
+import com.aglyn.ui.Load
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
 import com.aglyn.ui.MenuAction
@@ -70,6 +76,9 @@ import com.aglyn.ui.space
 
 /** Roles that may create and change a site's components, layouts and templates (`hostRoleCanWrite`). */
 private val WRITE_ROLES = setOf("admin", "editor", "author")
+
+/** The slot a plugin fills to publish a site's component or layout (the console's `hostArtifactPublish`). */
+const val ARTIFACT_PUBLISH_SLOT = "hostArtifactPublish"
 
 /** What a list's dialog is asking for. */
 private sealed interface ArtifactDialog {
@@ -97,6 +106,11 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
   val scope = rememberCoroutineScope()
   val model = remember(hostId, kind) { ArtifactListModel(kind, hostId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
+  val quota = remember(hostId, kind, context.api, context.firestore) { ArtifactQuotaModel(kind, hostId, context.api, context.firestore) }
+  LaunchedEffect(quota) { quota.loadPlan() }
+  // The rows the window holds change when something is created or deleted, which is when the count is asked again.
+  val rowsKey = (model.rows as? Load.Ready)?.value?.joinToString(",") { it.id }
+  LaunchedEffect(quota, rowsKey) { quota.recount() }
   val runner = remember(hostId, kind) { ActionRunner(scope) }
   val api = remember(hostId, kind, context.api, context.writer) { ArtifactsApi(context.api, context.writer, hostId, kind) }
   var dialog by remember { mutableStateOf<ArtifactDialog?>(null) }
@@ -116,6 +130,19 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("New ${kind.singular}", Modifier.padding(start = space(1f)))
           }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = space(2f)), verticalAlignment = Alignment.CenterVertically) {
+          val shown = quota.count ?: (model.rows as? Load.Ready)?.value?.size ?: 0
+          Text(
+            artifactQuotaReadout(shown, quota.limit, quota.ready, kind.singular),
+            Modifier.weight(1f).testTag("${kind.singular}-quota"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          ArtifactSortMenu(kind, model.sort, model::order)
+        }
+        model.notices.forEach { notice ->
+          Text(notice, Modifier.padding(horizontal = space(2f)).testTag("${kind.singular}-sort-notice"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           SearchField(model.search, model::type, placeholder = "Search ${kind.title.lowercase()}")
@@ -158,6 +185,36 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
     model.reload()
     context.navigate(kind.screen, mapOf("id" to id))
   }, onDeleted = model::drop, onOpen = { dialog = it }) { dialog = null }
+}
+
+/** The header sorts the console's tables give each column, as one menu: the default walk, then every column in either direction. */
+@Composable
+private fun ArtifactSortMenu(kind: ArtifactKind, sort: ListQuerySort?, onSort: (ListQuerySort?) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  Box {
+    TextButton(
+      onClick = { open = true },
+      modifier = Modifier.testTag("sort-${kind.collection}").semantics { contentDescription = "Sort: ${sort?.let(::artifactSortLabel) ?: "Default order"}" },
+    ) {
+      Icon(AglynIcons.named("sort"), contentDescription = null)
+      Text(sort?.let(::artifactSortLabel) ?: "Sort", Modifier.padding(start = space(1f)))
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      DropdownMenuItem(
+        text = { Text("Default order") },
+        trailingIcon = { if (sort == null) Icon(AglynIcons.named("check"), null) },
+        onClick = { open = false; onSort(null) },
+      )
+      for (choice in artifactSortChoices(kind)) {
+        DropdownMenuItem(
+          text = { Text(artifactSortLabel(choice)) },
+          trailingIcon = { if (choice == sort) Icon(AglynIcons.named("check"), null) },
+          onClick = { open = false; onSort(choice) },
+          modifier = Modifier.testTag("sort-${kind.collection}-${choice.column}-${choice.direction.raw}"),
+        )
+      }
+    }
+  }
 }
 
 private fun emptyBody(kind: ArtifactKind) = when (kind) {
@@ -226,6 +283,18 @@ private fun ArtifactDetail(
                 add(MenuAction("details", "Edit details", "edit", enabled = canEdit) { open(ArtifactDialog.Details(row)) })
                 if (!row.isStarterBundle) add(MenuAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(ArtifactDialog.Duplicate(row)) })
                 if (kind != ArtifactKind.TEMPLATE) add(MenuAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(ArtifactDialog.SaveTemplate(row)) })
+                // Publishing is the marketplace's (the console's `hostArtifactPublish` zone): offered only where a plugin fills the
+                // zone, opening its form with what this is and what it is called.
+                if (kind != ArtifactKind.TEMPLATE && context.slotWidgets(ARTIFACT_PUBLISH_SLOT).isNotEmpty()) {
+                  add(
+                    MenuAction("publish", "Publish to marketplace", "storefront") {
+                      context.navigate(
+                        if (kind == ArtifactKind.COMPONENT) "marketplace.publishComponent" else "marketplace.publishLayout",
+                        mapOf("id" to row.id, "name" to row.name, "description" to row.description.orEmpty()),
+                      )
+                    },
+                  )
+                }
                 add(
                   MenuAction("delete", if (row.isStarterBundle) "Delete bundle" else "Delete", "delete", destructive = true, enabled = canEdit) {
                     open(if (row.isStarterBundle) ArtifactDialog.DeleteBundle(row, siblings.ifEmpty { listOf(row) }) else ArtifactDialog.Delete(row))
