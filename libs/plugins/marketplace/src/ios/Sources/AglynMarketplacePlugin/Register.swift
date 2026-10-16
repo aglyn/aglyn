@@ -24,6 +24,9 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
     InstalledScreen(context: context)
   }
   r.screen(marketplaceLicencesScreen, title: "Licenses", icon: "doc.text") { context, _ in LicencesScreen(context: context) }
+  r.screen(marketplaceSellScreen, title: "Selling", icon: "storefront") { context, params in
+    SellScreen(context: context, initialSection: params["section"])
+  }
   // A marketplace plugin's own settings, from its manifest, opened from its page in the workspace's plugins.
   r.screen(marketplacePluginSettingsScreen, title: "Plugin settings", icon: "gearshape") { context, params in
     PluginSettingsScreen(context: context, listingID: params["listing"] ?? "")

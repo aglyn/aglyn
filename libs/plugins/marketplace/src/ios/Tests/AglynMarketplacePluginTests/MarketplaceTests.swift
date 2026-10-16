@@ -114,10 +114,14 @@ final class MarketplaceTests: XCTestCase {
   @MainActor
   func testThePublishScreensAreBundledAndFillTheSiteTemplateZone() throws {
     let specs = ScreenCatalog.load(from: .module)
-    XCTAssertEqual(specs.map(\.id).sorted(), ["marketplace.publishTemplate", "marketplace.publisherAgreement"])
+    let ids = [
+      "marketplace.publish", "marketplace.publishComponent", "marketplace.publishDatasetSchema", "marketplace.publishEmailStarter", "marketplace.publishEmailTemplate",
+      "marketplace.publishLayout", "marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publisherAgreement",
+    ]
+    XCTAssertEqual(specs.map(\.id).sorted(), ids)
     XCTAssertEqual(specs.first { $0.id == "marketplace.publishTemplate" }?.zones, ["siteTemplate"])
     let declared = SpecScreens.declaration(specs).screens
-    XCTAssertEqual(declared, ["marketplace.publishTemplate", "marketplace.publisherAgreement"])
+    XCTAssertEqual(declared.sorted(), ids)
   }
 
   // MARK: What a plugin's page says about its installs (marketplace-catalog.ts, replayed)
@@ -309,8 +313,9 @@ final class MarketplaceTests: XCTestCase {
     let registry = NativePluginRegistry()
     let declared = NativeContributionDeclaration(
       screens: [
-        "marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.publishTemplate",
-        "marketplace.publisherAgreement",
+        "marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell",
+        "marketplace.publish", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent",
+        "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter",
       ],
       widgets: ["marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
       deepLinks: ["marketplace.listing-page", "marketplace.page"])

@@ -74,6 +74,9 @@ const val MARKETPLACE_INSTALLED_SCREEN = "marketplace.installed"
 const val MARKETPLACE_LICENCES_SCREEN = "marketplace.licenses"
 const val MARKETPLACE_PLUGIN_SETTINGS_SCREEN = "marketplace.plugin-settings"
 
+/** Publishing to the marketplace is a spec screen (marketplace.screens.json): what this site and the workspace can publish. */
+const val MARKETPLACE_PUBLISH_SCREEN = "marketplace.publish"
+
 /** Workspace roles with `plugins.install` (`installPlugins`): the admin tier and editors. */
 internal val INSTALL_ROLES = setOf("owner", "admin", "editor")
 
@@ -97,6 +100,8 @@ private fun SectionTabs(context: NativePluginContext, current: String) {
       ChipOption(MARKETPLACE_BROWSE_SCREEN, "Browse all", "storefront"),
       ChipOption(MARKETPLACE_INSTALLED_SCREEN, "Installed", "extension"),
       ChipOption(MARKETPLACE_LICENCES_SCREEN, "Licenses", "receipt"),
+      ChipOption(MARKETPLACE_PUBLISH_SCREEN, "Publish", "upload"),
+      ChipOption(MARKETPLACE_SELL_SCREEN, "Selling", "storefront"),
     ),
     current,
     { if (it != current) context.navigate(it) },

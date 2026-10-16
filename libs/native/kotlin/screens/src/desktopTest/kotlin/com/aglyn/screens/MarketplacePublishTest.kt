@@ -173,6 +173,77 @@ class MarketplacePublishTest {
   }
 
   @Test
+  fun everyOtherKindPublishesWithWhatItIsAndTheListingTheRouteTakes() = runTest {
+    // Each kind: the screen, the route, and the fields that say which one it is.
+    val kinds = listOf(
+      Triple("marketplace.publishLayout", "/api/marketplace/publish-layout", """{"hostId":"h1","layoutId":"x1"}"""),
+      Triple("marketplace.publishComponent", "/api/marketplace/publish", """{"hostId":"h1","componentId":"x1"}"""),
+      Triple("marketplace.publishTheme", "/api/marketplace/publish-theme", """{"hostId":"h1"}"""),
+      Triple("marketplace.publishDatasetSchema", "/api/marketplace/publish-dataset-schema", """{"orgId":"o1","datasetId":"x1"}"""),
+      Triple("marketplace.publishEmailTemplate", "/api/marketplace/publish-email-template", """{"hostId":"h1","templateKey":"x1"}"""),
+      Triple("marketplace.publishEmailStarter", "/api/marketplace/publish-email-starter", """{"hostId":"h1","screenId":"x1"}"""),
+    )
+    for ((id, route, identity) in kinds) {
+      val publish = spec(id)
+      val form = publish.blocks.first { it.type == "form" }
+      val submit = ActionSpec.parse(form["submit"])!!
+      val sent = mutableListOf<HttpRequestData>()
+      val model = ScreenModel(publish, JsonObject(emptyMap()), client(200 to """{"ok":true,"version":2}""", sent = sent))
+      val context = json("""{"org":{"id":"o1"},"site":{"id":"h1"},"params":{"id":"x1"},"form":{"name":"Hero","description":"A hero","category":"Hero","price":0}}""")
+      val outcome = model.run(submit, context)
+      assertEquals(ActionOutcome.Done("Published v2 to the marketplace", json("""{"ok":true,"version":2}""")), outcome, id)
+      assertEquals(route, sent[0].url.encodedPath, id)
+      assertEquals(JsonObject(json(identity).let { it as JsonObject } + mapOf("displayName" to JsonPrimitive("Hero"), "description" to JsonPrimitive("A hero"), "category" to JsonPrimitive("Hero"), "priceUsd" to JsonPrimitive(0))), body(sent, 0), id)
+      // The form opens with the name and description the thing already has, handed over as the screen's parameters.
+      val fields = (form.raw.obj("fields") as JsonArray).mapNotNull { FieldSpec.parse(it) }
+      val params = json("""{"params":{"name":"Hero band","description":"The top of the page"}}""")
+      assertEquals(listOf("Hero band", "The top of the page"), listOf("name", "description").map { key -> ScreenValues.render(fields.first { it.key == key }.initial.orEmpty(), params) }, id)
+      assertTrue(fields.first { it.key == "name" }.required, id)
+      // The agreement is asked for exactly as the site template asks.
+      val (offeredContext, blocks) = shown(publish, """{"handle":"studio"}""")
+      assertEquals(listOf("Your organization has not accepted these terms. They must be accepted before anything is published."), texts(blocks, offeredContext).filter { "terms" in it }, id)
+    }
+    assertEquals("org", spec("marketplace.publishDatasetSchema").scope)
+    assertEquals("site", spec("marketplace.publishLayout").scope)
+    assertEquals(null, spec("marketplace.publishLayout").zones.firstOrNull())
+  }
+
+  @Test
+  fun thePublishHubListsWhatThisSiteAndTheWorkspaceCanPublishAndOpensTheRightForm() {
+    val hub = spec("marketplace.publish")
+    val context = json(
+      """{"site":{"id":"h1"},"org":{"id":"o1"},"data":{
+        "components":[{"${'$'}id":"c1","displayName":"Hero","description":"Top band"},{"${'$'}id":"c2","displayName":"Gone","deletedAt":1}],
+        "layouts":[{"${'$'}id":"l1","displayName":"Main"}],
+        "emails":[{"${'$'}id":"e1","displayName":"Receipt","versionId":"v1"},{"${'$'}id":"e2","displayName":"Never saved"}],
+        "emailScreens":[{"${'$'}id":"s1","displayName":"Welcome","versionId":"v1","deletedAt":null}],
+        "datasets":[{"${'$'}id":"d1","name":"Menu items"},{"${'$'}id":"d2","displayName":"Staff"}]}}""",
+    )
+    fun rows(title: String): List<Triple<String, String, Map<String, String>>> {
+      val block = hub.blocks.first { it.title == title }
+      return ScreenValues.scopes(block.string("items").orEmpty(), null, block.string("filter"), context).map { scope ->
+        val open = block["open"] as JsonObject
+        Triple(ScreenValues.render(block.string("primary").orEmpty(), scope), open.str("screen").orEmpty(), renderParams(open["params"], scope))
+      }
+    }
+    assertEquals(listOf(Triple("Hero", "marketplace.publishComponent", mapOf("id" to "c1", "name" to "Hero", "description" to "Top band"))), rows("Components"))
+    assertEquals(listOf("Main"), rows("Layouts").map { it.first })
+    // Only an email with a saved design can be published: a design that was opened and never saved has nothing to publish.
+    assertEquals(listOf("Receipt"), rows("Email templates").map { it.first })
+    assertEquals(listOf("Welcome"), rows("Emails").map { it.first })
+    assertEquals("marketplace.publishEmailStarter", rows("Emails").single().second)
+    // A dataset is named as the Data page names it.
+    assertEquals(listOf("Menu items", "Staff"), rows("Dataset schemas").map { it.first })
+    assertEquals(listOf("marketplace.publishTemplate", "marketplace.publishTheme"), hub.blocks.first { it.type == "links" }.raw.arr("items").mapNotNull { it.str("screen") })
+    // What it reads: this site's collections, and the workspace's datasets.
+    val paths = (hub.raw.obj("load") as JsonObject).mapValues { (_, load) -> ((load as JsonObject).obj("query") as JsonObject).str("collection") }
+    assertEquals(
+      mapOf("components" to "hosts/{site.id}/components", "layouts" to "hosts/{site.id}/layouts", "emails" to "hosts/{site.id}/emailTemplates", "emailScreens" to "hosts/{site.id}/screens", "datasets" to "orgs/{org.id}/datasets"),
+      paths,
+    )
+  }
+
+  @Test
   fun aPublishRefusedForTheAgreementOpensItAndAcceptingIsWhatSendsThePublishAgain() = runTest {
     val publish = spec("marketplace.publishTemplate")
     val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!

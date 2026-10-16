@@ -22401,6 +22401,1152 @@
           }
         ]
       ]
+    },
+    "summarizeSellerLedger": {
+      "module": "libs/plugins/marketplace/src/lib/model/seller-ledger-totals.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          null
+        ],
+        [
+          [
+            {
+              "amountCents": 1000,
+              "feeCents": 200,
+              "taxCents": 100,
+              "transferCents": 700
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "amountCents": 1000,
+              "feeCents": 200,
+              "taxCents": 100,
+              "transferCents": 700
+            },
+            {
+              "amountCents": 500,
+              "feeCents": 100,
+              "taxCents": 0,
+              "transferCents": 400,
+              "refundedAt": true,
+              "reversedTransferCents": 400
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "amountCents": 800,
+              "feeCents": 160,
+              "taxCents": 40
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "amountCents": 800,
+              "feeCents": 160,
+              "taxCents": 40,
+              "transferCents": 640,
+              "partialReversedTransferCents": 100
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "amountCents": 800,
+              "feeCents": 160,
+              "taxCents": 40,
+              "transferCents": 640,
+              "refundedAt": 1700000000000,
+              "reversedTransferCents": 300,
+              "partialReversedTransferCents": 50
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "amountCents": "1000",
+              "feeCents": "abc",
+              "taxCents": "25",
+              "transferCents": "900"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "refundedAt": 0
+            },
+            {
+              "refundedAt": "",
+              "amountCents": 100
+            },
+            {
+              "refundedAt": "x",
+              "amountCents": 100,
+              "reversedTransferCents": 20
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "amountCents": 1000,
+              "feeCents": 200,
+              "taxCents": 100,
+              "transferCents": null,
+              "reversedTransferCents": null
+            }
+          ]
+        ]
+      ]
+    },
+    "payoutReadiness": {
+      "module": "libs/plugins/marketplace/src/lib/model/payout-readiness.ts",
+      "args": [
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "pending"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "pending",
+            "chargesEnabled": "true",
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "error"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "error",
+            "chargesEnabled": "true",
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "loaded"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "accountLivemode": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "accountLivemode": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": true,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "payoutsEnabled": false,
+            "accountLivemode": "x"
+          }
+        ],
+        [
+          {
+            "state": "loaded",
+            "chargesEnabled": "true",
+            "accountLivemode": "x"
+          }
+        ]
+      ]
     }
   }
 }

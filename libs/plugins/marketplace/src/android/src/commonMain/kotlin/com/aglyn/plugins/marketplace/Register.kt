@@ -23,6 +23,7 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   }
   r.screen(MARKETPLACE_INSTALLED_SCREEN, title = "Installed", requiresSite = true, icon = "extension") { context, _ -> InstalledScreen(context) }
   r.screen(MARKETPLACE_LICENCES_SCREEN, title = "Licenses", icon = "receipt") { context, _ -> LicencesScreen(context) }
+  r.screen(MARKETPLACE_SELL_SCREEN, title = "Selling", icon = "storefront") { context, params -> SellScreen(context, params["section"]) }
   // A marketplace plugin's own settings, from its manifest, opened from its page in the workspace's plugins.
   r.screen(MARKETPLACE_PLUGIN_SETTINGS_SCREEN, title = "Plugin settings", icon = "settings") { context, params ->
     PluginSettingsScreen(context, params["listing"].orEmpty())

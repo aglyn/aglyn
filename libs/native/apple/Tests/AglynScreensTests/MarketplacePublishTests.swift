@@ -149,6 +149,91 @@ final class MarketplacePublishTests: XCTestCase {
     XCTAssertEqual(sent, ["action": "accept-agreement", "orgId": "o1", "version": version ?? .null])
   }
 
+  func testEveryOtherKindPublishesWithWhatItIsAndTheListingTheRouteTakes() async throws {
+    // Each kind: the screen, the route, and the fields that say which one it is.
+    let kinds: [(String, String, [String: JSONValue])] = [
+      ("marketplace.publishLayout", "/api/marketplace/publish-layout", ["hostId": "h1", "layoutId": "x1"]),
+      ("marketplace.publishComponent", "/api/marketplace/publish", ["hostId": "h1", "componentId": "x1"]),
+      ("marketplace.publishTheme", "/api/marketplace/publish-theme", ["hostId": "h1"]),
+      ("marketplace.publishDatasetSchema", "/api/marketplace/publish-dataset-schema", ["orgId": "o1", "datasetId": "x1"]),
+      ("marketplace.publishEmailTemplate", "/api/marketplace/publish-email-template", ["hostId": "h1", "templateKey": "x1"]),
+      ("marketplace.publishEmailStarter", "/api/marketplace/publish-email-starter", ["hostId": "h1", "screenId": "x1"]),
+    ]
+    for (id, route, identity) in kinds {
+      let publish = try spec(id)
+      let form = try XCTUnwrap(publish.blocks.first { $0.type == "form" })
+      let submit = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+      let transport = RecordingTransport(responses: [(200, #"{"ok":true,"version":2}"#)])
+      let model = ScreenModel(spec: publish, context: [:], api: api(transport))
+      let context: JSONValue = [
+        "org": ["id": "o1"], "site": ["id": "h1"], "params": ["id": "x1"],
+        "form": ["name": "Hero", "description": "A hero", "category": "Hero", "price": 0],
+      ]
+      let outcome = await model.run(submit, in: context)
+      XCTAssertEqual(outcome, .done(message: "Published v2 to the marketplace", response: ["ok": true, "version": 2]), id)
+      XCTAssertEqual(transport.requests[0].url?.path, route, id)
+      let body = try XCTUnwrap(transport.requests[0].httpBody.flatMap(JSONValue.decode))
+      var expected = identity
+      expected["displayName"] = "Hero"
+      expected["description"] = "A hero"
+      expected["category"] = "Hero"
+      expected["priceUsd"] = 0
+      XCTAssertEqual(body, .object(expected), id)
+      // The form opens with the name and description the thing already has, handed over as the screen's parameters.
+      let fields = form["fields"].array.compactMap(FieldSpec.init)
+      let params: JSONValue = ["params": ["name": "Hero band", "description": "The top of the page"]]
+      XCTAssertEqual(
+        ["name", "description"].map { key in ScreenValues.render(fields.first { $0.key == key }?.initial ?? "", in: params) },
+        ["Hero band", "The top of the page"], id)
+      XCTAssertTrue(try XCTUnwrap(fields.first { $0.key == "name" }).required, id)
+      // The agreement is asked for exactly as the site template asks.
+      let (offered, blocks) = shown(publish, profile: ["handle": "studio"])
+      XCTAssertEqual(
+        texts(blocks, offered).filter { $0.contains("terms") },
+        ["Your organization has not accepted these terms. They must be accepted before anything is published."], id)
+    }
+    XCTAssertEqual(try spec("marketplace.publishDatasetSchema").scope, "org")
+    XCTAssertEqual(try spec("marketplace.publishLayout").scope, "site")
+    XCTAssertTrue(try spec("marketplace.publishLayout").zones.isEmpty)
+  }
+
+  func testThePublishHubListsWhatThisSiteAndTheWorkspaceCanPublishAndOpensTheRightForm() throws {
+    let hub = try spec("marketplace.publish")
+    let context: JSONValue = [
+      "site": ["id": "h1"], "org": ["id": "o1"],
+      "data": [
+        "components": [["$id": "c1", "displayName": "Hero", "description": "Top band"], ["$id": "c2", "displayName": "Gone", "deletedAt": 1]],
+        "layouts": [["$id": "l1", "displayName": "Main"]],
+        "emails": [["$id": "e1", "displayName": "Receipt", "versionId": "v1"], ["$id": "e2", "displayName": "Never saved"]],
+        "emailScreens": [["$id": "s1", "displayName": "Welcome", "versionId": "v1", "deletedAt": .null]],
+        "datasets": [["$id": "d1", "name": "Menu items"], ["$id": "d2", "displayName": "Staff"]],
+      ],
+    ]
+    func rows(_ title: String) throws -> [(name: String, screen: String, params: [String: String])] {
+      let block = try XCTUnwrap(hub.blocks.first { $0.title == title })
+      let open = try XCTUnwrap(block["open"])
+      return ScreenValues.scopes(items: block["items"]?.stringValue ?? "", within: nil, filter: block["filter"]?.stringValue, in: context).map { scope in
+        (
+          ScreenValues.render(block["primary"]?.stringValue ?? "", in: scope), open["screen"]?.stringValue ?? "",
+          renderParams(open["params"], in: scope)
+        )
+      }
+    }
+    let components = try rows("Components")
+    XCTAssertEqual(components.map(\.name), ["Hero"])
+    XCTAssertEqual(components.first?.screen, "marketplace.publishComponent")
+    XCTAssertEqual(components.first?.params, ["id": "c1", "name": "Hero", "description": "Top band"])
+    XCTAssertEqual(try rows("Layouts").map(\.name), ["Main"])
+    // Only an email with a saved design can be published: a design that was opened and never saved has nothing to publish.
+    XCTAssertEqual(try rows("Email templates").map(\.name), ["Receipt"])
+    XCTAssertEqual(try rows("Emails").map(\.name), ["Welcome"])
+    XCTAssertEqual(try rows("Emails").first?.screen, "marketplace.publishEmailStarter")
+    // A dataset is named as the Data page names it.
+    XCTAssertEqual(try rows("Dataset schemas").map(\.name), ["Menu items", "Staff"])
+    let links = try XCTUnwrap(hub.blocks.first { $0.type == "links" })
+    XCTAssertEqual(links["items"].array.compactMap { $0["screen"]?.stringValue }, ["marketplace.publishTemplate", "marketplace.publishTheme"])
+  }
+
   func testAPublishRefusedForTheAgreementOpensItAndAcceptingIsWhatSendsThePublishAgain() async throws {
     let publish = try spec("marketplace.publishTemplate")
     let submit = try XCTUnwrap(publish.blocks.first { $0.type == "form" }?["submit"].flatMap(ActionSpec.init))
