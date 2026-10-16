@@ -294,8 +294,8 @@ struct ListRow: View {
 
   var body: some View {
     let primary = ScreenValues.render(block["primary"]?.stringValue ?? "{item.name|item.$id}", in: scope)
-    let secondary = block["secondary"]?.stringValue.map { ScreenValues.render($0, in: scope) }
-    let tertiary = block["tertiary"]?.stringValue.map { ScreenValues.render($0, in: scope) }
+    let secondary = rowLine(block["secondary"], in: scope)
+    let tertiary = rowLine(block["tertiary"], in: scope)
     let trailing = block["trailing"]?.stringValue.map { ScreenValues.render($0, in: scope) }
     let badges = block["badges"].array.compactMap { badge -> (String, AglynTone)? in
       guard ScreenValues.condition(badge["when"]?.stringValue, in: scope) else { return nil }
@@ -726,14 +726,14 @@ struct ActionInputSheet: View {
         }
       }
       .formStyle(.grouped)
-      .navigationTitle(ScreenValues.render(pending.action.label, in: pending.scope))
+      .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: pending.scope))
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
+          Button(ScreenValues.render(pending.action.submitLabel ?? pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
             run(visibleOnly(filled, inputs))
           }
           .disabled(missing)
@@ -907,4 +907,30 @@ struct HoursInput: View {
         end: field.hours.flatMap { ScreenValues.number($0["end"]) }.map { Int($0) } ?? 17 * 60),
       intervalNoun: field.hours?["noun"]?.stringValue ?? "hours", sameDay: field.hours?["sameDay"] == .bool(true))
   }
+}
+
+/// A list row's line: a template, or a list of parts (a template, or `{ text, when }` shown while its condition holds) joined
+/// with ` · `, a part that holds nothing left out, so a row never ends on a dangling `set by `.
+func rowLine(_ spec: JSONValue?, in scope: JSONValue) -> String? {
+  let line: String?
+  switch spec {
+  case .array(let parts)?:
+    line = parts.compactMap { part -> String? in
+      let template: String?
+      if case .string(let text) = part {
+        template = text
+      } else if ScreenValues.condition(part["when"]?.stringValue, in: scope) {
+        template = part["text"]?.stringValue
+      } else {
+        template = nil
+      }
+      guard let shown = template.map({ ScreenValues.render($0, in: scope).trimmingCharacters(in: .whitespaces) }), !shown.isEmpty else { return nil }
+      return shown
+    }.joined(separator: " \u{00B7} ")
+  case .string(let text)?:
+    line = ScreenValues.render(text, in: scope)
+  default:
+    line = nil
+  }
+  return line.flatMap { $0.isEmpty ? nil : $0 }
 }

@@ -154,7 +154,7 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
         title = if (open.kind == "variable") "Delete this variable?" else "Delete this function?",
         body = if (used > 0) {
           "\"${open.name}\" is used in ${summarizeDependents(open.scan!!)}" +
-            if (open.kind == "variable") ". Those bindings will render as empty or literal tokens after the next publish." else " — those references will stop resolving after the next publish."
+            if (open.kind == "variable") ". Those places show nothing in its place after the next publish." else ". Those places stop working after the next publish."
         } else {
           "\"${open.name}\" is not referenced by any published page, layout, or workflow."
         },
@@ -178,7 +178,7 @@ private fun VariableList(rows: List<VariableRow>, canEdit: Boolean, onEdit: (Var
   if (rows.isEmpty()) {
     return EmptyState(
       "No variables yet",
-      body = "A variable is a value you bind into any text with {{name}}: a phone number, a price, an opening date. Change it once and every page follows.",
+      body = "A variable is a value you put into any text with Insert data in the Besigner: a phone number, a price, an opening date. Change it once and every page follows.",
       icon = AglynIcons.named("data_object"),
     )
   }
@@ -294,7 +294,7 @@ private fun VariableEditor(
     error = runner.error,
     onDismiss = { runner.error = null; close() },
     onConfirm = {
-      runner.run("Saved — use {{${draft.name}}} in any text to bind it", onDone = close) {
+      runner.run("Saved. Put it into any text with Insert data in the Besigner.", onDone = close) {
         api.saveVariable(draft.id, draft.name, draft.type, draft.value, draft.workflowId, draft.workflowName)
       }
     },
@@ -311,7 +311,7 @@ private fun VariableEditor(
             when {
               nameTaken -> "A variable with this name already exists"
               draft.name.isNotEmpty() && !validName -> "Start with a letter or _; letters, numbers and _ only, up to 40"
-              else -> "Bind it with {{${draft.name.ifEmpty { "name" }}}}"
+              else -> "The name Insert data lists it by in the Besigner"
             },
           )
         },

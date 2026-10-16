@@ -265,6 +265,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit box",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "url": "/api/shipping/settings",
               "prompt": [
