@@ -5023,7 +5023,10 @@ const NEWSLETTER_NAME = /\bnewsletter\b|\bsubscribe\b|\bsign[- ]?up\b/i
  *   form's fields, named in words ("Contact form") with the reference
  *   pointed at it.
  * - Anything else this job could not make one more of is taken out of the
- *   section's uses, and the section is drawn on the page.
+ *   section's uses, and the section is drawn on the page — unless the
+ *   section itself is the form ("consultation request form"): without it
+ *   the section has no purpose, and what to put there instead is the
+ *   rule's to ask.
  * - A component the job could declare is left for the rule to ask about:
  *   what it should be has more than one answer.
  */
@@ -5062,7 +5065,7 @@ export function aiSettlePlanUndeclaredUses(
           ],
         }
       }
-    } else if (aiPlanUncreatableKind(next, kind, capabilities)) {
+    } else if (!FORM_SECTION_NAME.test(section.name) && aiPlanUncreatableKind(next, kind, capabilities)) {
       drop.add(ref.path)
     }
   }

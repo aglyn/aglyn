@@ -113,6 +113,11 @@ describe('aiSettlePlanUndeclaredUses (AGL-3845)', () => {
     expect(usesOf(settled)).toEqual([[]])
   })
 
+  it('leaves a section that is the form itself for the rule to ask about, where no form can be made', () => {
+    const asked = plan([section('consultation request form', ['new:Consultation request'])])
+    expect(aiSettlePlanUndeclaredUses(asked, EMPTY, NO_FORMS)).toBe(asked)
+  })
+
   it('takes out a component a site start may not make', () => {
     expect(FREE_SITE.create.component.allowed).toBe(false)
     const settled = aiSettlePlanUndeclaredUses(plan([section('Shop by scent', ['new:ScentFinder'])]), EMPTY, FREE_SITE)
