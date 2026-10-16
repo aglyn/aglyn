@@ -55,7 +55,7 @@ test('the first family of the stack, unquoted', () => {
   assert.equal(primaryFontFamily('Inter, sans-serif'), 'Inter')
 })
 
-const intent = { main: '#00b0ff', contrastText: '#FFFFFF', hoverText: '#0073a8', hover: '#0077ad' }
+const intent = { main: '#00b0ff', dark: '#0077ad', contrastText: '#FFFFFF', hoverText: '#0073a8', hover: '#0077ad' }
 const variant = (fontSize, extra = {}) => ({ fontSize, fontWeight: 400, lineHeight: 1.5, ...extra })
 const typography = {
   fontFamily: '"Roboto Flex",-apple-system',
@@ -116,6 +116,14 @@ test('both sources carry the same tokens as literals', () => {
   assert.match(kotlin, /primaryContainer = Color\(0xFFDBF4FF\)/)
   assert.match(kotlin, /titleLarge = AglynTokens\.Typography\.h6\.toTextStyle\(fontFamily\)/)
   assert.match(kotlin, /extraLarge = RoundedCornerShape\(28\.dp\)/)
+})
+
+test("an intent's text is the console's link shade, not its hover", () => {
+  const data = nativeThemeData(theme('#F5F5F5'), theme('#161c21'))
+  // `dark` (#0077ad) is what a console Link paints; `hoverText` (#0073a8) is
+  // only a text button's hover.
+  assert.match(kotlinTokensContent(data), /text = Color\(0xFF0077AD\)/)
+  assert.doesNotMatch(kotlinTokensContent(data), /text = Color\(0xFF0073A8\)/)
 })
 
 test('a console stack that starts with a face the apps do not bundle is refused', () => {

@@ -61,12 +61,22 @@ Use `Free`, `Pro`, or `Business` to match the entitlement tiers.
 
 The Material theme is a faithful port of the **console** app's MUI theme. The source
 of truth is [`libs/shared/ui/theme/src/lib/console.theme.ts`](../../libs/shared/ui/theme/src/lib/console.theme.ts).
-All colors live as CSS variables in [`src/css/custom.css`](src/css/custom.css). If the
-console palette changes, update these to match:
+The link and button colors are generated, not typed:
+[`src/css/theme-tokens.generated.css`](src/css/theme-tokens.generated.css) is written
+from the resolved console theme by `npm run generate:mobile-theme-tokens`, and the
+guard sweep's `--check` fails when it drifts. Never edit it by hand.
+
+| Docusaurus usage | CSS variable | console.theme.ts |
+| --- | --- | --- |
+| Primary button fill (and its hover ramp) | `--ifm-color-primary*` | `primary.main` |
+| Primary button label | `--ifm-button-color` on `.button--primary` | `primary.contrastText` |
+| Links, active menu and TOC entries, navbar hover | `--ifm-link-color` and friends | `primary.dark`, per scheme |
+
+Every other color lives as a CSS variable in [`src/css/custom.css`](src/css/custom.css).
+If the console palette changes, update these to match:
 
 | Docusaurus usage | CSS variable | console.theme.ts | Value |
 | --- | --- | --- | --- |
-| Accent / links / primary buttons | `--ifm-color-primary` | `secondary.main` | `#00b0ff` |
 | Navbar + footer (light) | `--ifm-navbar-background-color` | `primary.main` (light) | `#404C5C` |
 | Navbar (dark) | `--ifm-navbar-background-color` | `primary.main` (dark) | `#2C3540` |
 | Footer (dark) | `--ifm-footer-background-color` | `surface.main` (dark) | `#202934` |

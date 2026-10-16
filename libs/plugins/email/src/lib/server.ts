@@ -615,7 +615,7 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
           `<form method="post" action="/api/email/resubscribe?${escapeHtml(
             query,
           )}">` +
-          submitButton('Resubscribe', { accent: 'link', pal: brand.pal }) +
+          submitButton('Resubscribe', { pal: brand.pal }) +
           '</form>',
         420,
         brand,

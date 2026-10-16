@@ -46,6 +46,11 @@
  */
 
 import {
+  buildEmailPalette,
+  emailAccent,
+  PLATFORM_EMAIL_ACCENT,
+} from '@aglyn/shared-util-email/email-palette'
+import {
   PAL,
   PLATFORM_EMAIL_BRAND,
   page,
@@ -185,6 +190,34 @@ describe('the button stays readable on a merchant-chosen fill', () => {
   it('handles the short hex forms without misreading the luminance', () => {
     expect(resolveEmailPageBrand(themed({ primary: { main: '#fff' } })).pal.onBrand).toBe(PAL.ink)
     expect(resolveEmailPageBrand(themed({ primary: { main: '#000' } })).pal.onBrand).toBe(PAL.onBrand)
+  })
+})
+
+describe('links and buttons wear the theme, as a console Link and Button do', () => {
+  it('paints the platform page from the console accent, never a typed color', () => {
+    expect(PAL.link).toBe(PLATFORM_EMAIL_ACCENT.link)
+    expect(PAL.button).toBe(PLATFORM_EMAIL_ACCENT.fill)
+    expect(PAL.onButton).toBe(PLATFORM_EMAIL_ACCENT.label)
+    // The text shade and the fill are different slots.
+    expect(PAL.link).not.toBe(PAL.button)
+    const button = submitButton('Unsubscribe')
+    expect(button).toContain(`background:${PLATFORM_EMAIL_ACCENT.fill}`)
+    expect(button).toContain(`color:${PLATFORM_EMAIL_ACCENT.label}`)
+  })
+
+  it("links a themed site in its accent text shade and fills its buttons with the accent", () => {
+    const brand = resolveEmailPageBrand(themed({ primary: { main: '#8A4B2A' } }))
+    const derived = emailAccent(
+      buildEmailPalette({ base: 'tenant', colors: { primary: { main: '#8A4B2A' } } }),
+    ).link
+    expect(brand.pal.link).toBe(derived)
+    expect(brand.pal.link).not.toBe('#8A4B2A')
+    expect(brand.pal.button).toBe('#8A4B2A')
+    expect(submitButton('Resubscribe', { pal: brand.pal })).toContain('background:#8A4B2A')
+  })
+
+  it('keeps the platform link for a site that themed no primary', () => {
+    expect(resolveEmailPageBrand({ displayName: 'Plain' }).pal.link).toBe(PAL.link)
   })
 })
 
