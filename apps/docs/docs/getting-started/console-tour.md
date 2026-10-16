@@ -392,8 +392,12 @@ contents of.
 
 - **In console** is on for every category. Switching it off stops that
   category appearing in the feed and in the bell.
-- **Email** is **on for your site's transactions** — **Form submission**,
-  **New booking** and **New order** — and **off for everything else**. Switch a
+- **Email** is **on for what you would not want to miss**: your site's
+  transactions (**Form submission**, **New booking**, **New order**), a task,
+  contact or lead assigned to you, your AI jobs, your **Billing** notices,
+  **Listing review**, **Support ticket reply**, **Announcement**, and every
+  notice that something on your site or workspace was paused, held, flagged or
+  locked. It is **off for everything else**. Switch a
   category or a single notification on and you also get a message in your inbox
   when one arrives; switch it off and you don't. This does not
   touch the mail Aglyn already sends you — invites, verification, receipts,
