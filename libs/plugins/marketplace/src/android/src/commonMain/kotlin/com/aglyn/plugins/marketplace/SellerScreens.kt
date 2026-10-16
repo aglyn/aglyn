@@ -1,5 +1,17 @@
 package com.aglyn.plugins.marketplace
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.Contracts
+import com.aglyn.site.media.MediaChooserDialog
+import com.aglyn.site.media.MediaPickField
+import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.ui.RemoteImage
+import com.aglyn.ui.SelectField
+import com.aglyn.ui.SelectOption
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,7 +74,7 @@ private val SELL_SECTIONS = listOf(
 private val PROFILE_FIELDS = listOf(
   Triple("displayName", "Display name", KeyboardType.Text),
   Triple("bio", "Bio", KeyboardType.Text),
-  Triple("avatarUrl", "Logo address (https)", KeyboardType.Uri),
+  Triple("avatarUrl", "Logo", KeyboardType.Uri),
   Triple("website", "Website (https)", KeyboardType.Uri),
   Triple("supportEmail", "Support email", KeyboardType.Email),
   Triple("supportUrl", "Support address (https)", KeyboardType.Uri),
@@ -117,13 +129,18 @@ private fun ProfileSection(context: NativePluginContext, orgId: String, stored: 
       isError = fields.getValue("handle").isNotEmpty() && !isPublisherHandle(fields.getValue("handle")), singleLine = true, enabled = canManage && loaded,
       modifier = Modifier.fillMaxWidth().testTag("seller-handle"),
     )
-    for ((key, label, keyboard) in PROFILE_FIELDS) {
+    for ((key, label, keyboard) in PROFILE_FIELDS.filter { it.first != "avatarUrl" }) {
       OutlinedTextField(
         fields.getValue(key), { fields = fields + (key to it) }, label = { Text(label) }, singleLine = key != "bio", minLines = if (key == "bio") 3 else 1,
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboard), enabled = canManage && loaded,
         modifier = Modifier.fillMaxWidth().testTag("seller-$key"),
       )
     }
+    // The logo is picked from the media library, as the console's profile picks it; never typed.
+    MediaPickField(
+      context, "Logo", fields.getValue("avatarUrl"), onPick = { fields = fields + ("avatarUrl" to listingMediaValue(it.item.cdnPath, it.item.url)) },
+      onClear = { fields = fields + ("avatarUrl" to "") }, enabled = canManage && loaded, workspaceOnly = true, modifier = Modifier.testTag("seller-avatarUrl"),
+    )
     runner.error?.let { NoticeBanner(it, StatusTone.WARNING) }
     runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
     Button(
@@ -198,36 +215,99 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
       }
     }
   }
-  editing?.let { listing ->
-    var values by remember(listing.id) {
-      mutableStateOf(
-        mapOf(
-          "displayName" to listing.displayName, "description" to listing.text("description"), "readme" to listing.text("readme"), "logoUrl" to listing.text("logoUrl"),
-          "homepageUrl" to listing.text("homepageUrl"), "repositoryUrl" to listing.text("repositoryUrl"), "license" to listing.text("license"), "category" to listing.category,
-        ),
+  editing?.let { listing -> EditListingDialog(context, listing, runner, api) { editing = null } }
+}
+
+/**
+ * The console's listing editor: the words and links, the preview image (its own route), the screenshots and the logo,
+ * each picture chosen from the workspace's media library (or uploaded there from this device), never typed.
+ */
+@Composable
+private fun EditListingDialog(context: NativePluginContext, listing: SellerListing, runner: ActionRunner, api: SellerApi, close: () -> Unit) {
+  var values by remember(listing.id) {
+    mutableStateOf(
+      mapOf(
+        "displayName" to listing.displayName, "description" to listing.text("description"), "readme" to listing.text("readme"), "logoUrl" to listing.text("logoUrl"),
+        "homepageUrl" to listing.text("homepageUrl"), "repositoryUrl" to listing.text("repositoryUrl"), "license" to listing.text("license"), "category" to listing.category,
+      ),
+    )
+  }
+  var preview by remember(listing.id) { mutableStateOf(listing.text("previewImageUrl")) }
+  var screenshots by remember(listing.id) { mutableStateOf(listing.screenshots) }
+  var choosingScreenshot by remember { mutableStateOf(false) }
+  ActionDialog(
+    title = "Edit listing",
+    icon = "edit",
+    confirmLabel = "Save listing",
+    confirmEnabled = values.getValue("displayName").isNotBlank(),
+    busy = runner.busy,
+    error = runner.error,
+    onDismiss = { runner.clear(); close() },
+    onConfirm = {
+      val previewChanged = preview != listing.text("previewImageUrl")
+      val sentPreview = preview
+      val sentScreenshots = screenshots
+      runner.run("Listing updated", onDone = close) {
+        // The preview is not a content field, so it has its own route, touched only when it changed.
+        if (previewChanged) api.setPreviewImage(listing.id, sentPreview)
+        api.updateListing(listing.id, values.filterKeys { it != "category" }, values.getValue("category"), sentScreenshots)
+      }
+    },
+  ) {
+    Text("Everything here shows on the public listing page.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    for ((key, label) in listOf("displayName" to "Listing name", "description" to "Description", "readme" to "About")) {
+      OutlinedTextField(
+        values.getValue(key), { values = values + (key to it) }, label = { Text(label) }, singleLine = key == "displayName", minLines = if (key == "readme") 4 else if (key == "description") 2 else 1,
+        modifier = Modifier.fillMaxWidth().testTag("listing-$key"),
       )
     }
-    ActionDialog(
-      title = "Edit listing",
-      icon = "edit",
-      confirmLabel = "Save",
-      confirmEnabled = values.getValue("displayName").isNotBlank(),
-      busy = runner.busy,
-      error = runner.error,
-      onDismiss = { runner.clear(); editing = null },
-      onConfirm = {
-        runner.run("Listing updated", onDone = { editing = null }) {
-          api.updateListing(listing.id, values.filterKeys { it != "category" }, values.getValue("category"))
+    MediaPickField(
+      context, "Preview image", preview, onPick = { preview = listingMediaValue(it.item.cdnPath, it.item.url) }, onClear = { preview = "" },
+      supporting = "Shown on cards and at the top of the listing.", workspaceOnly = true, modifier = Modifier.testTag("listing-preview"),
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      Text("Screenshots (${screenshots.size}/$MAX_LISTING_SCREENSHOTS)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      if (screenshots.isNotEmpty()) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          screenshots.forEachIndexed { index, url ->
+            Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+              RemoteImage(
+                mediaPreviewUrl(url, context.api.origin, null), "Screenshot ${index + 1}",
+                Modifier.size(width = 96.dp, height = 72.dp).clip(MaterialTheme.shapes.small), icon = "image",
+              )
+              TextButton(onClick = { screenshots = screenshots.filter { it != url } }, modifier = Modifier.testTag("listing-screenshot-remove-$index")) { Text("Remove") }
+            }
+          }
         }
-      },
-    ) {
-      for ((key, label) in listOf("displayName" to "Listing name", "description" to "Description", "readme" to "About", "category" to "Category", "logoUrl" to "Logo address (https)", "homepageUrl" to "Homepage (https)", "repositoryUrl" to "Repository (https)", "license" to "License")) {
-        OutlinedTextField(
-          values.getValue(key), { values = values + (key to it) }, label = { Text(label) }, singleLine = key !in setOf("description", "readme"), minLines = if (key == "readme") 4 else if (key == "description") 2 else 1,
-          modifier = Modifier.fillMaxWidth().testTag("listing-$key"),
-        )
+      }
+      if (screenshots.size < MAX_LISTING_SCREENSHOTS) {
+        OutlinedButton(onClick = { choosingScreenshot = true }, modifier = Modifier.testTag("listing-screenshot-add")) { Text("Add from media") }
       }
     }
+    MediaPickField(
+      context, "Logo", values.getValue("logoUrl"), onPick = { values = values + ("logoUrl" to listingMediaValue(it.item.cdnPath, it.item.url)) },
+      onClear = { values = values + ("logoUrl" to "") }, supporting = LISTING_LOGO_HINT, onLink = { values = values + ("logoUrl" to it) }, workspaceOnly = true,
+      modifier = Modifier.testTag("listing-logoUrl"),
+    )
+    for ((key, label) in listOf("homepageUrl" to "Homepage (https)", "repositoryUrl" to "Repository (https)", "license" to "License")) {
+      OutlinedTextField(
+        values.getValue(key), { values = values + (key to it) }, label = { Text(label) }, singleLine = true,
+        keyboardOptions = if (key == "license") KeyboardOptions.Default else KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier.fillMaxWidth().testTag("listing-$key"),
+      )
+    }
+    val stored = values.getValue("category")
+    // A category the list no longer offers stays chosen rather than silently changing.
+    val categories = Contracts.listingCategories + listOfNotNull(stored.takeIf { it.isNotEmpty() && it !in Contracts.listingCategories })
+    SelectField("Category", categories.map { SelectOption(it, it) }, stored.ifEmpty { null }, { values = values + ("category" to it.orEmpty()) }, Modifier.testTag("listing-category"), noneLabel = "None")
+  }
+  if (choosingScreenshot) {
+    MediaChooserDialog(
+      context,
+      onChoose = { chosen -> screenshots = addingScreenshot(listingMediaValue(chosen.item.cdnPath, chosen.item.url), screenshots); choosingScreenshot = false },
+      onDismiss = { choosingScreenshot = false },
+      workspaceOnly = true,
+    )
   }
 }
 

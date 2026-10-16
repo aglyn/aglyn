@@ -59,6 +59,7 @@ kotlin {
         implementation(project(":native-ui"))
         implementation(project(":native-contracts"))
         implementation(project(":native-screens"))
+        implementation(project(":native-site"))
       }
     }
     commonTest.dependencies {

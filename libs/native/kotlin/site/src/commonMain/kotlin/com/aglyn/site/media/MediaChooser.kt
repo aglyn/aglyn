@@ -14,7 +14,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
@@ -37,11 +41,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
 import com.aglyn.contracts.hostQualifiedCdnPath
 import com.aglyn.contracts.mediaNodeSrc
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.Load
+import com.aglyn.ui.LocalMediaPicker
+import com.aglyn.ui.LocalVideoProbe
+import com.aglyn.ui.PickSource
+import com.aglyn.ui.PickedFile
+import com.aglyn.ui.pickSourceLabel
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SearchField
@@ -74,7 +86,9 @@ const val PRIVATE_FILE_REFUSAL = "That file is private, so it cannot be placed o
 /**
  * The media library as a chooser, the native side of the console's media
  * picker: this site's files and the workspace's, filtered to one [kind], one
- * tap to choose. Shown over whatever screen needs a file.
+ * tap to choose. Upload adds a file from this device to the library being
+ * shown, as the console picker's library does, and chooses it as soon as it
+ * lands. Shown over whatever screen needs a file.
  */
 @Composable
 fun MediaChooserDialog(
@@ -128,14 +142,68 @@ private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, sc
   val model = remember(scope, context.firestore) { MediaListModel(scope, context.firestore, coroutines, initialType = kind) }
   LaunchedEffect(model, scopeTokens) { model.start(scopeTokens) }
   var refusal by remember { mutableStateOf<String?>(null) }
+  val picker = LocalMediaPicker.current
+  val videoProbe = LocalVideoProbe.current
+  val api = remember(scope, context.api, videoProbe) { MediaApi(context.api, scope, videoProbe) }
+  val runner = remember(scope) { ActionRunner(coroutines) }
+  val canUpload = scope is MediaScope.Org && context.orgRole in setOf("owner", "admin", "editor") ||
+    scope is MediaScope.Site && context.siteRole in setOf("admin", "editor", "author")
+  var uploading by remember { mutableStateOf<String?>(null) }
+  // The file just uploaded here, chosen once the library lists it.
+  var uploaded by remember { mutableStateOf<String?>(null) }
+  var audioBatch by remember { mutableStateOf<List<PickedFile>?>(null) }
+
+  fun choose(item: MediaItem) {
+    if (item.private && !allowPrivate) refusal = PRIVATE_FILE_REFUSAL else onChoose(ChosenMedia(item, scope))
+  }
+
+  fun send(files: List<PickedFile>, rightsConfirmed: Boolean) {
+    refusal = null
+    runner.run(onDone = { model.refresh() }) {
+      try {
+        var last: String? = null
+        files.forEachIndexed { index, file ->
+          uploading = if (files.size == 1) "Uploading ${file.name}…" else "Uploading ${index + 1} of ${files.size}…"
+          last = api.upload(file, null, rightsConfirmed) ?: last
+        }
+        uploaded = last
+      } finally {
+        uploading = null
+      }
+    }
+  }
+
+  fun uploadFrom(source: PickSource) {
+    val device = picker ?: return
+    coroutines.launch {
+      val files = runCatching { device.pick(source, multiple = false) }.getOrDefault(emptyList())
+      if (files.isEmpty()) return@launch
+      // An audio file needs its uploader's rights confirmation first (AGL-3716).
+      if (files.any(::isAudioFile)) audioBatch = files else send(files, false)
+    }
+  }
+
+  // The upload is chosen the moment the library lists it (a file of another kind never appears here).
+  LaunchedEffect(uploaded, model.rows) {
+    val id = uploaded ?: return@LaunchedEffect
+    val item = (model.rows as? Load.Ready)?.value?.firstOrNull { it.id == id } ?: return@LaunchedEffect
+    uploaded = null
+    choose(item)
+  }
+
   Column(Modifier.fillMaxSize()) {
-    SearchField(model.search, model::type, placeholder = "Search files", modifier = Modifier.padding(space(2f)))
+    Row(Modifier.padding(space(2f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      SearchField(model.search, model::type, placeholder = "Search files", modifier = Modifier.weight(1f))
+      ChooserUploadButton(picker?.sources.orEmpty(), enabled = canUpload && !runner.busy, onPick = ::uploadFrom)
+    }
     refusal?.let { NoticeBanner(it, StatusTone.WARNING, Modifier.padding(horizontal = space(2f)).testTag("chooser-private-refusal")) }
+    uploading?.let { NoticeBanner(it, StatusTone.INFO, Modifier.padding(horizontal = space(2f)).testTag("chooser-uploading")) }
+      ?: runner.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(horizontal = space(2f)).testTag("chooser-upload-error")) }
     LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load the library", skeleton = { SkeletonGrid(tiles = 12) }) { rows ->
       if (rows.isEmpty()) {
         EmptyState(
           if (model.search.isBlank()) "No files here yet" else "No files match",
-          body = if (model.search.isBlank()) "Upload photos in the Media library, then choose them here." else null,
+          body = if (model.search.isBlank() && canUpload) "Upload a file from this device to choose it." else null,
           icon = AglynIcons.named("photo_library"),
         )
       } else {
@@ -152,9 +220,38 @@ private fun MediaChooserGrid(context: NativePluginContext, scope: MediaScope, sc
           horizontalArrangement = Arrangement.spacedBy(space(1f)),
           verticalArrangement = Arrangement.spacedBy(space(1f)),
         ) {
-          items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, selected = false) { if (item.private && !allowPrivate) refusal = PRIVATE_FILE_REFUSAL else onChoose(ChosenMedia(item, scope)) } }
+          items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, selected = false) { choose(item) } }
           if (model.hasMore) item(span = { GridItemSpan(maxLineSpan) }) { SkeletonList(rows = 1) }
         }
+      }
+    }
+  }
+  audioBatch?.let { files ->
+    AudioRightsDialog(files) { confirmed ->
+      audioBatch = null
+      if (confirmed) send(files, true)
+    }
+  }
+}
+
+/** Upload from the chooser: the device's sources, or the one it has. */
+@Composable
+private fun ChooserUploadButton(sources: List<PickSource>, enabled: Boolean, onPick: (PickSource) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  Box {
+    TextButton(onClick = { if (sources.size == 1) onPick(sources[0]) else open = true }, enabled = enabled && sources.isNotEmpty(), modifier = Modifier.testTag("chooser-upload")) {
+      Icon(AglynIcons.named("upload"), contentDescription = null)
+      Text("Upload", Modifier.padding(start = space(1f)))
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      for (source in sources) {
+        val (label, icon) = pickSourceLabel(source)
+        DropdownMenuItem(
+          text = { Text(label) },
+          leadingIcon = { Icon(AglynIcons.named(icon), null) },
+          onClick = { open = false; onPick(source) },
+          modifier = Modifier.testTag("chooser-upload-${source.name.lowercase()}"),
+        )
       }
     }
   }

@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynSite
 import Foundation
 
 /*
@@ -69,6 +70,23 @@ struct SellerListing: Identifiable, Equatable {
 
   /// The listing's first category: `categories[0]` of a listing, or the older single `category`.
   var category: String { (source["categories"] as? [Any])?.first as? String ?? text("category") }
+  /// The gallery under the listing's body, in order.
+  var screenshots: [String] { (source["screenshots"] as? [Any])?.compactMap { $0 as? String } ?? [] }
+}
+
+/// How many screenshots a listing's gallery holds (the console editor's `MAX_SCREENSHOTS`).
+let maxListingScreenshots = 6
+
+/// What the console says a listing's logo should be (`LISTING_LOGO_HINT`).
+let listingLogoHint = "Recommended: a square PNG or SVG, at least 256×256 — listings are shown as square tiles."
+
+/// What a picture chosen for a listing stores, as the console's picker hands it back: the path the CDN serves the file from,
+/// else its address.
+func listingMediaValue(_ chosen: ChosenMedia) -> String { chosen.item.cdnPath ?? chosen.item.url ?? "" }
+
+/// The gallery after adding `picked`: a file already in it, or one past the cap, changes nothing (the console's own rule).
+func addingScreenshot(_ picked: String, to current: [String]) -> [String] {
+  current.count >= maxListingScreenshots || current.contains(picked) ? current : current + [picked]
 }
 
 /// "$12.34" from cents (`$${(cents / 100).toFixed(2)}`).
@@ -143,10 +161,22 @@ struct SellerAPI {
       body: JSONValue.from(["action": "set-published", "listingId": listingID, "published": published]))
   }
 
-  /// The listing's words and links; a field left out is left as it is, and so is the preview and the screenshots.
-  func updateListing(_ listingID: String, fields: [String: String], category: String) async throws {
-    var body: [String: Any?] = ["action": "update-listing", "listingId": listingID, "categories": category.isEmpty ? [String]() : [category]]
+  /// The listing's words, links and screenshots; a field left out is left as it is, and so is the preview.
+  func updateListing(_ listingID: String, fields: [String: String], category: String, screenshots: [String]) async throws {
+    var body: [String: Any?] = [
+      "action": "update-listing", "listingId": listingID, "categories": category.isEmpty ? [String]() : [category], "screenshots": screenshots,
+    ]
     for (key, value) in fields { body[key] = value }
     try await api.request("/api/marketplace/publish-plugin", method: .post, body: JSONValue.from(body))
+  }
+
+  /// Sets the preview image to a file from the media library, or removes it when `url` is empty: the route of its own
+  /// the console's editor calls, because the preview is not a content field.
+  func setPreviewImage(_ listingID: String, url: String) async throws {
+    if url.isEmpty {
+      try await api.request("/api/marketplace/preview-image", method: .delete, body: JSONValue.from(["listingId": listingID]))
+    } else {
+      try await api.request("/api/marketplace/preview-image", method: .post, body: JSONValue.from(["listingId": listingID, "url": url]))
+    }
   }
 }

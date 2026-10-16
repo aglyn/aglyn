@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -22,14 +23,14 @@ private enum SellSection: String, CaseIterable, Identifiable {
 
 /// The profile fields a publisher edits, in the order the console's form lists them, with the route's key and the label shown.
 private let profileFields: [(key: String, label: String)] = [
-  ("displayName", "Display name"), ("bio", "Bio"), ("avatarUrl", "Logo address (https)"), ("website", "Website (https)"),
+  ("displayName", "Display name"), ("bio", "Bio"), ("avatarUrl", "Logo"), ("website", "Website (https)"),
   ("supportEmail", "Support email"), ("supportUrl", "Support address (https)"), ("githubUrl", "GitHub (https)"), ("xUrl", "X (https)"),
   ("linkedinUrl", "LinkedIn (https)"),
 ]
 
 /// Selling on the marketplace, the console's seller tabs in one screen: the public profile and the Publisher Agreement, the
-/// listings with what can be done to each, payouts through Stripe, and the sales ledger. Publishing a plugin's code (a bundle
-/// upload) and a listing's preview image and screenshots stay on the web.
+/// listings with what can be done to each (their words, preview image, screenshots and logo from the media library), payouts
+/// through Stripe, and the sales ledger.
 struct SellScreen: View {
   let context: NativePluginContext
   var initialSection: String?
@@ -103,12 +104,18 @@ private struct ProfileSection: View {
         Text("3 to 30 lowercase letters, digits and hyphens. It is claimed on the server, so two workspaces cannot both have it.")
           .font(AglynFont.caption).foregroundStyle(!(fields["handle"] ?? "").isEmpty && !isPublisherHandle(fields["handle"] ?? "") ? AglynColor.error : .secondary)
       }
-      ForEach(profileFields, id: \.key) { field in
+      ForEach(profileFields.filter { $0.key != "avatarUrl" }, id: \.key) { field in
         TextField(field.label, text: Binding(get: { fields[field.key] ?? "" }, set: { fields[field.key] = $0 }), axis: field.key == "bio" ? .vertical : .horizontal)
           .lineLimit(field.key == "bio" ? 3...6 : 1...1)
           .disabled(!canManage || !loaded)
           .accessibilityIdentifier("seller-\(field.key)")
       }
+      // The logo is picked from the media library, as the console's profile picks it; never typed.
+      MediaPickField(
+        context: context, label: "Logo", value: fields["avatarUrl"] ?? "", enabled: canManage && loaded, workspaceOnly: true,
+        onPick: { fields["avatarUrl"] = listingMediaValue($0) }, onClear: { fields["avatarUrl"] = "" }
+      )
+      .accessibilityIdentifier("seller-avatarUrl")
       if let error = runner.error { AglynNotice(error, tone: .warning) }
       if let notice = runner.notice { AglynNotice(notice, tone: .success) }
       Button("Save profile") {
@@ -211,40 +218,73 @@ private struct ListingsSection: View {
     }
     .task(id: orgID) { await live.bind(context.firestore, sellerListingsQuery(orgID: orgID)) }
     .sheet(item: $editing) { listing in
-      EditListingSheet(listing: listing, runner: runner, api: api) { editing = nil }
+      EditListingSheet(context: context, listing: listing, runner: runner, api: api) { editing = nil }
     }
   }
 }
 
+/// The console's listing editor: the words and links, the preview image (its own route), the screenshots and the logo, each
+/// picture chosen from the workspace's media library (or uploaded there from this device), never typed.
 private struct EditListingSheet: View {
+  let context: NativePluginContext
   let listing: SellerListing
   let runner: ActionRunner
   let api: SellerAPI
   let close: () -> Void
   @State private var values: [String: String] = [:]
+  @State private var preview = ""
+  @State private var screenshots: [String] = []
+  @State private var choosingScreenshot = false
 
-  private let editable: [(key: String, label: String)] = [
-    ("displayName", "Listing name"), ("description", "Description"), ("readme", "About"), ("category", "Category"),
-    ("logoUrl", "Logo address (https)"), ("homepageUrl", "Homepage (https)"), ("repositoryUrl", "Repository (https)"), ("license", "License"),
-  ]
+  private let texts: [(key: String, label: String)] = [("displayName", "Listing name"), ("description", "Description"), ("readme", "About")]
+  private let links: [(key: String, label: String)] = [("homepageUrl", "Homepage (https)"), ("repositoryUrl", "Repository (https)"), ("license", "License")]
+
+  private func binding(_ key: String) -> Binding<String> { Binding(get: { values[key] ?? "" }, set: { values[key] = $0 }) }
 
   var body: some View {
     AglynActionSheet(
-      "Edit listing", confirmLabel: "Save", confirmEnabled: !(values["displayName"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
+      "Edit listing", message: "Everything here shows on the public listing page.", confirmLabel: "Save listing",
+      confirmEnabled: !(values["displayName"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
       busy: runner.busy, error: runner.error, onCancel: {
         runner.clear()
         close()
       },
-      onConfirm: {
-        let sent = values.filter { $0.key != "category" }
-        let category = values["category"] ?? ""
-        runner.run("Listing updated", onDone: close) { try await api.updateListing(listing.id, fields: sent, category: category) }
-      }
+      onConfirm: save
     ) {
-      ForEach(editable, id: \.key) { field in
-        TextField(field.label, text: Binding(get: { values[field.key] ?? "" }, set: { values[field.key] = $0 }), axis: .vertical)
+      ForEach(texts, id: \.key) { field in
+        TextField(field.label, text: binding(field.key), axis: .vertical)
           .lineLimit(field.key == "readme" ? 4...10 : (field.key == "description" ? 2...4 : 1...1))
           .accessibilityIdentifier("listing-\(field.key)")
+      }
+      MediaPickField(
+        context: context, label: "Preview image", value: preview, workspaceOnly: true, supporting: "Shown on cards and at the top of the listing.",
+        onPick: { preview = listingMediaValue($0) }, onClear: { preview = "" }
+      )
+      .accessibilityIdentifier("listing-preview")
+      screenshotGallery
+      MediaPickField(
+        context: context, label: "Logo", value: values["logoUrl"] ?? "", workspaceOnly: true, supporting: listingLogoHint,
+        onPick: { values["logoUrl"] = listingMediaValue($0) }, onClear: { values["logoUrl"] = "" },
+        onLink: { values["logoUrl"] = $0 }
+      )
+      .accessibilityIdentifier("listing-logoUrl")
+      ForEach(links, id: \.key) { field in
+        TextField(field.label, text: binding(field.key))
+          .autocorrectionDisabled(field.key != "license")
+          .accessibilityIdentifier("listing-\(field.key)")
+      }
+      Picker("Category", selection: binding("category")) {
+        Text("None").tag("")
+        ForEach(ContractValues.shared.listingCategories, id: \.self) { Text($0).tag($0) }
+        // A category the list no longer offers stays chosen rather than silently changing.
+        let stored = values["category"] ?? ""
+        if !stored.isEmpty && !ContractValues.shared.listingCategories.contains(stored) { Text(stored).tag(stored) }
+      }
+      .accessibilityIdentifier("listing-category")
+    }
+    .sheet(isPresented: $choosingScreenshot) {
+      MediaChooserSheet(context: context, workspaceOnly: true) { chosen in
+        screenshots = addingScreenshot(listingMediaValue(chosen), to: screenshots)
       }
     }
     .onAppear {
@@ -253,6 +293,50 @@ private struct EditListingSheet: View {
         "logoUrl": listing.text("logoUrl"), "homepageUrl": listing.text("homepageUrl"), "repositoryUrl": listing.text("repositoryUrl"),
         "license": listing.text("license"), "category": listing.category,
       ]
+      preview = listing.text("previewImageUrl")
+      screenshots = listing.screenshots
+    }
+  }
+
+  private var screenshotGallery: some View {
+    VStack(alignment: .leading, spacing: AglynSpace.one) {
+      Text("Screenshots (\(screenshots.count)/\(maxListingScreenshots))").font(AglynFont.caption).foregroundStyle(.secondary)
+      if !screenshots.isEmpty {
+        ScrollView(.horizontal) {
+          HStack(spacing: AglynSpace.one) {
+            ForEach(Array(screenshots.enumerated()), id: \.element) { index, url in
+              VStack(spacing: AglynSpace.half) {
+                AglynRemoteImage(mediaPreviewURL(url, origin: context.api.origin, hostID: nil), systemImage: "photo")
+                  .frame(width: 96, height: 72)
+                  .clipShape(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
+                  .accessibilityLabel("Screenshot \(index + 1)")
+                Button("Remove", role: .destructive) { screenshots.removeAll { $0 == url } }
+                  .buttonStyle(.borderless)
+                  .font(AglynFont.caption)
+                  .accessibilityIdentifier("listing-screenshot-remove-\(index)")
+              }
+            }
+          }
+        }
+      }
+      if screenshots.count < maxListingScreenshots {
+        Button("Add from media") { choosingScreenshot = true }
+          .buttonStyle(.bordered)
+          .accessibilityIdentifier("listing-screenshot-add")
+      }
+    }
+  }
+
+  private func save() {
+    let sent = values.filter { $0.key != "category" }
+    let category = values["category"] ?? ""
+    let previewChanged = preview != listing.text("previewImageUrl")
+    let preview = preview
+    let screenshots = screenshots
+    runner.run("Listing updated", onDone: close) {
+      // The preview is not a content field, so it has its own route, touched only when it changed.
+      if previewChanged { try await api.setPreviewImage(listing.id, url: preview) }
+      try await api.updateListing(listing.id, fields: sent, category: category, screenshots: screenshots)
     }
   }
 }

@@ -77,6 +77,25 @@ fun SellerListing.text(key: String): String = (source[key] as? String).orEmpty()
 /** The listing's first category: `categories[0]` of a listing, or the older single `category`. */
 val SellerListing.category: String get() = ((source["categories"] as? List<*>)?.firstOrNull() as? String) ?: text("category")
 
+/** The gallery under the listing's body, in order. */
+val SellerListing.screenshots: List<String> get() = (source["screenshots"] as? List<*>)?.filterIsInstance<String>().orEmpty()
+
+/** How many screenshots a listing's gallery holds (the console editor's `MAX_SCREENSHOTS`). */
+const val MAX_LISTING_SCREENSHOTS = 6
+
+/** What the console says a listing's logo should be (`LISTING_LOGO_HINT`). */
+const val LISTING_LOGO_HINT = "Recommended: a square PNG or SVG, at least 256×256 — listings are shown as square tiles."
+
+/**
+ * What a picture chosen for a listing stores, as the console's picker hands it back: the path the CDN serves the file
+ * from, else its address.
+ */
+fun listingMediaValue(cdnPath: String?, url: String?): String = cdnPath ?: url.orEmpty()
+
+/** The gallery after adding [picked]: a file already in it, or one past the cap, changes nothing (the console's own rule). */
+fun addingScreenshot(picked: String, current: List<String>): List<String> =
+  if (current.size >= MAX_LISTING_SCREENSHOTS || picked in current) current else current + picked
+
 /** "$12.34" from cents (`$${(cents / 100).toFixed(2)}`). */
 fun dollars(cents: Double): String {
   val whole = (cents.takeIf { it.isFinite() } ?: 0.0).roundToLong()
@@ -132,8 +151,8 @@ class SellerApi(private val api: ConsoleApiClient, private val orgId: String) {
     api.request("/api/marketplace/publish-plugin", ApiMethod.POST, jsonBody("action" to "set-published", "listingId" to listingId, "published" to published))
   }
 
-  /** The listing's words and links; a field left out is left as it is, and so is the preview and the screenshots. */
-  suspend fun updateListing(listingId: String, fields: Map<String, String>, category: String) {
+  /** The listing's words, links and screenshots; a field left out is left as it is, and so is the preview. */
+  suspend fun updateListing(listingId: String, fields: Map<String, String>, category: String, screenshots: List<String>) {
     api.request(
       "/api/marketplace/publish-plugin",
       ApiMethod.POST,
@@ -142,7 +161,20 @@ class SellerApi(private val api: ConsoleApiClient, private val orgId: String) {
         "listingId" to listingId,
         *fields.map { it.key to it.value }.toTypedArray(),
         "categories" to if (category.isNotEmpty()) listOf(category) else emptyList<String>(),
+        "screenshots" to screenshots,
       ),
     )
+  }
+
+  /**
+   * Sets the preview image to a file from the media library, or removes it when [url] is empty: the route of its own the
+   * console's editor calls, because the preview is not a content field.
+   */
+  suspend fun setPreviewImage(listingId: String, url: String) {
+    if (url.isEmpty()) {
+      api.request("/api/marketplace/preview-image", ApiMethod.DELETE, jsonBody("listingId" to listingId))
+    } else {
+      api.request("/api/marketplace/preview-image", ApiMethod.POST, jsonBody("listingId" to listingId, "url" to url))
+    }
   }
 }

@@ -17,6 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { LISTING_LOGO_HINT } from '../constants/listing-media'
 import {
   marketplaceMinPriceUsd,
   marketplacePriceFloorHint,
@@ -180,5 +181,24 @@ describe('native publishing to the marketplace', () => {
     // A dataset's schema is the workspace's; every other kind is a site's.
     expect(screen('marketplace.publishDatasetSchema').scope).toBe('org')
     expect(kinds.filter(([id]) => id !== 'marketplace.publishDatasetSchema').every(([id]) => screen(id).scope === 'site')).toBe(true)
+  })
+
+  it('edits a listing as the console editor does: the gallery cap, the logo hint and the preview route', () => {
+    const editor = read('libs/plugins/marketplace/src/lib/components/listing-detail-editor.component.tsx')
+    const cap = /const MAX_SCREENSHOTS = (\d+)/.exec(editor)?.[1]
+    expect(cap).toBeDefined()
+    const swift = read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/Seller.swift')
+    const kotlin = read('libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/Seller.kt')
+    expect(swift).toContain(`let maxListingScreenshots = ${cap}`)
+    expect(kotlin).toContain(`const val MAX_LISTING_SCREENSHOTS = ${cap}`)
+    for (const native of [swift, kotlin]) {
+      expect(native).toContain(JSON.stringify(LISTING_LOGO_HINT))
+      // The preview image has its own route, POST to set and DELETE to remove, as the editor sends it.
+      expect(native).toContain('"/api/marketplace/preview-image"')
+      expect(native).toContain('"screenshots"')
+    }
+    expect(editor).toContain("'/api/marketplace/preview-image'")
+    expect(editor).toContain("method: values.previewImageUrl ? 'POST' : 'DELETE'")
+    expect(editor).toContain('screenshots,')
   })
 })
