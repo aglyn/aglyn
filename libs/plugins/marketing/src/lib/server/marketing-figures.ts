@@ -17,11 +17,13 @@
 
 import {
   PLUGIN_FIGURE_MAX_ROWS,
+  pluginFigureCellText,
   pluginFigureWindows,
   registerPluginFigureReader,
   type PluginFigureReader,
   type PluginFigureRow,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import { figureCount, figurePlural, figureRow } from '@aglyn/aglyn/app-utils/weekly-summary'
 import {
   type SendRate,
   type SendStats,
@@ -105,6 +107,24 @@ export function marketingFigureReaders(firestore: () => Firestore): PluginFigure
         'Each campaign email sent from the site in the window: how many were delivered and the share of delivered messages opened and clicked, with every campaign together on the first row.',
       scope: 'site',
       windows: WINDOWS,
+      weeklySummary: {
+        order: 90,
+        lines: (table) => {
+          const all = figureRow(table, 'campaign', 'All campaigns')
+          if (!all || !figureCount(all['delivered'])) return []
+          const sent = table.rows.filter((row) => row !== all && figureCount(row['delivered']) > 0).length
+          return [
+            `Campaigns: ${figurePlural(sent, 'email', 'emails')} sent, reaching ` +
+              pluginFigureCellText(table, 'delivered', all['delivered'] ?? 0) +
+              (typeof all['openRate'] === 'number'
+                ? `, ${pluginFigureCellText(table, 'openRate', all['openRate'])} opened`
+                : '') +
+              (typeof all['clickRate'] === 'number'
+                ? `, ${pluginFigureCellText(table, 'clickRate', all['clickRate'])} clicked`
+                : ''),
+          ]
+        },
+      },
       read: async (request) => {
         if (!request.hostId) return { ok: false, status: 400, error: 'Open a site to read its campaigns' }
         if (!WINDOWS.includes(request.days)) {

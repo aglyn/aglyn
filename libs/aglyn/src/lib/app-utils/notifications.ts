@@ -707,7 +707,7 @@ export const DIGEST_PREFS_FIELD = 'digestPrefs'
  * stored under it.
  */
 export interface NotificationDigestDeclaration {
-  /** The plugin that composes and sends it. */
+  /** The plugin that composes and sends it; `core` for the platform's own. */
   pluginId: string
   /** The key its switch is stored under in {@link DIGEST_PREFS_FIELD}. */
   key: string
@@ -717,9 +717,28 @@ export interface NotificationDigestDeclaration {
   description: string
 }
 
+/**
+ * The platform's own digests, listed before any plugin's. The Weekly summary
+ * (AGL-3867) is the core's because it reads every plugin's figures and
+ * belongs to none of them; its key is the one
+ * `@aglyn/tenant-data-admin/server/weekly-summary` reads.
+ */
+const CORE_NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] = [
+  {
+    pluginId: 'core',
+    key: 'weeklySummary',
+    label: 'Weekly summary',
+    description:
+      'Each Monday by email, for the workspaces you own or manage: last week’s visitors, top pages, ' +
+      'form submissions, new leads, bookings, sales and deals. Free, and nothing is generated.',
+  },
+]
+
 /** Every declared digest, in the order the settings page lists them. */
-export const NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] =
-  PLUGIN_NOTIFICATION_DIGESTS_DECLARED
+export const NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] = [
+  ...CORE_NOTIFICATION_DIGESTS,
+  ...PLUGIN_NOTIFICATION_DIGESTS_DECLARED,
+]
 
 /**
  * Whether a person keeps one digest: on unless its key is stored `false`. It

@@ -85,9 +85,10 @@ const day = (id: string, data: Data) => ({ [`hosts/host-1/analytics/${id}`]: dat
 
 describe('traffic', () => {
   const docs = {
-    // The window: Sep 10 to 16.
-    ...day('2026-09-16', { total: 40, visitors: 20, paths: { '/pricing': 30, '/': 10 }, referrers: { 'google.com': 12 }, utm: { source: { newsletter: 5 } } }),
-    ...day('2026-09-12', { total: 60, visitors: 25, paths: { '/pricing': 20, '/': 40 }, referrers: { 'google.com': 8, 'bing.com': 2 } }),
+    // The window: Sep 10 to 16. A referring host is stored as the collector
+    // writes it, its dots as `_`.
+    ...day('2026-09-16', { total: 40, visitors: 20, paths: { '/pricing': 30, '/': 10 }, referrers: { google_com: 12 }, utm: { source: { newsletter: 5 } } }),
+    ...day('2026-09-12', { total: 60, visitors: 25, paths: { '/pricing': 20, '/': 40 }, referrers: { google_com: 8, bing_com: 2 } }),
     // The week before: Sep 3 to 9.
     ...day('2026-09-05', { total: 80, visitors: 50, paths: { '/pricing': 10, '/': 70 } }),
   }
@@ -118,7 +119,7 @@ describe('traffic', () => {
     ])
   })
 
-  it('names where visits came from: referring sites and campaign tags', async () => {
+  it('names where visits came from — referring sites as hosts again, and campaign tags', async () => {
     const table = await tableOf(docs, 'traffic.sources')
     expect(table.rows).toEqual([
       { source: 'google.com', type: 'Referring site', views: 20, share: 20 },
