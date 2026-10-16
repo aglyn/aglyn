@@ -9,6 +9,38 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.259 — 2026-10-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.258...v1.0.0-beta.259)
+
+### Added
+
+- **ai:** set, change or remove an element's animation from Assist and the edit kind ([AGL-3838](https://linear.app/aglyn/issue/AGL-3838))
+- **ai:** pages and templates the AI builds move in a look-aware motion set in code ([AGL-3838](https://linear.app/aglyn/issue/AGL-3838))
+- **aglyn:** entrance motion pass for code-built pages; new home and starters move ([AGL-3838](https://linear.app/aglyn/issue/AGL-3838))
+
+### Fixed
+
+- **console:** one sign-in mints one console session and one device row ([AGL-3843](https://linear.app/aglyn/issue/AGL-3843))
+- **console:** "Use a different account" in the native sign-in sheet ends the session ([AGL-3842](https://linear.app/aglyn/issue/AGL-3842))
+- **ai:** a partly failed build job's alert names the kind once ([AGL-3683](https://linear.app/aglyn/issue/AGL-3683))
+- **theme:** every theme's links and buttons read the console's link and button slots ([AGL-3840](https://linear.app/aglyn/issue/AGL-3840))
+- **email:** bare addresses in email text link in the theme's link color ([AGL-3839](https://linear.app/aglyn/issue/AGL-3839))
+- **aglyn:** the first section's heading and largest picture stay still for LCP ([AGL-3838](https://linear.app/aglyn/issue/AGL-3838), [AGL-3581](https://linear.app/aglyn/issue/AGL-3581))
+- **ai:** an over-length plan search title or description is clipped at a word ([AGL-3837](https://linear.app/aglyn/issue/AGL-3837), [AGL-3813](https://linear.app/aglyn/issue/AGL-3813), [AGL-3828](https://linear.app/aglyn/issue/AGL-3828))
+
+### Documentation
+
+- pages that already move, and Assist animation edits ([AGL-3838](https://linear.app/aglyn/issue/AGL-3838))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **ai:** the live edit spec asks for two entrance animations ([AGL-3838](https://linear.app/aglyn/issue/AGL-3838), [AGL-3844](https://linear.app/aglyn/issue/AGL-3844), [AGL-3837](https://linear.app/aglyn/issue/AGL-3837))
+- **native:** regenerate the email HTML cases for the theme link color ([AGL-3840](https://linear.app/aglyn/issue/AGL-3840))
+
+</details>
+
 ## v1.0.0-beta.258 — 2026-10-15
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.257...v1.0.0-beta.258)
