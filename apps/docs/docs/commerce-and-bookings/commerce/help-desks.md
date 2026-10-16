@@ -1,17 +1,10 @@
 ---
 sidebar_position: 4.78
 title: "Help desks (Gorgias, Re:amaze, Kustomer, Gladly and Richpanel)"
-description: "Show your support team each buyer's recent orders beside their tickets in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form messages there as new tickets. Rolling out."
+description: "Show your support team each buyer's recent orders beside their tickets in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form messages there as new tickets."
 ---
 
 # Help desks: Gorgias, Re:amaze, Kustomer, Gladly and Richpanel
-
-:::note Rolling out
-Help desks appear in your console only once they are available on the platform
-you use. Until then, the site's **Integrations** page has no **Help desks**
-card, and contact form messages arrive in your [Inbox](../../content-and-data/forms/overview.md)
-as usual.
-:::
 
 Connect the help desk your support team already works in, and Aglyn keeps it
 up to date with your store. Each customer who has ordered from the site is added

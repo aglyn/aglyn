@@ -1133,6 +1133,32 @@ export const EXPECTED_POSTURE = Object.freeze([
           }),
         ]),
       }),
+      Object.freeze({
+        name: 'Plugin webhook bypass',
+        why: "shipping, fulfillment, print-on-demand, courier and delivery services post their webhooks from their own servers, which cannot solve a challenge, so a challenged webhook never reaches its route and shipments, tracking and order updates are lost",
+        // Live since 2026-10-16 (AGL-3846). Found when ShipMonk was already
+        // offered: an unsigned POST to each fulfillment network's webhook was
+        // answered 429 HTML, so a connected merchant's shipment notices never
+        // arrived and only the 15-minute read-back covered for them.
+        //
+        // Same argument as the Shipping connector bypass: each route proves
+        // its caller before it reads anything (an HMAC signature, a token in
+        // its address or a header it was registered with) and answers an
+        // unproven caller 401, and no vendor can send a header we invent.
+        //
+        // ONE regex naming each route EXACTLY, anchored at both ends, so a
+        // plugin's other routes and a look-alike such as `.../shipmonkX` stay
+        // challenged. A new webhook route is challenged until it is added
+        // here and to the live rule.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 're',
+            value:
+              '^/api/(fulfillment-networks/webhooks/(shipbob|shipmonk|flexport)|print-on-demand/webhooks/(printful|printify)|shipping/webhooks/(shippo|easypost|easyship|sendcloud)|couriers/webhooks/doordash|delivery-apps/webhooks/(doordash|uber-eats|grubhub))$',
+          }),
+        ]),
+      }),
     ]),
     // The console mount is the one mailed images resolve to, so Gmail's image
     // proxy and every campaign image land on this copy of the rule.

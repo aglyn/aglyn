@@ -69,9 +69,12 @@ import {
   ceilingedWindow,
   collectionCeiling,
   useFirestore,
+  useMerchantPayments,
   useOrgPlan,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useTransferLauncher } from '@aglyn/aglyn/app-utils/transfer-launcher-context'
@@ -199,6 +202,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
    * a paid feature.
    */
   const { org, ready: orgReady } = useOrgPlan(hostId)
+  // A draft order's link is a Stripe payment page, so it needs the store's
+  // Stripe account; the dialog says so before Create rather than after.
+  const payments = useMerchantPayments(hostId)
   const showStats =
     orgReady && checkEntitlement(org as never, 'commerceAnalytics')
 
@@ -1014,6 +1020,11 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       >
         <DialogTitle>{'Draft order'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {payments.blocked ? (
+            <PrerequisiteNotice href={payments.href ?? undefined} actionLabel="Open Payments">
+              {`${payments.reason ?? ''} The buyer pays a draft order on a Stripe payment page.`}
+            </PrerequisiteNotice>
+          ) : null}
           <TextField
             label="Product"
             value={draft?.productId ?? ''}
@@ -1135,21 +1146,23 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={
-              !draft?.productId ||
-              draft?.busy ||
-              // Once asked, the answer is required: retrying without one is
-              // refused again, so the button would only look broken.
-              Boolean(draft?.shipCountries?.length && !draft?.shipTo) ||
-              Boolean(draft?.askPostal && !draft?.shipPostal?.trim())
-            }
-            onClick={handleDraftCreate}
-          >
-            {'Create & copy link'}
-          </Button>
+          <BlockedControl blocked={payments.blocked} reason={payments.reason ?? ''}>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={
+                !draft?.productId ||
+                draft?.busy ||
+                // Once asked, the answer is required: retrying without one is
+                // refused again, so the button would only look broken.
+                Boolean(draft?.shipCountries?.length && !draft?.shipTo) ||
+                Boolean(draft?.askPostal && !draft?.shipPostal?.trim())
+              }
+              onClick={handleDraftCreate}
+            >
+              {'Create & copy link'}
+            </Button>
+          </BlockedControl>
         </DialogActions>
       </Dialog>
     </CardDisplay>

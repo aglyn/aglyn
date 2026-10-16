@@ -1,16 +1,10 @@
 ---
 sidebar_position: 4.6
 title: Print on demand (Printful and Printify)
-description: Connect your own Printful or Printify account, import its products into your store, and paid orders are sent to it to make and ship, with tracking written back to each order. Rolling out.
-unlisted: true
+description: Connect your own Printful or Printify account, import its products into your store, and paid orders are sent to it to make and ship, with tracking written back to each order.
 ---
 
 # Print on demand: Printful and Printify
-
-:::caution Rolling out
-Print on demand is **not yet available** on aglyn.com-hosted workspaces. Until
-it is, no **Print on demand** card appears on **Products → Integrations**.
-:::
 
 Sell T-shirts, mugs, posters and the rest of a print-on-demand catalog without
 holding stock. Connect your own **Printful** store or **Printify** shop, import

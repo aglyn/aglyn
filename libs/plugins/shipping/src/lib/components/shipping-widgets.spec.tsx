@@ -41,6 +41,10 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useStoreSettingsHref: () => '/acme/hosts/shop/products/shipping',
+}))
+
 const ORDER: OrderLabelsWidgetProps['order'] = {
   id: 'order-1',
   number: '1001',
@@ -165,6 +169,23 @@ describe('once a provider is configured', () => {
     )
     expect(((await screen.findByRole('button', { name: 'Buy label' })) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('button', { name: 'Return label' })).toBeTruthy()
+  })
+
+  it('says to add a ship-from address before Buy label, and links to Shipping (AGL-3853)', async () => {
+    request.mockResolvedValue({ labels: [], shipFrom: false })
+    render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
+    expect(
+      await screen.findByText('Add the address you ship from in Shipping settings to buy labels.', { selector: 'div' }),
+    ).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Buy label' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText('Open Shipping').closest('a')?.getAttribute('href')).toBe('/acme/hosts/shop/products/shipping')
+  })
+
+  it('leaves Buy label alone when the ship-from answer is unknown', async () => {
+    request.mockResolvedValue({ labels: [] })
+    render(<OrderLabelsWidget hostId="host-1" order={ORDER} />)
+    expect(((await screen.findByRole('button', { name: 'Buy label' })) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByText('Open Shipping')).toBeNull()
   })
 
   it('warns of an address the carrier could not deliver to, checked when the order was paid', async () => {

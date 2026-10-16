@@ -359,8 +359,8 @@ export const PLUGIN_DOCS = {
   },
   fulfillmentNetworks: {
     path: '/commerce-and-bookings/commerce/fulfillment-networks',
-    title: 'Fulfillment networks (ShipBob, ShipMonk and Amazon MCF)',
-    excerpt: 'Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.',
+    title: 'Fulfillment networks (ShipBob, ShipMonk, Flexport and Amazon MCF)',
+    excerpt: 'Send paid orders to ShipBob, ShipMonk, Flexport or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.',
   },
   funnels: {
     path: '/marketing-and-automation/analytics/funnels',
@@ -370,7 +370,7 @@ export const PLUGIN_DOCS = {
   helpDesks: {
     path: '/commerce-and-bookings/commerce/help-desks',
     title: 'Help desks (Gorgias, Re:amaze, Kustomer, Gladly and Richpanel)',
-    excerpt: 'Show your support team each buyer\'s recent orders beside their tickets in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form messages there as new tickets. Rolling out.',
+    excerpt: 'Show your support team each buyer\'s recent orders beside their tickets in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form messages there as new tickets.',
   },
   installYourFirstPlugin: {
     path: '/guides/install-your-first-plugin',
@@ -380,7 +380,7 @@ export const PLUGIN_DOCS = {
   inventorySync: {
     path: '/commerce-and-bookings/commerce/inventory-and-erp-sync',
     title: 'Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl, Ordoro)',
-    excerpt: 'Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account. Rolling out.',
+    excerpt: 'Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account.',
   },
   inviteTeammates: {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',
@@ -400,7 +400,7 @@ export const PLUGIN_DOCS = {
   loyaltyConnectors: {
     path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
     title: 'Connect Smile.io or Yotpo Loyalty',
-    excerpt: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register. Rolling out.',
+    excerpt: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register.',
   },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
@@ -475,7 +475,7 @@ export const PLUGIN_DOCS = {
   printOnDemand: {
     path: '/commerce-and-bookings/commerce/print-on-demand',
     title: 'Print on demand (Printful and Printify)',
-    excerpt: 'Connect your own Printful or Printify account, import its products into your store, and paid orders are sent to it to make and ship, with tracking written back to each order. Rolling out.',
+    excerpt: 'Connect your own Printful or Printify account, import its products into your store, and paid orders are sent to it to make and ship, with tracking written back to each order.',
   },
   publishAPlugin: {
     path: '/developers/plugins/publish-a-plugin',

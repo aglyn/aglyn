@@ -128,7 +128,7 @@ struct RecordsScreen: View {
         AglynEmptyState("Pick a workspace to see its data", systemImage: DataSymbols.dataset)
       }
     }
-    .aglynTask(id: "\(context.orgID ?? "")-\(datasetID)") {
+    .task(id: "\(context.orgID ?? "")-\(datasetID)") {
       if let orgID = context.orgID { await live.bind(context.firestore, datasetsPath(orgID) + [datasetID]) }
     }
   }
@@ -199,6 +199,14 @@ private struct RecordsBody: View {
     .onChange(of: searchText) { _, text in model.type(text) }
     .toolbar {
       ToolbarItemGroup(placement: .primaryAction) {
+        if canImportDatasetRecords(orgRole: context.orgRole) {
+          Button {
+            context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
+          } label: {
+            Label("Import records", systemImage: "square.and.arrow.up")
+          }
+          .accessibilityIdentifier("import-records")
+        }
         Button {
           exportRecords()
         } label: {
@@ -429,7 +437,7 @@ struct RecordDetailView: View {
       }
     }
     .navigationTitle(titled ? "Record" : "Records")
-    .aglynTask(id: "\(dataset.id)-\(recordID)") { await live.bind(context.firestore, recordsPath(orgID, dataset.id) + [recordID]) }
+    .task(id: "\(dataset.id)-\(recordID)") { await live.bind(context.firestore, recordsPath(orgID, dataset.id) + [recordID]) }
   }
 
   private func content(_ record: RecordRow) -> some View {
