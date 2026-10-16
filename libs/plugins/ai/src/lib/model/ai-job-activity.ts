@@ -17,6 +17,7 @@
 
 import {
   AI_JOB_PLAN_STEP,
+  AI_JOB_TERMINAL_STATUSES,
   type AiJobKind,
   type AiJobReviewReason,
   type AiJobStatus,
@@ -335,4 +336,52 @@ export function aiSiteBuildInFlight<
       return Number.isFinite(at) && now - at < AI_SITE_BUILD_PLAN_FRESH_MS
     }) ?? null
   )
+}
+
+/** The fields of a job {@link aiJobSettled} and {@link aiJobProblem} read. */
+export interface AiJobSettleSource {
+  status: AiJobStatus
+  error?: string | null
+  review?: { message?: string | null } | null
+}
+
+/** Whether a job has stopped moving: finished, or waiting on something only a person can change. */
+export function aiJobSettled(job: AiJobSettleSource | null): boolean {
+  if (!job) return false
+  return (
+    AI_JOB_TERMINAL_STATUSES.includes(job.status) ||
+    job.status === 'needs_input' ||
+    job.status === 'needs_review'
+  )
+}
+
+/**
+ * Why a settled job has no result to show, in words a person can act on, or
+ * `null` for a job that finished.
+ */
+export function aiJobProblem(job: AiJobSettleSource | null, failed: string): string | null {
+  if (!job || !aiJobSettled(job) || job.status === 'done') return null
+  if (job.status === 'canceled') return 'The job was canceled.'
+  if (job.status === 'needs_review') return job.review?.message || job.error || failed
+  return job.error || failed
+}
+
+export type AiFollowTone = 'info' | 'warning' | 'success' | 'error'
+
+/**
+ * What the follow card's status line says in each phase, and how loudly
+ * (AGL-3593): the dialog that started a job, and the apps' follow view.
+ */
+export const AI_JOB_FOLLOW_PHASE_LINES: Readonly<Record<AiJobPhase, { severity: AiFollowTone; text: string }>> = {
+  queued: { severity: 'info', text: 'Queued. It starts in a moment.' },
+  planning: { severity: 'info', text: 'Planning. The plan appears here when it is ready.' },
+  'plan-ready': {
+    severity: 'warning',
+    text: 'Your plan is ready. Read it below and confirm it to build — nothing is built until you do.',
+  },
+  building: { severity: 'info', text: 'Building. Everything it builds is an unpublished draft.' },
+  attention: { severity: 'warning', text: 'The job stopped and needs you.' },
+  done: { severity: 'success', text: 'Done. Your drafts are ready to open.' },
+  failed: { severity: 'error', text: 'The job stopped before it finished.' },
+  canceled: { severity: 'info', text: 'The job was canceled.' },
 }

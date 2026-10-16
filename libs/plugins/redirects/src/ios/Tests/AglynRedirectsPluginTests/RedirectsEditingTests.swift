@@ -87,6 +87,17 @@ final class RedirectsEditingTests: XCTestCase {
     XCTAssertNil(editor.deleting)
   }
 
+  func testDeleteStillHappensWhenTheDialogClosedFirst() async {
+    // The confirmation dialog dismisses (close() clears `deleting`) before its button's task runs.
+    let writes = FakeWrites()
+    let editor = RedirectsEditor(api: writes, uid: "u1")
+    editor.askDelete(row())
+    let asked = editor.deleting
+    editor.close()
+    await editor.confirmDelete(asked)
+    XCTAssertEqual(writes.calls, ["delete:r1", "announce:/old"])
+  }
+
   func testOnlyASitePathStaysInside() {
     XCTAssertFalse(isExternalRedirectDestination("/new"))
     XCTAssertTrue(isExternalRedirectDestination("//evil.example"))

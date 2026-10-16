@@ -27,11 +27,15 @@
 
 import { registerMobilePushSender } from './mobile-push-switch'
 
-let registered = false
+// On `globalThis` for the same reason as the registry itself: a second
+// module copy must not register a second sender and push everything twice.
+const REGISTERED_KEY = Symbol.for('@aglyn/tenant-data-admin:native-push-registered')
+
+const globalScope = globalThis as typeof globalThis & { [REGISTERED_KEY]?: true }
 
 export function registerNativePushSenders(): void {
-  if (registered) return
-  registered = true
+  if (globalScope[REGISTERED_KEY]) return
+  globalScope[REGISTERED_KEY] = true
   registerMobilePushSender(async (uids, payload, context) => {
     const { nativePushSender } = await import('./push-delivery')
     await nativePushSender(uids, payload, context)

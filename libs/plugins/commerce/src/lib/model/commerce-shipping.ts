@@ -382,6 +382,9 @@ export function resolveCheckoutShippingOptions(
   )
 }
 
+/** {@link CHECKOUT_SHIPPING_COUNTRIES} as plain codes, for the apps' draft order (AGL-3841). */
+export const CHECKOUT_SHIPPING_COUNTRY_CODES: readonly string[] = CHECKOUT_SHIPPING_COUNTRIES
+
 /** Shopper-facing names for the collectable destinations (AGL-1721). */
 export const CHECKOUT_SHIPPING_COUNTRY_NAMES: Readonly<Record<string, string>> =
   {

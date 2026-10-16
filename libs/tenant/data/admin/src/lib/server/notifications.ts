@@ -131,10 +131,10 @@ export function formatNotificationEmailDetails(
  * At most this many directory lookups per fan-out, and at most this many
  * notification emails.
  *
- * Both ceilings only ever bite on a fan-out where many recipients have
- * OPTED IN — the email channel defaults off outside a site's transactions
- * (`NOTIFICATION_TYPE_CHANNEL_DEFAULTS`), so the ordinary notification
- * costs exactly what it cost before this existed. They are here because a
+ * Both ceilings bite only on a fan-out where many recipients are emailed —
+ * the email channel defaults off outside the types in
+ * `NOTIFICATION_TYPE_CHANNEL_DEFAULTS`, and every fan-out goes to one
+ * workspace's or one site's people, or to staff. They are here because a
  * fan-out takes up to 400 uids and `notifyUsers` runs inside the mutation
  * that emitted it: a notification must not be able to turn one write into
  * four hundred directory reads and four hundred sends.

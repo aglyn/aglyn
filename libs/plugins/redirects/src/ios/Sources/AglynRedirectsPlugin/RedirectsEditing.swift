@@ -222,8 +222,10 @@ final class RedirectsEditor {
     }
   }
 
-  func confirmDelete() async {
-    guard let row = deleting else { return }
+  /// Deletes `asked`, the row the dialog was showing. The dialog's button hands it over because the dialog
+  /// closes (and `close()` clears `deleting`) before the button's task runs.
+  func confirmDelete(_ asked: RedirectRow? = nil) async {
+    guard let row = asked ?? deleting else { return }
     await run {
       try await self.api.delete(row.id)
       await self.api.announce(row.source)

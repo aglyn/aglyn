@@ -146,10 +146,45 @@ describe('a task falling due is work arriving (AGL-2659)', () => {
 describe('per-scope, per-channel notification settings (AGL-3223)', () => {
   const FORM = 'content.formSubmission'
 
-  it('defaults to the console and not the inbox, except a site\'s transactions', () => {
+  it('defaults to the console and not the inbox, except the types that email by default', () => {
     expect(notificationChannelEnabled(undefined, 'console', FORM)).toBe(true)
-    expect(notificationChannelEnabled({}, 'email', 'billing.invoice')).toBe(false)
-    expect(notificationChannelEnabled(undefined, 'email', 'content.taskAssigned')).toBe(false)
+    expect(notificationChannelEnabled({}, 'email', 'team.roleChanged')).toBe(false)
+    expect(notificationChannelEnabled(undefined, 'email', 'content.lowStock')).toBe(false)
+    expect(notificationChannelEnabled(undefined, 'email', 'staff.userSignedUp')).toBe(false)
+  })
+
+  it('emails work, bills, answers and stoppages to everyone who never said otherwise', () => {
+    for (const type of [
+      'content.taskAssigned',
+      'content.contactAssigned',
+      'content.leadAssigned',
+      'content.aiJobNeedsYou',
+      'content.aiJobDone',
+      'content.aiJobFailed',
+      'billing.invoice',
+      'billing.paymentFailed',
+      'billing.subscriptionCanceled',
+      'billing.usage',
+      'marketplace.review',
+      'support.ticketReply',
+      'system.announcement',
+      'system.formSubmissionsPaused',
+      'system.visitorRecordsPaused',
+      'system.abuseReportUrgent',
+      'system.riskNotice',
+      'system.dmcaCounterNotice',
+      'system.bandwidthCeilingTripped',
+      'system.billingWebhookHalfApplied',
+      'system.disputeUnattributed',
+      'staff.siteCreated',
+    ]) {
+      expect(notificationTypeChannelDefault(type, 'email')).toBe(true)
+      expect(notificationChannelEnabled({}, 'email', type, { orgId: 'o', hostId: 'h' })).toBe(true)
+    }
+    // A stored category no still wins over the type's default.
+    expect(
+      notificationChannelEnabled({ account: { billing: { email: false } } }, 'email', 'billing.invoice'),
+    ).toBe(false)
   })
 
   it('emails a site\'s transactions to everyone who never said otherwise', () => {
@@ -158,7 +193,7 @@ describe('per-scope, per-channel notification settings (AGL-3223)', () => {
       expect(notificationChannelEnabled({}, 'email', type, { orgId: 'o', hostId: 'h' })).toBe(true)
       expect(notificationTypeChannelDefault(type, 'email')).toBe(true)
     }
-    expect(notificationTypeChannelDefault('content.aiJobDone', 'email')).toBe(false)
+    expect(notificationTypeChannelDefault('content.lowStock', 'email')).toBe(false)
   })
 
   it('keeps a stored no, the category\'s or the type\'s, over that default', () => {
@@ -234,7 +269,7 @@ describe('per-scope, per-channel notification settings (AGL-3223)', () => {
       notificationChannelEnabled(undefined, 'email', FORM, undefined, muted),
     ).toBe(true)
     expect(
-      notificationChannelEnabled(undefined, 'email', 'content.taskAssigned', undefined, muted),
+      notificationChannelEnabled(undefined, 'email', 'content.lowStock', undefined, muted),
     ).toBe(false)
     expect(
       notificationChannelEnabled(

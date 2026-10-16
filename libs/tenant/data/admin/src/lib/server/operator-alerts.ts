@@ -101,6 +101,13 @@ export interface RaiseOperatorAlertOptions {
    * news of more than one tone.
    */
   level?: NotificationLevel
+  /**
+   * The tier as the caller judged it, for an alert that grows more urgent
+   * the longer its condition lasts (a check still degraded after 2 h). Sets
+   * the `[Must know]` prefix and the tier the webhook routes on; the console
+   * level follows it unless the definition or `level` names one.
+   */
+  tier?: OperatorAlertDefinition['tier']
   orgId?: string
   hostId?: string
 }
@@ -461,7 +468,7 @@ export function renderOperatorAlert(
   return {
     type: definition.type,
     label: definition.label,
-    tier: definition.tier,
+    tier: options.tier ?? definition.tier,
     category: definition.category,
     title,
     body,
@@ -512,7 +519,7 @@ export async function raiseOperatorAlert(
         type: alert.notificationType,
         title: alert.title,
         ...(alert.body ? { body: alert.body } : {}),
-        level: options.level ?? operatorAlertLevel(definition),
+        level: options.level ?? operatorAlertLevel({ tier: alert.tier, level: definition.level }),
         ...(alert.link && alert.link.startsWith('/') ? { link: alert.link } : {}),
         ...(alert.orgId ? { orgId: alert.orgId } : {}),
         ...(alert.hostId ? { hostId: alert.hostId } : {}),

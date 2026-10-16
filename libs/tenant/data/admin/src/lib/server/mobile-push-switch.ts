@@ -44,7 +44,25 @@ export type MobilePushSender = (
   context: { db: Firestore },
 ) => Promise<void>
 
-const senders = new Set<MobilePushSender>()
+/*
+ * The registry lives on `globalThis`, not in this module: `instrumentation.ts`
+ * registers the senders in its own copy of this module, and a route handler's
+ * `notifyUsers` reads another one (AGL-3412). A module-scoped set is empty
+ * where it is read, and every push is silently skipped.
+ */
+const SENDERS_KEY = Symbol.for('@aglyn/tenant-data-admin:mobile-push-senders')
+
+const globalScope = globalThis as typeof globalThis & {
+  [SENDERS_KEY]?: Set<MobilePushSender>
+}
+
+function senders(): Set<MobilePushSender> {
+  const existing = globalScope[SENDERS_KEY]
+  if (existing) return existing
+  const created = new Set<MobilePushSender>()
+  globalScope[SENDERS_KEY] = created
+  return created
+}
 
 /**
  * Adds a push transport to the fan-out. `notifyUsers` hands every registered
@@ -53,13 +71,13 @@ const senders = new Set<MobilePushSender>()
  * nothing is pushed. Returns the unregister function.
  */
 export function registerMobilePushSender(sender: MobilePushSender): () => void {
-  senders.add(sender)
+  senders().add(sender)
   return () => {
-    senders.delete(sender)
+    senders().delete(sender)
   }
 }
 
 /** The registered push transports, in registration order. */
 export function mobilePushSenders(): MobilePushSender[] {
-  return [...senders]
+  return [...senders()]
 }

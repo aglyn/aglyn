@@ -15,7 +15,9 @@ import SwiftUI
 public func registerCrmNative(_ r: NativePluginRegistrar) {
   for section in CrmSection.allCases {
     r.screen(section.screen, title: section == .contacts ? "CRM" : section.label, requiresSite: true, icon: section.symbol) { ctx, params in
-      CrmHubScreen(context: ctx, section: section, initialRecord: section.kind.flatMap { params[$0.param] })
+      CrmHubScreen(
+        context: ctx, section: section, initialRecord: section.kind.flatMap { params[$0.param] },
+        openEmail: section == .contacts ? params[contactsListEmailParam] : nil)
     }
   }
   for kind in CrmKind.allCases {

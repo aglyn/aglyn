@@ -193,6 +193,40 @@ export interface PluginFigureReader {
   /** The parameters the reader takes beyond its window; absent for none. */
   params?: readonly PluginFigureParam[]
   read(request: PluginFigureRequest): Promise<PluginFigureRead>
+  /**
+   * How the reader's table reads in the weekly summary email (AGL-3867), for
+   * a reader that belongs in it; absent, the summary leaves it out. The owner
+   * words its own figures, because only the owner knows which of its columns
+   * say what happened: the summary reads it over 7 days with no parameters
+   * and lists what `lines` answers.
+   */
+  weeklySummary?: PluginFigureWeeklySummary
+}
+
+/** A count a weekly summary's subject line may lead with, and how it is named. */
+export interface PluginFigureHeadline {
+  count: number
+  /** The noun for one, which also keys the sum across sites: "visitor". */
+  one: string
+  /** The noun for any other count: "visitors". */
+  many: string
+}
+
+/** A reader's part in the weekly summary. */
+export interface PluginFigureWeeklySummary {
+  /**
+   * Which section lists it: `site`, under each site; `workspace`, once for the
+   * whole workspace. A workspace reader may say `site` to be read narrowed to
+   * each site. Absent, a site reader is `site` and a workspace reader is
+   * `workspace`.
+   */
+  per?: 'site' | 'workspace'
+  /** Where its lines sit in a section: lower first. */
+  order: number
+  /** What the table says, one line each; `[]` when it has nothing to report this week. */
+  lines(table: PluginFigureTable): string[]
+  /** The count it adds to the subject line, or `null` for none this week. */
+  headline?(table: PluginFigureTable): PluginFigureHeadline | null
 }
 
 export const PLUGIN_FIGURES = definePluginServiceContract<PluginFigureReader>('core.figures', {
@@ -473,4 +507,56 @@ export function pluginFigureChange(current: number, previous: number | null): nu
   if (previous === null || !Number.isFinite(previous) || previous <= 0) return null
   if (!Number.isFinite(current)) return null
   return Math.round(((current - previous) / previous) * 1_000) / 10
+}
+
+/**
+ * How a cell reads to a person, by its column's kind; `null` is "—". Every
+ * consumer that shows a table to a person words its cells here, so an insight
+ * answer and a weekly summary print the same figure the same way.
+ */
+export function pluginFigureCellText(
+  table: Pick<PluginFigureTable, 'columns'>,
+  key: string,
+  value: PluginFigureCell | undefined,
+): string {
+  if (value === null || value === undefined || value === '') return '—'
+  const column = table.columns.find((entry) => entry.key === key)
+  if (typeof value === 'string' || !column) return String(value)
+  switch (column.kind) {
+    case 'money':
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: column.currency ?? 'USD',
+      }).format(value)
+    case 'percent':
+      return `${value.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+    case 'change':
+      return `${value > 0 ? '+' : ''}${value.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+    case 'duration': {
+      const seconds = Math.round(value)
+      if (seconds < 60) return `${seconds}s`
+      const minutes = Math.floor(seconds / 60)
+      if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`
+      return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+    }
+    default:
+      return value.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  }
+}
+
+/** The ISO 8601 week an instant falls in, in UTC (`2026-W38`). */
+export function pluginFigureIsoWeek(at: Date): string {
+  const date = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()))
+  // Thursday decides the week's year.
+  const weekday = date.getUTCDay() || 7
+  date.setUTCDate(date.getUTCDate() + 4 - weekday)
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1)
+  const week = Math.ceil(((date.getTime() - yearStart) / 86_400_000 + 1) / 7)
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+}
+
+/** The section of the weekly summary a reader is listed in, or `null` for a reader that is not in it. */
+export function pluginFigureSummarySection(reader: PluginFigureReader): 'site' | 'workspace' | null {
+  if (!reader.weeklySummary) return null
+  return reader.weeklySummary.per ?? (reader.scope === 'site' ? 'site' : 'workspace')
 }

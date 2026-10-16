@@ -326,6 +326,14 @@
       "why": "The service shape, slot walk and the 24-hour reminder band the console's Bookings card counts (AGL-3670)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/barcode/barcode-decode.ts",
+      "why": "The barcode symbologies' tables and check digits (EAN, UPC, Code 128), no imports: the apps' label sheet encodes with the same Code 128 table (AGL-3841)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/barcode/barcode-encode.ts",
+      "why": "Product label barcodes as bar modules, over barcode-decode's tables: the apps draw the label sheet's bars from the same encoding, and replay its cases (AGL-3841)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
       "why": "The pickup and delivery queue's tabs and its one Firestore query per tab (AGL-3624), which the native Aglyn app runs too; a type-only import."
     },
@@ -378,6 +386,10 @@
       "why": "What a store's shipping zones and rates cover: the resolver checkout builds its shipping options from and the Coverage block's words. Pure arithmetic over the settings document; the native Shipping page replays it from function-cases.generated.json."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-tax-decision.ts",
+      "why": "How an order's tax was calculated, in the order dialog's words; a type-only import of commerce-tax. The apps' order screens replay describeOrderTaxMode (AGL-3841)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
       "why": "The store's tax settings and the rate arithmetic, imports nothing; the offline register's totals tax a basket with it (AGL-3625)."
     },
@@ -388,6 +400,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
       "why": "The restock question's sentence the order screen prints (AGL-3651, AGL-3652); imports only commerce-orders."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
+      "why": "The order dialog's own rules: Fulfill items' counts and selection, the carrier select and the refund question; imports commerce-orders, commerce-dispute, order-fulfillment and tracking-url. The apps' order screens replay them (AGL-3841)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
@@ -426,8 +442,20 @@
       "why": "The receipt print layout as plain ops, which the app renders to a printable page (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/printing/product-labels.ts",
+      "why": "The product label sheet: sizes, copy limits, a product's label rows, the price line and the ZPL; imports barcode-encode, escape-html, commerce-receipt, print-document and a type from model/commerce. The apps print the same labels (AGL-3841)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/printing/render-text.ts",
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/transfer/shipping-presets.ts",
+      "why": "The orders export's shipping presets (Pirate Ship, Shippo, EasyPost, any tool) and the orders-still-to-ship filter; a type-only import of the transfer preset shape. The apps' Export for shipping offers the same (AGL-3841)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/utils/escape-html.ts",
+      "why": "Re-exports the shared escapeHtml, reached by product-labels (AGL-3841)."
     },
     {
       "path": "libs/plugins/crm/src/lib/constants/company-filters.ts",
@@ -692,6 +720,10 @@
     {
       "path": "libs/shared/util/timestamp/src/lib/zoned-time.ts",
       "why": "Reached by bookings: a moment on a zone's wall clock, through Intl; no imports."
+    },
+    {
+      "path": "libs/shared/util/tools/src/lib/escape-html.ts",
+      "why": "HTML escaping, no imports; reached by commerce's escape-html (AGL-3841)."
     },
     {
       "path": "libs/shared/util/tools/src/lib/linear-regex.ts",

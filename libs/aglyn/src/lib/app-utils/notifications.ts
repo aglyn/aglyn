@@ -707,7 +707,7 @@ export const DIGEST_PREFS_FIELD = 'digestPrefs'
  * stored under it.
  */
 export interface NotificationDigestDeclaration {
-  /** The plugin that composes and sends it. */
+  /** The plugin that composes and sends it; `core` for the platform's own. */
   pluginId: string
   /** The key its switch is stored under in {@link DIGEST_PREFS_FIELD}. */
   key: string
@@ -717,9 +717,28 @@ export interface NotificationDigestDeclaration {
   description: string
 }
 
+/**
+ * The platform's own digests, listed before any plugin's. The Weekly summary
+ * (AGL-3867) is the core's because it reads every plugin's figures and
+ * belongs to none of them; its key is the one
+ * `@aglyn/tenant-data-admin/server/weekly-summary` reads.
+ */
+const CORE_NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] = [
+  {
+    pluginId: 'core',
+    key: 'weeklySummary',
+    label: 'Weekly summary',
+    description:
+      'Each Monday by email, for the workspaces you own or manage: last week’s visitors, top pages, ' +
+      'form submissions, new leads, bookings, sales and deals. Free, and nothing is generated.',
+  },
+]
+
 /** Every declared digest, in the order the settings page lists them. */
-export const NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] =
-  PLUGIN_NOTIFICATION_DIGESTS_DECLARED
+export const NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] = [
+  ...CORE_NOTIFICATION_DIGESTS,
+  ...PLUGIN_NOTIFICATION_DIGESTS_DECLARED,
+]
 
 /**
  * Whether a person keeps one digest: on unless its key is stored `false`. It
@@ -863,9 +882,9 @@ export const NOTIFICATION_SETTINGS_FIELD = 'notificationSettings'
 /**
  * What a category does when nobody has said otherwise.
  *
- * Console on, email OFF, for every category — a site's own transactions are
- * the exception, by type, in {@link NOTIFICATION_TYPE_CHANNEL_DEFAULTS}.
- * Email defaults off because the inbox is
+ * Console on, email OFF, for every category. The types a person needs to hear
+ * about without opening the console are the exception, by type, in
+ * {@link NOTIFICATION_TYPE_CHANNEL_DEFAULTS}. Email defaults off because the inbox is
  * not ours to fill: the product already sends transactional mail nobody opted
  * into — welcome, verification, invites, dunning, usage alerts — and every one
  * of those leaves on the same domain a customer's password reset depends on.
@@ -900,22 +919,55 @@ export const NOTIFICATION_CHANNEL_DEFAULTS = inCategoryOrder(
 )
 
 /**
- * The types whose default differs from their category's: a site's own
- * transactions — a form submitted, a booking made, an order placed — email
- * the people who run it unless they said otherwise.
+ * The types whose default differs from their category's: each emails its
+ * recipients unless they said otherwise.
  *
  * Below every stored answer, the category's included, so a person who
  * switched content email off keeps it off; above the category default, so
  * everyone who never answered (every account, new or old) is emailed.
- * These are the events a site exists to produce, and an owner who hears
- * about them only by opening the console misses the customer.
+ *
+ * What is here is what somebody misses by hearing about it only in the
+ * console: a site's own transactions, work handed to them, their AI jobs,
+ * their bill, a reply or a verdict they are waiting on, an announcement, and
+ * every notice that something STOPPED or needs a person now. A type that
+ * already mails its own message stays out of the channel's way either way —
+ * see {@link NOTIFICATION_SELF_SENT_EMAIL_TYPES} and the `skipEmail` callers.
  */
 export const NOTIFICATION_TYPE_CHANNEL_DEFAULTS: Partial<
   Record<AglynNotificationType, Partial<Record<NotificationChannel, boolean>>>
 > = {
+  // A site's own transactions (AGL-3600).
   'content.formSubmission': { email: true },
   'content.booking': { email: true },
   'content.order': { email: true },
+  // Work handed to one person, and the AI jobs they started.
+  'content.taskAssigned': { email: true },
+  'content.contactAssigned': { email: true },
+  'content.leadAssigned': { email: true },
+  'content.aiJobNeedsYou': { email: true },
+  'content.aiJobDone': { email: true },
+  'content.aiJobFailed': { email: true },
+  // The workspace's bill. A usage crossing sends its own email and passes
+  // `skipEmail`, so this default never mails it twice.
+  'billing.invoice': { email: true },
+  'billing.paymentFailed': { email: true },
+  'billing.subscriptionCanceled': { email: true },
+  'billing.usage': { email: true },
+  // An answer somebody is waiting on.
+  'marketplace.review': { email: true },
+  'support.ticketReply': { email: true },
+  'system.announcement': { email: true },
+  // Something stopped, or needs a person now.
+  'system.formSubmissionsPaused': { email: true },
+  'system.visitorRecordsPaused': { email: true },
+  'system.abuseReportUrgent': { email: true },
+  'system.riskNotice': { email: true },
+  'system.dmcaCounterNotice': { email: true },
+  'system.bandwidthCeilingTripped': { email: true },
+  'system.billingWebhookHalfApplied': { email: true },
+  'system.disputeUnattributed': { email: true },
+  // Staff hear when somebody starts building.
+  'staff.siteCreated': { email: true },
 }
 
 /** What a type does on a channel when nobody has answered for it or its category. */

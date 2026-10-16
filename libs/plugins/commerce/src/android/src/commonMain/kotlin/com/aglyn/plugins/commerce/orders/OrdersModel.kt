@@ -4,6 +4,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.ListFilterRequest
+import com.aglyn.contracts.ListQueryPlan
+import com.aglyn.contracts.ListQuerySort
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.listquery.planListQuery
@@ -42,6 +45,30 @@ class OrdersListModel(
   var notice by mutableStateOf<String?>(null)
     private set
 
+  /** The filters added in the filter bar, beside the chip's. */
+  var clauses by mutableStateOf<List<ListFilterRequest>>(emptyList())
+    private set
+
+  /** The header sort asked; null is newest first. */
+  var sort by mutableStateOf<ListQuerySort?>(null)
+    private set
+
+  /** The plan the list ran, for its refusals and notices. */
+  var plan by mutableStateOf<ListQueryPlan?>(null)
+    private set
+
+  fun setFilters(next: List<ListFilterRequest>) {
+    if (next == clauses) return
+    clauses = next
+    reload()
+  }
+
+  fun sortBy(next: ListQuerySort?) {
+    if (next == sort) return
+    sort = next
+    reload()
+  }
+
   private var cursor: List<Any?>? = null
   private var job: Job? = null
 
@@ -61,14 +88,18 @@ class OrdersListModel(
     job?.cancel()
     val askedFilter = filter
     val askedSearch = search
+    val askedClauses = clauses
+    val askedSort = sort
     if (!debounce) rows = Load.Loading
     job = scope.launch {
       if (debounce) delay(ORDERS_SEARCH_DEBOUNCE_MS)
       rows = Load.Loading
-      val plan = planListQuery(Contracts.orderListQuery, ordersListRequest(askedFilter, askedSearch))
-      notice = plan.refused.firstOrNull()?.reason?.let { "Some of the search was left out: $it." }
+      val ran = planListQuery(Contracts.orderListQuery, ordersListRequest(askedFilter, askedSearch, askedClauses, askedSort))
+      plan = ran
+      // The filter bar says its own refusals; this line is for the chip and the search alone.
+      notice = if (askedClauses.isNotEmpty()) null else ran.refused.firstOrNull()?.reason?.let { "Some of the search was left out: $it." }
       rows = try {
-        val page = firestore.page(ordersQuery(hostId, askedFilter, askedSearch))
+        val page = firestore.page(ordersQuery(hostId, askedFilter, askedSearch, clauses = askedClauses, sort = askedSort))
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
         Load.Ready(page.docs.map(::orderRow))
@@ -86,10 +117,12 @@ class OrdersListModel(
     if (job?.isActive == true) return
     val askedFilter = filter
     val askedSearch = search
+    val askedClauses = clauses
+    val askedSort = sort
     loadingMore = true
     job = scope.launch {
       try {
-        val page = firestore.page(ordersQuery(hostId, askedFilter, askedSearch, startAfter = after))
+        val page = firestore.page(ordersQuery(hostId, askedFilter, askedSearch, startAfter = after, clauses = askedClauses, sort = askedSort))
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
         rows = Load.Ready(shown + page.docs.map(::orderRow).filter { row -> shown.none { it.id == row.id } })
@@ -103,7 +136,7 @@ class OrdersListModel(
 }
 
 /** The dialogs an order's screen opens, one at a time. */
-enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT, NOTE }
+enum class OrderDialog { FULFILL, DELIVERED, REFUND, CANCEL, RECEIPT, NOTE, EDIT_TRACKING, CANCEL_SHIPMENT, REFUND_LINE }
 
 /**
  * One order's actions: which dialog is open, whether its call is running,
@@ -130,12 +163,20 @@ class OrderActionsModel(
   var receiptChannels by mutableStateOf(setOf(ReceiptChannel.EMAIL))
     private set
 
-  fun open(next: OrderDialog) {
+  /** What the open dialog is about: a shipment's id, or a line's index. */
+  var target by mutableStateOf<String?>(null)
+    private set
+
+  fun open(next: OrderDialog, about: String? = null) {
     dialog = next
+    target = about
     error = null
     attemptKey = mintKey()
     if (next == OrderDialog.RECEIPT) scope.launch { receiptChannels = api.receiptChannels().ifEmpty { setOf(ReceiptChannel.EMAIL) } }
   }
+
+  /** The store's currency, which a typed shipping cost is in. */
+  suspend fun storeCurrency(): String = api.storeCurrency()
 
   fun close() {
     if (!busy) dialog = null
@@ -161,6 +202,36 @@ class OrderActionsModel(
         if (failure is CancellationException) throw failure
         error = (failure as? ConsoleApiError)?.message ?: "That did not go through. Check the connection and try again."
         done = null
+      } finally {
+        busy = false
+      }
+    }
+  }
+
+  /**
+   * Runs [call], which answers what to say; on success closes the dialog and says it, else keeps it open with the
+   * reason. A definitive refusal retires the attempt key (the next press is a new attempt); a lost answer keeps it, so
+   * the next press is the same attempt to the route.
+   */
+  fun runFor(call: suspend OrderActionsApi.(attemptKey: String) -> String) {
+    if (busy) return
+    busy = true
+    error = null
+    val key = attemptKey
+    scope.launch {
+      try {
+        val said = api.call(key)
+        dialog = null
+        done = said
+      } catch (failure: Throwable) {
+        if (failure is CancellationException) throw failure
+        val refused = failure as? ConsoleApiError
+        if (refused != null && refused.status in 1..499) {
+          attemptKey = mintKey()
+          error = refused.message
+        } else {
+          error = "The request did not complete, so it is not known whether it landed. Retrying is safe; the server writes it once."
+        }
       } finally {
         busy = false
       }

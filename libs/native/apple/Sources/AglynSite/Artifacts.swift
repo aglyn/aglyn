@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import Foundation
 import Observation
 
@@ -43,6 +44,15 @@ public enum ArtifactKind: String, CaseIterable, Identifiable, Sendable {
   public var id: String { rawValue }
 
   public var screen: String { "site.\(collection)" }
+
+  /// The zone this list hosts beside its create action (the console's `hostComponents`, `hostLayouts`, `hostTemplates`).
+  public var createZone: String {
+    switch self {
+    case .component: ListCreateZone.components
+    case .layout: ListCreateZone.layouts
+    case .template: ListCreateZone.templates
+    }
+  }
 
   public var collection: String {
     switch self {

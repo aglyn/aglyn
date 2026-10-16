@@ -22,6 +22,7 @@ import {
   registerPluginFigureReader,
   type PluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import { figureCount, figurePlural, figureRow } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 /**
@@ -104,6 +105,19 @@ export function automationRunFigureReader(firestore: () => Firestore): PluginFig
       'Runs of the site’s automations — actions, workflows and organization automations — over the window: how many succeeded and failed, the failure rate, and the change in runs from the window before, in total and by automation.',
     scope: 'site',
     windows: WINDOWS,
+    weeklySummary: {
+      order: 110,
+      lines: (table) => {
+        const all = figureRow(table, 'automation', 'All automations')
+        const succeeded = figureCount(all?.['succeeded'])
+        const failed = figureCount(all?.['failed'])
+        if (!succeeded && !failed) return []
+        return [
+          `Automations: ${figurePlural(succeeded, 'run', 'runs')} finished` +
+            (failed ? `, ${failed.toLocaleString('en-US')} failed` : ''),
+        ]
+      },
+    },
     read: async (request) => {
       if (!request.hostId) return { ok: false, status: 400, error: 'Open a site to read its automation runs' }
       if (!WINDOWS.includes(request.days)) {

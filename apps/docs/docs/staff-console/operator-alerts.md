@@ -67,7 +67,9 @@ only ever holds the answers staff actually gave.
 alert amber, and a routine one blue (see [how urgent each notification
 is](../getting-started/console-tour.md#notification-levels)). A few alerts name
 their own color because their tone and importance differ. A degraded health check
-is a must-know, but it is amber because degraded is not down. A recovery is green.
+is a must-know, but it is amber because degraded is not down. A check that is
+still degraded is amber at its first reminder and red from two hours on. A recovery
+is green.
 Support tickets are blue. The color changes nothing about delivery: the switches
 above decide that.
 
@@ -92,8 +94,8 @@ alerts.
 | Billing | Billing webhook failing its signature check; a delivery that moved nothing | Must |
 | Data protection | A person's erasure failed; a workspace's erasure failed; the database export failed | Must |
 | Legal | DMCA counter-notice; a DMCA takedown, impersonation or illegal-content report | Must |
-| Operations | A health check went degraded; a published site not rendering pages; the render monitor cannot see a site; the production canary found a deploy not rendering pages, rolled back or not | Must |
-| Operations | A health check recovered; a published site rendering again; a reaper stuck; a plugin job, consent group change, publish outbox or sending-domain provisioning failing; the bandwidth ceiling reached | Should |
+| Operations | A health check went degraded; a health check still degraded after 2 hours or more; a published site not rendering pages; the render monitor cannot see a site; the production canary found a deploy not rendering pages, rolled back or not | Must |
+| Operations | A health check still degraded after an hour; a health check recovered; a published site rendering again; a reaper stuck; a plugin job, consent group change, publish outbox or sending-domain provisioning failing; the bandwidth ceiling reached | Should |
 | Billing | Automatic billing lock; an invoice voided or uncollectible; a connected account's payout or transfer failed; a workspace's payment failed | Should |
 | Security | Staff access granted or a role raised; a plugin verifier regression | Should |
 | Support | A ticket past its response time; new tickets and replies (digest) | Should |
@@ -115,10 +117,26 @@ degraded, the **Health check degraded** alert goes out once. When it comes back,
 hour is told once, not on every swing. The page lists each check's current state and
 since when.
 
+**A check that stays degraded keeps reminding you.** One notice is easy to miss, so
+while a check stays degraded, **Health check still degraded** goes out an hour after
+it went degraded and again every two hours after that: at 1 hour, 3 hours, 5 hours,
+and so on, until it recovers. The first reminder is a should-know. From two hours on
+each reminder is a must-know, so it arrives red and marked **Must know** in the
+webhook channel. Each reminder names the check, how long it has been degraded and
+which checks were failing. It is told once per step however many copies of the
+console run the tick, and a check that recovers is not reminded again. If the tick
+missed a few runs, the next one sends only the latest reminder, not every one it
+missed.
+
+The reminders come from the stored verdicts, so a check that nothing asks any more
+keeps its last verdict. When you retire a health check that was degraded, delete its
+document in `operatorHealthState`, or it keeps reminding you.
+
 Nothing has to be watching for this to work. The **operator alerts tick**
 (`/api/admin/operator-alerts/tick`, every 15 minutes) asks every health endpoint on
 the console's own origin. It also asks the published-site runtime's endpoints when
-`OPERATOR_HEALTH_TENANT_ORIGIN` names one of your sites. The same tick flags support
+`OPERATOR_HEALTH_TENANT_ORIGIN` names one of your sites. The same tick sends the
+still-degraded reminders, flags support
 tickets past their response time and sends the daily digest.
 
 :::caution The tick cannot report its own death

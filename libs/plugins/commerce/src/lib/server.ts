@@ -463,6 +463,14 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/products/stock', async (req, res) =>
     (await import('./server/products-write')).productStockHandler(req, res),
   )
+  // The products list's Duplicate and Delete for the native apps (AGL-3841):
+  // the console's own copy and soft delete, with the site-wide cache drop.
+  registerPluginApiRoute('commerce/products/duplicate', async (req, res) =>
+    (await import('./server/products-write')).productDuplicateHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/products/delete', async (req, res) =>
+    (await import('./server/products-write')).productDeleteHandler(req, res),
+  )
   // The order dialog's note and restock answer for the native apps
   // (AGL-3651, AGL-3652): the console's own timeline computation, in one
   // transaction on the stored order. Loaded on first call.
@@ -471,6 +479,12 @@ export function registerCommerceConsoleApi(): void {
   )
   registerPluginApiRoute('commerce/order-restock-answer', async (req, res) =>
     (await import('./server/order-annotations')).orderRestockAnswerHandler(req, res),
+  )
+  // The order dialog's Packing slip and Invoice for the native apps
+  // (AGL-3841): the console's own two pages over the stored order, which the
+  // apps print on the device's print sheet. Loaded on first call.
+  registerPluginApiRoute('commerce/order-print', async (req, res) =>
+    (await import('./server/order-print')).orderPrintHandler(req, res),
   )
   // Issue / void store credit (AGL-2226). Server-side because the host
   // catch-all in the Firestore rules would otherwise let a client write

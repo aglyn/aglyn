@@ -34,28 +34,28 @@
           "type": "billing.invoice",
           "label": "Invoice available",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "neutral"
         },
         {
           "type": "billing.paymentFailed",
           "label": "Payment failed",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
           "type": "billing.subscriptionCanceled",
           "label": "Subscription canceled",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
           "type": "billing.usage",
           "label": "Usage threshold",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "warning"
         }
       ],
@@ -133,7 +133,7 @@
           "type": "content.taskAssigned",
           "label": "Task assigned to you",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "neutral"
         },
         {
@@ -148,14 +148,14 @@
           "type": "content.contactAssigned",
           "label": "Contact assigned to you",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "neutral"
         },
         {
           "type": "content.leadAssigned",
           "label": "Lead assigned to you",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "neutral"
         },
         {
@@ -178,21 +178,21 @@
           "type": "content.aiJobNeedsYou",
           "label": "AI job needs you",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "warning"
         },
         {
           "type": "content.aiJobDone",
           "label": "AI job finished",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "success"
         },
         {
           "type": "content.aiJobFailed",
           "label": "AI job stopped",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "warning"
         }
       ],
@@ -210,7 +210,7 @@
           "type": "marketplace.review",
           "label": "Listing review",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "info"
         }
       ],
@@ -235,7 +235,7 @@
           "type": "support.ticketReply",
           "label": "Support ticket reply",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "info"
         }
       ],
@@ -253,7 +253,7 @@
           "type": "system.announcement",
           "label": "Announcement",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "info"
         },
         {
@@ -288,28 +288,28 @@
           "type": "system.formSubmissionsPaused",
           "label": "Form submissions paused",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
           "type": "system.visitorRecordsPaused",
           "label": "Sign-ups or leads paused",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
           "type": "system.abuseReportUrgent",
           "label": "Urgent abuse report",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
           "type": "system.riskNotice",
           "label": "Held, flagged or locked on your workspace",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical",
           "selfSentEmail": "Risk and account notices are always emailed, whatever this switch says."
         },
@@ -317,14 +317,14 @@
           "type": "system.dmcaCounterNotice",
           "label": "DMCA counter-notice",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
           "type": "system.bandwidthCeilingTripped",
           "label": "Bandwidth ceiling reached",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "warning"
         },
         {
@@ -338,14 +338,14 @@
           "type": "system.billingWebhookHalfApplied",
           "label": "Billing webhook half applied",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
           "type": "system.disputeUnattributed",
           "label": "Card dispute with no owner",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {
@@ -364,6 +364,11 @@
     }
   ],
   "digests": [
+    {
+      "key": "weeklySummary",
+      "label": "Weekly summary",
+      "description": "Each Monday by email, for the workspaces you own or manage: last week’s visitors, top pages, form submissions, new leads, bookings, sales and deals. Free, and nothing is generated."
+    },
     {
       "key": "crmDaily",
       "label": "Daily CRM digest",

@@ -431,10 +431,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           { variant: 'info', persist: false },
         )
       }
-      // The source's SKU and barcode keys are not copied: the copy's own are
-      // derived below, and a copy of a product with none must have none.
-      const { $id: _sourceId, skus: _skus, barcodes: _barcodes, ...copy } =
-        product as ProductRow & { skus?: string[]; barcodes?: string[] }
       try {
         /*
          * The copy's slug is asked of the store, so a second Duplicate of
@@ -443,28 +439,22 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
          * and find it by the source's name.
          */
         const slug = await productSlugLedger(firestore, hostId).claim(
-          CommerceModel.commerceSlug(`${product.slug}-copy`),
+          CommerceModel.productDuplicateSlugBase(product.slug, product.name),
         )
         // Duplicate is a create — rides the quota-enforcing API (AGL-473).
+        // The source's SKU and barcode keys are not copied: the copy's own
+        // are derived (`productDuplicateFields`), and a copy of a product
+        // with none must have none.
         await createHostResource({
           hostId,
           resource: 'product',
           data: {
-            ...copy,
-            ...CommerceModel.productSearchFields({
-              name: `${product.name} (copy)`,
-              variants: product.variants,
-            }),
-            ...CommerceModel.productStockFields(product),
+            ...CommerceModel.productDuplicateFields(product, slug, Date.now()),
             // The COPY's smart collections: its name differs from the source's.
             ...(await productCollectionFields(firestore, hostId, {
               ...product,
-              name: `${product.name} (copy)`,
+              name: CommerceModel.productDuplicateName(product.name),
             })),
-            slug,
-            status: 'draft',
-            createdAtMs: Date.now(),
-            updatedAtMs: Date.now(),
           },
         })
         // A create moves the count and the aggregate is a one-shot — the

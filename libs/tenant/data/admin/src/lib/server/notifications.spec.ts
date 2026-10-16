@@ -336,11 +336,17 @@ describe('the notification email channel (AGL-3224)', () => {
     process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.example.com'
   })
 
-  it('sends nothing to somebody who never asked, outside a site\'s transactions', async () => {
+  it('sends nothing to somebody who never asked, outside the types that email by default', async () => {
     directory.set('uid-a', 'a@example.com')
-    await notifyUsers(['uid-a'], { ...FORM, type: 'content.taskAssigned' })
+    await notifyUsers(['uid-a'], { ...FORM, type: 'content.lowStock' })
     expect(written).toHaveLength(1)
     expect(sends).toHaveLength(0)
+  })
+
+  it('emails a task assigned to somebody who never said otherwise', async () => {
+    directory.set('uid-a', 'a@example.com')
+    await notifyUsers(['uid-a'], { ...FORM, type: 'content.taskAssigned' })
+    expect(sends).toHaveLength(1)
   })
 
   it('emails a form submission to somebody who never said otherwise', async () => {

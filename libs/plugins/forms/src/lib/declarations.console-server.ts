@@ -20,6 +20,7 @@
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerFormsRecordRoutes } from './model/forms-record-routes'
 import {
   FORM_SUBMISSIONS_MATCH_KEYS,
   FORM_SUBMISSIONS_TRANSFER_KEY,
@@ -58,6 +59,10 @@ async function formSubmissionsTransfer(): Promise<FormSubmissionsTransferResourc
  * Registering again replaces this plugin's own entries.
  */
 export function registerFormsConsoleServerDeclarations(): void {
+  // A form's console address on the server too, so a server route that names a
+  // form someone else made (an AI job's draft, AGL-3854) links it through the
+  // record-route seam rather than spelling this plugin's path.
+  registerFormsRecordRoutes()
   registerApiV1SiteResource(
     'form-submissions',
     {

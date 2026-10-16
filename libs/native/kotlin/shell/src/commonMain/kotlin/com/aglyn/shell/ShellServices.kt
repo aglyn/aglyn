@@ -40,7 +40,7 @@ class ShellServices(
   val besigner: @Composable (path: String, onExit: () -> Unit, onConsoleLink: (String) -> Unit) -> Unit,
   /** Test credentials a debug build fills the sign-in form with; null in release. */
   val debugSignIn: Pair<String, String>? = null,
-  /** The register's printers, card reader and scanner; none in the Aglyn app. */
+  /** The register's printers, card reader and scanner; in the Aglyn app, only the device's print sheet. */
   val peripherals: com.aglyn.hardware.Peripherals = com.aglyn.hardware.NoPeripherals,
   /** This install's push registration; desktop has none in v1. */
   val push: com.aglyn.core.PushRegistrar = com.aglyn.core.NoPush,

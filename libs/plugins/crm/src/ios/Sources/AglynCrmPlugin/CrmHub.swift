@@ -133,6 +133,8 @@ struct CrmHubScreen: View {
   let context: NativePluginContext
   @State var section: CrmSection
   var initialRecord: String?
+  /// The Contacts list asked to open the one person with this address (`?email=`, `contactByEmail`).
+  var openEmail: String?
 
   var body: some View {
     CrmGate(context: context) { scope, api, reference in
@@ -158,7 +160,9 @@ struct CrmHubScreen: View {
   private func sectionView(_ scope: CrmScope, _ api: CrmAPI, _ reference: CrmReference) -> some View {
     switch section {
     case .contacts, .leads, .companies:
-      RecordsSection(context: context, kind: section.kind!, scope: scope, api: api, reference: reference, initial: initialRecord)
+      RecordsSection(
+        context: context, kind: section.kind!, scope: scope, api: api, reference: reference, initial: initialRecord,
+        openEmail: section == .contacts ? openEmail : nil)
         .id(section)
     case .deals: DealsSection(context: context, scope: scope, api: api, reference: reference, initial: initialRecord)
     case .tasks: TasksSection(context: context, scope: scope, api: api, reference: reference)

@@ -195,6 +195,17 @@ final class FunnelsTests: XCTestCase {
     XCTAssertNil(editor.deleting)
   }
 
+  func testDeleteStillHappensWhenTheDialogClosedFirst() async {
+    // The confirmation dialog dismisses (close() clears `deleting`) before its button's task runs.
+    let api = FakeAPI()
+    let editor = FunnelsEditor(api: api)
+    editor.askDelete(row())
+    let asked = editor.deleting
+    editor.close()
+    await editor.confirmDelete(asked)
+    XCTAssertEqual(api.calls, ["delete fn1"])
+  }
+
   func testCreateWithAIOpensTheEditorOnTheProposalAndNamesWhatItLeftOut() async {
     let api = FakeAPI()
     let editor = FunnelsEditor(api: api)

@@ -25,7 +25,11 @@ import { firebaseAdmin, getLockdownVerdict, getOrgForHost, isImpersonationSessio
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   type EditedProduct,
+  liftLegacyProduct,
   productCollectionIds,
+  productDuplicateFields,
+  productDuplicateName,
+  productDuplicateSlugBase,
   productEditWrite,
   productMembershipInput,
   productSaveFields,
@@ -307,5 +311,130 @@ export function createProductStockHandler(options: ProductsWriteDeps = {}): Plug
   }
 }
 
+/**
+ * The first slug in `base`, `base-2`, `base-3`… no product of the site holds,
+ * as the console's slug ledger claims one (`product-slugs.ts`): a second
+ * Duplicate of the same product does not mint a second `-copy` (AGL-3321).
+ */
+export async function claimProductSlug(products: FirebaseFirestore.CollectionReference, base: string): Promise<string> {
+  for (let suffix = 1; suffix < 1000; suffix += 1) {
+    const candidate = suffix < 2 ? base : `${base}-${suffix}`
+    const held = await products.where('slug', '==', candidate).limit(1).get()
+    if (held.empty) return candidate
+  }
+  return `${base}-${Date.now()}`
+}
+
+/**
+ * `POST /api/commerce/products/duplicate` (AGL-3841): the products list's
+ * Duplicate for the native apps. The console builds the copy in the browser
+ * (`productDuplicateFields`, its slug ledger, the copy's smart collections)
+ * and creates it through the quota-enforcing resources route; this runs the
+ * same model over the stored product and creates it under the save route's
+ * create door (the plan's commerce entitlement and its product quota, counted
+ * in the same transaction). `newProductId` is the client's, so a retry finds
+ * its own copy and answers `replayed`.
+ */
+export function createProductDuplicateHandler(options: ProductsWriteDeps = {}): PluginApiHandler {
+  return async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    const deps = resolved(options)
+    const body = bodyOf(req)
+    const { hostId, productId, newProductId } = body
+    if (!validId(hostId) || !validId(productId) || !validId(newProductId) || productId === newProductId) {
+      return res.status(400).json({ error: 'Missing site or product' })
+    }
+    try {
+      const door = await gate(req, res, hostId, deps)
+      if (!door) return
+      const db = deps.firestore()
+      const hostRef = db.collection('hosts').doc(hostId)
+      const products = hostRef.collection('products')
+      const copyRef = products.doc(newProductId)
+      const already = await copyRef.get()
+      if (already.exists) return res.status(200).json({ ok: true, id: newProductId, replayed: true })
+      const source = await products.doc(productId).get()
+      if (!source.exists || source.get('deletedAt')) return res.status(404).json({ error: 'This product was deleted' })
+      const product = liftLegacyProduct((source.data() ?? {}) as never)
+      const slug = await claimProductSlug(products, productDuplicateSlugBase(product.slug, product.name))
+      const nowMs = deps.now()
+      const fields = productDuplicateFields(product, slug, nowMs)
+      const smartQuery = hostRef.collection('collections').where('kind', '==', 'catalog').where('mode', '==', 'smart')
+      const outbox = outboxEntry(db, hostId)
+      const answer = await db.runTransaction(async (tx) => {
+        const [existing, smart] = await Promise.all([tx.get(copyRef), tx.get(smartQuery)])
+        if (existing.exists) return { status: 200, body: { ok: true, id: newProductId, replayed: true } }
+        const early = planRefusal(door.org as never)
+        if (early) return { status: early.status, body: { error: early.error } }
+        const used = (await tx.get(products.count())).data().count
+        const room = roomRefusal(door.org as never, Number(used) || 0)
+        if (room) return { status: room.status, body: { error: room.error } }
+        // The COPY's smart collections: its name differs from the source's.
+        const collectionIds = productCollectionIds(
+          productMembershipInput({ name: productDuplicateName(product.name) }, product) as never,
+          smart.docs.map((doc) => smartCollectionRulesOf(doc.id, doc.data())),
+        )
+        tx.create(copyRef, {
+          ...fields,
+          collectionIds,
+          deletedAt: null,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          createdBy: door.uid,
+        })
+        tx.set(outbox.ref, outbox.data)
+        return { status: 200, body: { ok: true, id: newProductId, replayed: false, slug } }
+      })
+      if (answer.status === 200 && !(answer.body as { replayed?: boolean }).replayed) {
+        await settleCache(deps, hostId, outbox.ref, 'product duplicated from the app')
+      }
+      return res.status(answer.status).json(answer.body)
+    } catch (error) {
+      console.error('[commerce/products/duplicate]', error)
+      return res.status(500).json({ error: 'Could not duplicate product' })
+    }
+  }
+}
+
+/**
+ * `POST /api/commerce/products/delete` (AGL-3841): the products list's Delete
+ * for the native apps, the console's write (`deletedAt` on the product, which
+ * stops it being purchasable) with the site-wide cache drop, under the save
+ * route's gate. Deleting a deleted product answers `already`.
+ */
+export function createProductDeleteHandler(options: ProductsWriteDeps = {}): PluginApiHandler {
+  return async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    const deps = resolved(options)
+    const body = bodyOf(req)
+    const { hostId, productId } = body
+    if (!validId(hostId) || !validId(productId)) return res.status(400).json({ error: 'Missing site or product' })
+    try {
+      const door = await gate(req, res, hostId, deps)
+      if (!door) return
+      const db = deps.firestore()
+      const productRef = db.collection('hosts').doc(hostId).collection('products').doc(productId)
+      const outbox = outboxEntry(db, hostId)
+      const answer = await db.runTransaction(async (tx) => {
+        const stored = await tx.get(productRef)
+        if (!stored.exists) return { status: 404, body: { error: 'This product no longer exists' } }
+        if (stored.get('deletedAt')) return { status: 200, body: { ok: true, already: true } }
+        tx.update(productRef, { deletedAt: FieldValue.serverTimestamp() })
+        tx.set(outbox.ref, outbox.data)
+        return { status: 200, body: { ok: true, already: false } }
+      })
+      if (answer.status === 200 && !(answer.body as { already?: boolean }).already) {
+        await settleCache(deps, hostId, outbox.ref, 'product deleted from the app')
+      }
+      return res.status(answer.status).json(answer.body)
+    } catch (error) {
+      console.error('[commerce/products/delete]', error)
+      return res.status(500).json({ error: 'Could not delete product' })
+    }
+  }
+}
+
 export const productSaveHandler = createProductSaveHandler()
 export const productStockHandler = createProductStockHandler()
+export const productDuplicateHandler = createProductDuplicateHandler()
+export const productDeleteHandler = createProductDeleteHandler()
