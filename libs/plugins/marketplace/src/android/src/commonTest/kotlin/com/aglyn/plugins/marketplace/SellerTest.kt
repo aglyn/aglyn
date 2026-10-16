@@ -27,11 +27,13 @@ import kotlin.test.assertNull
 class SellerTest {
   private class Calls(answer: String = "{}", status: HttpStatusCode = HttpStatusCode.OK) {
     val seen = mutableListOf<Pair<String, JsonObject>>()
+    val methods = mutableListOf<String>()
     val client = ConsoleApiClient(
       origin = "https://console.test/",
       http = HttpClient(
         MockEngine { request ->
           val text = (request.body as? OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+          methods += request.method.value
           seen += request.url.encodedPath to (if (text.isEmpty()) JsonObject(emptyMap()) else Json.parseToJsonElement(text).jsonObject)
           respond(answer, status, headersOf(HttpHeaders.ContentType, "application/json"))
         },
@@ -118,16 +120,40 @@ class SellerTest {
     val api = SellerApi(calls.client, "o1")
     api.setVisibility("l1", "private")
     api.setPublished("l1", published = false)
-    api.updateListing("l1", mapOf("displayName" to "Hero", "description" to "A hero", "readme" to "About it", "homepageUrl" to "https://x.test"), "Marketing")
-    api.updateListing("l1", mapOf("displayName" to "Hero"), "")
+    api.updateListing("l1", mapOf("displayName" to "Hero", "description" to "A hero", "readme" to "About it", "homepageUrl" to "https://x.test"), "Marketing", listOf("/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"))
+    api.updateListing("l1", mapOf("displayName" to "Hero"), "", emptyList())
     assertEquals(List(4) { "/api/marketplace/publish-plugin" }, calls.seen.map { it.first })
     assertEquals(mapOf("action" to "set-visibility", "listingId" to "l1", "visibility" to "private"), calls.seen[0].second.mapValues { it.value.jsonPrimitive.content })
     assertEquals(mapOf("action" to "set-published", "listingId" to "l1", "published" to "false"), calls.seen[1].second.mapValues { it.value.jsonPrimitive.content })
     val update = calls.seen[2].second
     assertEquals("update-listing", update["action"]?.jsonPrimitive?.content)
     assertEquals(listOf("Marketing"), update["categories"]!!.jsonArray.map { it.jsonPrimitive.content })
-    // The screenshots and the preview are not sent, so they are left as they are.
-    assertNull(update["screenshots"])
+    // The gallery is sent whole, in order, as the console's editor sends it; the preview is not a content field.
+    assertEquals(listOf("/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"), update["screenshots"]!!.jsonArray.map { it.jsonPrimitive.content })
+    assertNull(update["previewImageUrl"])
     assertEquals(0, calls.seen[3].second["categories"]!!.jsonArray.size)
+    assertEquals(0, calls.seen[3].second["screenshots"]!!.jsonArray.size)
+  }
+
+  @Test
+  fun thePreviewImageIsSetAndRemovedThroughItsOwnRoute() = runTest {
+    val calls = Calls()
+    val api = SellerApi(calls.client, "o1")
+    api.setPreviewImage("l1", "/api/media/cdn/org:o1/m1")
+    api.setPreviewImage("l1", "")
+    assertEquals(List(2) { "/api/marketplace/preview-image" }, calls.seen.map { it.first })
+    assertEquals(listOf("POST", "DELETE"), calls.methods)
+    assertEquals(mapOf("listingId" to "l1", "url" to "/api/media/cdn/org:o1/m1"), calls.seen[0].second.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(mapOf("listingId" to "l1"), calls.seen[1].second.mapValues { it.value.jsonPrimitive.content })
+  }
+
+  @Test
+  fun theGalleryHoldsSixDistinctScreenshotsAndAListingReadsItsOwn() {
+    var gallery = emptyList<String>()
+    repeat(8) { gallery = addingScreenshot("/s/$it", gallery) }
+    assertEquals((0 until 6).map { "/s/$it" }, gallery)
+    assertEquals(listOf("/s/1"), addingScreenshot("/s/1", listOf("/s/1")))
+    val listing = SellerListing.from(FirestoreDoc("l1", "marketplaceListings/l1", mapOf("displayName" to "Hero", "screenshots" to listOf("/a", "/b", 3))))
+    assertEquals(listOf("/a", "/b"), listing.screenshots)
   }
 }

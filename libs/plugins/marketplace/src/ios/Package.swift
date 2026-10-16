@@ -32,6 +32,7 @@ let package = Package(
         .product(name: "AglynUI", package: "apple"),
         .product(name: "AglynPluginHost", package: "apple"),
         .product(name: "AglynScreens", package: "apple"),
+        .product(name: "AglynSite", package: "apple"),
       ],
       // Publishing the site as a template: the spec screens its Kotlin module reads too (src/android/screens links the file).
       resources: [.copy("Resources/marketplace.screens.json")]

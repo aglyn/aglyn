@@ -9,12 +9,14 @@ import XCTest
 
 private final class SellerTransport: HTTPTransport, @unchecked Sendable {
   var seen: [(path: String, body: [String: Any])] = []
+  var methods: [String] = []
   var answer = "{}"
   var status = 200
 
   func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
     let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
     seen.append((request.url?.path ?? "", body))
+    methods.append(request.httpMethod ?? "")
     return (Data(answer.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
   }
 }
@@ -104,8 +106,10 @@ final class SellerTests: XCTestCase {
     let api = SellerAPI(api: client(transport), orgID: "o1")
     try await api.setVisibility("l1", "private")
     try await api.setPublished("l1", published: false)
-    try await api.updateListing("l1", fields: ["displayName": "Hero", "description": "A hero", "readme": "About it", "homepageUrl": "https://x.test"], category: "Marketing")
-    try await api.updateListing("l1", fields: ["displayName": "Hero"], category: "")
+    try await api.updateListing(
+      "l1", fields: ["displayName": "Hero", "description": "A hero", "readme": "About it", "homepageUrl": "https://x.test"], category: "Marketing",
+      screenshots: ["/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"])
+    try await api.updateListing("l1", fields: ["displayName": "Hero"], category: "", screenshots: [])
     XCTAssertEqual(transport.seen.map(\.path), Array(repeating: "/api/marketplace/publish-plugin", count: 4))
     XCTAssertEqual(transport.seen[0].body["action"] as? String, "set-visibility")
     XCTAssertEqual(transport.seen[0].body["visibility"] as? String, "private")
@@ -114,8 +118,30 @@ final class SellerTests: XCTestCase {
     let update = transport.seen[2].body
     XCTAssertEqual(update["action"] as? String, "update-listing")
     XCTAssertEqual(update["categories"] as? [String], ["Marketing"])
-    // The screenshots and the preview are not sent, so they are left as they are.
-    XCTAssertNil(update["screenshots"])
+    // The gallery is sent whole, in order, as the console's editor sends it; the preview is not a content field.
+    XCTAssertEqual(update["screenshots"] as? [String], ["/api/media/cdn/org:o1/a", "/api/media/cdn/org:o1/b"])
+    XCTAssertNil(update["previewImageUrl"])
     XCTAssertEqual(transport.seen[3].body["categories"] as? [String], [])
+    XCTAssertEqual(transport.seen[3].body["screenshots"] as? [String], [])
+  }
+
+  func testThePreviewImageIsSetAndRemovedThroughItsOwnRoute() async throws {
+    let transport = SellerTransport()
+    let api = SellerAPI(api: client(transport), orgID: "o1")
+    try await api.setPreviewImage("l1", url: "/api/media/cdn/org:o1/m1")
+    try await api.setPreviewImage("l1", url: "")
+    XCTAssertEqual(transport.seen.map(\.path), ["/api/marketplace/preview-image", "/api/marketplace/preview-image"])
+    XCTAssertEqual(transport.methods, ["POST", "DELETE"])
+    XCTAssertEqual(transport.seen[0].body as? [String: String], ["listingId": "l1", "url": "/api/media/cdn/org:o1/m1"])
+    XCTAssertEqual(transport.seen[1].body as? [String: String], ["listingId": "l1"])
+  }
+
+  func testTheGalleryHoldsSixDistinctScreenshotsAndAListingReadsItsOwn() {
+    var gallery: [String] = []
+    for index in 0..<8 { gallery = addingScreenshot("/s/\(index)", to: gallery) }
+    XCTAssertEqual(gallery, (0..<6).map { "/s/\($0)" })
+    XCTAssertEqual(addingScreenshot("/s/1", to: ["/s/1"]), ["/s/1"])
+    let listing = SellerListing(FirestoreDocument(id: "l1", data: ["displayName": "Hero", "screenshots": ["/a", "/b", 3]]))
+    XCTAssertEqual(listing.screenshots, ["/a", "/b"])
   }
 }
