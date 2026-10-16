@@ -303,6 +303,27 @@ object AiCreateDoors {
   }
 }
 
+/**
+ * The job a create screen was following when it opened something on top of itself (the draft, the Besigner, AI jobs,
+ * credits). The shell disposes a screen that is not on top, so coming back would otherwise show an empty brief: the
+ * screen takes its job back from here. A list's entry clears it, so a new Create with AI starts from a new brief.
+ */
+object AiCreateFollowed {
+  private val leaving = HashMap<String, String>()
+
+  fun leave(key: String, jobId: String) {
+    leaving[key] = jobId
+  }
+
+  fun take(key: String): String? = leaving.remove(key)
+
+  fun forget(key: String) {
+    leaving.remove(key)
+  }
+}
+
+private fun followKey(context: NativePluginContext, kind: AiCreateKind?) = "${context.orgId}/${context.hostId}/${kind?.key}"
+
 // ── The entry beside a list's create action ──────────────────────────────
 
 /**
@@ -323,7 +344,10 @@ fun AiCreateButton(context: NativePluginContext, kind: AiCreateKind) {
     }
   }
   val shown = door?.takeIf { it.drawn } ?: return
-  val open = { context.navigate(AI_CREATE_SCREEN, mapOf("kind" to kind.key)) }
+  val open = {
+    AiCreateFollowed.forget(followKey(context, kind))
+    context.navigate(AI_CREATE_SCREEN, mapOf("kind" to kind.key))
+  }
   if (placement == SlotPlacement.HEADER) {
     FilledTonalIconButton(
       onClick = open,
@@ -356,7 +380,8 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
   var busy by remember { mutableStateOf(false) }
   var notice by remember { mutableStateOf<String?>(null) }
   var outOfCredits by remember { mutableStateOf(false) }
-  var jobId by remember { mutableStateOf(initialJobId) }
+  val followed = remember { followKey(context, kind) }
+  var jobId by remember { mutableStateOf(initialJobId ?: AiCreateFollowed.take(followed)) }
   var view by remember { mutableStateOf<AiFollowView?>(null) }
   var following by remember { mutableStateOf<Job?>(null) }
   DisposableEffect(Unit) { onDispose { following?.cancel() } }
@@ -455,8 +480,9 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
   }
 
   LaunchedEffect(Unit) {
-    val first = jobId
-    if (first != null) follow(first) else loadDoor(false)
+    // The door's words frame a followed job too (its title and what was started).
+    jobId?.let { follow(it) }
+    loadDoor(false)
   }
 
   @Composable
@@ -477,6 +503,7 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
       when {
         currentJob != null -> FollowSections(
           context, currentJob, current?.copy, view, busy, notice,
+          onLeave = { AiCreateFollowed.leave(followed, currentJob) },
           onConfirm = { decide(currentJob, cancel = false) },
           onCancel = { decide(currentJob, cancel = true) },
         )
@@ -557,7 +584,8 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
           current.building?.let { NoticeBanner(it, StatusTone.INFO) }
           notice?.let {
             NoticeBanner(it, StatusTone.WARNING)
-            if (outOfCredits) CreditActions()
+            // Where more credits come from, unless the credits line above already offers it.
+            if (outOfCredits && current.credits?.exhausted != true) CreditActions()
           }
           Button(
             onClick = { start(current, copy) },
@@ -586,6 +614,7 @@ private fun FollowSections(
   view: AiFollowView?,
   busy: Boolean,
   notice: String?,
+  onLeave: () -> Unit,
   onConfirm: () -> Unit,
   onCancel: () -> Unit,
 ) {
@@ -606,12 +635,18 @@ private fun FollowSections(
       view.spent?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       view.open?.let { open ->
         Button(
-          onClick = { context.openLink(open.detail) },
+          onClick = {
+            onLeave()
+            context.openLink(open.detail)
+          },
           modifier = Modifier.fillMaxWidth().testTag("ai-create-open"),
         ) { Text(open.label) }
         open.besigner?.let { path ->
           OutlinedButton(
-            onClick = { context.openBesigner(path, ConsoleScope.ABSOLUTE) },
+            onClick = {
+              onLeave()
+              context.openBesigner(path, ConsoleScope.ABSOLUTE)
+            },
             modifier = Modifier.fillMaxWidth().testTag("ai-create-besigner"),
           ) { Text("Edit in the Besigner") }
         }
@@ -649,7 +684,13 @@ private fun FollowSections(
       }
     }
   }
-  TextButton(onClick = { context.navigate("ai.job", mapOf("jobId" to jobId)) }, modifier = Modifier.testTag("ai-create-jobs")) {
+  TextButton(
+    onClick = {
+      onLeave()
+      context.navigate("ai.job", mapOf("jobId" to jobId))
+    },
+    modifier = Modifier.testTag("ai-create-jobs"),
+  ) {
     Text("Open AI jobs")
   }
 }

@@ -400,7 +400,8 @@ struct AiCreateScreen: View {
       if let building = door.building { AglynNotice(building, tone: .info) }
       if let notice {
         AglynNotice(notice, tone: .warning)
-        if outOfCredits { creditActions }
+        // Where more credits come from, unless the credits line above already offers it.
+        if outOfCredits && door.credits?.exhausted != true { creditActions }
       }
       Button {
         start(door, copy: copy)
