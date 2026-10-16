@@ -25,6 +25,7 @@ import { resolveConsolePluginPage } from '@aglyn/aglyn'
 import { useEnabledPluginIds } from '../../../../../../components/console-plugins-gate.component'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
 import {
@@ -471,10 +472,16 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       <CircularProgress size={24} />
     </Box>
   ) : !PluginComponent ? (
-    <Alert severity="warning">
-      {"This page isn't available. It may have moved or the feature that " +
-        'provided it is not installed.'}
-    </Alert>
+    // The commonest cause is a plugin switched off for this site or the
+    // workspace, which the operator can turn back on themselves.
+    <PrerequisiteNotice
+      severity="warning"
+      href={orgSlug ? buildRoute(Route.ORG_PLUGINS, { orgSlug }) : undefined}
+      actionLabel="Open Plugins"
+    >
+      {"This page isn't available. The plugin that provides it may be turned off " +
+        'for this site, or the page may have moved. Turn the plugin on under Plugins.'}
+    </PrerequisiteNotice>
   ) : !orgReady || !permissionsLoaded || surfacePermission === 'pending' ? (
     // The choke point for every plugin console page (AGL-1380). `org` is
     // undefined both while the billing doc is in flight and while the read is
