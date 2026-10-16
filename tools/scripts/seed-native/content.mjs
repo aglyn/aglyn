@@ -204,17 +204,36 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
     },
     { merge: true },
   )
+  // The theme library holds the site's own themes (`custom`), a marketplace theme it installed (`installed`) and the
+  // stash a built-in theme keeps while another is picked (`default`, `preset`), each by its `kind`. Only the first two
+  // are listed as themes to switch to.
   await put(`hosts/${hostId}/themes/theme-warm`, {
+    kind: 'custom',
     name: 'Warm',
     theme: { colorSchemes: { light: { primary: { main: '#8a4b2a' } } }, shape: { borderRadius: 8 } },
     createdAt: ago(12),
     updatedAt: ago(12),
   })
   await put(`hosts/${hostId}/themes/theme-cool`, {
+    kind: 'custom',
     name: 'Cool',
     theme: { colorSchemes: { light: { primary: { main: '#1a5f8a' } } } },
     createdAt: ago(9),
     updatedAt: ago(9),
+  })
+  await put(`hosts/${hostId}/themes/installed--seed-theme-harvest`, {
+    kind: 'installed',
+    name: 'Harvest',
+    theme: { colorSchemes: { light: { primary: { main: '#6b7d2a' } } }, shape: { borderRadius: 12 } },
+    installedFrom: { listingId: 'seed-theme-harvest', version: '1.0.0' },
+    createdAt: ago(7),
+    updatedAt: ago(7),
+  })
+  await put(`hosts/${hostId}/themes/default`, {
+    kind: 'default',
+    name: 'Platform default',
+    override: { patch: { shape: { borderRadius: 4 } } },
+    updatedAt: ago(8),
   })
   // One customized email: its design is a version the Besigner opens.
   await put(`hosts/${hostId}/emailTemplates/order-receipt`, {
