@@ -143,6 +143,29 @@ public enum DeepLinks {
     return params
   }
 
+  /// A notification's stored link as the console follows it (`normalizeNotificationLink`, AGL-644): host
+  /// notifications are stored as `/{hostDocId}/…` and opened at `/{orgSlug}/hosts/{subdomain}/…`, and `/org/…`
+  /// is the workspace's own `/{orgSlug}/…`. Anything else, and an absolute URL, is left as it is.
+  public static func notificationLink(
+    _ link: String?, orgSlug: String?, hostID: String?, hostSubdomain: String?
+  ) -> String? {
+    guard let link, !link.isEmpty else { return nil }
+    guard link.hasPrefix("/") else { return link }
+    if let orgSlug, !orgSlug.isEmpty, let hostID, !hostID.isEmpty, let hostSubdomain, !hostSubdomain.isEmpty {
+      let prefix = "/\(hostID)"
+      if link == prefix || link.hasPrefix(prefix + "/") || link.hasPrefix(prefix + "?") {
+        return "/\(orgSlug)/hosts/\(hostSubdomain)" + link.dropFirst(prefix.count)
+      }
+    }
+    if let orgSlug, !orgSlug.isEmpty {
+      if link == "/org" || link.hasPrefix("/org/") || link.hasPrefix("/org?") {
+        return "/\(orgSlug)" + link.dropFirst("/org".count)
+      }
+      if link == "/hosts" { return "/\(orgSlug)/hosts" }
+    }
+    return link
+  }
+
   public static func resolve(_ link: String, routes: [any DeepLinkRoute]) -> LinkTarget? {
     guard let full = consolePath(of: link) else { return nil }
     let path: String

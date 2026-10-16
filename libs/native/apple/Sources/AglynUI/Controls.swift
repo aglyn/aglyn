@@ -121,11 +121,22 @@ public struct AglynNotice: View {
   let actionTitle: String?
   let action: (() -> Void)?
 
-  /// `actionTitle` and `action` add one button beside the message ("Undo").
-  /// A trailing closure is still `onDismiss`.
+  /// A trailing closure is `onDismiss`, the notice's close button. It is the
+  /// only closure this init takes, so the compiler cannot bind it to another one.
+  public init(_ message: String, tone: AglynTone, onDismiss: (() -> Void)? = nil) {
+    self.message = message
+    self.tone = tone
+    self.onDismiss = onDismiss
+    self.actionTitle = nil
+    self.action = nil
+  }
+
+  /// `actionTitle` and `action` add one button beside the message ("Undo"); either
+  /// nil leaves it out. Neither has a default, so the first init stays the only
+  /// match for a notice that has just a close button.
   public init(
-    _ message: String, tone: AglynTone, onDismiss: (() -> Void)? = nil, actionTitle: String? = nil,
-    action: (() -> Void)? = nil
+    _ message: String, tone: AglynTone, onDismiss: (() -> Void)? = nil, actionTitle: String?,
+    action: (() -> Void)?
   ) {
     self.message = message
     self.tone = tone

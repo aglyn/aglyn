@@ -31,7 +31,7 @@ export async function seedNotifications({ put, uid, orgId, hostId, now }) {
       type: 'content.order',
       title: `New order on ${site} — $52.37`,
       body: 'A shopper ordered 2 × Stoneware Mug on Juniper Street Bakery.',
-      link: `/${hostId}/orders`,
+      link: `/${hostId}/products`,
       ago: 12 * MINUTE,
     },
     {
