@@ -51,6 +51,12 @@ export interface AiJobAdmissionContext {
   firestore: FirebaseFirestore.Firestore
   orgId: string
   hostId: string | null
+  /**
+   * The create door's check, asked before "Create site" makes the site the
+   * job is for (AGL-3859): `hostId` is null because the site does not exist
+   * yet, and a kind that needs one answers for everything but the site.
+   */
+  siteToCome?: boolean
   /** The job's kind-specific inputs, as the door parsed or the job stored them. */
   inputs: Readonly<Record<string, unknown>>
   /** The org document the gate ladder read; a check narrows it to the fields it reads. */

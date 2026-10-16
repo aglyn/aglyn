@@ -50,7 +50,6 @@ import { requestStarterSite } from '../utils/host-first-run'
 import {
   SITE_START_LIVE_VALUE,
   SITE_START_PARAM,
-  SITE_START_VALUE,
 } from './host-first-run-gate.component'
 import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
 import { useSiteAddress } from './site-address-fields.component'
@@ -98,7 +97,7 @@ export interface CreateHostDialogProps {
 
 /** What a create attempt came to. */
 type CreateOutcome =
-  | { site: ConsoleCreatedSite; guidedStart: boolean }
+  | { site: ConsoleCreatedSite }
   | { error: string; address?: boolean }
 
 /**
@@ -121,7 +120,13 @@ type CreateOutcome =
  *
  * A workspace with no start to offer — no widget on the zone, or one that
  * answers it draws nothing — gets the plain name-and-address dialog, which
- * creates the site with the starter as it always has.
+ * creates the site with the starter. A guided start the person was not offered
+ * here is still offered on the site, which has its starter until it is
+ * answered (AGL-3859).
+ *
+ * A guided start is checked by the jobs route before the site is created
+ * (AGL-3859), so one that would be refused, or that asks for the Free
+ * go-ahead, is answered with nothing created.
  *
  * What the create would refuse for reasons the console already knows — a role
  * without `hosts.create`, a plan with no site left — is said before anything
@@ -259,7 +264,7 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
             // so the response's slug outranks the (possibly null) current one.
             orgSlug: String(payload.orgSlug ?? orgSlug ?? ''),
           }
-          return { site, guidedStart: payload.guidedStart === true }
+          return { site }
         } catch (error) {
           console.error(error)
           return { error: 'An error has occurred' }
@@ -279,7 +284,11 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
     if (busy || !address.check()) return
     setBusy(true)
     try {
-      const outcome = await requestCreate()
+      // Always with the starter (AGL-3859). Without it the server makes the
+      // site empty for a guided start this dialog never offered, and a person
+      // who leaves before that start is answered is left with a site that has
+      // nothing on it.
+      const outcome = await requestCreate('starter')
       if ('error' in outcome) {
         return void enqueueSnackbar(outcome.error, {
           variant: outcome.address ? 'warning' : 'error',
@@ -290,11 +299,7 @@ function CreateSiteFlow({ onClose }: { onClose: () => void }) {
       // Create clickable again, until the dashboard has loaded behind it.
       onClose()
       if (!outcome.site.orgSlug) return
-      // A site born for the guided start without this dialog having offered
-      // it lands with `?start=site`, which the host layout answers with the
-      // start (AGL-3596). Every other site lands on its dashboard.
-      const dashboard = dashboardOf(outcome.site)
-      land(outcome.guidedStart ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_VALUE}` : dashboard)
+      land(dashboardOf(outcome.site))
     } finally {
       setBusy(false)
     }
