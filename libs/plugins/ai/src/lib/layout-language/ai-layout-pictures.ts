@@ -43,11 +43,17 @@ import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from './ai-layout-label
  *
  * Where the library answered and nothing in it fits a slot
  * ({@link AI_LAYOUT_NO_PHOTO}), the slot keeps the compiler's no-photo
- * treatment — its frame with its icon, or its section's own band behind a
- * cover — and never a starter: the beta.257 Copper Kettle Catering start
- * (2026-10-15) opened a barbecue caterer's home page on the starters'
- * pottery workbench (AGL-3831). An empty picture draws nothing on the
- * published page, and the Besigner shows the owner where to choose one.
+ * treatment — its frame with its icon — and never a starter: the beta.257
+ * Copper Kettle Catering start (2026-10-15) opened a barbecue caterer's home
+ * page on the starters' pottery workbench (AGL-3831). An empty picture draws
+ * nothing on the published page, and the Besigner shows the owner where to
+ * choose one. A COVER left without a photo is taken out, frame and all
+ * ({@link aiLayoutDropEmptyCovers}): its frame is a black scrim laid over the
+ * whole section for a dimmed photo, and with nothing in it the section read
+ * as a solid black block (the beta.261 Synchronicity Gym hero, AGL-3856).
+ * Without it the section shows its own band: a cover's section is pinned to
+ * the site's dark scheme, which paints that scheme's background and text
+ * colors, so the words written for a dark photo stay readable.
  *
  * A slot keeps the alt text the model wrote only when it describes the photo
  * placed: a stock photo that is not what it says is described by what it is
@@ -355,6 +361,47 @@ export function aiLayoutPlacePictures(
 }
 
 /**
+ * Whether a frame is a cover's (AGL-3856): laid absolutely over its whole
+ * section, the photo dimmed over it, as the compiler draws words over a
+ * photo.
+ */
+function isCoverFrame(frame: Record<string, unknown> | undefined): boolean {
+  const sx = frame?.['sx'] as Record<string, unknown> | undefined
+  return sx?.['position'] === 'absolute' && sx['width'] === '100%' && sx['height'] === '100%'
+}
+
+/**
+ * The page without the covers left with no photo (AGL-3856): each slot whose
+ * photo is missing and whose frame is a cover loses its frame, its image and
+ * its icon, so its section shows its own band instead of a black scrim over
+ * nothing. Every other empty slot keeps its frame for the owner to fill.
+ */
+export function aiLayoutDropEmptyCovers(
+  nodes: NodesMap,
+  slots: readonly AiLayoutPictureSlot[],
+  photos: ReadonlyArray<AiLayoutPicturePhoto | null>,
+): NodesMap {
+  const map = nodes as unknown as Record<string, Record<string, unknown>>
+  const covers = slots.filter((slot, index) => {
+    if (photos[index]?.src || !slot.frameId) return false
+    const image = map[slot.imageId]
+    const src = (image?.['props'] as Record<string, unknown> | undefined)?.['src']
+    return !(typeof src === 'string' && src.trim()) && isCoverFrame(map[slot.frameId])
+  })
+  if (!covers.length) return nodes
+  const next = { ...map }
+  for (const slot of covers) {
+    const frameId = slot.frameId as string
+    for (const [id, node] of Object.entries(next)) {
+      const children = node['nodes'] as string[] | undefined
+      if (children?.includes(frameId)) next[id] = { ...node, nodes: children.filter((child) => child !== frameId) }
+    }
+    for (const id of [frameId, slot.imageId, slot.iconId]) if (id) delete next[id]
+  }
+  return next as unknown as NodesMap
+}
+
+/**
  * A source of photos found for the slots themselves — a stock search copied
  * into the site's library — answering per slot, in order: a photo; or
  * {@link AI_LAYOUT_NO_PHOTO} where the library answered and nothing fits,
@@ -369,8 +416,8 @@ export type AiLayoutPictureSource = (
 /**
  * Fills a stored page's empty picture slots (AGL-3660): from `source` where
  * one is given and it answers; a slot it answers with nothing fitting stays
- * without a photo; every other slot takes a starter photo, described by its
- * own words (AGL-3831). Never throws, and never leaves a page worse than it
+ * without a photo, a cover taken out ({@link aiLayoutDropEmptyCovers}); every
+ * other slot takes a starter photo, described by its own words (AGL-3831). Never throws, and never leaves a page worse than it
  * came: a picture is decoration, and a job never fails over one.
  */
 export async function aiResolveLayoutPictures(
@@ -407,15 +454,12 @@ export async function aiResolveLayoutPictures(
     const starters = aiLayoutStarterPhotos(slots, input.seed).map((photo) =>
       otherLanguage ? { ...photo, alt: aiLayoutLabel('illustrativePhoto', input.language) } : photo,
     )
-    return aiLayoutPlacePictures(
-      nodes,
-      slots,
-      slots.map((_slot, index) => {
-        const answer = found[index]
-        if (answer) return answer.src ? answer : null
-        return starters[index] ?? null
-      }),
-    )
+    const photos = slots.map((_slot, index) => {
+      const answer = found[index]
+      if (answer) return answer.src ? answer : null
+      return starters[index] ?? null
+    })
+    return aiLayoutDropEmptyCovers(aiLayoutPlacePictures(nodes, slots, photos), slots, photos)
   } catch (error) {
     console.error('ai layout pictures: the page keeps its empty picture slots', { error })
     return nodes
