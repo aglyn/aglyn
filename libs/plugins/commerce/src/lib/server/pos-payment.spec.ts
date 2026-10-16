@@ -499,6 +499,20 @@ describe('typed card and the QR link', () => {
     expect(create.params.get('capture_method')).toBeNull()
     expect(Number(create.params.get('application_fee_amount'))).toBe(100 + posCardProcessingCostCents(6000))
   })
+
+  it('hands back the publishable key the card form loads, so a register needs no context read to take it', async () => {
+    const previous = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_fake'
+    try {
+      const keyed = await act({ action: 'card-keyed', amountCents: 2000 }, 'kp')
+      expect(keyed.body.publishableKey).toBe('pk_test_fake')
+      const cash = await act({ action: 'cash', tenderedCents: 500, amountCents: 500 }, 'kc')
+      expect(cash.body.publishableKey).toBeUndefined()
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+      else process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = previous
+    }
+  })
 })
 
 describe('voiding an open sale', () => {

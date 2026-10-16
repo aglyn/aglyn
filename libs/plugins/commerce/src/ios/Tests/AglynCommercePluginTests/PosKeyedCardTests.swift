@@ -97,6 +97,36 @@ final class KeyedCardTenderTests: XCTestCase {
     XCTAssertEqual(request?.merchantName, "Corner Shop")
   }
 
+  func testTheKeyTheServerAnsweredWithLoadsTheForm() async {
+    var started = keyedAnswer(due: 1080, keyedPayment("pending"), secret: secret)
+    started.publishableKey = "pk_test_fromServer"
+    XCTAssertEqual(
+      readPaymentAnswer(.object(["sale": .object([:]), "publishableKey": "pk_test_fromServer"])).publishableKey,
+      "pk_test_fromServer")
+    let api = ScriptedSaleAPI()
+    api.answers = [.success(started), .success(keyedAnswer(due: 0, keyedPayment("succeeded"), completed: true))]
+    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
+    let checkout = checkout(api)
+    // A register whose context never loaded has no key of its own.
+    await checkout.payCard(KeyedCardService(entry: form, publishableKey: "", merchantName: "Corner Shop"))
+    XCTAssertEqual(form.requests.first?.publishableKey, "pk_test_fromServer")
+    XCTAssertEqual(checkout.step, .receipt(changeCents: 0))
+  }
+
+  func testNoKeyAnywhereSaysCardEntryIsNotSetUpAndReleasesTheAmount() async {
+    let api = ScriptedSaleAPI()
+    api.answers = [
+      .success(keyedAnswer(due: 1080, keyedPayment("pending"), secret: secret)),
+      .success(keyedAnswer(due: 1080, keyedPayment("canceled"))),
+    ]
+    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
+    let checkout = checkout(api)
+    await checkout.payCard(KeyedCardService(entry: form, publishableKey: "", merchantName: "Corner Shop"))
+    XCTAssertTrue(form.requests.isEmpty, "the form never opens without a key")
+    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-keyed", "cancel"])
+    XCTAssertEqual(checkout.notice?.message, "Card entry is not set up for this site.")
+  }
+
   func testTheTipIsPartOfWhatTheFormCharges() async {
     let api = ScriptedSaleAPI()
     api.answers = [
@@ -224,9 +254,9 @@ final class KeyedCardTenderTests: XCTestCase {
   func testTheCardStepReadsAsTypingNotTapping() {
     let form = FakeCardForm(.canceled(paymentIntentID: intent))
     let keyed = service(form)
-    XCTAssertEqual(keyed.label, "Type card")
+    XCTAssertEqual(keyed.label, "Enter card manually")
     XCTAssertEqual(keyed.kind, .keyed)
-    XCTAssertEqual(keyed.prompt, "Type the card into the card form.")
+    XCTAssertEqual(keyed.prompt, "Enter the card in the card form.")
   }
 }
 
@@ -271,21 +301,23 @@ final class KeyedCardOfferTests: XCTestCase {
     return model
   }
 
-  func testTypeCardIsOfferedWithTheSitesKeyAndThisAppsCardForm() async {
+  func testEnterCardManuallyIsOfferedWithTheSitesKeyAndThisAppsCardForm() async {
     let model = await register(key: "pk_test_51Habc", entry: FakeCardForm(.canceled(paymentIntentID: intent)))
-    XCTAssertEqual(model.keyedCard?.label, "Type card")
+    XCTAssertEqual(model.keyedCard?.label, "Enter card manually")
     XCTAssertEqual(model.keyedCard?.publishableKey, "pk_test_51Habc")
-    XCTAssertEqual(model.cardService(labeled: "Type card")?.kind, .keyed)
+    XCTAssertEqual(model.cardService(labeled: "Enter card manually")?.kind, .keyed)
   }
 
-  func testTypeCardIsNotOfferedWithoutTheKeyAsTheConsoleDoesNot() async {
+  func testEnterCardManuallyIsOfferedEvenWhenTheContextHasNoKey() async {
+    // The server hands the key back with the intent, so a missing (or unread) context never hides the tender.
     let model = await register(key: "", entry: FakeCardForm(.canceled(paymentIntentID: intent)))
-    XCTAssertNil(model.keyedCard)
+    XCTAssertEqual(model.keyedCard?.label, "Enter card manually")
+    XCTAssertEqual(model.keyedCard?.publishableKey, "")
   }
 
-  func testTypeCardIsNotOfferedWhereTheAppHasNoCardForm() async {
+  func testEnterCardManuallyIsNotOfferedWhereTheAppHasNoCardForm() async {
     let model = await register(key: "pk_test_51Habc", entry: nil)
     XCTAssertNil(model.keyedCard, "the Mac register and the Aglyn app carry no Stripe card SDK")
-    XCTAssertNil(model.cardService(labeled: "Type card"))
+    XCTAssertNil(model.cardService(labeled: "Enter card manually"))
   }
 }

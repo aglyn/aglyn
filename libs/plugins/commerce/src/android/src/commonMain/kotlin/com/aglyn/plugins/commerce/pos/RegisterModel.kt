@@ -158,15 +158,16 @@ class RegisterModel(
   val readers = mutableStateListOf<CardReaderService>()
 
   /**
-   * "Type card", as the console offers it with the site's publishable key,
-   * where this app has Stripe's card form. Not offered while offline: a card
-   * needs the server's intent.
+   * A card typed in (the console's "Type card"), wherever this app has
+   * Stripe's card form. Offered even before the register's context has
+   * loaded: the server hands the publishable key back with the intent, so a
+   * context read that failed never hides the tender. Not offered while
+   * offline: a card needs the server's intent.
    */
   val keyedCard: KeyedCardService?
     get() {
       val entry = peripherals.keyedCardEntry ?: return null
-      val key = context?.publishableKey?.takeIf { it.isNotEmpty() } ?: return null
-      return if (online) KeyedCardService(entry, key, storeName) else null
+      return if (online) KeyedCardService(entry, context?.publishableKey.orEmpty(), storeName) else null
     }
 
   /** The card tender a payment step names by label, to cancel or to read what it asks for. */

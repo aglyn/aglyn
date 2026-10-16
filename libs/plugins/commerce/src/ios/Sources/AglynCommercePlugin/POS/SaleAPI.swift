@@ -132,6 +132,8 @@ struct PosPaymentAnswer: Equatable {
   let completed: Bool
   let clientSecret: String?
   let paymentIntentID: String?
+  /// The publishable key a typed card's form loads Stripe with (`card-keyed` answers carry it).
+  var publishableKey: String? = nil
 
   /// The payment this answer started or re-read.
   var payment: PosSalePayment? { sale.payments.first { $0.id == paymentID } }
@@ -207,6 +209,21 @@ func readPosContext(_ body: JSONValue?) -> PosContext {
     publishableKey: record["publishableKey"].text ?? "")
 }
 
+/// The readers route's `list` answer (`commerce/pos-readers`).
+func readPosReadersList(_ body: JSONValue?) -> PosReadersList {
+  let record = body.object
+  return PosReadersList(
+    available: record["available"].flag, testMode: record["testMode"].flag, locationReady: record["locationReady"].flag,
+    readers: record["readers"].array.compactMap { entry in
+      let reader = entry.objectValue
+      guard let id = reader["id"].text else { return nil }
+      return PosReaderRow(
+        id: id, label: reader["label"].text ?? "Card reader", registerID: reader["registerId"].text,
+        deviceType: reader["deviceType"].text, serialNumber: reader["serialNumber"].text,
+        status: reader["status"].text ?? "offline", livemode: reader["livemode"].flag)
+    })
+}
+
 func readSalePayment(_ element: JSONValue) -> PosSalePayment? {
   let payment = element.objectValue
   guard let id = payment["id"].text else { return nil }
@@ -231,7 +248,8 @@ func readPaymentAnswer(_ body: JSONValue?) -> PosPaymentAnswer {
     paymentID: record["paymentId"].text,
     completed: record["completed"].flag,
     clientSecret: record["clientSecret"].text,
-    paymentIntentID: record["paymentIntentId"].text)
+    paymentIntentID: record["paymentIntentId"].text,
+    publishableKey: record["publishableKey"].text)
 }
 
 func readOpenedSale(_ body: JSONValue?) -> PosOpenedSale {

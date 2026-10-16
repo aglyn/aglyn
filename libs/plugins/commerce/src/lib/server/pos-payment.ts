@@ -283,6 +283,11 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
       completed: outcome.order.status === 'paid',
       ...(outcome.clientSecret ? { clientSecret: outcome.clientSecret } : {}),
       ...(outcome.paymentIntentId ? { paymentIntentId: outcome.paymentIntentId } : {}),
+      // The key the typed-card form loads Stripe with, beside the secret it
+      // confirms, so a register whose context read failed can still take it.
+      ...(action === 'card-keyed' && outcome.clientSecret
+        ? { publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '') }
+        : {}),
     })
   } catch (error) {
     console.error('[pos-payment]', action, error)

@@ -241,6 +241,9 @@ final class DeviceReaderService: CardReaderService {
   }
 }
 
+/// What the register calls a card typed in at the register.
+let keyedCardLabel = "Enter card manually"
+
 /// A card typed in at the register (card not present), the console's "Type
 /// card": the server makes the PaymentIntent (`card-keyed`) and hands back its
 /// secret, Stripe's own card form takes the card (the number never touches the
@@ -262,9 +265,9 @@ final class KeyedCardService: CardReaderService {
   }
 
   var id: String { "keyed" }
-  var label: String { "Type card" }
+  var label: String { keyedCardLabel }
   var kind: CardReaderKind { .keyed }
-  var prompt: String? { "Type the card into the card form." }
+  var prompt: String? { "Enter the card in the card form." }
 
   func charge(
     _ deps: TenderDeps, amountCents: Int, tipCents: Int, attemptKey: String,
@@ -286,8 +289,10 @@ final class KeyedCardService: CardReaderService {
     }
     // The secret names its own intent (`pi_…_secret_…`).
     let intent = started.paymentIntentID ?? secret.components(separatedBy: "_secret_").first ?? ""
+    // The key the server answered with, else the one the register's context read.
+    let key = started.publishableKey.flatMap { $0.isEmpty ? nil : $0 } ?? publishableKey
     let request = KeyedCardRequest(
-      paymentIntentID: intent, clientSecret: secret, publishableKey: publishableKey,
+      paymentIntentID: intent, clientSecret: secret, publishableKey: key,
       amountCents: payment.amountCents + payment.tipCents, merchantName: merchantName)
     let problem =
       request.problem
