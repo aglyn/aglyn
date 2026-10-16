@@ -110,12 +110,12 @@ enum OrderFilter: String, CaseIterable, Identifiable {
   }
 }
 
-/// The orders page's plan: a chip's clauses, a typed word, newest first.
-func ordersPlan(_ filter: OrderFilter, search: String) -> ListQueryPlan {
+/// The orders page's plan: a chip's clauses, the filters added, a typed word, and the sort asked (newest first by default).
+func ordersPlan(_ filter: OrderFilter, search: String, clauses: [ListFilterRequest] = [], sort: ListQuerySort? = nil) -> ListQueryPlan {
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
   return planListQuery(
     ContractValues.shared.orderListQuery,
-    ListQueryRequest(clauses: filter.clauses, search: words.isEmpty ? nil : [words]))
+    ListQueryRequest(clauses: filter.clauses + clauses, search: words.isEmpty ? nil : [words], sort: sort))
 }
 
 @MainActor
@@ -128,6 +128,12 @@ final class OrdersModel {
   private(set) var hasMore = false
   var filter: OrderFilter = .all { didSet { if oldValue != filter { restart() } } }
   var search = "" { didSet { if oldValue != search { restart() } } }
+  /// The filters added in the filter bar, beside the chip's.
+  var clauses: [ListFilterRequest] = [] { didSet { if oldValue != clauses { restart() } } }
+  /// The header sort asked; nil is newest first.
+  var sort: ListQuerySort? { didSet { if oldValue != sort { restart() } } }
+  /// The plan the list ran, for its refusals and notices.
+  private(set) var plan: ListQueryPlan?
 
   @ObservationIgnored private var reader: FirestoreReader?
   @ObservationIgnored private var hostID: String?
@@ -162,8 +168,9 @@ final class OrdersModel {
     listener?.remove()
     failed = false
     guard let reader, let hostID else { return }
-    let plan = ordersPlan(filter, search: search)
-    notice = plan.refused.isEmpty ? plan.notices.first : "This search cannot run with that filter. Clear one of them."
+    let plan = ordersPlan(filter, search: search, clauses: clauses, sort: sort)
+    self.plan = plan
+    notice = plan.refused.isEmpty || !clauses.isEmpty ? nil : "This search cannot run with that filter. Clear one of them."
     // One probe row past the page tells whether another page exists.
     let window = limit
     listener = reader.listen(plan.firestoreQuery(ordersPath(hostID), limit: window + 1)) { [weak self] result in
@@ -336,4 +343,15 @@ func performOrderAction(_ action: OrderAction, api: ConsoleAPIClient, hostID: St
   case .cancel:
     _ = try await api.request("/api/commerce/cancel-order", method: .post, body: .object(body))
   }
+}
+
+/// The console link to the customer's CRM record (`pluginRecordByEmailHref('contact', …)`): the Contacts list asked
+/// to open the one person with this address. Nil for a guest with no address, or before the site's slugs are known.
+func customerCrmLink(orgSlug: String?, hostSlug: String?, email: String?) -> String? {
+  let address = (email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+  guard let orgSlug, !orgSlug.isEmpty, let hostSlug, !hostSlug.isEmpty, !address.isEmpty else { return nil }
+  var allowed = CharacterSet.alphanumerics
+  allowed.insert(charactersIn: "-._~")
+  let encoded = address.addingPercentEncoding(withAllowedCharacters: allowed) ?? address
+  return "/\(orgSlug)/hosts/\(hostSlug)/crm/contacts?email=\(encoded)"
 }

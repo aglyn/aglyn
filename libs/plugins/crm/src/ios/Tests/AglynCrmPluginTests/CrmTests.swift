@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import Foundation
 import XCTest
@@ -98,5 +99,16 @@ final class CrmTests: XCTestCase {
     XCTAssertFalse(crmSuiteCarried(["plan": "pro", "billingStatus": "canceled"]))
     XCTAssertFalse(crmSuiteCarried(["plan": "free"]))
     XCTAssertTrue(crmSuiteCarried(["entitlements": ["features": ["crm": true]]]))
+  }
+}
+
+/// The Contacts list asked to open one person by address (`contactsListSeed`, `?email=`).
+final class CrmContactByEmailTests: XCTestCase {
+  func testTheAddressNarrowsTheListToThatOnePerson() {
+    let filter = contactEmailFilter("  Jane@Example.com ")
+    XCTAssertEqual(filter?.id, contactEmailFilterID)
+    XCTAssertEqual(filter?.clauses, [ListFilterRequest(field: "email", op: "equals", value: "jane@example.com")])
+    XCTAssertNil(contactEmailFilter(nil))
+    XCTAssertNil(contactEmailFilter("not an address"))
   }
 }

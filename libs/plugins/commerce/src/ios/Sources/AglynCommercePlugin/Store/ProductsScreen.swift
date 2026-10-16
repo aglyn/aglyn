@@ -96,15 +96,29 @@ struct ProductsScreen: View {
         ForEach(ContractValues.shared.productListOptions["status"] ?? [], id: \.value) { option in
           AglynChoiceChip(option.label, selected: model.status == option.value) { model.status = option.value }
         }
+        ListSortMenu(sorts: ContractValues.shared.productListQuery.sorts, selected: model.sort) { model.sort = $0 }
       }
       .padding(.horizontal, AglynSpace.two)
       .padding(.vertical, AglynSpace.one)
     }
   }
 
+  /// Any filter the console's grid takes: name, status, type, slug, SKU, barcode.
+  private var filters: some View {
+    ClauseFilterBar(
+      fields: ContractValues.shared.productListQuery.fields, headers: ContractValues.shared.productListHeaders,
+      choices: filterChoices(ContractValues.shared.productListOptions), clauses: model.clauses,
+      refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? []
+    ) { model.clauses = $0 }
+    .padding(.horizontal, AglynSpace.two)
+  }
+
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
+      filters
+      ProductsZone(context: context, slot: commerceProductsCreateSlot)
+      ProductsZone(context: context, slot: commerceProductsHubSlot)
       if created != nil {
         AglynNotice("Product added.", tone: .success) { created = nil }
           .padding(.horizontal, AglynSpace.two)

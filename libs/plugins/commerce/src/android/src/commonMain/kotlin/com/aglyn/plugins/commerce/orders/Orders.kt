@@ -11,6 +11,7 @@ import com.aglyn.contracts.trackingStatusLabel
 import com.aglyn.contracts.HostOrder
 import com.aglyn.contracts.ListFilterRequest
 import com.aglyn.contracts.ListQueryRequest
+import com.aglyn.contracts.ListQuerySort
 import com.aglyn.contracts.OrderChannel
 import com.aglyn.contracts.OrderLineFulfillmentState
 import com.aglyn.contracts.OrderRefundState
@@ -79,14 +80,27 @@ enum class OrderFilter(val label: String, val clauses: () -> List<ListFilterRequ
   DISPUTES("Disputes", { Contracts.openDisputeClause.let { listOf(ListFilterRequest(it.field, it.op, it.value)) } }),
 }
 
-/** The request the list sends the planner: the chip's clauses and the quick search's words. */
-fun ordersListRequest(filter: OrderFilter, search: String = ""): ListQueryRequest = ListQueryRequest(
-  clauses = filter.clauses(),
+/** The request the list sends the planner: the chip's clauses, the filters added, the quick search's words and the sort asked. */
+fun ordersListRequest(
+  filter: OrderFilter,
+  search: String = "",
+  clauses: List<ListFilterRequest> = emptyList(),
+  sort: ListQuerySort? = null,
+): ListQueryRequest = ListQueryRequest(
+  clauses = filter.clauses() + clauses,
   search = search.trim().ifEmpty { null }?.let { listOf(it) },
+  sort = sort,
 )
 
-fun ordersQuery(hostId: String, filter: OrderFilter, search: String = "", startAfter: List<Any?>? = null): FirestoreQuery =
-  planListQuery(Contracts.orderListQuery, ordersListRequest(filter, search))
+fun ordersQuery(
+  hostId: String,
+  filter: OrderFilter,
+  search: String = "",
+  startAfter: List<Any?>? = null,
+  clauses: List<ListFilterRequest> = emptyList(),
+  sort: ListQuerySort? = null,
+): FirestoreQuery =
+  planListQuery(Contracts.orderListQuery, ordersListRequest(filter, search, clauses, sort))
     .toFirestoreQuery(ordersPath(hostId), ORDERS_PAGE_SIZE, startAfter)
 
 /** An order as the console reads it ([liftLegacyOrder]); a document that is not an order reads as an empty one. */
@@ -432,5 +446,23 @@ class ConsoleOrderActionsApi(
       body("orderId" to orderId, "resolution" to resolution.raw, "flaggedAtMs" to flaggedAtMs.toLong()),
     )?.jsonObject
     return (answer?.get("verdict") as? JsonPrimitive)?.contentOrNull ?: "recorded"
+  }
+}
+
+/**
+ * The console link to the customer's CRM record (`pluginRecordByEmailHref('contact', …)`): the Contacts list asked
+ * to open the one person with this address. Null for a guest with no address, or before the site's slugs are known.
+ */
+fun customerCrmLink(orgSlug: String?, hostSlug: String?, email: String?): String? {
+  val address = email?.trim().orEmpty()
+  if (orgSlug.isNullOrBlank() || hostSlug.isNullOrBlank() || address.isEmpty()) return null
+  return "/$orgSlug/hosts/$hostSlug/crm/contacts?email=${percentEncode(address)}"
+}
+
+/** Percent-encodes every byte but the unreserved characters, as `encodeURIComponent` does for a query value. */
+private fun percentEncode(value: String): String = buildString {
+  for (byte in value.encodeToByteArray()) {
+    val c = byte.toInt().toChar()
+    if (c.isLetterOrDigit() && c.code < 128 || c in "-._~") append(c) else append('%').append((byte.toInt() and 0xff).toString(16).uppercase().padStart(2, '0'))
   }
 }

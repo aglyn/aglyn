@@ -1,5 +1,9 @@
 package com.aglyn.plugins.commerce.products
 
+import com.aglyn.plugins.commerce.lists.ListSortMenu
+import com.aglyn.plugins.commerce.lists.filterChoices
+import com.aglyn.plugins.commerce.lists.filterRefusals
+import com.aglyn.pluginhost.ClauseFilterBar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.aglyn.contracts.Contracts
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -168,6 +173,22 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           ) { Text("Import") }
         }
       }
+      // Any filter the console's grid takes (name, status, type, slug, SKU, barcode) and its header sorts.
+      Row(verticalAlignment = Alignment.Top) {
+        ClauseFilterBar(
+          fields = Contracts.productListQuery.fields,
+          headers = Contracts.productListHeaders,
+          choices = filterChoices(Contracts.productListOptions),
+          clauses = model.clauses,
+          onChange = model::setFilters,
+          modifier = Modifier.weight(1f),
+          refused = model.plan?.let { filterRefusals(it, model.clauses) } ?: emptyList(),
+          notices = model.plan?.notices ?: emptyList(),
+        )
+        ListSortMenu(Contracts.productListQuery.sorts, model.sort, model::sortBy, Modifier.padding(start = space(1f)))
+      }
+      ProductsZone(context, COMMERCE_PRODUCTS_CREATE_SLOT)
+      ProductsZone(context, COMMERCE_PRODUCTS_HUB_SLOT)
       // Products listed before they have a price (AGL-3676): the one step left before the store sells them.
       comingSoonNotice((model.rows as? Load.Ready)?.value.orEmpty().filter { it.status == ProductStatus.ACTIVE && it.priceMissing }.map { it.name })
         ?.let { NoticeBanner(it, StatusTone.INFO) }
@@ -574,5 +595,22 @@ fun productWriteMessage(error: Throwable, fallback: String): String {
   return when {
     refused != null && refused.status in 1..499 -> refused.message.ifEmpty { fallback }
     else -> "It is not known whether that went through. Trying again is safe; it will not happen twice."
+  }
+}
+
+/**
+ * The Products page's zones, the console's `productsCreate` (another way to start a product, beside Add product) and
+ * `productsHub` (above the catalog: proposals the hub writes). The plugins that put a widget here are never named;
+ * each zone draws whatever the registry holds for it, and nothing when no plugin contributes.
+ */
+const val COMMERCE_PRODUCTS_CREATE_SLOT = "productsCreate"
+const val COMMERCE_PRODUCTS_HUB_SLOT = "productsHub"
+
+@Composable
+internal fun ProductsZone(context: NativePluginContext, slot: String) {
+  val widgets = context.slotWidgets(slot)
+  if (widgets.isEmpty()) return
+  Column(Modifier.fillMaxWidth().testTag("products-zone-$slot"), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+    for (widget in widgets) androidx.compose.runtime.key(widget.id) { widget.content(context) }
   }
 }

@@ -176,16 +176,26 @@ struct OrdersScreen: View {
   }
 
   private var chips: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        ForEach(OrderFilter.allCases) { filter in
-          AglynChoiceChip(filter.label, selected: model.filter == filter) { model.filter = filter }
+    VStack(alignment: .leading, spacing: 0) {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: AglynSpace.one) {
+          ForEach(OrderFilter.allCases) { filter in
+            AglynChoiceChip(filter.label, selected: model.filter == filter) { model.filter = filter }
+          }
+          ListSortMenu(sorts: ContractValues.shared.orderListQuery.sorts, selected: model.sort) { model.sort = $0 }
         }
+        .padding(.horizontal, AglynSpace.two)
+        .padding(.vertical, AglynSpace.one)
       }
+      .accessibilityIdentifier("orders-status-chips")
+      // Any filter the console's grid takes: status, channel, customer, date, product, disputes.
+      ClauseFilterBar(
+        fields: ContractValues.shared.orderListQuery.fields, headers: ContractValues.shared.orderListHeaders,
+        choices: orderFilterChoices(), clauses: model.clauses,
+        refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? []
+      ) { model.clauses = $0 }
       .padding(.horizontal, AglynSpace.two)
-      .padding(.vertical, AglynSpace.one)
     }
-    .accessibilityIdentifier("orders-status-chips")
   }
 
   @ViewBuilder

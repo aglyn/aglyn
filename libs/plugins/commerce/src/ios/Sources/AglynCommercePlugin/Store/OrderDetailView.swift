@@ -192,6 +192,11 @@ struct OrderDetailView: View {
       Section("Customer") {
         LabeledContent("Name", value: row.customer)
         if let email = order.customerEmail, !email.isEmpty { LabeledContent("Email", value: email) }
+        // Their CRM record, which the order fed (the console's "View customer in CRM").
+        if let link = customerCrmLink(orgSlug: context.orgSlug, hostSlug: context.hostSlug, email: order.customerEmail) {
+          Button("View customer in CRM", systemImage: "person.crop.circle") { context.openLink(link) }
+            .accessibilityIdentifier("order-customer-crm")
+        }
         if let phone = order.customerPhone, !phone.isEmpty { LabeledContent("Phone", value: phone) }
         if let address = order.shippingAddress, let text = addressText(address) {
           LabeledContent("Ships to") { Text(text).multilineTextAlignment(.trailing) }

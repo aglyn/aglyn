@@ -1,5 +1,9 @@
 package com.aglyn.plugins.commerce.orders
 
+import com.aglyn.plugins.commerce.lists.ListSortMenu
+import com.aglyn.plugins.commerce.lists.filterRefusals
+import com.aglyn.plugins.commerce.lists.orderFilterChoices
+import com.aglyn.pluginhost.ClauseFilterBar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -183,10 +187,24 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
       outcome?.let { done ->
         NoticeBanner(describeBulkFulfill(done), if (done.refused.isEmpty() && done.unknown.isEmpty()) StatusTone.SUCCESS else StatusTone.WARNING)
       }
-      ChoiceChipRow(
-        options = OrderFilter.entries.map { ChipOption(it.name, it.label) },
-        selected = model.filter.name,
-        onSelect = { key -> model.pick(OrderFilter.valueOf(key)) },
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        ChoiceChipRow(
+          options = OrderFilter.entries.map { ChipOption(it.name, it.label) },
+          selected = model.filter.name,
+          onSelect = { key -> model.pick(OrderFilter.valueOf(key)) },
+          modifier = Modifier.weight(1f),
+        )
+        ListSortMenu(Contracts.orderListQuery.sorts, model.sort, model::sortBy, Modifier.padding(start = space(1f)))
+      }
+      // Any filter the console's grid takes: status, channel, customer, date, product, disputes.
+      ClauseFilterBar(
+        fields = Contracts.orderListQuery.fields,
+        headers = Contracts.orderListHeaders,
+        choices = orderFilterChoices(),
+        clauses = model.clauses,
+        onChange = model::setFilters,
+        refused = model.plan?.let { filterRefusals(it, model.clauses) } ?: emptyList(),
+        notices = model.plan?.notices ?: emptyList(),
       )
       model.notice?.let { NoticeBanner(it, StatusTone.WARNING) }
       said?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { said = null }) { Text("Dismiss") } }) }
@@ -403,7 +421,11 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
         } else {
           null
         }
-        OrderDetailContent(detail, actions, printing, onPrint, onPrintLabel, registerReceipt) {
+        val customerLink = customerCrmLink(context.orgSlug, context.hostSlug, detail.order.customerEmail)
+        OrderDetailContent(
+          detail, actions, printing, onPrint, onPrintLabel, registerReceipt,
+          openCustomer = customerLink?.let { link -> { context.openLink(link) } },
+        ) {
           context.navigate(COMMERCE_ORDER_SERVICES_SCREEN, mapOf("orderId" to orderId))
         }
         OrderDialogs(detail, actions)
@@ -426,6 +448,7 @@ private fun OrderDetailContent(
   onPrint: (OrderPrintKind) -> Unit,
   onPrintLabel: (Shipment) -> Unit,
   registerReceipt: (@Composable () -> Unit)?,
+  openCustomer: (() -> Unit)? = null,
   openServices: () -> Unit,
 ) {
   val order = detail.order
@@ -521,6 +544,10 @@ private fun OrderDetailContent(
       val who = listOfNotNull(order.customerName, order.customerEmail, order.customerPhone).filter { it.isNotBlank() }
       if (who.isEmpty()) Text("Guest", style = MaterialTheme.typography.bodyLarge)
       who.forEach { Text(it, style = MaterialTheme.typography.bodyLarge) }
+      // Their CRM record, which the order fed (the console's "View customer in CRM").
+      openCustomer?.let { open ->
+        TextButton(onClick = open, modifier = Modifier.testTag("order-customer-crm")) { Text("View customer in CRM") }
+      }
       val shipTo = addressLines(order.shippingAddress)
       if (shipTo.isNotEmpty()) {
         Text("Ship to", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -6,7 +6,9 @@ import androidx.compose.runtime.setValue
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.HostProduct
 import com.aglyn.contracts.ListFilterRequest
+import com.aglyn.contracts.ListQueryPlan
 import com.aglyn.contracts.ListQueryRequest
+import com.aglyn.contracts.ListQuerySort
 import com.aglyn.contracts.ProductStatus
 import com.aglyn.contracts.ProductType
 import com.aglyn.contracts.ProductVariant
@@ -51,18 +53,34 @@ enum class ProductFilter(val label: String, val status: ProductStatus?) {
 val PRODUCT_CODE_FIELDS = listOf("barcodes", "skus")
 
 /** The hub's request: live products, the chip's status, and the search word or a whole code. */
-fun productsListRequest(filter: ProductFilter, search: String = "", code: Pair<String, String>? = null): ListQueryRequest = ListQueryRequest(
+fun productsListRequest(
+  filter: ProductFilter,
+  search: String = "",
+  code: Pair<String, String>? = null,
+  clauses: List<ListFilterRequest> = emptyList(),
+  sort: ListQuerySort? = null,
+): ListQueryRequest = ListQueryRequest(
   base = Contracts.productListBase,
   clauses = buildList {
     filter.status?.let { add(ListFilterRequest("status", "equals", it.raw)) }
     code?.let { (field, value) -> add(ListFilterRequest(field, "contains", value)) }
+    addAll(clauses)
   },
   // A code and a search word would both be the query's one array clause.
   search = if (code != null) null else search.trim().ifEmpty { null }?.let { listOf(it) },
+  sort = sort,
 )
 
-fun productsQuery(hostId: String, filter: ProductFilter, search: String = "", code: Pair<String, String>? = null, startAfter: List<Any?>? = null): FirestoreQuery =
-  planListQuery(Contracts.productListQuery, productsListRequest(filter, search, code))
+fun productsQuery(
+  hostId: String,
+  filter: ProductFilter,
+  search: String = "",
+  code: Pair<String, String>? = null,
+  startAfter: List<Any?>? = null,
+  clauses: List<ListFilterRequest> = emptyList(),
+  sort: ListQuerySort? = null,
+): FirestoreQuery =
+  planListQuery(Contracts.productListQuery, productsListRequest(filter, search, code, clauses, sort))
     .toFirestoreQuery(productsPath(hostId), PRODUCTS_PAGE_SIZE, startAfter)
 
 /** A product as the console reads it ([liftLegacyProduct]). */
@@ -124,8 +142,32 @@ class ProductsListModel(private val hostId: String, private val firestore: Fires
     private set
   var hasMore by mutableStateOf(false)
     private set
+
+  /** The filters added in the filter bar, beside the status chip. */
+  var clauses by mutableStateOf<List<ListFilterRequest>>(emptyList())
+    private set
+
+  /** The header sort asked; null is name order. */
+  var sort by mutableStateOf<ListQuerySort?>(null)
+    private set
+
+  /** The plan the list ran, for its refusals and notices. */
+  var plan by mutableStateOf<ListQueryPlan?>(null)
+    private set
   private var cursor: List<Any?>? = null
   private var job: Job? = null
+
+  fun setFilters(next: List<ListFilterRequest>) {
+    if (next == clauses) return
+    clauses = next
+    reload()
+  }
+
+  fun sortBy(next: ListQuerySort?) {
+    if (next == sort) return
+    sort = next
+    reload()
+  }
 
   fun pick(next: ProductFilter) {
     if (next == filter) return
@@ -142,12 +184,15 @@ class ProductsListModel(private val hostId: String, private val firestore: Fires
   fun reload(debounce: Boolean = false) {
     job?.cancel()
     val asked = filter to search
+    val askedClauses = clauses
+    val askedSort = sort
     if (!debounce) rows = Load.Loading
     job = scope.launch {
       if (debounce) delay(300)
       rows = Load.Loading
+      plan = planListQuery(Contracts.productListQuery, productsListRequest(asked.first, asked.second, clauses = askedClauses, sort = askedSort))
       rows = try {
-        val page = firestore.page(productsQuery(hostId, asked.first, asked.second))
+        val page = firestore.page(productsQuery(hostId, asked.first, asked.second, clauses = askedClauses, sort = askedSort))
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
         Load.Ready(page.docs.map(::productRow))
@@ -164,8 +209,10 @@ class ProductsListModel(private val hostId: String, private val firestore: Fires
     val shown = (rows as? Load.Ready)?.value ?: return
     if (job?.isActive == true) return
     val asked = filter to search
+    val askedClauses = clauses
+    val askedSort = sort
     job = scope.launch {
-      runCatching { firestore.page(productsQuery(hostId, asked.first, asked.second, startAfter = after)) }.onSuccess { page ->
+      runCatching { firestore.page(productsQuery(hostId, asked.first, asked.second, startAfter = after, clauses = askedClauses, sort = askedSort)) }.onSuccess { page ->
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
         rows = Load.Ready(shown + page.docs.map(::productRow).filter { row -> shown.none { it.id == row.id } })

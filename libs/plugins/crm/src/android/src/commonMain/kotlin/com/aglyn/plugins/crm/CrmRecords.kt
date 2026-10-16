@@ -69,6 +69,17 @@ fun scopeBase(scope: CrmScope): List<ListQueryFilter> =
 /** A chip over a list: the clauses it adds to the one query. */
 data class CrmFilter(val key: String, val label: String, val clauses: List<ListFilterRequest> = emptyList(), val base: List<ListQueryFilter> = emptyList())
 
+/** The query param the Contacts list opens one person by (`CONTACTS_LIST_EMAIL_PARAM`). */
+const val CONTACTS_LIST_EMAIL_PARAM = "email"
+const val CONTACT_EMAIL_FILTER_KEY = "email"
+
+/** The Contacts list narrowed to one address, as `contactsListSeed` narrows it; null for no address or not one. */
+fun contactEmailFilter(raw: String?): CrmFilter? {
+  val email = raw.orEmpty().trim().lowercase()
+  if ('@' !in email || email.length > 320) return null
+  return CrmFilter(CONTACT_EMAIL_FILTER_KEY, email, listOf(ListFilterRequest("email", "equals", email)))
+}
+
 /** The chips each list offers, as the console's views and its Show menu ask them. */
 fun crmFilters(kind: CrmKind, scope: CrmScope): List<CrmFilter> {
   val mine = ListFilterRequest("ownerUid", "equals", scope.uid)
