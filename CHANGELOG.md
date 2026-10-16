@@ -9,6 +9,64 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.260 — 2026-10-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.259...v1.0.0-beta.260)
+
+### Added
+
+- **console:** plan- and plugin-gated pieces say what unlocks them ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **shipping:** the Buy label button asks for a ship-from address first ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **commerce,bookings:** draft orders, reservations and paid services ask for Stripe ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **commerce:** the register says to connect Stripe instead of hiding card tenders ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **native:** components, layouts and templates sort by column and print the plan's count ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** import records into a dataset on every native platform ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** report someone else's review, in the console's words ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the licenses page lists your own purchases beside the workspace's ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668), [AGL-2331](https://linear.app/aglyn/issue/AGL-2331))
+- **native:** publish a component or layout to the marketplace from its own page ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** publish a plugin, state the take rate, gate every publish ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** spec files send their bytes, choices explain themselves, take rate loads ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** a listing's preview image, screenshots and logo come from the media library ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the media chooser uploads from this device and picks what it uploaded ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** selling on the marketplace: profile, listings, payouts and sales
+- **native:** the seller panel's money rules, replayed from the console's
+- **native:** a publish hub lists what a site and its workspace can publish
+- **native:** publish a layout, component, theme, dataset schema or email to the marketplace
+
+### Fixed
+
+- **ios:** the Besigner takes the whole phone screen, with a smoke test from the app ([AGL-3850](https://linear.app/aglyn/issue/AGL-3850))
+- **native:** a refused refresh token signs Android out instead of crashing ([AGL-3855](https://linear.app/aglyn/issue/AGL-3855))
+- **native:** the publish hub lists what was read, and spec blocks never share an identity ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the Besigner opens signed in and its exits return to the app ([AGL-3850](https://linear.app/aglyn/issue/AGL-3850))
+- **console:** the apps open the Besigner through a page that signs their web view in ([AGL-3850](https://linear.app/aglyn/issue/AGL-3850))
+- **native:** the dataset records, schema and record screens load on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **health:** lower the App Check floor to 0.75 so native test runs stop paging ([AGL-2402](https://linear.app/aglyn/issue/AGL-2402))
+- **native:** signing out of an SSO account returns the auth instance to the project pool ([AGL-3844](https://linear.app/aglyn/issue/AGL-3844))
+- **firewall:** declare the plugin webhook bypass the console now carries ([AGL-3846](https://linear.app/aglyn/issue/AGL-3846))
+- **native:** the publisher profile's logo is picked from the media library ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the marketplace's slot spec declares every screen it registers ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+
+### Documentation
+
+- **commerce:** grayed, the American spelling, in the setup-step notes ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **commerce:** the POS, orders, stays, services and labels name their setup step ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **native:** the components lists sort and count; Publish to marketplace is left ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **commerce:** help desks, inventory sync, Flexport, print on demand and loyalty accounts are live ([AGL-3847](https://linear.app/aglyn/issue/AGL-3847))
+
+<details>
+<summary>Also in this release: 5 test, 2 chore</summary>
+
+- **commerce:** specs that draw the register or orders stub the payments hook ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **console:** the Besigner entry page adopts the app's sign-in, not a new login ([AGL-3850](https://linear.app/aglyn/issue/AGL-3850))
+- **console:** the Besigner entry page adopts the app's sign-in, not a new login ([AGL-3850](https://linear.app/aglyn/issue/AGL-3850))
+- **linear:** raise the issue ceiling to AGL-3853, read off Linear ([AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **native:** the spec sweep knows the listing screen; the hub test reads queries ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **marketplace:** the native publish spec types a field's label and options ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **linear:** raise the issue ceiling to AGL-3847, read off Linear ([AGL-3847](https://linear.app/aglyn/issue/AGL-3847), [AGL-3846](https://linear.app/aglyn/issue/AGL-3846))
+
+</details>
+
 ## v1.0.0-beta.259 — 2026-10-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.258...v1.0.0-beta.259)
