@@ -249,6 +249,12 @@ describe('the Ironline Strength Studio events (AGL-3856, beta.259)', () => {
     expect(aiStockRelevance(byId(HEART_POTATO), judged(terms, { subject: 'intro barbell basics', strict: true }))).toBe(0)
   })
 
+  it('turns down another sport’s ball, as the beta.261 deadlift night’s basketball court (AGL-3864)', () => {
+    const court = { ...byId(YOGA_ON_THE_BEACH), id: 'basketball-court', tags: ['sport', 'basketball', 'ball'] }
+    expect(aiStockRelevance(court, judged(terms, { subject: 'deadlift pr night', strict: true }))).toBe(0)
+    expect(terms.shunLead).toEqual(expect.arrayContaining(['basketball', 'football', 'tennis']))
+  })
+
   it('covers each event with a photo of lifting or training, described by its own words', async () => {
     const deps = fakes()
     const events: Array<[string, string]> = [
