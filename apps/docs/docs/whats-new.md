@@ -10,7 +10,18 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — your help desk sees every buyer's orders (newest)
+## October 2026 — the console says what to set up first (newest)
+
+- **[Taking payment](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
+  when your store's Stripe account isn't connected yet, the register's card
+  buttons stay on screen greyed out, with a note linking to **Payments**,
+  instead of disappearing. Draft orders, reservations and paid booking
+  services say the same before you rely on them.
+- **[Shipping labels](commerce-and-bookings/commerce/shipping-labels-and-live-rates.md#ship-from)** —
+  **Buy label** says to add the address you ship from, with a link to
+  **Shipping & delivery**, rather than refusing after you press it.
+
+## October 2026 — your help desk sees every buyer's orders
 
 - **[Help desks](commerce-and-bookings/commerce/help-desks.md)** — connect your own
   Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and each customer who
