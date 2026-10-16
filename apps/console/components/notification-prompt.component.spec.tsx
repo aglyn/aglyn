@@ -85,6 +85,16 @@ describe('NotificationPrompt gating (AGL-663)', () => {
     },
   )
 
+  it('stays hidden in the native apps\' Besigner web view (AGL-3850)', () => {
+    window.sessionStorage.setItem('aglyn:native-app-web-view', '1')
+    try {
+      renderAndSettle()
+      expect(screen.queryByText('Enable notifications')).toBeNull()
+    } finally {
+      window.sessionStorage.clear()
+    }
+  })
+
   it('stays hidden when nobody is signed in', () => {
     mockUser = undefined
     renderAndSettle()
