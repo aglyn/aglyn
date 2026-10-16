@@ -402,6 +402,10 @@
       "why": "The restock question's sentence the order screen prints (AGL-3651, AGL-3652); imports only commerce-orders."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
+      "why": "The order dialog's own rules: Fulfill items' counts and selection, the carrier select and the refund question; imports commerce-orders, commerce-dispute, order-fulfillment and tracking-url. The apps' order screens replay them (AGL-3841)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
       "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
     },

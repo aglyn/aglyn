@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { orderLineRefundCents, type HostOrder, type OrderDispute } from './commerce-orders'
+import type { HostOrder, OrderDispute } from './commerce-orders'
 
 /**
  * Reading a chargeback back out of an order (AGL-1796).
@@ -300,45 +300,3 @@ export function splitOrderReversal(
   )
   return { refundedCents: total - chargedBackCents, chargedBackCents }
 }
-
-/** Dollars as the order dialog prints them. */
-const dialogUsd = (cents: number | undefined) => `$${((cents ?? 0) / 100).toFixed(2)}`
-
-/**
- * The order dialog's refund question: the whole order, or the named lines
- * (AGL-2454), with the figure the route will refund (the server's own
- * `orderLineRefundCents` for lines) and, while an inquiry is open, that a full
- * refund resolves it (AGL-1820).
- */
-export function orderRefundPrompt(
-  order: Pick<HostOrder, 'lineItems' | 'totals' | 'amountCents' | 'refundedCents' | 'dispute'>,
-  lineItemIds: readonly number[] = [],
-): { title: string; text: string } {
-  const lines = order.lineItems ?? []
-  const scoped = lineItemIds.length > 0
-  const text =
-    (scoped
-      ? `Refunds ${dialogUsd(orderLineRefundCents(order, lineItemIds))} for ${lineItemIds
-          .map((index) => lines[index]?.name ?? `line ${index}`)
-          .join(', ')} through Stripe, and withdraws that line's ` +
-        'downloads, license keys and gated content. A license key already ' +
-        'sent to the buyer is retired, not returned to your pool — they ' +
-        'still hold the string, so reissuing it would give two people one ' +
-        'working key.'
-      : `Refunds ${dialogUsd(
-          (order.totals?.totalCents ?? order.amountCents ?? 0) - (order.refundedCents ?? 0),
-        )} to the buyer through Stripe.`) +
-    (orderHasOpenDispute(order) && !orderDisputeBlocksRefund(order)
-      ? ' An inquiry is open on this charge — a full refund resolves it' +
-        ' before it can become a chargeback.'
-      : '')
-  return { title: scoped ? 'Refund this line?' : 'Refund this order?', text }
-}
-
-/** Why Refund is unavailable while a chargeback is open (AGL-1820), as the order dialog says it. */
-export const REFUND_BLOCKED_BY_DISPUTE =
-  'A chargeback is open on this order, and refunding would not' +
-  ' withdraw it — the bank has already taken the disputed' +
-  ' amount, so a refund on top would pay the shopper twice.' +
-  ' Respond to the dispute or accept it in the Stripe' +
-  ' dashboard; refund any remainder once it settles.'

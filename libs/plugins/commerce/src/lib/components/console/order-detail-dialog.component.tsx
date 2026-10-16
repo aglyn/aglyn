@@ -18,6 +18,7 @@
 
 import * as CommerceModel from '../../model'
 import { buildPackingSlipHtml } from '../../utils/order-packing-slip'
+import { orderRefundPrompt, REFUND_BLOCKED_BY_DISPUTE } from '../../model/order-dialog'
 // The CRM's address from the SHARED builder, not the plugin (AGL-2622): the
 // CRM already reaches marketing, and marketing reaches commerce, so an
 // import of the CRM from here would close a cycle between the three
@@ -603,7 +604,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     // The SERVER's figure, not a second derivation of it (`orderLineRefundCents`
     // inside the prompt): the list value `unitAmountCents x quantity` is more
     // than the buyer paid on a discounted order.
-    const prompt = CommerceModel.orderRefundPrompt(order, lineItemIds ?? [])
+    const prompt = orderRefundPrompt(order, lineItemIds ?? [])
     const confirmed = await confirm({
       title: prompt.title,
       description: prompt.text,
@@ -1115,7 +1116,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           // (AGL-1809), while an open INQUIRY shows the badge but must keep
           // this button live — a full refund is how an inquiry is resolved.
           CommerceModel.orderDisputeBlocksRefund(order) ? (
-            <Tooltip title={CommerceModel.REFUND_BLOCKED_BY_DISPUTE}>
+            <Tooltip title={REFUND_BLOCKED_BY_DISPUTE}>
               {/* A disabled button fires no pointer events; the wrapper
                   carries the hover for the tooltip. */}
               <span>

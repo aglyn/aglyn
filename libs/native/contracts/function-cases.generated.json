@@ -12177,7 +12177,7 @@
       ]
     },
     "fulfillItemsIsEverything": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "cases": [
         {
           "args": [
@@ -12360,7 +12360,7 @@
       ]
     },
     "fulfillItemsSelection": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "cases": [
         {
           "args": [
@@ -12418,7 +12418,7 @@
       ]
     },
     "fulfillItemsStartQuantities": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "cases": [
         {
           "args": [
@@ -12502,7 +12502,7 @@
       ]
     },
     "fulfillmentCarrierChoice": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "cases": [
         {
           "args": [
@@ -19921,7 +19921,7 @@
       ]
     },
     "orderRefundPrompt": {
-      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "cases": [
         {
           "args": [

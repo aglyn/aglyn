@@ -18,6 +18,13 @@
 
 import * as CommerceModel from '../../model'
 import {
+  FULFILLMENT_OTHER_CARRIER,
+  fulfillItemsIsEverything,
+  fulfillItemsSelection,
+  fulfillItemsStartQuantities,
+  fulfillmentCarrierChoice,
+} from '../../model/order-dialog'
+import {
   Button,
   Checkbox,
   Chip,
@@ -49,7 +56,7 @@ import type {
  */
 
 /** The carrier select's value for a carrier typed by hand. */
-const OTHER_CARRIER = CommerceModel.FULFILLMENT_OTHER_CARRIER
+const OTHER_CARRIER = FULFILLMENT_OTHER_CARRIER
 
 /** What the panel asks the dialog to record. */
 export interface FulfillItemsSubmission {
@@ -181,7 +188,7 @@ export function toZoneFulfillment(
 }
 
 /** The select's value for a typed carrier: a known name, or Other. */
-const carrierChoiceFor = CommerceModel.fulfillmentCarrierChoice
+const carrierChoiceFor = fulfillmentCarrierChoice
 
 interface CarrierFieldsProps {
   carrier: string
@@ -279,7 +286,7 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
   // Digital and service lines start at zero (nothing to ship), unless
   // nothing physical is left (`fulfillItemsStartQuantities`).
   const [quantities, setQuantities] = useState<Record<number, number>>(() =>
-    Object.fromEntries(CommerceModel.fulfillItemsStartQuantities(order).map((quantity, index) => [index, quantity])),
+    Object.fromEntries(fulfillItemsStartQuantities(order).map((quantity, index) => [index, quantity])),
   )
   const [tracking, setTracking] = useState({ carrier: '', trackingNumber: '', trackingUrl: '', labelUrl: '' })
   const [notify, setNotify] = useState(true)
@@ -292,10 +299,10 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
   const [zoneKey, setZoneKey] = useState(0)
 
   const selection = useMemo(
-    () => CommerceModel.fulfillItemsSelection(states.map((state) => quantities[state.lineItemId] ?? 0)),
+    () => fulfillItemsSelection(states.map((state) => quantities[state.lineItemId] ?? 0)),
     [states, quantities],
   )
-  const everything = useMemo(() => CommerceModel.fulfillItemsIsEverything(order, selection), [order, selection])
+  const everything = useMemo(() => fulfillItemsIsEverything(order, selection), [order, selection])
 
   const setQuantity = (lineItemId: number, value: number, max: number) =>
     setQuantities((current) => ({

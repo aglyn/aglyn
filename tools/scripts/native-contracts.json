@@ -761,13 +761,7 @@
     "libs/plugins/commerce/src/lib/model/order-fulfillment.ts": {
       "values": [
         "FULFILLMENT_CARRIER_CHOICES",
-        "FULFILLMENT_OTHER_CARRIER",
         "SHIPPING_COST_MAX_CENTS"
-      ]
-    },
-    "libs/plugins/commerce/src/lib/model/commerce-dispute.ts": {
-      "values": [
-        "REFUND_BLOCKED_BY_DISPUTE"
       ]
     },
     "libs/aglyn/src/lib/app-utils/payment-risk.ts": {
@@ -789,6 +783,12 @@
       "values": [
         "CHECKOUT_SHIPPING_COUNTRY_NAMES",
         "CHECKOUT_SHIPPING_COUNTRY_CODES"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/order-dialog.ts": {
+      "values": [
+        "FULFILLMENT_OTHER_CARRIER",
+        "REFUND_BLOCKED_BY_DISPUTE"
       ]
     }
   },
@@ -23284,7 +23284,7 @@
       ]
     },
     "fulfillmentCarrierChoice": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "args": [
         [
           "ups"
@@ -23307,7 +23307,7 @@
       ]
     },
     "fulfillItemsStartQuantities": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "args": [
         [
           {
@@ -23375,7 +23375,7 @@
       ]
     },
     "fulfillItemsSelection": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "args": [
         [
           [
@@ -23403,7 +23403,7 @@
       ]
     },
     "fulfillItemsIsEverything": {
-      "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "args": [
         [
           {
@@ -24074,7 +24074,7 @@
       ]
     },
     "orderRefundPrompt": {
-      "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
+      "module": "libs/plugins/commerce/src/lib/model/order-dialog.ts",
       "args": [
         [
           {
