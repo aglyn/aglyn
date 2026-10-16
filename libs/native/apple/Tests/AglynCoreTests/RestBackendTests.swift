@@ -331,6 +331,21 @@ final class RestFirestoreReaderTests: XCTestCase {
     RestFirestoreReader(projectID: "demo", emulatorHost: "127.0.0.1:8389", transport: transport) { "tok" }
   }
 
+  func testCountsWithOneAggregationQuery() async throws {
+    let transport = RecordingTransport([
+      (200, #"[{"result":{"aggregateFields":{"n":{"integerValue":"19"}}},"readTime":"2026-10-16T00:00:00Z"}]"#)
+    ])
+    let query = FirestoreQuery(["hosts", "h1", "products"], order: [.init("nameLower")])
+    let n = try await reader(transport).count(query)
+    XCTAssertEqual(n, 19)
+    XCTAssertEqual(
+      transport.requests[0].url?.absoluteString,
+      "http://127.0.0.1:8389/v1/projects/demo/databases/(default)/documents/hosts/h1:runAggregationQuery")
+    let body = transport.json(0)["structuredAggregationQuery"] as? [String: Any]
+    XCTAssertNotNil(body?["aggregations"])
+    XCTAssertNil((body?["structuredQuery"] as? [String: Any])?["orderBy"], "a count needs no order")
+  }
+
   func testQueriesTheParentWithAStructuredQuery() {
     let query = FirestoreQuery(
       ["users", "u1", "orgs"], equals: [("orgId", "o1"), ("archived", false)],

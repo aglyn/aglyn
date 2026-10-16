@@ -93,6 +93,32 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     return parent.isEmpty ? "\(root):runQuery" : "\(root)/\(Self.encodePath(Array(parent))):runQuery"
   }
 
+  /// The query's count, as the SDK's `count()` answers it: one `runAggregationQuery` that reads no documents.
+  public func count(_ query: FirestoreQuery) async throws -> Int? {
+    let url = runQueryURL(query).replacingOccurrences(of: ":runQuery", with: ":runAggregationQuery")
+    let (status, response) = try await send(url: url, method: "POST", body: countBody(query))
+    guard (200..<300).contains(status), let rows = response as? [[String: Any]] else {
+      throw Self.failure(status: status, body: response)
+    }
+    return Self.countResult(rows)
+  }
+
+  func countBody(_ query: FirestoreQuery) -> [String: Any] {
+    var structured = runQueryBody(query)["structuredQuery"] as? [String: Any] ?? [:]
+    structured.removeValue(forKey: "orderBy")
+    return ["structuredAggregationQuery": ["structuredQuery": structured, "aggregations": [["alias": "n", "count": [:]]]]]
+  }
+
+  static func countResult(_ rows: [[String: Any]]) -> Int? {
+    for row in rows {
+      guard let fields = (row["result"] as? [String: Any])?["aggregateFields"] as? [String: Any], let n = fields["n"] else { continue }
+      if let number = decodeValue(n) as? Int { return number }
+      if let number = decodeValue(n) as? Int64 { return Int(number) }
+      if let text = (n as? [String: Any])?["integerValue"] as? String { return Int(text) }
+    }
+    return nil
+  }
+
   private func runQuery(url: String, body: [String: Any]) async throws -> [FirestoreDocument] {
     let (status, response) = try await send(url: url, method: "POST", body: body)
     guard (200..<300).contains(status), let rows = response as? [[String: Any]] else {

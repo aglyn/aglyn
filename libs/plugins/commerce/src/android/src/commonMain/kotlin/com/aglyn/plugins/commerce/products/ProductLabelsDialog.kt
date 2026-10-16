@@ -67,7 +67,7 @@ fun ProductLabelsDialog(productName: String, initial: List<ProductLabelRow>, pri
       }
     },
     onDismiss = onDismiss,
-    icon = "qr_code",
+    icon = "barcode",
     busy = busy,
     error = problem,
     confirmEnabled = total > 0,

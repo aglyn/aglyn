@@ -124,6 +124,8 @@ fun ProductsScreen(context: NativePluginContext, initialProductId: String? = nul
 @Composable
 private fun ProductsList(context: NativePluginContext, model: ProductsListModel, editor: ProductEditorModel, selected: String?, onSelect: (String) -> Unit) {
   val listState = rememberLazyListState()
+  // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
+  LaunchedEffect(model.filter, model.clauses, model.sort) { listState.scrollToItem(0) }
   val nearEnd by remember {
     derivedStateOf {
       val info = listState.layoutInfo
