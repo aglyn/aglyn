@@ -94,6 +94,10 @@ struct FormsScreen: View {
         .keyboardShortcut("n", modifiers: .command)
         .accessibilityIdentifier("add-form")
       }
+      // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
+      ToolbarItemGroup(placement: .primaryAction) {
+        SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header)
+      }
     }
     .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
@@ -136,7 +140,12 @@ struct FormsScreen: View {
       model.start(context.firestore, hostID: context.hostID)
       if let initialFormID {
         selection = initialFormID
-        if !isWide { pushed = initialFormID }
+        if !isWide {
+          // A push set while this screen's own push is still animating is dropped, so the form a link named is
+          // pushed once the screen has settled.
+          try? await Task.sleep(nanoseconds: 450_000_000)
+          pushed = initialFormID
+        }
       }
     }
     .onDisappear {
@@ -194,6 +203,7 @@ struct FormsScreen: View {
         if model.search.isEmpty && model.status == .inUse && role.canEditContent {
           Button("New form") { sheet = .create }.buttonStyle(.borderedProminent)
         }
+        if model.search.isEmpty && model.status == .inUse { SlotWidgets(context: context, slot: ListCreateZone.forms) }
       }
     } else if selectable {
       List(selection: $selection) { rows(selectable: true) }

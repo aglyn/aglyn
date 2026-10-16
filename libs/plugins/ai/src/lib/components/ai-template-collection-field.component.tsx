@@ -18,7 +18,6 @@
  */
 
 import { COLLECTIONS_MAX_PER_HOST } from '@aglyn/aglyn/app-utils/collection-entries'
-import { hostCollectionKind } from '@aglyn/aglyn/app-utils/collection-kind'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -28,6 +27,7 @@ import {
 import { MenuItem, TextField } from '@mui/material'
 import { collection } from 'firebase/firestore'
 import { useMemo } from 'react'
+import { aiTemplateCollectionOptions } from '../model/ai-template-collections'
 
 /**
  * The collection an entry page template is for (AGL-3043), in the brief
@@ -41,28 +41,10 @@ import { useMemo } from 'react'
  * whole list rather than a window of it.
  */
 
-/** A content collection as the field offers it. */
-export interface AiTemplateCollectionOption {
-  id: string
-  name: string
-}
-
-/**
- * The content collections among a site's collection rows, by name, each
- * named as the template step names it: display name, name, slug, then id.
- */
-export function aiTemplateCollectionOptions(
-  rows: ReadonlyArray<Record<string, unknown> & { $id: string }>,
-): AiTemplateCollectionOption[] {
-  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
-  return rows
-    .filter((row) => hostCollectionKind(row) === 'content')
-    .map((row) => ({
-      id: row.$id,
-      name: text(row['displayName']) || text(row['name']) || text(row['slug']) || row.$id,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-}
+// The options are the model's, which the native apps' door reads too
+// (AGL-3854); re-exported for this field's existing readers.
+export { aiTemplateCollectionOptions } from '../model/ai-template-collections'
+export type { AiTemplateCollectionOption } from '../model/ai-template-collections'
 
 export interface AiTemplateCollectionFieldProps {
   hostId: string

@@ -20,11 +20,7 @@ import { AppLink } from '@aglyn/shared-ui-jsx'
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Box, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  AI_JOB_PHASE_LABELS,
-  aiJobPhase,
-  type AiJobPhase,
-} from '../model/ai-job-activity'
+import { AI_JOB_FOLLOW_PHASE_LINES, AI_JOB_PHASE_LABELS, aiJobPhase } from '../model/ai-job-activity'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { AiJobPlan } from './ai-job-plan.component'
 import { cancelAiJobRequest, resumeAiJobRequest } from './ai-job-requests'
@@ -78,22 +74,8 @@ export interface AiJobFollowProps {
   staff?: boolean
 }
 
-/** What the status line says in each phase, and how loudly. */
-const PHASE_LINE: Readonly<
-  Record<AiJobPhase, { severity: 'info' | 'warning' | 'success' | 'error'; text: string }>
-> = {
-  queued: { severity: 'info', text: 'Queued. It starts in a moment.' },
-  planning: { severity: 'info', text: 'Planning. The plan appears here when it is ready.' },
-  'plan-ready': {
-    severity: 'warning',
-    text: 'Your plan is ready. Read it below and confirm it to build — nothing is built until you do.',
-  },
-  building: { severity: 'info', text: 'Building. Everything it builds is an unpublished draft.' },
-  attention: { severity: 'warning', text: 'The job stopped and needs you.' },
-  done: { severity: 'success', text: 'Done. Your drafts are ready to open.' },
-  failed: { severity: 'error', text: 'The job stopped before it finished.' },
-  canceled: { severity: 'info', text: 'The job was canceled.' },
-}
+/** What the status line says in each phase, and how loudly: the model's, which the apps' follow view sends too. */
+const PHASE_LINE = AI_JOB_FOLLOW_PHASE_LINES
 
 /** The org slug a console address names: its first segment. */
 function orgSlugFromLocation(): string {

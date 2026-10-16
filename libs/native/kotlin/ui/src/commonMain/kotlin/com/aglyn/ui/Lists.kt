@@ -3,6 +3,7 @@ package com.aglyn.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -108,17 +109,21 @@ fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, conte
   }
 }
 
-/** A list pane's header: its title (or count) on the left and its actions on the right. */
+/**
+ * A list pane's header: its title (or count) on the left and its actions on the right. When they do not fit one line
+ * (a phone, or a narrow list pane, with a plugin's action beside the list's own), the actions that do not fit wrap onto
+ * the next line, right-aligned, instead of running off the edge or squeezing the title out.
+ */
 @Composable
 fun ListHeader(title: String, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
-  Row(
+  FlowRow(
     modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(space(1f)),
+    horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End),
+    verticalArrangement = Arrangement.spacedBy(space(1f)),
   ) {
     Text(
       title,
-      Modifier.weight(1f).semantics { heading() },
+      Modifier.weight(1f).align(Alignment.CenterVertically).semantics { heading() },
       style = MaterialTheme.typography.titleSmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       maxLines = 1,

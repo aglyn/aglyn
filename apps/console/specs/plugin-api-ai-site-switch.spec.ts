@@ -153,6 +153,8 @@ const SITE_DOORS: Record<string, 'GET' | 'POST' | 'PATCH'> = {
   // Create images with AI (AGL-3602): a site's library names its `hostId`; the
   // organization's library names none and is a workspace call.
   'ai/media/images': 'POST',
+  // Create with AI's door in the apps (AGL-3854): it names the list's site.
+  'ai/create': 'GET',
 }
 
 /**
@@ -168,7 +170,13 @@ const HANDLER_GATED_DOORS = ['assist/chat', 'ai/jobs/batch']
  * open, so a job the switch failed can still be read and a queued one stopped.
  * The beat fails the job itself.
  */
-const JOB_DOORS = ['ai/jobs/:jobId/cancel', 'ai/jobs/:jobId/events', 'ai/insights/:jobId', 'ai/crm/:jobId']
+const JOB_DOORS = [
+  'ai/jobs/:jobId/cancel',
+  'ai/jobs/:jobId/events',
+  'ai/insights/:jobId',
+  'ai/crm/:jobId',
+  'ai/create/:jobId',
+]
 
 /**
  * The workspace half of AI: billing, credits, feedback and the staff doors.
@@ -292,7 +300,12 @@ describe('the workspace half keeps running whatever a site decided', () => {
 
   it.each(JOB_DOORS)('%s runs: it names a job, not a site', async (path) => {
     const method =
-      path.endsWith('/events') || path.startsWith('ai/insights/') || path.startsWith('ai/crm/') ? 'GET' : 'POST'
+      path.endsWith('/events') ||
+      path.startsWith('ai/insights/') ||
+      path.startsWith('ai/crm/') ||
+      path.startsWith('ai/create/')
+        ? 'GET'
+        : 'POST'
     const response = await call(path, method, null)
     expect(response.status).toBe(200)
     expect(mockCalls).toEqual([path])
