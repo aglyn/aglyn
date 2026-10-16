@@ -28,6 +28,8 @@ import {
   type PushOutcome,
   type PushTarget,
   type PushTransport,
+  appReceivesPush,
+  POS_PUSH_TYPES,
 } from './push-delivery'
 
 const NOW = Date.UTC(2026, 9, 7)
@@ -96,7 +98,7 @@ describe('native push delivery (AGL-3651)', () => {
       {
         'uid-a': {
           phone: { token: APNS, transport: 'apns', apnsEnvironment: 'production', platform: 'ios', app: 'aglyn', lastSeen },
-          mac: { token: APNS_MAC, transport: 'apns', apnsEnvironment: 'sandbox', platform: 'macos', app: 'aglyn-pos', lastSeen },
+          mac: { token: APNS_MAC, transport: 'apns', apnsEnvironment: 'sandbox', platform: 'macos', app: 'aglyn', lastSeen },
         },
         'uid-b': { pixel: { token: FCM, transport: 'fcm', platform: 'android', app: 'aglyn', lastSeen } },
       },
@@ -113,7 +115,7 @@ describe('native push delivery (AGL-3651)', () => {
     expect(deleted).toEqual([])
     expect(apns.calls[0].targets).toEqual([
       { token: APNS, app: 'aglyn', topic: 'com.aglyn.app', apnsEnvironment: 'production' },
-      { token: APNS_MAC, app: 'aglyn-pos', topic: 'com.aglyn.pos', apnsEnvironment: 'sandbox' },
+      { token: APNS_MAC, app: 'aglyn', topic: 'com.aglyn.app', apnsEnvironment: 'sandbox' },
     ])
     expect(fcm.calls[0].targets).toEqual([{ token: FCM, app: 'aglyn', topic: 'com.aglyn.app' }])
     expect(apns.calls[0].message).toEqual({
@@ -122,6 +124,37 @@ describe('native push delivery (AGL-3651)', () => {
       data: { type: 'content.order', link: '/acme/hosts/host-1/orders/o1', orgId: 'org-1', hostId: 'host-1' },
       urgent: false,
     })
+  })
+
+  it('sends a workspace notification to the Aglyn app only, never a second copy through Aglyn POS', async () => {
+    const { db, deleted } = fakeDb(
+      {
+        'uid-a': {
+          app: { token: APNS, transport: 'apns', apnsEnvironment: 'production', platform: 'macos', app: 'aglyn', lastSeen },
+          pos: { token: APNS_MAC, transport: 'apns', apnsEnvironment: 'production', platform: 'macos', app: 'aglyn-pos', lastSeen },
+          posAndroid: { token: FCM, transport: 'fcm', platform: 'android', app: 'aglyn-pos', lastSeen },
+        },
+      },
+      { 'org-1': { slug: 'acme' } },
+    )
+    const apns = recorder()
+    const fcm = recorder()
+    const result = await deliverNativePush(['uid-a'], PAYLOAD, {
+      db,
+      now: () => NOW,
+      transport: async (kind) => (kind === 'apns' ? apns.transport : fcm.transport),
+    })
+    expect(result).toEqual({ sent: 1, pruned: 0, failed: 0, skipped: 0 })
+    expect(apns.calls[0].targets.map((target) => target.app)).toEqual(['aglyn'])
+    expect(fcm.calls).toEqual([])
+    // Skipped, not forgotten: the register keeps its row for the types it is sent.
+    expect(deleted).toEqual([])
+  })
+
+  it('lets only the listed types through to the POS app', () => {
+    expect(appReceivesPush('aglyn', 'content.order')).toBe(true)
+    expect(appReceivesPush('aglyn-pos', 'content.order')).toBe(POS_PUSH_TYPES.has('content.order'))
+    expect(appReceivesPush('aglyn-pos', undefined)).toBe(false)
   })
 
   it('prunes Expo, transport-less, malformed and stale rows, and never sends to them', async () => {

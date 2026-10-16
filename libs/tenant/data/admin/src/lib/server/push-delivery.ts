@@ -132,6 +132,19 @@ async function pushLink(db: Firestore, payload: MobilePushPayload): Promise<stri
 const isApp = (value: unknown): value is MobileDeviceApp => value === 'aglyn' || value === 'aglyn-pos'
 
 /**
+ * The notification types the Aglyn POS app is pushed. The register is not a
+ * second inbox: a person who has both apps would otherwise get every
+ * workspace notification twice on the same Mac or iPad, so the Aglyn app
+ * carries them all and the POS app only what a register needs. None yet.
+ */
+export const POS_PUSH_TYPES: ReadonlySet<string> = new Set<string>()
+
+/** Whether `app` is sent a notification of `type`. */
+export function appReceivesPush(app: MobileDeviceApp, type: string | undefined): boolean {
+  return app === 'aglyn' || (type !== undefined && POS_PUSH_TYPES.has(type))
+}
+
+/**
  * Sends one notification to every live device of `uids`, each through its
  * own transport. Never throws: the console notification is the record, and a
  * push is a courtesy beside it.
@@ -173,6 +186,7 @@ export async function deliverNativePush(
           await prune(device.ref)
           continue
         }
+        if (!appReceivesPush(app, payload.type)) continue
         if (seen.has(token) || total >= MAX_DEVICES) continue
         seen.add(token)
         total += 1
