@@ -20,6 +20,7 @@ import {
   AuthErrorMessage,
   AuthErrorNotice,
   type AuthResultError,
+  normalizeAuthError,
 } from '@aglyn/shared-data-enums'
 import {Alert, type AlertProps as MuiAlertProps, Typography} from '@mui/material'
 
@@ -29,7 +30,8 @@ export interface AuthErrorAlertComponentProps extends Partial<MuiAlertProps> {
 }
 
 function AuthErrorAlertComponent(props: AuthErrorAlertComponentProps) {
-  const {error, ...rest} = props
+  const {error: raw, ...rest} = props
+  const error = normalizeAuthError(raw)
 
   return (
     <>

@@ -31,12 +31,15 @@
 import {
   domainOf,
   evaluateSsoDomainPolicy,
+  parseSsoExemptEmails,
   parseSsoRequiredDomains,
+  ssoDomainCreationRefused,
   ssoDomainEnforcementEnabled,
   ssoDomainRefusal,
   ssoRequiredDomains,
   SSO_DOMAIN_ENFORCEMENT_ENV,
   SSO_DOMAIN_REFUSAL_MESSAGE,
+  SSO_EXEMPT_EMAILS_ENV,
   SSO_REQUIRED_DOMAINS_ENV,
 } from './sso-domain-policy'
 
@@ -372,5 +375,74 @@ describe('foreign-tenant visibility', () => {
         AGLYN_ON,
       ),
     ).toBeNull()
+  })
+})
+
+describe('named exemptions', () => {
+  const REVIEWER = 'reviewer+store@aglyn.com'
+  const exempt = parseSsoExemptEmails(` ${REVIEWER.toUpperCase()}, not-an-address `)
+  const ON_WITH_REVIEWER = { ...AGLYN_ON, [SSO_EXEMPT_EMAILS_ENV]: REVIEWER }
+
+  it('parses exact addresses, lower-cased, and drops anything without an @', () => {
+    expect([...exempt]).toEqual([REVIEWER])
+    expect(parseSsoExemptEmails(undefined).size).toBe(0)
+  })
+
+  it('admits a named address outside the tenant, and flags it for review', () => {
+    const decision = evaluateSsoDomainPolicy(
+      { email: REVIEWER, tenantId: null },
+      AGLYN_OPERATED,
+      exempt,
+    )
+    expect(decision.verdict).toBe('allow-exempt')
+    expect(decision.refused).toBe(false)
+    expect(decision.reviewable).toBe(true)
+  })
+
+  it('still refuses every other address on the domain', () => {
+    const decision = evaluateSsoDomainPolicy(
+      { email: 'reviewer@aglyn.com', tenantId: null },
+      AGLYN_OPERATED,
+      exempt,
+    )
+    expect(decision.verdict).toBe('refuse-sso-required')
+  })
+
+  it('reaches the session mint from configuration', () => {
+    expect(ssoDomainRefusal({ email: REVIEWER, tenantId: null }, ON_WITH_REVIEWER)).toBeNull()
+    expect(
+      ssoDomainRefusal({ email: 'person@aglyn.com', tenantId: null }, ON_WITH_REVIEWER),
+    ).not.toBeNull()
+  })
+})
+
+describe('account creation agrees with the session mint', () => {
+  const identities = [
+    { email: 'person@aglyn.com', tenantId: null },
+    { email: 'person@aglyn.com', tenantId: DESIGNATED },
+    { email: 'person@aglyn.com', tenantId: CUSTOMER_TENANT },
+    { email: 'person@gmail.com', tenantId: null },
+    { email: 'reviewer@aglyn.com', tenantId: null },
+  ]
+  const configs = [
+    AGLYN_ON,
+    AGLYN_OFF,
+    SELF_HOST_ON,
+    { ...AGLYN_ON, [SSO_EXEMPT_EMAILS_ENV]: 'reviewer@aglyn.com' },
+  ]
+
+  it('refuses creation exactly when the mint would refuse the session', () => {
+    for (const env of configs) {
+      for (const identity of identities) {
+        expect(ssoDomainCreationRefused(identity, env)).toBe(
+          ssoDomainRefusal(identity, env) !== null,
+        )
+      }
+    }
+  })
+
+  it('refuses the duplicate a Google sign-in would create, ON', () => {
+    expect(ssoDomainCreationRefused({ email: 'staff@aglyn.com', tenantId: null }, AGLYN_ON)).toBe(true)
+    expect(ssoDomainCreationRefused({ email: 'staff@aglyn.com', tenantId: null }, AGLYN_OFF)).toBe(false)
   })
 })
