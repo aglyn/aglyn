@@ -1353,6 +1353,33 @@ describe('a Free workspace’s AI credits before and after a start (AGL-3660)', 
     }
   })
 
+  it('checks a guided start before its site exists: the same prompt, then ok, and creates nothing (AGL-3859)', async () => {
+    mockDocs.set(accountMonth(), { estCostUsd: 0.23 })
+    registerAiJobAdmission('site', createAiSiteJobAdmission())
+    registerAiJobStep('page', (context) => siteRunner(context))
+    try {
+      const body = { ...VALID, hostId: null, kind: 'site', brief: 'A site for a dog groomer.', inputs: { businessType: 'dog groomer', pages: 2 } }
+      const ownerAsks = mockResolveOwner.mock.calls.length
+      const asked = await createJob(post({ ...body, check: true }))
+      expect(asked.status).toBe(409)
+      expect(await asked.json()).toMatchObject({ code: AI_CREDITS_CONFIRM_CODE })
+      const admitted = await createJob(post({ ...body, check: true, creditsConfirmed: true }))
+      expect(admitted.status).toBe(200)
+      expect(await admitted.json()).toEqual({ ok: true })
+      expect(jobDocs()).toEqual([])
+      expect(planRunner).not.toHaveBeenCalled()
+      expect(mockResolveOwner.mock.calls.length).toBe(ownerAsks)
+      // Both reservations went back.
+      expect(mockDocs.get(`orgs/${ORG}/assistUsage/${month()}`)?.['messages']).toBe(0)
+      // Only a check may name no site: a start still needs the one it builds.
+      const unchecked = await createJob(post({ ...body, creditsConfirmed: true }))
+      expect(unchecked.status).toBe(400)
+      expect(jobDocs()).toEqual([])
+    } finally {
+      registerAiJobAdmission('site', null)
+    }
+  })
+
   it('resumes a job the meter paused from its paused step — refused while still out, carried on after a credit return', async () => {
     const { job } = await (await createJob(post({ ...VALID, kind: 'site' }))).json()
     const path = `orgs/${ORG}/aiJobs/${job.id}`

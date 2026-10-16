@@ -2575,16 +2575,24 @@ written by code.
   footer and navigation, anything pinned or laid over its band, anything
   hidden, and anything already carrying an animation prop (`none` included)
   are left alone, and a block that holds one is opened up so its other
-  children move instead. A page it already moved comes back as the same
-  object, so no write is made for it.
+  children move instead. Later sections take the character's presets in
+  turn (`sectionPresets`), so a page is never one move repeated, and a split
+  — a column of words beside a picture — comes in from its own sides
+  (`sides`): the left column from the left, the right from the right, a
+  stagger step apart, while a picture that zooms keeps its zoom. The tenant's
+  sheet clips the root's overflow-x on any page that slides sideways, so a
+  phone never scrolls sideways while it plays. A page it already moved comes
+  back as the same object, so no write is made for it.
 - **The site's character.** `aiSiteMotion` (`src/lib/layout-language/ai-layout-motion.ts`)
   maps the site's kind to a mood and turns it by the site's design seed, so
   every page of one site moves alike and two sites of one kind differ: calm
-  (law and finance, health, yoga, beauty, blog) fades on a gentle curve,
-  650–800 ms; bold (studio, fitness, music, events) rises with overshoot and
-  zooms pictures in, 450–600 ms; gallery (portfolio, photography) zooms
-  pictures in one after another; standard (every other kind) rises smoothly,
-  500–700 ms. Items stagger 60–120 ms apart.
+  (law and finance, health, yoga, beauty, blog) fades and rises in turn on a
+  gentle curve, 650–800 ms; bold (studio, fitness, music, events) rises with
+  overshoot and zooms pictures in, 450–600 ms; gallery (portfolio,
+  photography) zooms pictures in one after another while its words fade and
+  rise in turn; standard (every other kind) rises and fades in turn,
+  500–700 ms. The seed picks which preset the second section starts on.
+  Every mood brings a split in from its sides. Items stagger 60–120 ms apart.
 - **Where it is written.** A layout-language page's check, once the page has
   passed (`aiLayoutPageCheck`, so the one write carries it); the page step's
   last pass, which settles a page built a section at a time the same way; and
@@ -2593,7 +2601,8 @@ written by code.
   instances sit inside a group that already staggers them.
 - **The starters.** The same pass runs on a new site's home
   (`buildDefaultHomeScreen`) and on every starter page as it is seeded
-  (`buildStarterTemplateDocs`), in the default character. The starters
+  (`buildStarterTemplateDocs`), in the default character: rises and fades in
+  turn, with a split from its sides. The starters
   themselves carry none, because they are also the page examples a model is
   shown.
 - **Afterwards.** It is the author's: the Besigner's Animation section shows

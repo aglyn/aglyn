@@ -52,7 +52,9 @@ import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from './ai-layout-label
  * A slot keeps the alt text the model wrote only when it describes the photo
  * placed: a stock photo that is not what it says is described by what it is
  * (`aiStockPhotoAlt`), and a starter photo always by its own words, since
- * the model never wrote for it (AGL-3831).
+ * the model never wrote for it (AGL-3831). A stand-in the compiler drew where
+ * the model described no picture is decorative while empty; the photo placed
+ * there is described by its own words and is no longer decorative (AGL-3856).
  */
 
 /** What a picture slot is for, read from where it sits and what it says. */
@@ -78,6 +80,13 @@ export interface AiLayoutPictureSlot {
    * category and held to it, so a wick trimmer is never a laptop on a desk.
    */
   product?: { subjects: readonly string[] }
+  /**
+   * A stand-in the compiler drew where the model described no picture
+   * (AGL-3856): its words are what a search looks for, never what a photo
+   * shows, so a photo placed there is described by its own, and is no longer
+   * decorative once it is.
+   */
+  standIn?: boolean
 }
 
 /** A photo a slot is filled with. */
@@ -184,6 +193,7 @@ export function aiLayoutPictureSlots(
           alt,
           aspect: slotAspect(node, frame),
           sectionIndex: here,
+          ...(node.props?.['decorative'] === true ? { standIn: true } : {}),
           role: aiLayoutPictureRole({
             sectionIndex: here,
             sectionName: here >= 0 ? (sections.names[here] ?? '') : '',
@@ -318,6 +328,9 @@ export function aiLayoutPlacePictures(
     if (!photo || !node) return
     const props = { ...((node['props'] as Record<string, unknown> | undefined) ?? {}) }
     delete props['loading']
+    // A photo placed is described by its words, never hidden from a screen
+    // reader: a stand-in was decorative only while it showed nothing (AGL-3856).
+    if (photo.alt?.trim()) delete props['decorative']
     next[slot.imageId] = {
       ...node,
       props: {

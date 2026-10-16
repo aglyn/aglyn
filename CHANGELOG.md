@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.261 — 2026-10-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.260...v1.0.0-beta.261)
+
+### Added
+
+- **ai:** pages move in more than one way; splits slide in from their sides ([AGL-3858](https://linear.app/aglyn/issue/AGL-3858))
+
+### Fixed
+
+- **ai:** a plan's references to nothing come out before the rules read it ([AGL-3845](https://linear.app/aglyn/issue/AGL-3845))
+- **console,ai:** no site is created until its start is admitted ([AGL-3859](https://linear.app/aglyn/issue/AGL-3859), [AGL-3761](https://linear.app/aglyn/issue/AGL-3761))
+- **health:** the app check sampler counts only its own six hours ([AGL-3857](https://linear.app/aglyn/issue/AGL-3857))
+- **events-calendar:** a cover keeps its words; the place line names a host once ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** stock photos fit their slot and are described by their own words ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** a section that is the form itself keeps its undeclared form for the re-ask ([AGL-3845](https://linear.app/aglyn/issue/AGL-3845))
+- **ai:** a section's undeclared creation is declared as a form or taken out ([AGL-3845](https://linear.app/aglyn/issue/AGL-3845))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **ai:** record the verbatim British tags the photo matcher reads ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+
+</details>
+
 ## v1.0.0-beta.260 — 2026-10-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.259...v1.0.0-beta.260)

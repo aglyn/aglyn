@@ -935,15 +935,19 @@ export function createAiSiteJobAdmission(
       const shape = aiSitePlanRefusal(context.plan, { freeTaste })
       if (shape) return { status: 400, error: shape }
     }
-    if (!context.hostId) {
+    if (!context.hostId && !context.siteToCome) {
       return {
         status: 400,
         error: 'Open the site the scaffold is for before starting the job',
       }
     }
-    const owner = await resolveOrgIdForHost(context.hostId)
-    if (!owner || owner !== context.orgId)
-      return { status: 404, error: 'Unknown site' }
+    // A site still to come (AGL-3859) is the one "Create site" makes for
+    // this org once everything else here has said yes.
+    if (context.hostId) {
+      const owner = await resolveOrgIdForHost(context.hostId)
+      if (!owner || owner !== context.orgId)
+        return { status: 404, error: 'Unknown site' }
+    }
     if (!aiJobStepRunnerFor('page')) {
       return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
     }

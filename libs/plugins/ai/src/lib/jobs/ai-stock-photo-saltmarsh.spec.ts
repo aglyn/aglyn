@@ -319,9 +319,10 @@ describe('the Saltmarsh Soap Co start’s photos (AGL-3660, beta.241)', () => {
       { provider: () => provider, ingest: () => ingest },
     )
     const [hero] = (await source?.([HERO])) ?? []
-    // Handmade perilla soap bars, from "handmade soap" ("soap shop" was never sent, so answers nothing here);
-    // a hit whose first tag is not soap no longer competes for the hero (AGL-3760).
-    expect(idOf(hero?.src)).toBe('4926841')
+    // Handmade soap, from "handmade soap" ("soap shop" was never sent, so answers nothing here);
+    // a hit whose first tag is not soap no longer competes for the hero (AGL-3760), and one
+    // whose second tag says soap too leads (AGL-3856): cupcake soaps, "cupcake soap, soap".
+    expect(idOf(hero?.src)).toBe('447655')
     expect(asked).not.toContain('shop')
     expect(names(idOf(hero?.src), ['soap', 'soaps'])).toBe(true)
     expect(OFF_TOPIC).not.toContain(idOf(hero?.src))

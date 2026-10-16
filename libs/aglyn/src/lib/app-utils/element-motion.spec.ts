@@ -210,8 +210,59 @@ describe('applyElementMotion (AGL-3838)', () => {
     // Nothing nested: no card, cell or word inside the staggered grid moves on its own.
     for (const id of Object.keys(nodes).filter((key) => /^s\d/.test(key))) expect(motionOf(nodes, id)).toEqual({})
     expect(motionOf(nodes, 'servicesStack')).toEqual({})
-    // A section of words alone moves as one block.
-    expect(motionOf(nodes, 'aboutWords')).toMatchObject({ aglynAnimation: 'slide-up', aglynAnimationTrigger: 'scroll' })
+    // A section of words alone moves as one block — the third section, so the second of the default turns.
+    expect(motionOf(nodes, 'aboutWords')).toMatchObject({ aglynAnimation: 'fade', aglynAnimationTrigger: 'scroll' })
+  })
+
+  it('gives later sections the character’s presets in turn, so a page is not one repeated move', () => {
+    const character: ElementMotionCharacter = { ...ELEMENT_MOTION_DEFAULT, sectionPresets: ['slide-down', 'zoom-out'] }
+    const nodes = applyElementMotion(page(), { character })
+    expect(motionOf(nodes, 'servicesTitle')).toMatchObject({ aglynAnimation: 'slide-down' })
+    expect(motionOf(nodes, 'aboutWords')).toMatchObject({ aglynAnimation: 'zoom-out' })
+    // Without turns, every later section takes the one preset.
+    const single = applyElementMotion(page(), { character: { ...ELEMENT_MOTION_DEFAULT, sectionPresets: undefined } })
+    expect(motionOf(single, 'aboutWords')).toMatchObject({ aglynAnimation: ELEMENT_MOTION_DEFAULT.preset })
+  })
+
+  it('brings a split’s columns in from their own sides, the second a stagger step later', () => {
+    const split = (): Record<string, any> =>
+      buildStarterNodes([
+        { id: 'top', componentId: 'section', children: [text('topTitle', 'h1', 'A title')] },
+        {
+          id: 'story',
+          componentId: 'section',
+          children: [
+            {
+              id: 'storyGrid',
+              componentId: 'muiGrid',
+              props: { container: true },
+              children: [
+                {
+                  id: 'storyWordsCell',
+                  componentId: 'muiGrid',
+                  children: [{ id: 'storyWords', componentId: 'muiStack', children: [text('storyTitle', 'h2', 'Our story'), text('storyBody', 'body1', 'Words.')] }],
+                },
+                { id: 'storyPhotoCell', componentId: 'muiGrid', children: [{ id: 'storyPhoto', componentId: 'image', props: { alt: 'A picture' } }] },
+              ],
+            },
+          ],
+        },
+      ])
+    const nodes = applyElementMotion(split())
+    expect(motionOf(nodes, 'storyWordsCell')).toMatchObject({ aglynAnimation: 'slide-right', aglynAnimationTrigger: 'scroll' })
+    expect(motionOf(nodes, 'storyPhotoCell')).toMatchObject({
+      aglynAnimation: 'slide-left',
+      aglynAnimationTrigger: 'scroll',
+      aglynAnimationDelay: ELEMENT_MOTION_DEFAULT.staggerStepMs,
+    })
+    expect(motionOf(nodes, 'storyGrid')).toEqual({})
+    // A picture that zooms keeps its zoom; the words still come from their side.
+    const zooming = applyElementMotion(split(), { character: { ...ELEMENT_MOTION_DEFAULT, mediaPreset: 'zoom-in' } })
+    expect(motionOf(zooming, 'storyWordsCell')).toMatchObject({ aglynAnimation: 'slide-right' })
+    expect(motionOf(zooming, 'storyPhotoCell')).toMatchObject({ aglynAnimation: 'zoom-in' })
+    // A character without sides moves the split as before.
+    const plain = applyElementMotion(split(), { character: { ...ELEMENT_MOTION_DEFAULT, sides: false } })
+    expect(Object.values(plain).map((node: any) => node.props?.aglynAnimation).filter(Boolean)).not.toContain('slide-right')
   })
 
   it('never moves a form or its fields, nor the block that holds one', () => {
