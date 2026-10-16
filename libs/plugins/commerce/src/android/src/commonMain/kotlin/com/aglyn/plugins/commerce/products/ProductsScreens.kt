@@ -58,6 +58,7 @@ import com.aglyn.plugins.commerce.pos.Load
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.AmountRow
 import com.aglyn.ui.BarcodeScanSheet
@@ -112,6 +113,7 @@ fun ProductsScreen(context: NativePluginContext, initialProductId: String? = nul
   LaunchedEffect(startNew) { if (startNew) editor.create() }
   AglynListDetail(
     initialSelected = initialProductId,
+    onItemRemoved = { model.reload() },
     list = { selected, onSelect -> ProductsList(context, model, editor, selected, onSelect) },
     detail = { selected ->
       if (selected == null) EmptyState("Pick a product to see it here", icon = AglynIcons.named("inventory"))
@@ -125,7 +127,9 @@ fun ProductsScreen(context: NativePluginContext, initialProductId: String? = nul
 private fun ProductsList(context: NativePluginContext, model: ProductsListModel, editor: ProductEditorModel, selected: String?, onSelect: (String) -> Unit) {
   val listState = rememberLazyListState()
   // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
-  LaunchedEffect(model.filter, model.clauses, model.sort) { listState.scrollToItem(0) }
+  // Coming back to the list (from a product, or Back) keeps where it was.
+  var arrived by remember { mutableStateOf(false) }
+  LaunchedEffect(model.filter, model.clauses, model.sort) { if (arrived) listState.scrollToItem(0) else arrived = true }
   val nearEnd by remember {
     derivedStateOf {
       val info = listState.layoutInfo
@@ -251,6 +255,8 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
   var working by remember(productId) { mutableStateOf(false) }
   var notice by remember(productId) { mutableStateOf<Pair<String, StatusTone>?>(null) }
   val scope = rememberCoroutineScope()
+  // A deleted product closes its detail and drops out of the list.
+  CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value != null && ready.value?.data?.get("deletedAt") == null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
@@ -281,7 +287,13 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
             scope.launch {
               notice = try {
                 deleteProduct(context.api, hostId, productId)
-                "Product deleted" to StatusTone.SUCCESS
+                // In the catalog the detail closes on the delete, so the list says it.
+                if (editor != null) {
+                  editor.done = "Product deleted"
+                  null
+                } else {
+                  "Product deleted" to StatusTone.SUCCESS
+                }
               } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 productWriteMessage(error, "Could not delete product") to StatusTone.ERROR

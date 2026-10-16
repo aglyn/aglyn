@@ -55,6 +55,8 @@ import com.aglyn.site.artifacts.UseTemplateDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
+import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
@@ -129,6 +131,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
 
   AglynListDetail(
     initialSelected = initialPageId,
+    detailBanner = { if (dialog == null) RunnerBanners(runner) },
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         ListHeader("Pages") {
@@ -142,10 +145,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
           SlotWidgets(context, ListCreateZone.PAGES, SlotPlacement.HEADER)
         }
         if (dialog == null) {
-          runner.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(horizontal = space(2f))) }
-          runner.notice?.let { message ->
-            NoticeBanner(message, StatusTone.SUCCESS, Modifier.padding(horizontal = space(2f)), action = { TextButton(onClick = runner::clear) { Text("Dismiss") } })
-          }
+          Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RunnerBanners(runner) }
         }
         when (val rows = live.rows) {
           Live.Loading -> SkeletonList(rows = 6)
@@ -175,7 +175,10 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
       }
     },
     detail = { selected ->
-      val row = (live.rows as? Live.Ready)?.value?.firstOrNull { it.page.id == selected }
+      val rows = (live.rows as? Live.Ready)?.value
+      val row = rows?.firstOrNull { it.page.id == selected }
+      // A deleted page leaves the list, and its detail closes with it.
+      CloseWhenGone(rows?.let { row != null })
       if (row == null) {
         EmptyState("Pick a page to see it here", icon = AglynIcons.named("description"))
       } else {

@@ -56,6 +56,7 @@ import com.aglyn.ui.Busy
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -201,6 +202,8 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, scope:
   val live by flow.collectAsState(Live.Loading)
   var dialog by remember(id) { mutableStateOf<RecordDialog?>(null) }
   var notice by remember(id) { mutableStateOf<String?>(null) }
+  // A deleted (or converted) record closes its detail.
+  CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this ${kind.singular.lowercase()}", body = value.error.message, icon = AglynIcons.named("error"))

@@ -70,10 +70,12 @@ import com.aglyn.core.OrgAccess
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -224,6 +226,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   }
 
   AglynListDetail(
+    // A phone shows a file without the library, so the file carries the library's banners.
+    detailBanner = { if (dialog == null) RunnerBanners(runner) },
     initialSelected = initialMediaId,
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
@@ -579,6 +583,8 @@ private fun MediaDetail(
   onChanged: () -> Unit,
 ) {
   val live by remember(scope, mediaId, context.firestore) { context.firestore.observeDoc("${scope.path}/media/$mediaId") }.collectAsState(Live.Loading)
+  // A deleted file closes its detail; the library already dropped it and offers the undo.
+  CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value?.let(MediaItem::from) != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this file", body = "Check the connection and try again.", icon = AglynIcons.named("error"))

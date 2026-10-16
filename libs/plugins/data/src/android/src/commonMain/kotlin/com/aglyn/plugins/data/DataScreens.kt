@@ -50,6 +50,7 @@ import com.aglyn.pluginhost.rememberOrgAccess
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.DetailRow
@@ -188,6 +189,8 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
     detail = { selected ->
       val rows = (datasets as? Live.Ready)?.value
       val dataset = rows?.firstOrNull { it.id == selected }
+      // A deleted dataset leaves the list, and its detail closes with it.
+      CloseWhenGone(rows?.let { dataset != null })
       when {
         selected == null -> EmptyState("Pick a dataset to see it here", icon = AglynIcons.named("dataset"))
         rows == null -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))

@@ -47,6 +47,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.SlotPlacement
@@ -54,6 +55,7 @@ import com.aglyn.pluginhost.SlotWidgets
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -120,6 +122,9 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
 
   AglynListDetail(
     initialSelected = initialId,
+    onItemRemoved = { model.reload(keep = true) },
+    // A phone shows one without the list, so it carries the list's banners.
+    detailBanner = { if (dialog == null) RunnerBanners(runner) },
     list = { selected, onSelect ->
       val listState = rememberLazyListState()
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
@@ -153,10 +158,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
           if (kind.kindChoices.isNotEmpty()) {
             ChoiceChipRow(kind.kindChoices.map { ChipOption(it.first ?: "all", it.second) }, model.kindFilter ?: "all", { model.pick(it.takeIf { key -> key != "all" }) })
           }
-          if (dialog == null) {
-            runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
-            runner.notice?.let { message -> NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
-          }
+          if (dialog == null) RunnerBanners(runner)
         }
         RefreshableBox(model.refreshing, model::refresh) {
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load ${kind.title.lowercase()}") { rows ->
@@ -273,6 +275,8 @@ private fun ArtifactDetail(
   open: (ArtifactDialog) -> Unit,
 ) {
   val live by remember(hostId, kind, id, context.firestore) { context.firestore.observeDoc("hosts/$hostId/${kind.collection}/$id") }.collectAsState(Live.Loading)
+  // A deleted one closes its detail and drops out of the list.
+  CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value?.let(ArtifactRow::from) != null })
   when (val doc = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this ${kind.singular}", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
