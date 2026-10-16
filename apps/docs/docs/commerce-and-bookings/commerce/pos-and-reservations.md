@@ -133,7 +133,7 @@ zero, and only then is the stock taken and the order completed.
 
 **Card reader**, **Type card** and **Card (QR)** charge through your store's
 Stripe account. Until Stripe is connected and able to take charges, they show
-greyed out with a note above them that links to **Products → Settings →
+grayed out with a note above them that links to **Products → Settings →
 Payments**, where you connect it. Cash, gift cards, store credit and room
 charges work without Stripe.
 

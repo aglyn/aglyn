@@ -14,7 +14,7 @@ for the how-to.
 
 - **[Taking payment](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
   when your store's Stripe account isn't connected yet, the register's card
-  buttons stay on screen greyed out, with a note linking to **Payments**,
+  buttons stay on screen grayed out, with a note linking to **Payments**,
   instead of disappearing. Draft orders, reservations and paid booking
   services say the same before you rely on them.
 - **[Shipping labels](commerce-and-bookings/commerce/shipping-labels-and-live-rates.md#ship-from)** —

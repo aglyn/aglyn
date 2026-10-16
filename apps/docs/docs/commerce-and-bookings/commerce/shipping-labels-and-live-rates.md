@@ -61,7 +61,7 @@ postal address (see [Where parcels ship from](./shipping.md#where-parcels-ship-f
 
 Labels and carrier rates need a complete address to ship from: street, city,
 postal code and country. Until there is one, the card shows a warning, and on
-each order **Buy label** and **Return label** are greyed out with a link to
+each order **Buy label** and **Return label** are grayed out with a link to
 **Shipping & delivery** to add it.
 
 ### Boxes {#boxes}
