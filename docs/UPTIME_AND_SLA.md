@@ -217,7 +217,7 @@ the five say nothing about whether a customer is affected.
 | `publishRules` | every publish path a customer can take is still authorized | a publish route refuses, or a rule leaves a path uncovered |
 | `publishAnnounce` | published cache drops are landing rather than piling up in the outbox | entries go pending, stale or stalled |
 | `signupCanary` | a scheduled walk really did create and verify an account on production, recently, and cleaned up after itself | `signup-walk-failed` — **a stranger could not sign up**, `failedStep` names where; `canary-left-residue` — the walk passed but left an org behind; `canary-stale` / `canary-unavailable` — the WALKER did not report |
-| `appCheckAttestation` | App Check's allow rate on `identitytoolkit.googleapis.com` over six hours is at or above 90% across at least 20 requests | attestation is refusing real visitors, which breaks sign-up and sign-in for everybody |
+| `appCheckAttestation` | App Check's allow rate on `identitytoolkit.googleapis.com` over six hours is at or above 75% across at least 20 requests (native Simulator and emulator test builds cannot attest, so the floor leaves room for their denials) | attestation is refusing real visitors, which breaks sign-up and sign-in for everybody |
 
 ⛔ **`canary-stale` is not a signup outage.** It means the scheduled walker did
 not report, which is a CI condition. Check the "Signup canary" workflow's run
