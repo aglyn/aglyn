@@ -24,6 +24,7 @@ import java.util.concurrent.CountDownLatch
 private const val IID_ENVIRONMENT_COMPLETED = "4e8a3389-c9d8-4bd2-b6b5-124fee6cc14d"
 private const val IID_CONTROLLER_COMPLETED = "6c4819f3-c9b7-4260-8127-c9f5bde7f68c"
 private const val IID_NAVIGATION_STARTING = "9adbe429-f36d-432b-9ddc-f8881fbd76e3"
+private const val IID_SOURCE_CHANGED = "3c067f9f-5388-4772-8b48-79f7ef1ab37c"
 private const val IID_NEW_WINDOW_REQUESTED = "d4c185fe-c81c-4989-97af-2d3fa7ab5651"
 private const val IID_WEB_MESSAGE_RECEIVED = "57213f19-00e6-49fa-8e07-898ea01ecbd2"
 private const val IID_ADD_SCRIPT_COMPLETED = "b99369f3-9b11-47b5-bc6f-8e7895fcea17"
@@ -42,8 +43,10 @@ private object Slot {
   const val GET_CORE_WEBVIEW2 = 25
   // ICoreWebView2
   const val GET_SETTINGS = 3
+  const val GET_SOURCE = 4
   const val NAVIGATE = 5
   const val ADD_NAVIGATION_STARTING = 7
+  const val ADD_SOURCE_CHANGED = 11
   const val ADD_SCRIPT_ON_DOCUMENT_CREATED = 27
   const val EXECUTE_SCRIPT = 29
   const val ADD_WEB_MESSAGE_RECEIVED = 34
@@ -126,6 +129,11 @@ enum class NavigationVerdict { ALLOW, CANCEL }
 class WebView2Listener(
   /** A navigation to [uri] is about to start: allow it, or cancel it (the caller routes it elsewhere). */
   val onNavigation: (uri: String) -> NavigationVerdict,
+  /**
+   * The page's address changed without a navigation starting: the console's
+   * client-side router (history.pushState), which NavigationStarting never sees.
+   */
+  val onSourceChanged: (uri: String) -> Unit = {},
   /** A web message from the page: its source URL and string payload. */
   val onMessage: (source: String, data: String) -> Unit = { _, _ -> },
   /** The view is ready, or failed with a reason. */
@@ -216,6 +224,10 @@ class WebView2View(
       if (listener.onNavigation(uri) == NavigationVerdict.CANCEL) args.call(Slot.NAV_PUT_CANCEL, 1)
     }
     view.call(Slot.ADD_NAVIGATION_STARTING, navigating, eventToken()).check("add_NavigationStarting")
+    val sourceChanged = eventHandler(IID_SOURCE_CHANGED) { _ ->
+      webview?.string(Slot.GET_SOURCE, "get_Source")?.let(listener.onSourceChanged)
+    }
+    view.call(Slot.ADD_SOURCE_CHANGED, sourceChanged, eventToken()).check("add_SourceChanged")
     // A new window (target=_blank, window.open) never opens: it is routed like a navigation.
     val newWindow = eventHandler(IID_NEW_WINDOW_REQUESTED) { args ->
       args.call(Slot.NEW_WINDOW_PUT_HANDLED, 1)
