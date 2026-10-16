@@ -12,7 +12,8 @@ enum FirestoreLoads {
   /// A Firestore value as JSON: a date becomes epoch milliseconds.
   static func json(_ value: Any?) -> JSONValue {
     switch value {
-    case nil: return .null
+    // A stored null arrives as NSNull from both readers; it is no value, never the text "<null>".
+    case nil, is NSNull: return .null
     case let text as String: return .string(text)
     case let flag as Bool: return .bool(flag)
     case let number as NSNumber:

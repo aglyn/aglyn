@@ -143,6 +143,15 @@ final class FirestoreLoadsTests: XCTestCase {
     XCTAssertEqual(none, .null)
   }
 
+  func testAStoredNullIsNoValueSoAFallbackIsUsedAndNothingWritesTheTextNull() throws {
+    // Site activity: a system row stores `actorEmail: null`, and `{item.actorEmail|'System'}` printed "<null>".
+    XCTAssertEqual(FirestoreLoads.json(NSNull()), .null)
+    XCTAssertEqual(FirestoreLoads.json(["actorEmail": NSNull(), "action": "ran"] as [String: Any]), .object(["actorEmail": .null, "action": .string("ran")]))
+    XCTAssertEqual(FirestoreLoads.stored(["note": NSNull()] as [String: Any]), .object(["note": .null]))
+    let row: JSONValue = .object(["item": FirestoreLoads.json(["actorEmail": NSNull()] as [String: Any])])
+    XCTAssertEqual(ScreenValues.render("{item.actorEmail|'System'}", in: row), "System")
+  }
+
   /// A coupon "works through this day" on the device's own clock, as a browser's `Date.parse` of a zone-less time.
   func testADateCanBeTheDevicesOwnEndOfDay() throws {
     let body: JSONValue = ["$dateMs": ["value": "2026-11-30", "time": "23:59:59.999", "local": true]]
