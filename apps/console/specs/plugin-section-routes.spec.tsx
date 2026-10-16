@@ -364,8 +364,10 @@ describe('a plugin section is a route (AGL-2501)', () => {
     mount()
 
     await waitFor(() =>
-      expect(screen.getByText(/It may have moved/)).toBeTruthy(),
+      expect(screen.getByText(/The plugin that provides it may be turned off/)).toBeTruthy(),
     )
+    // The operator can act on the commonest cause, so the notice links to it.
+    expect(screen.getByText('Open Plugins').closest('a')?.getAttribute('href')).toMatch(/\/plugins$/)
     expect(mockNotFound).not.toHaveBeenCalled()
   })
 

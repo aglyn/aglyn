@@ -142,6 +142,7 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
   /*
    * The real translator, not a stub. It is a pure function of the shared
    * declaration, and a mock that omits a barrel export does not fail as
