@@ -88,6 +88,13 @@ final class CrmReference {
   func pipeline(_ id: String?) -> Pipeline {
     activePipelines.first { $0.id == id } ?? activePipelines.first { $0.isDefault } ?? activePipelines[0]
   }
+
+  /// A stage's name in its pipeline (an archived one too), else in the pipeline a deal without one falls back to; the id
+  /// itself when neither has it.
+  func stageName(_ pipelineID: String?, _ stageID: String) -> String {
+    let named = (pipelineDocs.rows + [.standard]).first { $0.id == pipelineID } ?? pipeline(pipelineID)
+    return named.stages.first { $0.id == stageID }?.name ?? stageID
+  }
 }
 
 /// The CRM's gate: the site's scope, then the plan, then the content with the shared reads.

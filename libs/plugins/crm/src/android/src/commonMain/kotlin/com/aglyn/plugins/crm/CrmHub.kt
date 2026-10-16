@@ -97,8 +97,9 @@ class CrmReference(
   fun memberLabel(uid: String?): String? = uid?.let { id -> members.firstOrNull { it.uid == id }?.label ?: id }
   val activePipelines: List<Pipeline> get() = pipelines.filter { !it.archived }.ifEmpty { listOf(defaultPipeline()) }
   fun pipeline(id: String?): Pipeline = activePipelines.firstOrNull { it.id == id } ?: activePipelines.firstOrNull { it.isDefault } ?: activePipelines.first()
+  /** A stage's name in its pipeline (an archived one too), else in the pipeline a deal without one falls back to; the id itself when neither has it. */
   fun stageName(pipelineId: String?, stageId: String?): String? =
-    stageId?.let { sid -> (pipelines + defaultPipeline()).firstOrNull { it.id == pipelineId }?.stages?.firstOrNull { it.id == sid }?.name ?: sid }
+    stageId?.let { sid -> ((pipelines + defaultPipeline()).firstOrNull { it.id == pipelineId } ?: pipeline(pipelineId)).stages.firstOrNull { it.id == sid }?.name ?: sid }
 }
 
 @Composable
