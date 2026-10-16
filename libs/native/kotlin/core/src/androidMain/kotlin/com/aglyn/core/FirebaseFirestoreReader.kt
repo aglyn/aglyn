@@ -59,7 +59,8 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
     var q: Query = db.collection(query.collectionPath)
     for (filter in query.filters) {
       val field = if (filter.field == "__name__") FieldPath.documentId() else FieldPath.of(*filter.field.split('.').toTypedArray())
-      val value = filter.value
+      // A timestamp filter (a date range, the tombstones a quota count leaves out) is the SDK's Timestamp.
+      val value = toSdk(filter.value)
       q = when (filter.op) {
         FilterOp.EQ -> q.whereEqualTo(field, value)
         FilterOp.NE -> q.whereNotEqualTo(field, value)

@@ -17,7 +17,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Redirects | `redirects` | leads | [x] | [x] |
 | Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `couriers`, `sales-channels` | next lane | [x] | [x] |
 | Sites, pages and their versions | `hosts/[host]/screens/*` (opening a page = Besigner) | AGL-3668 | [x] | [x] |
-| Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [ ] | [ ] |
+| Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [x] | [x] |
 | Site setup | `hosts/[host]/setup/{details,business,emails,seo,theme,tracking,integrations}`, `theme` (the theme's Advanced overrides are a raw JSON editor: not built, people are not asked to write code) | AGL-3668 | [x] | [x] |
 | Content collections | `hosts/[host]/content/*` | AGL-3668 | [x] | [x] |
 | Media | `hosts/[host]/media`, `[orgSlug]/media` (`video-delivery` has no console page: it is server-side only) | AGL-3668 | [x] | [x] |
@@ -137,10 +137,13 @@ AI plugin's SEO fixes, the cover-video poster frame, the image editor and
 Setup's Integrations section (the cards of the plugins running on the site)
 (#1586); and the Disabled notice on a file staff took down. What is left:
 
-- Components, layouts, templates: the per-plan count beside Create (the
-  limit the Billing and usage meter already reads). Publish to marketplace on
-  a component or layout is native: the detail menu offers it wherever the
-  marketplace fills the `hostArtifactPublish` slot, as the console's does.
+- Components, layouts, templates: complete. The lists sort by every column the
+  console's tables sort by (a menu of the declaration's orders, with the
+  console's notice when a search or filter changes the order) and print the
+  per-plan count beside Create (`3/10 layouts on your plan`, the entitlements
+  quota against the server's count). Publish to marketplace on a component or
+  layout is native: the detail menu offers it wherever the marketplace fills
+  the `hostArtifactPublish` slot, as the console's does.
 - Site setup, deliberately not built: the theme's Advanced overrides, a raw
   JSON editor. Everything else in the row is native, including the AI plugin's
   widgets in the Business profile and SEO areas.
