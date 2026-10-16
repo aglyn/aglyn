@@ -1,6 +1,6 @@
 package com.aglyn.plugins.commerce.products
 
-import com.aglyn.contracts.ContractValues
+import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.EncodedBarcode
 import com.aglyn.contracts.EncodedFormat
 import com.aglyn.contracts.LabelSize
@@ -65,7 +65,7 @@ private fun widthsToModules(widths: List<Int>) = widths.mapIndexed { index, widt
 
 /** Code 128: set C for an even run of digits (half as wide), set B otherwise. */
 private fun code128(text: String): String {
-  val patterns = ContractValues.shared.code128Patterns.map { row -> row.map { it.toInt() } }
+  val patterns = Contracts.code128Patterns.map { row -> row.map { it.toInt() } }
   val numeric = isAsciiDigits(text) && text.length % 2 == 0 && text.length >= 4
   val values = mutableListOf(if (numeric) 105 else 104)
   if (numeric) {
@@ -93,7 +93,7 @@ fun encodeBarcode(raw: String?): EncodedBarcode? {
       8 -> return EncodedBarcode(EncodedFormat.EAN_8, ean8(value), value)
     }
   }
-  val printable = value.filter { it.code in 0x20..0x7e }.take(ContractValues.shared.labelCodeMaxLength.toInt())
+  val printable = value.filter { it.code in 0x20..0x7e }.take(Contracts.labelCodeMaxLength.toInt())
   if (printable.isEmpty()) return null
   return EncodedBarcode(EncodedFormat.CODE_128, code128(printable), printable)
 }
@@ -147,7 +147,7 @@ fun productLabelRows(product: Map<String, Any?>): List<ProductLabelRow> {
 
 /** A copy count kept whole, at least 0 and at most the console's limit (`labelCopiesFromInput`). */
 fun labelCopiesFromInput(value: Double): Long =
-  if (value.isNaN()) 0 else floor(value).coerceIn(0.0, ContractValues.shared.maxLabelCopies.toDouble()).toLong()
+  if (value.isNaN()) 0 else floor(value).coerceIn(0.0, Contracts.maxLabelCopies.toDouble()).toLong()
 
 /** A typed copy count: what JavaScript's `Number` reads in it. */
 fun labelCopiesFromInput(text: String): Long = labelCopiesFromInput(jsNumber(text, true))
@@ -165,7 +165,7 @@ fun labelPriceText(priceCents: Double?, currency: String?): String =
   if (priceCents == null || !priceCents.isFinite()) "" else formatReceiptMoney(jsRound(priceCents).toDouble(), currency ?: "usd")
 
 /** The size picked, or the first (`labelSize`). */
-fun labelSize(id: String?): LabelSize = ContractValues.shared.labelSizes.let { sizes -> sizes.firstOrNull { it.id == id } ?: sizes.first() }
+fun labelSize(id: String?): LabelSize = Contracts.labelSizes.let { sizes -> sizes.firstOrNull { it.id == id } ?: sizes.first() }
 
 /** The ZPL file's name (`labelsZplFileName`). */
 fun labelsZplFileName(productName: String?): String =

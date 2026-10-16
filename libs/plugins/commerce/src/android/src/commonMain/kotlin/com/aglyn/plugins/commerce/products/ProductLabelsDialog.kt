@@ -22,7 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.aglyn.contracts.ContractValues
+import com.aglyn.contracts.Contracts
 import com.aglyn.hardware.PrintableDocument
 import com.aglyn.hardware.SystemPrintResult
 import com.aglyn.hardware.SystemPrinter
@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProductLabelsDialog(productName: String, initial: List<ProductLabelRow>, printer: SystemPrinter?, onDismiss: () -> Unit) {
   var rows by remember(initial) { mutableStateOf(initial) }
-  var sizeId by remember { mutableStateOf(ContractValues.shared.labelSizes.firstOrNull()?.id) }
+  var sizeId by remember { mutableStateOf(Contracts.labelSizes.firstOrNull()?.id) }
   var busy by remember { mutableStateOf(false) }
   var problem by remember { mutableStateOf<String?>(null) }
   var note by remember { mutableStateOf<String?>(null) }
@@ -78,7 +78,7 @@ fun ProductLabelsDialog(productName: String, initial: List<ProductLabelRow>, pri
       note?.let { NoticeBanner(it, StatusTone.SUCCESS) }
       SelectField(
         label = "Label size",
-        options = ContractValues.shared.labelSizes.map { SelectOption(it.id, it.label) },
+        options = Contracts.labelSizes.map { SelectOption(it.id, it.label) },
         selected = sizeId,
         onSelect = { sizeId = it },
         modifier = Modifier.fillMaxWidth().testTag("labels-size"),
