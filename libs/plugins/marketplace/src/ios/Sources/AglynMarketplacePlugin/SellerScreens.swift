@@ -23,7 +23,7 @@ private enum SellSection: String, CaseIterable, Identifiable {
 
 /// The profile fields a publisher edits, in the order the console's form lists them, with the route's key and the label shown.
 private let profileFields: [(key: String, label: String)] = [
-  ("displayName", "Display name"), ("bio", "Bio"), ("avatarUrl", "Logo address (https)"), ("website", "Website (https)"),
+  ("displayName", "Display name"), ("bio", "Bio"), ("avatarUrl", "Logo"), ("website", "Website (https)"),
   ("supportEmail", "Support email"), ("supportUrl", "Support address (https)"), ("githubUrl", "GitHub (https)"), ("xUrl", "X (https)"),
   ("linkedinUrl", "LinkedIn (https)"),
 ]
@@ -104,12 +104,18 @@ private struct ProfileSection: View {
         Text("3 to 30 lowercase letters, digits and hyphens. It is claimed on the server, so two workspaces cannot both have it.")
           .font(AglynFont.caption).foregroundStyle(!(fields["handle"] ?? "").isEmpty && !isPublisherHandle(fields["handle"] ?? "") ? AglynColor.error : .secondary)
       }
-      ForEach(profileFields, id: \.key) { field in
+      ForEach(profileFields.filter { $0.key != "avatarUrl" }, id: \.key) { field in
         TextField(field.label, text: Binding(get: { fields[field.key] ?? "" }, set: { fields[field.key] = $0 }), axis: field.key == "bio" ? .vertical : .horizontal)
           .lineLimit(field.key == "bio" ? 3...6 : 1...1)
           .disabled(!canManage || !loaded)
           .accessibilityIdentifier("seller-\(field.key)")
       }
+      // The logo is picked from the media library, as the console's profile picks it; never typed.
+      MediaPickField(
+        context: context, label: "Logo", value: fields["avatarUrl"] ?? "", enabled: canManage && loaded, workspaceOnly: true,
+        onPick: { fields["avatarUrl"] = listingMediaValue($0) }, onClear: { fields["avatarUrl"] = "" }
+      )
+      .accessibilityIdentifier("seller-avatarUrl")
       if let error = runner.error { AglynNotice(error, tone: .warning) }
       if let notice = runner.notice { AglynNotice(notice, tone: .success) }
       Button("Save profile") {

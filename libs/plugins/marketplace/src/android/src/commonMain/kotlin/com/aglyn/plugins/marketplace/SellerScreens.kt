@@ -74,7 +74,7 @@ private val SELL_SECTIONS = listOf(
 private val PROFILE_FIELDS = listOf(
   Triple("displayName", "Display name", KeyboardType.Text),
   Triple("bio", "Bio", KeyboardType.Text),
-  Triple("avatarUrl", "Logo address (https)", KeyboardType.Uri),
+  Triple("avatarUrl", "Logo", KeyboardType.Uri),
   Triple("website", "Website (https)", KeyboardType.Uri),
   Triple("supportEmail", "Support email", KeyboardType.Email),
   Triple("supportUrl", "Support address (https)", KeyboardType.Uri),
@@ -129,13 +129,18 @@ private fun ProfileSection(context: NativePluginContext, orgId: String, stored: 
       isError = fields.getValue("handle").isNotEmpty() && !isPublisherHandle(fields.getValue("handle")), singleLine = true, enabled = canManage && loaded,
       modifier = Modifier.fillMaxWidth().testTag("seller-handle"),
     )
-    for ((key, label, keyboard) in PROFILE_FIELDS) {
+    for ((key, label, keyboard) in PROFILE_FIELDS.filter { it.first != "avatarUrl" }) {
       OutlinedTextField(
         fields.getValue(key), { fields = fields + (key to it) }, label = { Text(label) }, singleLine = key != "bio", minLines = if (key == "bio") 3 else 1,
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboard), enabled = canManage && loaded,
         modifier = Modifier.fillMaxWidth().testTag("seller-$key"),
       )
     }
+    // The logo is picked from the media library, as the console's profile picks it; never typed.
+    MediaPickField(
+      context, "Logo", fields.getValue("avatarUrl"), onPick = { fields = fields + ("avatarUrl" to listingMediaValue(it.item.cdnPath, it.item.url)) },
+      onClear = { fields = fields + ("avatarUrl" to "") }, enabled = canManage && loaded, workspaceOnly = true, modifier = Modifier.testTag("seller-avatarUrl"),
+    )
     runner.error?.let { NoticeBanner(it, StatusTone.WARNING) }
     runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
     Button(
