@@ -140,7 +140,12 @@ struct FormsScreen: View {
       model.start(context.firestore, hostID: context.hostID)
       if let initialFormID {
         selection = initialFormID
-        if !isWide { pushed = initialFormID }
+        if !isWide {
+          // A push set while this screen's own push is still animating is dropped, so the form a link named is
+          // pushed once the screen has settled.
+          try? await Task.sleep(nanoseconds: 450_000_000)
+          pushed = initialFormID
+        }
       }
     }
     .onDisappear {
