@@ -134,3 +134,13 @@ fun passwordChangeMessage(code: String?): String = when (code?.uppercase()?.subs
   -> "Your current password is not right."
   else -> authErrorMessage(code)
 }
+
+/**
+ * Whether a failed token refresh means the session is over (its refresh token is no longer honoured, the account was
+ * deleted or disabled), from the Firebase error code or, where the SDK wraps it, the server's code in the message.
+ */
+fun isDeadSessionError(code: String?, message: String?): Boolean {
+  val dead = setOf("INVALID_REFRESH_TOKEN", "TOKEN_EXPIRED", "USER_NOT_FOUND", "USER_DISABLED", "INVALID_GRANT_TYPE", "USER_TOKEN_EXPIRED", "INVALID_USER_TOKEN")
+  val normalized = code?.removePrefix("ERROR_")?.uppercase()
+  return normalized in dead || dead.any { message?.contains(it) == true }
+}
