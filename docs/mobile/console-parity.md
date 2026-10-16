@@ -22,7 +22,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Content collections | `hosts/[host]/content/*` | AGL-3668 | [x] | [x] |
 | Media | `hosts/[host]/media`, `[orgSlug]/media` (`video-delivery` has no console page: it is server-side only) | AGL-3668 | [x] | [x] |
 | Forms and submissions | `forms` | AGL-3668 | [x] | [x] |
-| Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [ ] | [x] |
+| Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [x] | [x] |
 | Fonts, theme presets, logic | `fonts`, `theme-presets`, `logic` | AGL-3668 | [x] | [x] |
 | Plugin marketplace | `marketplace` (browse, listings, install, my installs and licenses native) | AGL-3668 | [ ] | [ ] |
 | CRM | `crm` | AGL-3669 | [x] | [x] |
@@ -147,9 +147,10 @@ Setup's Integrations section (the cards of the plugins running on the site)
   theme, dataset schema or email starter), the publisher agreement, the seller
   panel and reports. Browsing, listing detail, install, uninstall and licenses
   are native.
-- Datasets: Import (and the dataset page's Export entry beside it) open the
-  data transfer hub, which the Workspace settings lane builds; export of a
-  dataset is native. Apple's box is ticked when Import opens the hub.
+- Datasets: Import is on the dataset's page and on its records list (an owner
+  or an admin, the transfer routes' own rule), and opens the Imports and
+  exports hub's import wizard on `data.dataset:<id>`, as the console's
+  `openImport` does; export of a dataset is native too.
 
 The media library's "Default sharing for new media" card is in Workspace
 settings, where the apps keep the workspace's defaults.

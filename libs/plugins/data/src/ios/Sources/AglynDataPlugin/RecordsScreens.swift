@@ -199,6 +199,14 @@ private struct RecordsBody: View {
     .onChange(of: searchText) { _, text in model.type(text) }
     .toolbar {
       ToolbarItemGroup(placement: .primaryAction) {
+        if canImportDatasetRecords(orgRole: context.orgRole) {
+          Button {
+            context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
+          } label: {
+            Label("Import records", systemImage: "square.and.arrow.up")
+          }
+          .accessibilityIdentifier("import-records")
+        }
         Button {
           exportRecords()
         } label: {

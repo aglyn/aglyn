@@ -148,4 +148,16 @@ class DataTest {
     assertEquals(DatasetFieldType.BOOL, definition.type)
     assertNull(definition.customType)
   }
+
+  @Test
+  fun importOpensTheWorkspacesWizardOnThisDataset() {
+    // The console's `openImport` call: the dataset's transfer resource, titled for it, offered to an owner or an admin.
+    assertEquals("core.settings.data.import", DATA_IMPORT_SCREEN)
+    assertEquals(mapOf("resource" to "data.dataset:ds1", "title" to "Import into Menu items"), datasetImportParams("ds1", "Menu items"))
+    assertEquals("Import records", datasetImportParams("ds1", "")["title"])
+    assertTrue(canImportDatasetRecords("owner"))
+    assertTrue(canImportDatasetRecords("admin"))
+    assertFalse(canImportDatasetRecords("editor"))
+    assertFalse(canImportDatasetRecords(null))
+  }
 }
