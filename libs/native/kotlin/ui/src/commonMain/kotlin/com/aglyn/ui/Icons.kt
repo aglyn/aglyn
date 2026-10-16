@@ -5,6 +5,7 @@ import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.Login
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
@@ -307,6 +308,7 @@ object AglynIcons {
     "location_on" to Icons.Outlined.LocationOn,
     "undo" to Icons.AutoMirrored.Outlined.Undo,
     "filter_list" to Icons.Outlined.FilterList,
+    "sort" to Icons.AutoMirrored.Outlined.Sort,
     "done" to Icons.Outlined.Done,
     "calendar_month" to Icons.Outlined.CalendarMonth,
     "today" to Icons.Outlined.Today,
