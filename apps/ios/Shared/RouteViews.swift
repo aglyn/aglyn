@@ -155,6 +155,8 @@ struct BesignerScreen: View {
     .navigationTitle(webModel.title.isEmpty ? "Besigner" : webModel.title)
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
+      // The editor takes the whole screen: on a phone the tab bar covered the bottom of its canvas.
+      .toolbar(.hidden, for: .tabBar)
     #endif
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
