@@ -281,8 +281,10 @@ final class FunnelsEditor {
     }
   }
 
-  func confirmDelete() async {
-    guard let row = deleting else { return }
+  /// Deletes `asked`, the funnel the dialog was showing. The dialog's button hands it over because the dialog
+  /// closes (and `close()` clears `deleting`) before the button's task runs.
+  func confirmDelete(_ asked: FunnelRow? = nil) async {
+    guard let row = asked ?? deleting else { return }
     await run {
       let deleted = try await self.api.delete(row.id)
       if deleted.recordingChanged { await self.api.announceSiteWide() }

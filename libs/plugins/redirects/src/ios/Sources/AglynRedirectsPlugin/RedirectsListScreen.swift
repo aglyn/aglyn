@@ -54,7 +54,10 @@ struct RedirectsListScreen: View {
       "Delete this redirect?", isPresented: Binding(get: { editor?.deleting != nil }, set: { if !$0 { editor?.close() } }),
       titleVisibility: .visible
     ) {
-      Button("Delete", role: .destructive) { Task { await editor?.confirmDelete() } }
+      Button("Delete", role: .destructive) {
+        let row = editor?.deleting
+        Task { await editor?.confirmDelete(row) }
+      }
     } message: {
       Text("\(editor?.deleting?.source ?? "This path") stops redirecting.")
     }

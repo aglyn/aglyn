@@ -25,7 +25,9 @@ struct SidebarScreen: Identifiable, Hashable {
           id: tab.id, title: tab.title, icon: tab.icon, screen: tab.screen,
           requiresSite: model.registry.screen(tab.screen)?.requiresSite ?? false))
     }
-    for action in model.registry.quickActions(for: .aglyn) {
+    // A quick action that carries params (New product, Ship orders) is an action, not a place: the sidebar
+    // opens a screen with none, so such an action stays on Home.
+    for action in model.registry.quickActions(for: .aglyn) where action.params.isEmpty {
       let screen = action.screen
       guard seen.insert(screen).inserted else { continue }
       items.append(
