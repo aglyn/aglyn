@@ -160,6 +160,16 @@ Setup's Integrations section (the cards of the plugins running on the site)
   exports hub's import wizard on `data.dataset:<id>`, as the console's
   `openImport` does; export of a dataset is native too.
 
+Create with AI (AGL-3854): beside Create on Pages, Templates, Layouts, Forms and
+Components, in each list's create zone (`hostScreens`, `hostTemplates`, `hostLayouts`,
+`hostForms`, `hostComponents`, drawn natively through `SlotWidgets`), and in the list's empty
+state. The AI plugin's `ai.create` screen reads `/api/ai/create` (whether the entry is drawn and
+as what, the brief's words and choices, a template's collections, the month's credits) and
+follows the job through `/api/ai/create/:jobId` (plan, estimated cost, Confirm, Cancel, the draft
+opened natively or in the Besigner); it starts, confirms and cancels through the console's own
+jobs routes. Driven on the Android phone and tablet against the local stack; the iPhone and iPad
+run waits on the Simulator (see the issue).
+
 The media library's "Default sharing for new media" card is in Workspace
 settings, where the apps keep the workspace's defaults.
 
