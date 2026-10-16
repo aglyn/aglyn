@@ -246,7 +246,7 @@ class AiNativeTest {
   }
 
   @Test
-  fun theFollowViewReadsAndOpensUnderTheWorkspace() {
+  fun theFollowViewReadsAndOpensTheConsoleAddress() {
     val view = aiFollowViewOf(
       json(
         """{"job":{"id":"j1"},"view":{"id":"j1","kind":"page","status":"needs_review","hostId":"h1","phase":"plan-ready","phaseLabel":"Plan ready",
@@ -260,8 +260,17 @@ class AiNativeTest {
     assertEquals(listOf("Builds the page Spring offer at /spring"), view.planLines)
     assertEquals("Confirm plan", view.confirmLabel)
     assertEquals(true, view.confirmEnabled)
-    assertEquals("/acme/hosts/roofs/layouts/l1", aiCreateLink("/hosts/roofs/layouts/l1", "acme"))
-    assertEquals("/hosts/roofs/screens", aiCreateLink("/hosts/roofs/screens", null))
+    assertEquals(null, view.open)
+    val done = aiFollowViewOf(
+      json(
+        """{"view":{"id":"j1","kind":"layout","status":"done","phase":"done","phaseLabel":"Done","line":{"tone":"success","text":"Done."},
+         "moving":false,"settled":true,"findings":[],"confirm":null,
+         "open":{"label":"Open Site frame","detail":"/acme/hosts/roofs/layouts/l1","besigner":"/acme/hosts/roofs/layouts/l1/versions/v1/besigner"}}}""",
+      ),
+    )!!
+    // The console's own addresses, which the app's link resolver opens natively (and the Besigner in its web view).
+    assertEquals(AiFollowView.Open("Open Site frame", "/acme/hosts/roofs/layouts/l1", "/acme/hosts/roofs/layouts/l1/versions/v1/besigner"), done.open)
+    assertEquals(true, done.settled)
   }
 }
 

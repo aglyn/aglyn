@@ -286,7 +286,16 @@ export async function GET_FOLLOW(request: Request, { params }: { params: Promise
         .catch(() => false)
     : false
   return Response.json(
-    { job: summary, view: aiJobFollowView(summary, { staff: gate.staff, buildInFlight, now: now.getTime() }) },
+    {
+      job: summary,
+      view: aiJobFollowView(summary, {
+        // Console addresses name the workspace by its slug, as every link the apps resolve does.
+        orgSlug: typeof gate.org.slug === 'string' ? gate.org.slug : null,
+        staff: gate.staff,
+        buildInFlight,
+        now: now.getTime(),
+      }),
+    },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
   )
 }

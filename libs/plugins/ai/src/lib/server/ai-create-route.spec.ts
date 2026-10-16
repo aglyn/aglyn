@@ -215,7 +215,7 @@ describe('GET /api/ai/create/:jobId', () => {
   })
 
   it('reads one job of the workspace’s as the follow card does', async () => {
-    mockGate.mockResolvedValue({ firestore: {}, orgId: 'org-1', staff: false })
+    mockGate.mockResolvedValue({ firestore: {}, orgId: 'org-1', org: { slug: 'acme' }, staff: false })
     mockJob = {
       $id: 'job-1',
       orgId: 'org-1',
@@ -233,13 +233,13 @@ describe('GET /api/ai/create/:jobId', () => {
     expect(payload.view.phase).toBe('done')
     expect(payload.view.open).toEqual({
       label: 'Open Site frame',
-      detail: '/hosts/roofs/layouts/l1',
-      besigner: '/hosts/roofs/layouts/l1/versions/v1/besigner',
+      detail: '/acme/hosts/roofs/layouts/l1',
+      besigner: '/acme/hosts/roofs/layouts/l1/versions/v1/besigner',
     })
   })
 
   it('answers 404 for a job the workspace does not hold, or an id that is not one', async () => {
-    mockGate.mockResolvedValue({ firestore: {}, orgId: 'org-1', staff: false })
+    mockGate.mockResolvedValue({ firestore: {}, orgId: 'org-1', org: {}, staff: false })
     expect((await follow()).status).toBe(404)
     expect((await follow('../x')).status).toBe(404)
   })

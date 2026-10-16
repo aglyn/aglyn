@@ -252,7 +252,7 @@ final class AIPluginTests: XCTestCase {
     XCTAssertFalse(aiCreateOutOfCredits(ConsoleAPIError(status: 403, message: "no", body: nil)))
   }
 
-  func testTheFollowViewReadsAndOpensUnderTheWorkspace() throws {
+  func testTheFollowViewReadsAndOpensTheConsoleAddress() throws {
     let view = try JSONDecoder().decode(
       AiFollowAnswer.self,
       from: Data("""
@@ -260,12 +260,13 @@ final class AIPluginTests: XCTestCase {
          "line":{"tone":"success","text":"Done. Your drafts are ready to open."},"moving":false,"settled":true,"steps":null,
          "plan":null,"findings":[],"detail":null,"estimate":null,"retryRefusal":null,"confirm":null,"building":null,
          "problem":null,"spent":"Used 12 credits.",
-         "open":{"label":"Open Site frame","detail":"/hosts/roofs/layouts/l1","besigner":"/hosts/roofs/layouts/l1/versions/v1/besigner"}}}
+         "open":{"label":"Open Site frame","detail":"/acme/hosts/roofs/layouts/l1","besigner":"/acme/hosts/roofs/layouts/l1/versions/v1/besigner"}}}
         """.utf8)
     ).view
     XCTAssertEqual(view.tone, .success)
-    XCTAssertEqual(aiCreateLink(view.open?.detail ?? "", orgSlug: "acme"), "/acme/hosts/roofs/layouts/l1")
-    XCTAssertEqual(aiCreateLink("/hosts/roofs/screens", orgSlug: nil), "/hosts/roofs/screens")
+    // The console's own addresses, which the app's link resolver opens natively (and the Besigner in its web view).
+    XCTAssertEqual(view.open?.detail, "/acme/hosts/roofs/layouts/l1")
+    XCTAssertEqual(view.open?.besigner, "/acme/hosts/roofs/layouts/l1/versions/v1/besigner")
   }
 }
 

@@ -16,6 +16,7 @@
  */
 
 
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AI_JOB_BESIGNER_SEGMENT } from './ai-job-notice'
 import {
   AI_BRIEF_COPY,
@@ -261,19 +262,21 @@ export function aiCreateDoorView(input: AiCreateDoorInput): AiCreateDoorView {
 export { AI_JOB_FOLLOW_PHASE_LINES, type AiFollowTone }
 
 /**
- * Where one output opens in an app, as console addresses under the workspace
- * (`/hosts/{site}/…`), which the apps' link resolver answers natively: a page
- * opens its page (the console's preview address, which the apps' Pages claims),
- * a component, layout or template its details, a form its own page. `besigner`
- * is the version the job wrote, opened in the Besigner. `null` where the output
- * has no page of its own or names no site.
+ * Where one output opens in an app, as the console addresses the apps' link
+ * resolver answers natively: a page opens its page (the console's preview
+ * address, which the apps' Pages claims), a component, layout or template its
+ * details, and anything else the page its owner publishes through the
+ * record-route seam (a form's own page). `besigner` is the version the job
+ * wrote, opened in the Besigner. `null` where the output has no page of its own,
+ * names no site, or its owner is not loaded.
  */
 export function aiJobOutputAppLinks(
   output: Pick<AiJobOutput, 'resource' | 'id' | 'versionId' | 'hostSubdomain'>,
+  orgSlug: string,
 ): { detail: string; besigner: string | null } | null {
   const host = output.hostSubdomain
-  if (!host) return null
-  const site = `/hosts/${host}`
+  if (!host || !orgSlug) return null
+  const site = `/${orgSlug}/hosts/${host}`
   const id = encodeURIComponent(output.id)
   const segment = AI_JOB_BESIGNER_SEGMENT[output.resource]
   if (segment) {
@@ -284,10 +287,9 @@ export function aiJobOutputAppLinks(
     }
     return { detail: `${site}/${segment}/${id}`, besigner }
   }
-  // A form's own page, under the address the forms plugin publishes for it
-  // (its native `forms.record` link); a new form has no version to design yet.
-  if (output.resource === 'form') return { detail: `${site}/forms/${id}`, besigner: null }
-  return null
+  // A new form has no version to design yet: it opens on its own page.
+  const record = pluginRecordHref(output.resource, { orgSlug, host }, output.id)
+  return record ? { detail: record, besigner: null } : null
 }
 
 /** The one thing a finished job leads with, as the console's `aiJobPrimaryLink` picks it. */
@@ -297,14 +299,21 @@ export interface AiJobFollowOpen {
   besigner: string | null
 }
 
-export function aiJobFollowOpen(job: Pick<AiJobSummary, 'status' | 'outputs'>): AiJobFollowOpen | null {
-  if (job.status !== 'done') return null
+export function aiJobFollowOpen(
+  job: Pick<AiJobSummary, 'status' | 'outputs'>,
+  orgSlug: string,
+): AiJobFollowOpen | null {
+  if (job.status !== 'done' || !orgSlug) return null
   const screens = job.outputs.filter((output) => output.resource === 'screen' && output.hostSubdomain)
   if (screens.length > 1) {
-    return { label: 'Open your draft pages', detail: `/hosts/${screens[0].hostSubdomain}/screens`, besigner: null }
+    return {
+      label: 'Open your draft pages',
+      detail: `/${orgSlug}/hosts/${screens[0].hostSubdomain}/screens`,
+      besigner: null,
+    }
   }
   for (const output of job.outputs) {
-    const links = aiJobOutputAppLinks(output)
+    const links = aiJobOutputAppLinks(output, orgSlug)
     if (links) {
       return { label: output.resource === 'screen' ? 'Open the draft page' : `Open ${output.label}`, ...links }
     }
@@ -348,7 +357,7 @@ export interface AiJobFollowView {
 /** The follow card's view of one job, for the apps (the console's `AiJobFollow` and `AiJobPlan`). */
 export function aiJobFollowView(
   job: AiJobSummary,
-  options: { staff?: boolean; buildInFlight?: boolean; now?: number } = {},
+  options: { orgSlug?: string | null; staff?: boolean; buildInFlight?: boolean; now?: number } = {},
 ): AiJobFollowView {
   const phase = aiJobPhase(job)
   const line = AI_JOB_FOLLOW_PHASE_LINES[phase]
@@ -396,6 +405,6 @@ export function aiJobFollowView(
       job.creditsSpent > 0
         ? `Used ${n(job.creditsSpent)} ${job.creditsSpent === 1 ? 'credit' : 'credits'}${phase === 'done' || AI_JOB_TERMINAL_STATUSES.includes(job.status) ? '' : ' so far'}.`
         : null,
-    open: aiJobFollowOpen(job),
+    open: aiJobFollowOpen(job, options.orgSlug ?? ''),
   }
 }

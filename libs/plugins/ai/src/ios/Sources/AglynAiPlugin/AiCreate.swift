@@ -199,12 +199,6 @@ func aiCreateOutOfCredits(_ error: Error) -> Bool {
   return failure.status == 402
 }
 
-/// A follow view's console address (`/hosts/{site}/…`) under the workspace.
-func aiCreateLink(_ path: String, orgSlug: String?) -> String {
-  guard let orgSlug, !orgSlug.isEmpty else { return path }
-  return "/\(orgSlug)\(path)"
-}
-
 // MARK: - The door, read once per list
 
 /// The door answers lists read, kept briefly so a list's header and its empty state ask once.
@@ -479,7 +473,7 @@ struct AiCreateScreen: View {
       if let open = view.open {
         Section {
           Button {
-            context.openLink(aiCreateLink(open.detail, orgSlug: context.orgSlug))
+            context.openLink(open.detail)
           } label: {
             Label(open.label, systemImage: "arrow.right.circle").frame(maxWidth: .infinity)
           }
@@ -487,7 +481,7 @@ struct AiCreateScreen: View {
           .accessibilityIdentifier("ai-create-open")
           if let besigner = open.besigner {
             Button {
-              context.openBesigner(besigner, scope: .org)
+              context.openBesigner(besigner, scope: .absolute)
             } label: {
               Label("Edit in the Besigner", systemImage: "wand.and.stars")
             }

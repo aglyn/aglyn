@@ -21,6 +21,7 @@
  * upsell and follow card say.
  */
 
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AI_BRIEF_COPY, AI_BRIEF_MAX_CHARS } from './ai-brief-copy'
 import { aiJobCreditRange } from './ai-build-job'
 import { AI_PAGE_TYPES } from './ai-page-job'
@@ -313,38 +314,48 @@ describe('the job it started, as the follow card reads it', () => {
         creditsSpent: 31,
         outputs: [{ resource: 'screen', id: 'scr-1', versionId: 'v-1', hostId: 'host-1', hostSubdomain: 'roofs', label: 'Spring offer' }],
       }),
+      { orgSlug: 'acme' },
     )
     expect(done.line.tone).toBe('success')
     expect(done.spent).toBe('Used 31 credits.')
     expect(done.open).toEqual({
       label: 'Open the draft page',
-      detail: '/hosts/roofs/screens/scr-1/versions/v-1/view',
-      besigner: '/hosts/roofs/screens/scr-1/versions/v-1/besigner',
+      detail: '/acme/hosts/roofs/screens/scr-1/versions/v-1/view',
+      besigner: '/acme/hosts/roofs/screens/scr-1/versions/v-1/besigner',
     })
   })
 })
 
 describe('where an output opens in the apps', () => {
   const output = { id: 'x1', versionId: 'v1', hostSubdomain: 'roofs' }
+  beforeAll(() => {
+    // The owner's address for a record kind, as the forms plugin publishes its form's.
+    registerPluginRecordRoute(
+      'form',
+      { list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/owner-list`, record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/owner-list/${id}` },
+      { pluginId: 'owner' },
+    )
+  })
   it('opens a component, layout or template on its details, and its version in the Besigner', () => {
-    expect(aiJobOutputAppLinks({ ...output, resource: 'layout' })).toEqual({
-      detail: '/hosts/roofs/layouts/x1',
-      besigner: '/hosts/roofs/layouts/x1/versions/v1/besigner',
+    expect(aiJobOutputAppLinks({ ...output, resource: 'layout' }, 'acme')).toEqual({
+      detail: '/acme/hosts/roofs/layouts/x1',
+      besigner: '/acme/hosts/roofs/layouts/x1/versions/v1/besigner',
     })
-    expect(aiJobOutputAppLinks({ ...output, resource: 'reusableComponent' })?.detail).toBe('/hosts/roofs/components/x1')
-    expect(aiJobOutputAppLinks({ ...output, resource: 'template' })?.detail).toBe('/hosts/roofs/templates/x1')
+    expect(aiJobOutputAppLinks({ ...output, resource: 'reusableComponent' }, 'acme')?.detail).toBe('/acme/hosts/roofs/components/x1')
+    expect(aiJobOutputAppLinks({ ...output, resource: 'template' }, 'acme')?.detail).toBe('/acme/hosts/roofs/templates/x1')
   })
 
-  it('opens a form on its own page, with no version to design yet', () => {
-    expect(aiJobOutputAppLinks({ ...output, resource: 'form', versionId: null })).toEqual({
-      detail: '/hosts/roofs/forms/x1',
+  it('opens a form on the page its owner publishes for it, with no version to design yet', () => {
+    expect(aiJobOutputAppLinks({ ...output, resource: 'form', versionId: null }, 'acme')).toEqual({
+      detail: '/acme/hosts/roofs/owner-list/x1',
       besigner: null,
     })
   })
 
   it('opens nothing for an output that names no site or has no page', () => {
-    expect(aiJobOutputAppLinks({ ...output, resource: 'layout', hostSubdomain: null })).toBeNull()
-    expect(aiJobOutputAppLinks({ ...output, resource: 'text' })).toBeNull()
+    expect(aiJobOutputAppLinks({ ...output, resource: 'layout', hostSubdomain: null }, 'acme')).toBeNull()
+    expect(aiJobOutputAppLinks({ ...output, resource: 'layout' }, '')).toBeNull()
+    expect(aiJobOutputAppLinks({ ...output, resource: 'text' }, 'acme')).toBeNull()
   })
 
   it('opens the Pages list for several pages, and nothing before the job is done', () => {
@@ -352,17 +363,17 @@ describe('where an output opens in the apps', () => {
       { resource: 'screen' as const, id: 'a', versionId: 'v', hostId: 'h', hostSubdomain: 'roofs', label: 'A' },
       { resource: 'screen' as const, id: 'b', versionId: 'v', hostId: 'h', hostSubdomain: 'roofs', label: 'B' },
     ]
-    expect(aiJobFollowOpen({ status: 'done', outputs: pages })).toEqual({
+    expect(aiJobFollowOpen({ status: 'done', outputs: pages }, 'acme')).toEqual({
       label: 'Open your draft pages',
-      detail: '/hosts/roofs/screens',
+      detail: '/acme/hosts/roofs/screens',
       besigner: null,
     })
-    expect(aiJobFollowOpen({ status: 'running', outputs: pages })).toBeNull()
+    expect(aiJobFollowOpen({ status: 'running', outputs: pages }, 'acme')).toBeNull()
     expect(
       aiJobFollowOpen({
         status: 'done',
         outputs: [{ resource: 'layout', id: 'l', versionId: 'v', hostId: 'h', hostSubdomain: 'roofs', label: 'Site frame' }],
-      })?.label,
+      }, 'acme')?.label,
     ).toBe('Open Site frame')
   })
 })

@@ -283,9 +283,6 @@ fun aiCreateOutOfCredits(error: Throwable): Boolean {
   return if (reason != null) reason == "quota" else error.status == 402
 }
 
-/** A follow view's console address (`/hosts/{site}/…`) under the workspace. */
-fun aiCreateLink(path: String, orgSlug: String?): String = if (orgSlug.isNullOrEmpty()) path else "/$orgSlug$path"
-
 // ── The door, read once per list ─────────────────────────────────────────
 
 /** The door answers lists read, kept briefly so a list's header and its empty state ask once. */
@@ -609,12 +606,12 @@ private fun FollowSections(
       view.spent?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       view.open?.let { open ->
         Button(
-          onClick = { context.openLink(aiCreateLink(open.detail, context.orgSlug)) },
+          onClick = { context.openLink(open.detail) },
           modifier = Modifier.fillMaxWidth().testTag("ai-create-open"),
         ) { Text(open.label) }
         open.besigner?.let { path ->
           OutlinedButton(
-            onClick = { context.openBesigner(path, ConsoleScope.ORG) },
+            onClick = { context.openBesigner(path, ConsoleScope.ABSOLUTE) },
             modifier = Modifier.fillMaxWidth().testTag("ai-create-besigner"),
           ) { Text("Edit in the Besigner") }
         }
