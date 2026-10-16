@@ -4220,6 +4220,47 @@ export function aiSettlePlanRefs(
 }
 
 /**
+ * References to nothing at all are taken out before the rules read the plan
+ * (AGL-3845), where each has one reading. The live Free candle-shop start of
+ * 2026-10-16, on an empty site, reused a layout `laySite` and duplicated a
+ * page `scrStarter` the site does not have, and wrote what each section
+ * shows into its uses ("hero", "product grid", "help text"). It was refused
+ * for the unknown records, and the Free wall's trim, which never takes a
+ * section that places something, could take none of them.
+ *
+ * - A reuse of a record the site does not have is dropped, and a page laid
+ *   out in it names no layout, for the layouts settle to place.
+ * - A page duplicated from a page the site does not have starts fresh.
+ * - A section's use that names no record the site has and no creation of the
+ *   plan is a description, not a reference, and comes out.
+ *
+ * Runs after `aiSettlePlanRefs`, so a creation spelled another way is
+ * already pointed at, never dropped.
+ */
+export function aiSettlePlanUnknownIds(plan: AiBuildPlan, inventory: AiSiteInventory | null): AiBuildPlan {
+  const kinds = inventoryKinds(inventory)
+  const reuse = plan.reuse.filter((entry) => entry.kind === 'theme' || kinds.get(entry.id) === entry.kind)
+  const dropped = new Set(plan.reuse.filter((entry) => !reuse.includes(entry)).map((entry) => entry.id))
+  const names = (ref: string | null | undefined): boolean =>
+    !!ref && (kinds.has(ref) || !!aiPlanCreateFor(plan, ref) || !!aiPlanItemFor(plan, ref) || (isAiPlanNewRef(ref) && !dropped.has(ref)))
+  let changed = reuse.length !== plan.reuse.length
+  const screens = plan.screens.map((screen) => {
+    const layout = screen.layout && dropped.has(screen.layout) ? null : screen.layout
+    const duplicateOf = screen.duplicateOf && !kinds.has(screen.duplicateOf) ? null : screen.duplicateOf
+    const sections = screen.sections.map((section) => {
+      const uses = section.uses.filter(names)
+      return uses.length === section.uses.length ? section : { ...section, uses }
+    })
+    if (layout === screen.layout && duplicateOf === screen.duplicateOf && sections.every((one, index) => one === screen.sections[index])) {
+      return screen
+    }
+    changed = true
+    return { ...screen, layout, duplicateOf, sections }
+  })
+  return changed ? { ...plan, reuse, screens } : plan
+}
+
+/**
  * What customers say, which no dataset of the site's holds: a review, a
  * testimonial, a rating, a quote (AGL-3616). A job never writes them for the
  * people who did not, so a dataset of them is one nothing can seed.
