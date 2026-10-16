@@ -156,4 +156,16 @@ class SellerTest {
     val listing = SellerListing.from(FirestoreDoc("l1", "marketplaceListings/l1", mapOf("displayName" to "Hero", "screenshots" to listOf("/a", "/b", 3))))
     assertEquals(listOf("/a", "/b"), listing.screenshots)
   }
+
+  @Test
+  fun aListingOrSomeoneElsesReviewIsReportedThroughTheReportRoute() = runTest {
+    val calls = Calls()
+    val api = MarketplaceApi(calls.client)
+    api.report("l1", "  Spam  ")
+    api.report("l1", "Abusive", reviewUid = "u2")
+    assertEquals(List(2) { "/api/marketplace/report" }, calls.seen.map { it.first })
+    assertEquals(mapOf("listingId" to "l1", "reason" to "Spam"), calls.seen[0].second.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(mapOf("listingId" to "l1", "reason" to "Abusive", "reviewUid" to "u2"), calls.seen[1].second.mapValues { it.value.jsonPrimitive.content })
+    assertEquals(1000, MAX_REPORT_REASON_LENGTH)
+  }
 }

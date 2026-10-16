@@ -301,12 +301,21 @@ data class InstallPinRow(val listingId: String, val name: String, val version: S
 }
 
 /** A purchase the workspace holds (`marketplacePurchases`). */
-data class LicenceRow(val id: String, val listingId: String, val buyerUid: String?, val paidCents: Long, val createdAt: FirestoreTimestamp?) {
+data class LicenceRow(
+  val id: String,
+  val listingId: String,
+  val buyerUid: String?,
+  val paidCents: Long,
+  val createdAt: FirestoreTimestamp?,
+  /** The workspace the license landed in; none (before AGL-2331) licenses every workspace the buyer belongs to. */
+  val buyerOrgId: String? = null,
+) {
   companion object {
     fun from(doc: FirestoreDoc) = LicenceRow(
       id = doc.id,
       listingId = doc.string("listingId").orEmpty(),
       buyerUid = doc.string("buyerUid"),
+      buyerOrgId = doc.string("buyerOrgId")?.takeIf { it.isNotEmpty() },
       paidCents = ((doc.data["amountCents"] as? Number)?.toLong() ?: 0) - ((doc.data["taxCents"] as? Number)?.toLong() ?: 0),
       createdAt = doc.data["createdAt"] as? FirestoreTimestamp,
     )
@@ -377,13 +386,49 @@ class MarketplaceApi(private val api: ConsoleApiClient) {
     api.request("/api/marketplace/reviews", ApiMethod.DELETE, jsonBody("listingId" to listingId))
   }
 
-  /** Reports a listing to staff. */
-  suspend fun report(listingId: String, reason: String) {
-    api.request("/api/marketplace/report", ApiMethod.POST, jsonBody("listingId" to listingId, "reason" to reason.trim()))
+  /** Reports a listing, or one of its reviews ([reviewUid], the reviewer's uid), to staff. Reporting again updates the report. */
+  suspend fun report(listingId: String, reason: String, reviewUid: String? = null) {
+    val fields = listOfNotNull("listingId" to listingId, "reason" to reason.trim(), reviewUid?.let { "reviewUid" to it })
+    api.request("/api/marketplace/report", ApiMethod.POST, jsonBody(*fields.toTypedArray()))
   }
 }
 
 /** "This workspace": its live purchases, by document id (`HELD_LICENCE_QUERY` over `licenceBase`). */
+/** The longest reason a report keeps (the console's and the route's `MAX_REASON_LENGTH`). */
+const val MAX_REPORT_REASON_LENGTH = 1000
+
+/** The Licensed-to choice that means a purchase naming no workspace (`EVERY_WORKSPACE`). */
+const val EVERY_WORKSPACE = "every"
+
+/**
+ * "Bought by you": the signed-in person's own live purchases across every workspace (`MINE_LICENCE_QUERY` over
+ * `licenceBase`), narrowed to the workspace each landed in when one is chosen; [EVERY_WORKSPACE] asks for those that name
+ * none, as `mineLicenceClauses` reads it.
+ */
+fun boughtByYouQuery(uid: String, licensedTo: String?) = planListQuery(
+  Contracts.mineLicenceQuery,
+  ListQueryRequest(
+    base = listOf(
+      ListQueryFilter(op = ListQueryOp.EQUAL, path = "buyerUid", value = JsonPrimitive(uid)),
+      ListQueryFilter(op = ListQueryOp.EQUAL, path = "refundedAt", value = JsonNull),
+    ),
+    clauses = when (licensedTo) {
+      null -> emptyList()
+      EVERY_WORKSPACE -> listOf(ListFilterRequest(field = "buyerOrgId", op = "isEmpty", value = ""))
+      else -> listOf(ListFilterRequest(field = "buyerOrgId", op = "equals", value = licensedTo))
+    },
+  ),
+).toFirestoreQuery("marketplacePurchases", 100)
+
+/** Who bought a license the workspace holds, as the console's table says it. */
+fun boughtByLabel(licence: LicenceRow, uid: String): String = if (licence.buyerUid == uid) "You" else "A colleague"
+
+/** Which workspace one of your purchases licenses, as the console's table says it. */
+fun licensedToLabel(licence: LicenceRow, orgId: String?, names: Map<String, String>): String {
+  val licensed = licence.buyerOrgId ?: return "Every workspace you belong to"
+  return if (licensed == orgId) "This workspace" else names[licensed] ?: licensed
+}
+
 fun licencesQuery(orgId: String) = planListQuery(
   Contracts.heldLicenceQuery,
   ListQueryRequest(

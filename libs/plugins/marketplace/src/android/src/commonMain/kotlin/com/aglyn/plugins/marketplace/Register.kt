@@ -36,6 +36,9 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   r.widget("marketplace.plugin-installation", title = "Installation", order = 10, slot = "pluginInstallation") { context ->
     PluginInstallationCard(context)
   }
+  // A site's component and layout pages offer Publish to marketplace only where a plugin fills this slot (the console's
+  // `hostArtifactPublish` zone); the publish itself is this plugin's spec screens, so the widget draws nothing of its own.
+  r.widget("marketplace.artifact-publish", title = "Publish to marketplace", order = 10, slot = "hostArtifactPublish") { _ -> }
   r.quickAction("marketplace.open", title = "Marketplace", icon = "storefront", order = 60, screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.page", path = "/marketplace", screen = MARKETPLACE_BROWSE_SCREEN)
   r.deepLink("marketplace.listing-page", path = "/marketplace/:listingId", screen = MARKETPLACE_LISTING_SCREEN)

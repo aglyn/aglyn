@@ -27,3 +27,15 @@ public func planFeatureCarried(_ org: [String: Any]?, _ feature: String) -> Bool
   if let override = ((org?["entitlements"] as? [String: Any])?["features"] as? [String: Any])?[feature] as? Bool { return override }
   return PlanFeatureDefaults.byPlan[effectivePlan(org)]?[feature] ?? false
 }
+
+/// The marketplace's take rate on a workspace's sales, as the console's `resolveMarketplaceFeePct` answers it: a per-org
+/// override when it is a number, else the effective plan's rate; a rate that is not a usable percentage is priced at the
+/// Free plan's (the conservative direction). A comp lifts caps, never a price.
+public func marketplaceFeePct(_ org: [String: Any]?) -> Double {
+  func usable(_ value: Double?) -> Double? { value.flatMap { $0.isFinite && $0 >= 0 && $0 <= 100 ? $0 : nil } }
+  let override = (org?["entitlements"] as? [String: Any])?["marketplaceFeePct"]
+  // A JSON `true` bridges to NSNumber too; only a real number is an override, as the console's `typeof` reads it.
+  let number = (override as? NSNumber).flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0.doubleValue }
+  let rate = number != nil ? usable(number) : usable(MarketplaceFeeDefaults.byPlan[effectivePlan(org)])
+  return rate ?? MarketplaceFeeDefaults.byPlan["free"] ?? 30
+}

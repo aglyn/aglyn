@@ -144,4 +144,15 @@ final class SellerTests: XCTestCase {
     let listing = SellerListing(FirestoreDocument(id: "l1", data: ["displayName": "Hero", "screenshots": ["/a", "/b", 3]]))
     XCTAssertEqual(listing.screenshots, ["/a", "/b"])
   }
+
+  func testAListingOrSomeoneElsesReviewIsReportedThroughTheReportRoute() async throws {
+    let transport = SellerTransport()
+    let api = MarketplaceAPI(api: client(transport))
+    try await api.report(listingID: "l1", reason: "  Spam  ")
+    try await api.report(listingID: "l1", reason: "Abusive", reviewUID: "u2")
+    XCTAssertEqual(transport.seen.map(\.path), ["/api/marketplace/report", "/api/marketplace/report"])
+    XCTAssertEqual(transport.seen[0].body as? [String: String], ["listingId": "l1", "reason": "Spam"])
+    XCTAssertEqual(transport.seen[1].body as? [String: String], ["listingId": "l1", "reason": "Abusive", "reviewUid": "u2"])
+    XCTAssertEqual(maxReportReasonLength, 1000)
+  }
 }

@@ -10,6 +10,9 @@ import SwiftUI
 /// Roles that may create and change a site's components, layouts and templates (`hostRoleCanWrite`).
 private let artifactWriteRoles: Set<String> = ["admin", "editor", "author"]
 
+/// The slot a plugin fills to publish a site's component or layout (the console's `hostArtifactPublish`).
+public let artifactPublishSlot = "hostArtifactPublish"
+
 /// What a list's sheet is asking for.
 private enum ArtifactDialog: Identifiable {
   case create
@@ -318,6 +321,15 @@ private struct ArtifactDetail: View {
         Button("Edit details", systemImage: "pencil") { open(.details(row)) }.disabled(!canEdit)
         if !row.isStarterBundle { Button("Duplicate", systemImage: "square.on.square") { open(.duplicate(row)) }.disabled(!canEdit) }
         if kind != .template { Button("Save as template", systemImage: "bookmark") { open(.saveTemplate(row)) }.disabled(!canEdit) }
+        // Publishing is the marketplace's (the console's `hostArtifactPublish` zone): offered only where a plugin fills the
+        // zone, opening its form with what this is and what it is called.
+        if kind != .template, !context.slotWidgets(artifactPublishSlot).isEmpty {
+          Button("Publish to marketplace", systemImage: "storefront") {
+            context.navigate(
+              kind == .component ? "marketplace.publishComponent" : "marketplace.publishLayout",
+              ["id": row.id, "name": row.name, "description": row.description ?? ""])
+          }
+        }
         Button(row.isStarterBundle ? "Delete bundle" : "Delete", systemImage: "trash", role: .destructive) {
           open(row.isStarterBundle ? .deleteBundle(lead: row, pages: bundle.isEmpty ? [row] : bundle) : .delete(row, siblings: []))
         }

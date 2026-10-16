@@ -616,6 +616,10 @@ object ScreenValues {
     return floor(body.toDouble() * 100 + 0.5).toInt()
   }
 
+  /** A file's bytes as standard base64 with padding, what a route that takes a file whole in JSON reads (`Buffer.from(x, 'base64')`). */
+  @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+  fun base64(bytes: ByteArray): String = kotlin.io.encoding.Base64.Default.encode(bytes)
+
   /**
    * A chosen file's text: UTF-8 (a byte-order mark dropped), UTF-16 where it carries its mark, else
    * Windows-1252, the encoding a spreadsheet's "CSV" is saved in. Nothing is dropped silently.

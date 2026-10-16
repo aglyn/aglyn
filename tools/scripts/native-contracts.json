@@ -641,7 +641,8 @@
       "values": [
         "MARKETPLACE_BROWSE_QUERY",
         "BROWSE_SORTS",
-        "HELD_LICENCE_QUERY"
+        "HELD_LICENCE_QUERY",
+        "MINE_LICENCE_QUERY"
       ]
     },
     "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts": {

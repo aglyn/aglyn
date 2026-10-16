@@ -195,6 +195,11 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
                   MenuAction("view-${listing.id}", "View", "info") { context.navigate(MARKETPLACE_LISTING_SCREEN, mapOf("listing" to listing.id)) },
                   MenuAction("edit-${listing.id}", "Edit listing", "edit", enabled = canManage) { runner.clear(); editing = listing },
                   if (listing.isPlugin) {
+                    MenuAction("version-${listing.id}", "Publish new version", "upload", enabled = canManage) { context.navigate("marketplace.publishPlugin", mapOf("listing" to listing.id)) }
+                  } else {
+                    null
+                  },
+                  if (listing.isPlugin) {
                     MenuAction("visibility-${listing.id}", if (listing.isPrivate) "Make public" else "Make private", "lock", enabled = canManage) {
                       val next = if (listing.isPrivate) "public" else "private"
                       runner.run(if (next == "private") "Now private — only your sites can install it" else "Published to the marketplace") { api.setVisibility(listing.id, next) }
@@ -223,7 +228,7 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
  * each picture chosen from the workspace's media library (or uploaded there from this device), never typed.
  */
 @Composable
-private fun EditListingDialog(context: NativePluginContext, listing: SellerListing, runner: ActionRunner, api: SellerApi, close: () -> Unit) {
+internal fun EditListingDialog(context: NativePluginContext, listing: SellerListing, runner: ActionRunner, api: SellerApi, close: () -> Unit) {
   var values by remember(listing.id) {
     mutableStateOf(
       mapOf(

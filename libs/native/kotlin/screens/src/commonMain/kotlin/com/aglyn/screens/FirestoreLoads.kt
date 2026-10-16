@@ -67,6 +67,17 @@ internal object FirestoreLoads {
   }
 
   /**
+   * The take rate on the workspace's marketplace sales, as the console's publish panel states it: `pct` from the
+   * workspace's own document (`resolveMarketplaceFeePct`), and `paid`, the rate on a paid plan.
+   */
+  suspend fun marketplaceTakeRate(reader: FirestoreReader, orgId: String): JsonElement = JsonObject(
+    mapOf(
+      "pct" to JsonPrimitive(com.aglyn.core.marketplaceFeePct(reader.get("orgs/$orgId")?.data)),
+      "paid" to JsonPrimitive(com.aglyn.core.MarketplaceFeeDefaults.paid),
+    ),
+  )
+
+  /**
    * Whether the workspace carries a plan feature, as the console's `checkEntitlement` answers from the workspace's own
    * document, with the name of the cheapest plan that includes it (what an upsell says): `{ carried, label }`.
    */

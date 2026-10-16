@@ -183,6 +183,10 @@ private struct ListingsSection: View {
                       .disabled(!canManage)
                       if listing.isPlugin {
                         Button {
+                          context.navigate("marketplace.publishPlugin", ["listing": listing.id])
+                        } label: { Label("Publish new version", systemImage: "square.and.arrow.up") }
+                        .disabled(!canManage)
+                        Button {
                           let next = listing.isPrivate ? "public" : "private"
                           runner.run(next == "private" ? "Now private — only your sites can install it" : "Published to the marketplace") {
                             try await api.setVisibility(listing.id, next)
@@ -225,7 +229,7 @@ private struct ListingsSection: View {
 
 /// The console's listing editor: the words and links, the preview image (its own route), the screenshots and the logo, each
 /// picture chosen from the workspace's media library (or uploaded there from this device), never typed.
-private struct EditListingSheet: View {
+struct EditListingSheet: View {
   let context: NativePluginContext
   let listing: SellerListing
   let runner: ActionRunner
